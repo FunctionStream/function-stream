@@ -122,7 +122,7 @@
       </a-button>
       <a-button type="primary"
                 @click="onSub">
-        add Function
+        Add Function
       </a-button>
     </div>
   </a-drawer>
@@ -177,4 +177,3 @@ export default {
   },
 }
 </script>
-
