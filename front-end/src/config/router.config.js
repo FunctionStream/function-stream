@@ -43,31 +43,6 @@ export const constantRouterMap = [
     redirect: '/user/login',
     hidden: true,
     children: [
-      {
-        path: 'login',
-        name: 'login',
-        component: () => import(/* webpackChunkName: "user" */ '@/views/user/Login')
-      },
-      {
-        path: 'register',
-        name: 'register',
-        component: () => import(/* webpackChunkName: "user" */ '@/views/user/Register')
-      },
-      {
-        path: 'register-result',
-        name: 'registerResult',
-        component: () => import(/* webpackChunkName: "user" */ '@/views/user/RegisterResult')
-      },
-      {
-        path: 'recover',
-        name: 'recover',
-        component: undefined
-      }
     ]
-  },
-
-  {
-    path: '/404',
-    component: () => import(/* webpackChunkName: "fail" */ '@/views/exception/404')
   }
 ]
