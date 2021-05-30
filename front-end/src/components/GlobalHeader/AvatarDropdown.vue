@@ -1,7 +1,11 @@
 <template>
   <a-dropdown v-if="currentUser && currentUser.name" placement="bottomRight">
-    <span class="ant-pro-account-avatar">
-      <a-avatar size="small" src="https://gw.alipayobjects.com/zos/antfincdn/XAosXuNZyF/BiazfanxmamNRoxxVxka.png" class="antd-pro-global-header-index-avatar" />
+    <!-- <span class="ant-pro-account-avatar">
+      <a-avatar
+        size="small"
+        src="https://gw.alipayobjects.com/zos/antfincdn/XAosXuNZyF/BiazfanxmamNRoxxVxka.png"
+        class="antd-pro-global-header-index-avatar"
+      />
       <span>{{ currentUser.name }}</span>
     </span>
     <template v-slot:overlay>
@@ -20,10 +24,10 @@
           {{ $t('menu.account.logout') }}
         </a-menu-item>
       </a-menu>
-    </template>
+    </template> -->
   </a-dropdown>
   <span v-else>
-    <a-spin size="small" :style="{ marginLeft: 8, marginRight: 8 }" />
+    <!-- <a-spin size="small" :style="{ marginLeft: 8, marginRight: 8 }" /> -->
   </span>
 </template>
 
@@ -35,21 +39,21 @@ export default {
   props: {
     currentUser: {
       type: Object,
-      default: () => null
+      default: () => null,
     },
     menu: {
       type: Boolean,
-      default: true
-    }
+      default: true,
+    },
   },
   methods: {
-    handleToCenter () {
+    handleToCenter() {
       this.$router.push({ path: '/account/center' })
     },
-    handleToSettings () {
+    handleToSettings() {
       this.$router.push({ path: '/account/settings' })
     },
-    handleLogout (e) {
+    handleLogout(e) {
       Modal.confirm({
         title: this.$t('layouts.usermenu.dialog.title'),
         content: this.$t('layouts.usermenu.dialog.content'),
@@ -61,10 +65,10 @@ export default {
             this.$router.push({ name: 'login' })
           })
         },
-        onCancel () {}
+        onCancel() {},
       })
-    }
-  }
+    },
+  },
 }
 </script>
 
