@@ -10,8 +10,7 @@
                 rules: [{ required: true, message: 'Please select function!' }],
                 initialValue: currentFunction.name,
               },
-            ]"
-          >
+            ]">
             <a-select-option v-for="item in data" :key="item.key" :value="item.name">
               {{ item.name }}
             </a-select-option>
@@ -28,13 +27,12 @@
               },
             ]"
             :auto-size="{ minRows: 1, maxRows: 5 }"
-            allowClear
-          />
+            allowClear />
         </a-form-item>
       </a-row>
     </a-form>
     <a-row type="flex" justify="end" :style="{ marginBottom: '24px' }">
-      <a-button type="primary" :loading="triggering" @click="onSub"> Trigger </a-button>
+      <a-button type="primary" :loading="triggering" @click="onSub"> Trigger</a-button>
     </a-row>
     <a-card title="Result" :extra="triggerResultType" size="small">
       <div :style="{ minHeight: '64px' }">
@@ -48,33 +46,33 @@
 import { triggerFunc } from '@/api/func'
 
 export default {
-  data() {
+  data () {
     return {
       form: this.$form.createForm(this),
       triggerResult: '',
       triggerResultType: '',
-      triggering: false,
+      triggering: false
     }
   },
   props: {
     visible: {
       type: Boolean,
-      default: false,
+      default: false
     },
     data: {
       type: Array,
-      default: [],
+      default: []
     },
     currentFunction: {
       type: Object,
-      default: {},
-    },
+      default: {}
+    }
   },
   methods: {
-    onClose() {
+    onClose () {
       this.$parent.closeTrigger()
     },
-    onSub() {
+    onSub () {
       this.triggering = true
       this.triggerResult = ''
       this.triggerResultType = ''
@@ -92,14 +90,14 @@ export default {
             }, 500)
           })
       })
-    },
+    }
   },
   watch: {
-    currentFunction() {
+    currentFunction () {
       this.form.setFieldsValue({
-        functionName: this.currentFunction.name,
+        functionName: this.currentFunction.name
       })
-    },
-  },
+    }
+  }
 }
 </script>

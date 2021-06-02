@@ -8,12 +8,7 @@
       </template>
 
       <a-card :bordered="false">
-        <function-table
-          :data="functionList"
-          :loadingList="loadingList"
-          :onSelFunction="onSelFunction"
-          :onShowDetail="onShowDetail"
-        />
+        <function-table :data="functionList" :loadingList="loadingList" :onSelFunction="onSelFunction" :onShowDetail="onShowDetail" />
       </a-card>
     </page-header-wrapper>
 
@@ -30,10 +25,10 @@ import AddForm from './components/AddForm.vue'
 import FunctionDetailVue from './components/FunctionDetail.vue'
 import FunctionTable from './components/FunctionTable'
 import Trigger from './components/Trigger.vue'
-import { getList, getStatus, getInfo, getStats } from '@/api/func'
+import { getInfo, getList, getStats, getStatus } from '@/api/func'
 
 export default {
-  data() {
+  data () {
     return {
       functionList: [],
       visibleDrawer: false,
@@ -41,16 +36,16 @@ export default {
       visibleDetail: false,
       currentFunction: {},
       currentFuncionInfo: {},
-      loadingList: false,
+      loadingList: false
     }
   },
   components: {
     FunctionTable,
     AddForm,
     Trigger,
-    FunctionDetailVue,
+    FunctionDetailVue
   },
-  async mounted() {
+  async mounted () {
     this.loadingList = true
     try {
       const res = await getList()
@@ -67,32 +62,32 @@ export default {
     this.loadingList = false
   },
   methods: {
-    formatDate(date) {
+    formatDate (date) {
       return moment(date).format('YYYY/MM/DD')
     },
-    showDrawer() {
+    showDrawer () {
       this.visibleDrawer = true
     },
-    closeDrawer() {
+    closeDrawer () {
       this.visibleDrawer = false
     },
-    showTrigger() {
+    showTrigger () {
       this.visibleTrigger = true
     },
-    closeTrigger() {
+    closeTrigger () {
       this.visibleTrigger = false
     },
-    showDetail() {
+    showDetail () {
       this.visibleDetail = true
     },
-    closeDetail() {
+    closeDetail () {
       this.visibleDetail = false
     },
-    onSelFunction(value) {
+    onSelFunction (value) {
       this.currentFunction = value
       this.showTrigger()
     },
-    onShowDetail(value) {
+    onShowDetail (value) {
       this.currentFuncionInfo = { ...this.currentFuncionInfo, ...value }
       this.showDetail()
       const { name } = value
@@ -106,7 +101,7 @@ export default {
         if (!res) return
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res }
       })
-    },
-  },
+    }
+  }
 }
 </script>

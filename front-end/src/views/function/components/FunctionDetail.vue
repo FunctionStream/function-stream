@@ -1,50 +1,40 @@
 <template>
-  <a-drawer :visible="visible"
-            :width="810"
-            @close="onClose">
+  <a-drawer :visible="visible" :width="810" @close="onClose">
     <!-- function Info -->
-    <a-descriptions title="Function Info"
-                    bordered>
+    <a-descriptions title="Function Info" bordered>
       <a-descriptions-item label="Name">
-        {{currentFuncionInfo.name}}
+        {{ currentFuncionInfo.name }}
       </a-descriptions-item>
-      <a-descriptions-item label="Classname"
-                           :span="2">
-        {{currentFuncionInfo.className}}
+      <a-descriptions-item label="Classname" :span="2">
+        {{ currentFuncionInfo.className }}
       </a-descriptions-item>
       <a-descriptions-item label="Status">
-        <a-badge status="processing"
-                 text="Running" />
+        <a-badge status="processing" text="Running" />
       </a-descriptions-item>
-      <a-descriptions-item label="Runtime"
-                           :span="2">
-        {{currentFuncionInfo.runtime}}
+      <a-descriptions-item label="Runtime" :span="2">
+        {{ currentFuncionInfo.runtime }}
       </a-descriptions-item>
-      <a-descriptions-item label="Input"
-                           :span="3">
-        {{currentFuncionInfo.input}}
+      <a-descriptions-item label="Input" :span="3">
+        {{ currentFuncionInfo.input }}
       </a-descriptions-item>
-      <a-descriptions-item label="Output"
-                           :span="3">
-        {{currentFuncionInfo.output}}
+      <a-descriptions-item label="Output" :span="3">
+        {{ currentFuncionInfo.output }}
       </a-descriptions-item>
-      <a-descriptions-item label="Resources"
-                           :span="3">
-        <b>CPU</b>: {{currentFuncionInfo.resources && currentFuncionInfo.resources.cpu || 0}}
+      <a-descriptions-item label="Resources" :span="3">
+        <b>CPU</b>: {{ (currentFuncionInfo.resources && currentFuncionInfo.resources.cpu) || 0 }}
         <br />
-        <b>RAM</b>: {{currentFuncionInfo.resources && currentFuncionInfo.resources.ram || 0}}
+        <b>RAM</b>: {{ (currentFuncionInfo.resources && currentFuncionInfo.resources.ram) || 0 }}
         <br />
-        <b>DISK</b>: {{currentFuncionInfo.resources && currentFuncionInfo.resources.disk || 0}}
+        <b>DISK</b>: {{ (currentFuncionInfo.resources && currentFuncionInfo.resources.disk) || 0 }}
       </a-descriptions-item>
-      <a-descriptions-item label="Stats"
-                           :span="3">
-        <b>Received</b>: {{currentFuncionInfo.receivedTotal || 0}}
+      <a-descriptions-item label="Stats" :span="3">
+        <b>Received</b>: {{ currentFuncionInfo.receivedTotal || 0 }}
         <br />
-        <b>Processed Successfully</b>: {{currentFuncionInfo.processedSuccessfullyTotal || 0}}
+        <b>Processed Successfully</b>: {{ currentFuncionInfo.processedSuccessfullyTotal || 0 }}
         <br />
-        <b>System Exceptions</b>: {{currentFuncionInfo.systemExceptionsTotal || 0}}
+        <b>System Exceptions</b>: {{ currentFuncionInfo.systemExceptionsTotal || 0 }}
         <br />
-        <b>Avg Process Latency</b>: {{currentFuncionInfo.avgProcessLatency || 0}}
+        <b>Avg Process Latency</b>: {{ currentFuncionInfo.avgProcessLatency || 0 }}
       </a-descriptions-item>
     </a-descriptions>
   </a-drawer>
@@ -54,19 +44,18 @@ export default {
   props: {
     visible: {
       type: Boolean,
-      default: false,
+      default: false
     },
     currentFuncionInfo: {
       type: Object,
-      default: () => { },
+      default: () => {}
     }
   },
   methods: {
-    onClose() {
-      this.$parent.currentFuncionInfo = {};
-      this.$parent.closeDetail();
-    },
+    onClose () {
+      this.$parent.currentFuncionInfo = {}
+      this.$parent.closeDetail()
+    }
   }
 }
 </script>
-

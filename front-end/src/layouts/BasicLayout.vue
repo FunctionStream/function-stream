@@ -7,8 +7,7 @@
     :handleMediaQuery="handleMediaQuery"
     :handleCollapse="handleCollapse"
     :i18nRender="i18nRender"
-    v-bind="settings"
-  >
+    v-bind="settings">
     <!-- Ads begin
       广告代码 真实项目中请移除
       production remove this Ads
@@ -37,8 +36,7 @@
               () => {
                 $message.info('只是一个DEMO')
               }
-            "
-          />
+            " />
         </a-tooltip>
       </div>
     </template>
@@ -77,9 +75,9 @@ export default {
     RightContent,
     GlobalFooter,
     LogoSvg,
-    Ads,
+    Ads
   },
-  data() {
+  data () {
     return {
       // preview.pro.antdv.com only use.
       isProPreviewSite: process.env.VUE_APP_PREVIEW === 'true' && process.env.NODE_ENV !== 'development',
@@ -105,22 +103,22 @@ export default {
         colorWeak: defaultSettings.colorWeak,
 
         hideHintAlert: false,
-        hideCopyButton: false,
+        hideCopyButton: false
       },
       // 媒体查询
       query: {},
 
       // 是否手机模式
-      isMobile: false,
+      isMobile: false
     }
   },
   computed: {
     ...mapState({
       // 动态主路由
-      mainMenu: (state) => state.permission.addRouters,
-    }),
+      mainMenu: (state) => state.permission.addRouters
+    })
   },
-  created() {
+  created () {
     const routes = asyncRouterMap.find((item) => item.path === '/')
     // const routes = this.mainMenu.find(item => item.path === '/')
     this.menus = (routes && routes.children) || []
@@ -132,7 +130,7 @@ export default {
       this.$store.commit(TOGGLE_MOBILE_TYPE, this.isMobile)
     })
   },
-  mounted() {
+  mounted () {
     const userAgent = navigator.userAgent
     if (userAgent.indexOf('Edge') > -1) {
       this.$nextTick(() => {
@@ -151,7 +149,7 @@ export default {
   },
   methods: {
     i18nRender,
-    handleMediaQuery(val) {
+    handleMediaQuery (val) {
       this.query = val
       if (this.isMobile && !val['screen-xs']) {
         this.isMobile = false
@@ -164,10 +162,10 @@ export default {
         // this.settings.fixSiderbar = false
       }
     },
-    handleCollapse(val) {
+    handleCollapse (val) {
       this.collapsed = val
     },
-    handleSettingChange({ type, value }) {
+    handleSettingChange ({ type, value }) {
       console.log('type', type, value)
       type && (this.settings[type] = value)
       switch (type) {
@@ -183,8 +181,8 @@ export default {
           }
           break
       }
-    },
-  },
+    }
+  }
 }
 </script>
 
