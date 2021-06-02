@@ -1,24 +1,19 @@
 <template>
-  <a-drawer :width="720"
-            :visible="visible"
-            :body-style="{ paddingBottom: '40px' }"
-            @close="onClose">
-    <a-form :form="form"
-            layout="vertical"
-            hide-required-mark>
+  <a-drawer :width="720" :visible="visible" :body-style="{ paddingBottom: '40px' }" @close="onClose">
+    <a-form :form="form" layout="vertical" hide-required-mark>
       <a-row>
-        <a-form-item label="Inputs"
-                     v-decorator="">
-          <a-input v-decorator="[
+        <a-form-item label="Inputs" v-decorator="">
+          <a-input name='inputs' v-decorator="[
                   'inputs',
                   {
-                    rules: [{ required: true, message: 'Please enter inputs', }],
-                    initialValue:'persistent://public/default/input-topic',
+                    rules: [{ required: true, message: 'Please enter inputs', },
+                    ],
                   },
-                ]"
-                   placeholder="Please enter inputs"
-                   allowClear />
+                ]" placeholder="Please enter inputs" allowClear @pressEnter="enterInput" />
         </a-form-item>
+            <a-breadcrumb>
+            <a-breadcrumb-item v-for="(value,index) in input"><a @click="editInput(index)">{{value}}</a><a-icon type="close-circle" @click='deleteInputs(index)'/></a-breadcrumb-item>
+          </a-breadcrumb>
       </a-row>
       <a-row>
         <a-form-item label="Output">
@@ -28,9 +23,7 @@
                     rules: [{ required: true, message: 'Please enter output' }],
                     initialValue:'persistent://public/default/output-topic',
                   },
-                ]"
-                   placeholder="Please enter output"
-                   allowClear />
+                ]" placeholder="Please enter output" allowClear />
         </a-form-item>
       </a-row>
       <a-row>
@@ -41,9 +34,7 @@
                     rules: [{ required: true, message: 'Please enter log-topic' }],
                     initialValue:'persistent://public/default/log-topic',
                   },
-                ]"
-                   placeholder="Please enter log-topic"
-                   allowClear />
+                ]" placeholder="Please enter log-topic" allowClear />
         </a-form-item>
       </a-row>
       <a-row :gutter="16">
@@ -54,9 +45,7 @@
                   {
                     rules: [{ required: true, message: 'Please enter className' }],
                   },
-                ]"
-                     placeholder="Please enter className"
-                     allowClear />
+                ]" placeholder="Please enter className" allowClear />
           </a-form-item>
         </a-col>
         <a-col :span="12">
@@ -67,8 +56,7 @@
                       rules: [{ required: true }],
                       initialValue:'JAVA'
                     },
-                  ]"
-                      @change="onRuntimeChg">
+                  ]" @change="onRuntimeChg">
               <a-select-option value="JAVA">
                 JAVA
               </a-select-option>
@@ -89,9 +77,7 @@
                                   valuePropName: 'fileList',
                                   getValueFromEvent: normFile,
                                 },
-                              ]"
-                            :before-upload="fbeforeUpload"
-                            name="data">
+                              ]" :before-upload="fbeforeUpload" name="data">
             <p class="ant-upload-drag-icon">
               <a-icon type="inbox" />
             </p>
@@ -116,12 +102,10 @@
           textAlign: 'right',
           zIndex: 1,
         }">
-      <a-button :style="{ marginRight: '16px' }"
-                @click="onReset">
+      <a-button :style="{ marginRight: '16px' }" @click="onReset">
         reset
       </a-button>
-      <a-button type="primary"
-                @click="onSub">
+      <a-button type="primary" @click="onSub">
         Add Function
       </a-button>
     </div>
@@ -129,51 +113,103 @@
 </template>
 
 <script>
-export default {
-  data() {
-    return {
-      form: this.$form.createForm(this),
-    };
-  },
-  props: {
-    visible: {
-      type: Boolean,
-      default: false,
-    }
-  },
-  methods: {
-    showDrawer() {
-      this.$parent.showDrawer();
+  import { testFunc } from '@/api/func'
+  export default {
+    data() {
+      return {
+        form: this.$form.createForm(this),
+        input:[
+          "persistent://public/default/iutput-topic",
+          "persistent://public/default/iutput-topic1"
+        ],
+        isEdit:-1
+      };
     },
-    onClose() {
-      this.$parent.closeDrawer();
-    },
-    onReset() {
-      this.form.resetFields();
-    },
-    onSub() {
-      this.form.validateFields((err, values) => {
-        if (!err) {
-          console.log('Received values of form: ', values);
-        }
-      });
-    },
-    onRuntimeChg(value) {
-      this.form.setFieldsValue({
-        runtime: value,
-      });
-    },
-    normFile(e) {
-      console.log('Upload event:', e);
-      if (Array.isArray(e)) {
-        return [e[e.length - 1]];
+    props: {
+      visible: {
+        type: Boolean,
+        default: false,
       }
-      if (e && e.fileList.length > 0) return [e.fileList[e.fileList.length - 1]];
-      return [];
     },
-    fbeforeUpload() {
-      return false;
-    }
-  },
-}
+    methods: {
+      showDrawer() {
+        this.$parent.showDrawer();
+      },
+      onClose() {
+        this.$parent.closeDrawer();
+      },
+      onReset() {
+        this.form.resetFields();
+      },
+      onSub() {
+        this.form.validateFields((err, values) => {
+          if (err) return
+          // console.log('Received values of form: ', values)
+          values.inputs = this.input
+          console.log(values)
+          testFunc(values.functionName, values)
+            .then((res) => {
+              console.log(res) 
+            })
+        })
+      },
+      // onSub() {
+      //   this.form.validateFields((err, values) => {
+      //     if (!err) {
+      //       console.log('Received values of form: ', values);
+      //     }
+      //   });
+      // },
+      onRuntimeChg(value) {
+        this.form.setFieldsValue({
+          runtime: value,
+        });
+      },
+      normFile(e) {
+        // console.log('Upload event:', e);
+        if (Array.isArray(e)) {
+          return [e[e.length - 1]];
+        }
+        if (e && e.fileList.length > 0) return [e.fileList[e.fileList.length - 1]];
+        return [];
+      },
+      fbeforeUpload() {
+        return false;
+      },
+      enterInput(e){                    //输入input(支持逐个输入)
+        const value = e.target.value;
+        var pattern = /\ /;
+        // console.log(pattern.test(value));
+        if(!value){
+          this.$message.error("不能为空!");
+          return
+        }else if(pattern.test(value)){
+          this.$message.error("不能含有空格！！");
+          return
+        }
+        for(var i=0;i<this.input.length;i++){
+          if(value == this.input[i]){
+            this.$message.error("已有该input！");
+            return
+          }
+        }
+        if(this.isEdit != -1){
+          this.input.splice(this.isEdit, 1, value);
+          // this.form.resetFields('inputs');
+        }else{
+          this.input.push(value)
+          // this.form.resetFields('inputs');
+        }
+        this.isEdit=-1
+      },
+      deleteInputs(index){
+        this.input.splice(index,1);
+      },
+      editInput(index){
+        this.form.setFieldsValue({inputs:this.input[index]})
+        this.isEdit=index
+        // console.log(this.form)
+      }
+    },
+  }
 </script>

@@ -6,6 +6,7 @@ export const funcApi = {
   list: '/function/list',
   create: '/function/create',
   info: ({ funcName }) => `/function/${funcName}/info`,
+  test: ({ funcName }) => `/function/${funcName}/test`,
   stats: ({ funcName }) => `/function/${funcName}/stats`,
   status: ({ funcName }) => `/function/${funcName}/status`,
   trigger: ({ funcName }) => `/function/${funcName}/trigger`,
@@ -24,12 +25,20 @@ export function getInfo(funcName) {
   return get(funcApi.info({ funcName }));
 }
 
+// export function getTest(funcName) {
+//   return get(funcApi.test({ funcName }));
+// }
+
 export function getStats(funcName) {
   return get(funcApi.stats({ funcName }));
 }
 
 export function getStatus(funcName) {
   return get(funcApi.status({ funcName }));
+}
+
+export function testFunc(funcName, data) {
+  return post(funcApi.test({ funcName }), { data });
 }
 
 export function triggerFunc(funcName, data) {
