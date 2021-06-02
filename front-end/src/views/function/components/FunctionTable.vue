@@ -1,13 +1,16 @@
 <template>
   <a-table :columns="columns" :loading="loadingList" :data-source="data">
     <span slot="status" slot-scope="text">
-      <a-badge v-if="text === true" status="processing" text="Running" />
-      <a-badge v-else-if="text === false" status="default" text="Down" />
+      <a-badge v-if="text === true" v-model="text" status="processing" text="Running" />
+      <a-badge v-else-if="text === false" v-model="text" status="default" text="Down" />
       <a-spin v-else size="small" />
     </span>
 
     <span slot="action" slot-scope="text">
       <a @click="onSelFunction(text)">Trigger</a>
+      <a-divider type="vertical" />
+      <a @click="onStart(text)" v-show="!text.status">start</a>
+      <a @click="onStop(text)" v-show="text.status">stop</a>
       <a-divider type="vertical" />
       <a @click="onShowDetail(text)">Detail</a>
       <a-divider type="vertical" />
@@ -18,23 +21,26 @@
 
 <script>
 // import moment from 'moment';
-import { deleteFunc } from '@/api/func'
+import { deleteFunc, startFunc } from '@/api/func'
 
 const columns = [
   {
     title: 'Name',
     dataIndex: 'name',
     key: 'name',
+    width: '33.3%',
   },
   {
     title: 'Status',
     dataIndex: 'status',
     key: 'status',
+    width: '33.3%',
     scopedSlots: { customRender: 'status' },
   },
   {
     title: 'Options',
     key: 'action',
+    width: '33.3%',
     scopedSlots: { customRender: 'action' },
   },
 ]
@@ -43,6 +49,7 @@ export default {
   data() {
     return {
       columns,
+      isShow: false
     }
   },
   props: {
@@ -80,6 +87,38 @@ export default {
           }
         },
       })
+    },
+    onStart(text) {
+      const { name = '' } = text
+      const _this = this
+      async function Start() {
+        try {
+          const res = await startFunc(name)
+          text.status = !text.status
+          console.log(res)
+          alert("函数已启动")
+        } catch (error) {
+          console.log(res)
+          alert("函数启动异常")
+        }
+      }
+      Start()
+    },
+    onStop(text) {
+      const { name = '' } = text
+      const _this = this
+      async function Stop() {
+        try {
+          const res = await startFunc(name)
+          text.status = !text.status
+          console.log(res)
+          alert("函数已停机")
+        } catch (error) {
+          console.log(res)
+          alert("函数停机异常")
+        }
+      }
+      Stop()
     },
   },
 }

@@ -10,6 +10,8 @@ export const funcApi = {
   status: ({ funcName }) => `/function/${funcName}/status`,
   trigger: ({ funcName }) => `/function/${funcName}/trigger`,
   deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
+  startFunc: ({ funcName }) => `/function/${funcName}/start`,
+  stopFunc: ({ funcName }) => `/function/${funcName}/stop`,
 }
 
 export function getList() {
@@ -40,5 +42,10 @@ export function deleteFunc(funcName) {
   return post(funcApi.deleteFunc({ funcName }));
 }
 
+export function startFunc(funcName) {
+  return post(funcApi.startFunc({ funcName }));
+}
 
-
+export function stopFunc(funcName) {
+  return post(funcApi.startFunc({ funcName }));
+}
