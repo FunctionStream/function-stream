@@ -3,7 +3,7 @@
     <page-header-wrapper>
       <template slot="extra">
         <div class="table-operator">
-          <a-button type="primary" icon="plus" @click="showDrawer">add Function</a-button>
+          <a-button type="primary" icon="plus" @click="showDrawer">Add Function</a-button>
         </div>
       </template>
 
