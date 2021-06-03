@@ -11,9 +11,9 @@ export const funcApi = {
     info: ({
         funcName
     }) => `/function/${funcName}/info`,
-    test: ({
+    addFunc: ({
         funcName
-    }) => `/function/${funcName}/test`,
+    }) => `/function/${funcName}/add`,
     stats: ({
         funcName
     }) => `/function/${funcName}/stats`,
@@ -60,8 +60,8 @@ export function getStatus (funcName) {
     }))
 }
 
-export function testFunc (funcName, data) {
-    return post(funcApi.test({
+export function addFunc (funcName, data) {
+    return post(funcApi.addFunc({
         funcName
     }), {
         data

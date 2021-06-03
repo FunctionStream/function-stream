@@ -151,19 +151,12 @@
           // console.log('Received values of form: ', values)
           values.inputs = this.input
           console.log(values)
-          testFunc(values.functionName, values)
+          addFunc(values.functionName, values)
             .then((res) => {
               console.log(res)
             })
         })
       },
-      // onSub() {
-      //   this.form.validateFields((err, values) => {
-      //     if (!err) {
-      //       console.log('Received values of form: ', values);
-      //     }
-      //   });
-      // },
       onRuntimeChg(value) {
         this.form.setFieldsValue({
           runtime: value,
