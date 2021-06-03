@@ -95,11 +95,8 @@ export default {
         try {
           const res = await startFunc(name)
           text.status = !text.status
-          console.log(res)
-          alert("函数已启动")
         } catch (error) {
-          console.log(res)
-          alert("函数启动异常")
+          console.error(res)
         }
       }
       Start()
@@ -111,11 +108,8 @@ export default {
         try {
           const res = await startFunc(name)
           text.status = !text.status
-          console.log(res)
-          alert("函数已停机")
         } catch (error) {
-          console.log(res)
-          alert("函数停机异常")
+          console.error(res)
         }
       }
       Stop()
