@@ -3,7 +3,7 @@ import request from '@/utils/request'
 const {
     post,
     get
-} = request;
+} = request
 
 export const funcApi = {
     list: '/function/list',
@@ -25,23 +25,23 @@ export const funcApi = {
     }) => `/function/${funcName}/trigger`,
     deleteFunc: ({
         funcName
-    }) => `/function/${funcName}/delete`,
+    }) => `/function/${funcName}/delete`
 }
 
 export function getList () {
-    return get(funcApi.list);
+    return get(funcApi.list)
 }
 
 export function createFunc (data) {
     return post(funcApi.create, {
         data
-    });
+    })
 }
 
 export function getInfo (funcName) {
     return get(funcApi.info({
         funcName
-    }));
+    }))
 }
 
 // export function getTest(funcName) {
@@ -51,13 +51,13 @@ export function getInfo (funcName) {
 export function getStats (funcName) {
     return get(funcApi.stats({
         funcName
-    }));
+    }))
 }
 
 export function getStatus (funcName) {
     return get(funcApi.status({
         funcName
-    }));
+    }))
 }
 
 export function testFunc (funcName, data) {
@@ -65,7 +65,7 @@ export function testFunc (funcName, data) {
         funcName
     }), {
         data
-    });
+    })
 }
 
 export function triggerFunc (funcName, data) {
@@ -73,11 +73,11 @@ export function triggerFunc (funcName, data) {
         funcName
     }), {
         data
-    });
+    })
 }
 
 export function deleteFunc (funcName) {
     return post(funcApi.deleteFunc({
         funcName
-    }));
+    }))
 }
