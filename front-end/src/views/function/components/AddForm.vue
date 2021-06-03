@@ -11,9 +11,11 @@
                   },
                 ]" placeholder="Please enter inputs" allowClear @pressEnter="enterInput" />
         </a-form-item>
-            <a-breadcrumb>
-            <a-breadcrumb-item v-for="(value,index) in input"><a @click="editInput(index)">{{value}}</a><a-icon type="close-circle" @click='deleteInputs(index)'/></a-breadcrumb-item>
-          </a-breadcrumb>
+        <a-breadcrumb>
+          <a-breadcrumb-item v-for="(value,index) in input"><a @click="editInput(index)">{{value}}</a>
+            <a-icon type="close-circle" @click='deleteInputs(index)' />
+          </a-breadcrumb-item>
+        </a-breadcrumb>
       </a-row>
       <a-row>
         <a-form-item label="Output">
@@ -113,16 +115,18 @@
 </template>
 
 <script>
-  import { testFunc } from '@/api/func'
+  import {
+    testFunc
+  } from '@/api/func'
   export default {
     data() {
       return {
         form: this.$form.createForm(this),
-        input:[
+        input: [
           "persistent://public/default/iutput-topic",
           "persistent://public/default/iutput-topic1"
         ],
-        isEdit:-1
+        isEdit: -1
       };
     },
     props: {
@@ -149,7 +153,7 @@
           console.log(values)
           testFunc(values.functionName, values)
             .then((res) => {
-              console.log(res) 
+              console.log(res)
             })
         })
       },
@@ -176,38 +180,40 @@
       fbeforeUpload() {
         return false;
       },
-      enterInput(e){                    //输入input(支持逐个输入)
+      enterInput(e) { //输入input(支持逐个输入)
         const value = e.target.value;
         var pattern = /\ /;
         // console.log(pattern.test(value));
-        if(!value){
+        if (!value) {
           this.$message.error("不能为空!");
           return
-        }else if(pattern.test(value)){
+        } else if (pattern.test(value)) {
           this.$message.error("不能含有空格！！");
           return
         }
-        for(var i=0;i<this.input.length;i++){
-          if(value == this.input[i]){
+        for (var i = 0; i < this.input.length; i++) {
+          if (value == this.input[i]) {
             this.$message.error("已有该input！");
             return
           }
         }
-        if(this.isEdit != -1){
+        if (this.isEdit != -1) {
           this.input.splice(this.isEdit, 1, value);
           // this.form.resetFields('inputs');
-        }else{
+        } else {
           this.input.push(value)
           // this.form.resetFields('inputs');
         }
-        this.isEdit=-1
+        this.isEdit = -1
       },
-      deleteInputs(index){
-        this.input.splice(index,1);
+      deleteInputs(index) {
+        this.input.splice(index, 1);
       },
-      editInput(index){
-        this.form.setFieldsValue({inputs:this.input[index]})
-        this.isEdit=index
+      editInput(index) {
+        this.form.setFieldsValue({
+          inputs: this.input[index]
+        })
+        this.isEdit = index
         // console.log(this.form)
       }
     },
