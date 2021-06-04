@@ -63,8 +63,6 @@ export default {
   },
   methods: {
     onClose() {
-      // console.log(this.$parent.testname)
-      console.log(this.$parent.currentFuncionInfo)
       this.$parent.currentFuncionInfo = {};
       this.$parent.closeDetail();
     },
