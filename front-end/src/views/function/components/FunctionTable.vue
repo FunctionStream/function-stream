@@ -1,8 +1,8 @@
 <template>
   <a-table :columns="columns" :loading="loadingList" :data-source="data">
     <span slot="status" slot-scope="text">
-      <a-badge v-if="text === true" v-model="text" status="processing" text="Running" />
-      <a-badge v-else-if="text === false" v-model="text" status="default" text="Down" />
+      <a-badge v-if="text === true" status="processing" text="Running" />
+      <a-badge v-else-if="text === false" status="default" text="Down" />
       <a-spin v-else size="small" />
     </span>
 
@@ -28,19 +28,16 @@ const columns = [
     title: 'Name',
     dataIndex: 'name',
     key: 'name',
-    width: '33.3%',
   },
   {
     title: 'Status',
     dataIndex: 'status',
     key: 'status',
-    width: '33.3%',
     scopedSlots: { customRender: 'status' },
   },
   {
     title: 'Options',
     key: 'action',
-    width: '33.3%',
     scopedSlots: { customRender: 'action' },
   },
 ]
@@ -49,7 +46,6 @@ export default {
   data() {
     return {
       columns,
-      isShow: false
     }
   },
   props: {
@@ -95,7 +91,9 @@ export default {
         try {
           const res = await startFunc(name)
           text.status = !text.status
+          _this.$message.success('Function was started successfully.')
         } catch (error) {
+          _this.$message.error('Function startup failed!')
           console.error(res)
         }
       }
@@ -108,7 +106,9 @@ export default {
         try {
           const res = await startFunc(name)
           text.status = !text.status
+          _this.$message.success('Function was stopped successfully.')
         } catch (error) {
+          _this.$message.error('Function stop failed!')
           console.error(res)
         }
       }
@@ -117,3 +117,13 @@ export default {
   },
 }
 </script>
+
+<style>
+.ant-table-thead > tr >th{
+  background-color: #409eff;
+  color: white;
+}
+.ant-table-thead > tr >th,.ant-table-tbody > tr >td{
+  text-align: center;
+}
+</style>
