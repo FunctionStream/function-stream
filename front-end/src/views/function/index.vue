@@ -121,9 +121,8 @@ export default {
       getStats(name).then((res) => {
         if (!res) return
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res }
-
       }).finally(() => {
-        this.loadingDetail = false;
+        this.loadingDetail = false
       })
     }
   }
