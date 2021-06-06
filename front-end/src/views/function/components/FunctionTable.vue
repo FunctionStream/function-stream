@@ -73,7 +73,7 @@ export default {
         okType: 'danger',
         async onOk () {
           try {
-            const res = await deleteFunc(name)
+            await deleteFunc(name)
             _this.$notification.success({ message: `"${name}" function deleted successfully` })
           } catch (error) {
             _this.$notification.error({ message: `"${name}" funciton deletion failed` })
