@@ -63,11 +63,11 @@ export default {
     },
     data: {
       type: Array,
-      default: []
+      default: () => []
     },
     currentFunction: {
       type: Object,
-      default: {}
+      default: () => {}
     }
   },
   methods: {

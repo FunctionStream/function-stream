@@ -48,7 +48,7 @@ export default {
   props: {
     data: {
       type: Array,
-      default: []
+      default: () => []
     },
     onSelFunction: {
       type: Function,

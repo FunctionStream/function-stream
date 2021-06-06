@@ -35,6 +35,7 @@ import FunctionDetailVue from './components/FunctionDetail.vue'
 import FunctionTable from './components/FunctionTable'
 import Trigger from './components/Trigger.vue'
 import { getList, getStatus, getInfo, getStats } from '@/api/func'
+import moment from 'moment'
 
 export default {
   data () {
