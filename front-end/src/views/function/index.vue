@@ -31,9 +31,10 @@ import FunctionDetailVue from './components/FunctionDetail.vue'
 import FunctionTable from './components/FunctionTable'
 import Trigger from './components/Trigger.vue'
 import { getList, getStatus, getInfo, getStats } from '@/api/func'
+import moment from 'moment'
 
 export default {
-  data() {
+  data () {
     return {
       functionList: [],
       visibleDrawer: false,
@@ -41,23 +42,24 @@ export default {
       visibleDetail: false,
       currentFunction: {},
       currentFuncionInfo: {},
-      loadingList: false,
+      loadingList: false
     }
   },
   components: {
     FunctionTable,
     AddForm,
     Trigger,
-    FunctionDetailVue,
+    FunctionDetailVue
   },
-  async mounted() {
+  async mounted () {
     this.loadingList = true
     try {
       const res = await getList()
       if (Array.isArray(res)) {
         this.functionList = res?.map((name) => ({ key: name, name }))
 
-        // get status
+        // get status  fixme ① 'res' should be ensure of type ② replace the 'map' option by other option
+        // eslint-disable-next-line no-trailing-spaces,no-unused-expressions
         res?.map(async (name, i) => {
           const res = await getStatus(name)
           this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
@@ -67,32 +69,33 @@ export default {
     this.loadingList = false
   },
   methods: {
-    formatDate(date) {
+    // fixme ① this func is unused ② suggest putting it in the filter
+    formatDate (date) {
       return moment(date).format('YYYY/MM/DD')
     },
-    showDrawer() {
+    showDrawer () {
       this.visibleDrawer = true
     },
-    closeDrawer() {
+    closeDrawer () {
       this.visibleDrawer = false
     },
-    showTrigger() {
+    showTrigger () {
       this.visibleTrigger = true
     },
-    closeTrigger() {
+    closeTrigger () {
       this.visibleTrigger = false
     },
-    showDetail() {
+    showDetail () {
       this.visibleDetail = true
     },
-    closeDetail() {
+    closeDetail () {
       this.visibleDetail = false
     },
-    onSelFunction(value) {
+    onSelFunction (value) {
       this.currentFunction = value
       this.showTrigger()
     },
-    onShowDetail(value) {
+    onShowDetail (value) {
       this.currentFuncionInfo = { ...this.currentFuncionInfo, ...value }
       this.showDetail()
       const { name } = value
@@ -106,7 +109,7 @@ export default {
         if (!res) return
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res }
       })
-    },
-  },
+    }
+  }
 }
 </script>
