@@ -105,7 +105,7 @@ export default {
       async function Stop() {
         try {
           const res = await startFunc(name)
-          text.status = !text.status
+          text.status = false
           _this.$message.success('Function was stopped successfully.')
         } catch (error) {
           _this.$message.error('Function stop failed!')
