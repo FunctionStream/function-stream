@@ -9,8 +9,8 @@
     <span slot="action" slot-scope="text">
       <a @click="onSelFunction(text)">Trigger</a>
       <a-divider type="vertical" />
-      <a @click="onStart(text)" v-show="!text.status">start</a>
-      <a @click="onStop(text)" v-show="text.status">stop</a>
+      <a @click="onStart(text)" v-show="!text.status">Start</a>
+      <a @click="onStop(text)" v-show="text.status">Stop</a>
       <a-divider type="vertical" />
       <a @click="onShowDetail(text)">Detail</a>
       <a-divider type="vertical" />
@@ -90,7 +90,7 @@ export default {
       async function Start() {
         try {
           const res = await startFunc(name)
-          text.status = !text.status
+          text.status = true
           _this.$message.success('Function was started successfully.')
         } catch (error) {
           _this.$message.error('Function startup failed!')
@@ -105,7 +105,7 @@ export default {
       async function Stop() {
         try {
           const res = await startFunc(name)
-          text.status = !text.status
+          text.status = false
           _this.$message.success('Function was stopped successfully.')
         } catch (error) {
           _this.$message.error('Function stop failed!')
