@@ -119,10 +119,6 @@ export default {
 </script>
 
 <style>
-.ant-table-thead > tr >th{
-  background-color: #409eff;
-  color: white;
-}
 .ant-table-thead > tr >th,.ant-table-tbody > tr >td{
   text-align: center;
 }
