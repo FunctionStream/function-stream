@@ -9,7 +9,7 @@
     <span slot="action" slot-scope="text">
       <a @click="onSelFunction(text)">Trigger</a>
       <a-divider type="vertical" />
-      <a @click="onStart(text)" v-show="!text.status">start</a>
+      <a @click="onStart(text)" v-show="!text.status">Start</a>
       <a @click="onStop(text)" v-show="text.status">stop</a>
       <a-divider type="vertical" />
       <a @click="onShowDetail(text)">Detail</a>
