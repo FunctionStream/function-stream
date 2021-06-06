@@ -9,12 +9,6 @@
     :i18nRender="i18nRender"
     v-bind="settings"
   >
-    <!-- Ads begin
-      广告代码 真实项目中请移除
-      production remove this Ads
-    -->
-    <ads v-if="isProPreviewSite && !collapsed" />
-    <!-- Ads end -->
 
     <!-- 1.0.0+ 版本 pro-layout 提供 API，
           我们推荐使用这种方式进行 LOGO 和 title 自定义
@@ -43,11 +37,17 @@
       </div>
     </template>
 
-    <setting-drawer v-if="isDev" :settings="settings" @change="handleSettingChange">
+    <setting-drawer
+      v-if="isDev"
+      :settings="settings"
+      @change="handleSettingChange">
       <div style="margin: 12px 0">This is SettingDrawer custom footer content.</div>
     </setting-drawer>
     <template v-slot:rightContentRender>
-      <right-content :top-menu="settings.layout === 'topmenu'" :is-mobile="isMobile" :theme="settings.theme" />
+      <right-content
+        :top-menu="settings.layout === 'topmenu'"
+        :is-mobile="isMobile"
+        :theme="settings.theme" />
     </template>
     <!-- custom footer / 自定义Footer -->
     <template v-slot:footerRender>
@@ -67,7 +67,6 @@ import { asyncRouterMap } from '@/config/router.config.js'
 import defaultSettings from '@/config/defaultSettings'
 import RightContent from '@/components/GlobalHeader/RightContent'
 import GlobalFooter from '@/components/GlobalFooter'
-import Ads from '@/components/Other/CarbonAds'
 import LogoSvg from '../assets/logo.svg?inline'
 
 export default {
@@ -76,8 +75,7 @@ export default {
     SettingDrawer,
     RightContent,
     GlobalFooter,
-    LogoSvg,
-    Ads
+    LogoSvg
   },
   data () {
     return {
