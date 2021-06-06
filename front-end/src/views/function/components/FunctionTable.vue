@@ -90,7 +90,7 @@ export default {
       async function Start() {
         try {
           const res = await startFunc(name)
-          text.status = !text.status
+          text.status = true
           _this.$message.success('Function was started successfully.')
         } catch (error) {
           _this.$message.error('Function startup failed!')
