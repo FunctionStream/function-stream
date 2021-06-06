@@ -37,7 +37,7 @@ import Trigger from './components/Trigger.vue'
 import { getList, getStatus, getInfo, getStats } from '@/api/func'
 
 export default {
-  data() {
+  data () {
     return {
       functionList: [],
       visibleDrawer: false,
@@ -46,16 +46,16 @@ export default {
       currentFunction: {},
       currentFuncionInfo: {},
       loadingList: false,
-      loadingDetail: false,
+      loadingDetail: false
     }
   },
   components: {
     FunctionTable,
     AddForm,
     Trigger,
-    FunctionDetailVue,
+    FunctionDetailVue
   },
-  async mounted() {
+  async mounted () {
     this.loadingList = true
     try {
       const res = await getList()
@@ -73,33 +73,33 @@ export default {
     this.loadingList = false
   },
   methods: {
-    formatDate(date) {
+    formatDate (date) {
       return moment(date).format('YYYY/MM/DD')
     },
-    showDrawer() {
+    showDrawer () {
       this.visibleDrawer = true
     },
-    closeDrawer() {
+    closeDrawer () {
       this.visibleDrawer = false
     },
-    showTrigger() {
+    showTrigger () {
       this.visibleTrigger = true
     },
-    closeTrigger() {
+    closeTrigger () {
       this.visibleTrigger = false
     },
-    showDetail() {
+    showDetail () {
       this.visibleDetail = true
     },
-    closeDetail() {
+    closeDetail () {
       this.visibleDetail = false
     },
-    onSelFunction(value) {
+    onSelFunction (value) {
       this.currentFunction = value
       this.showTrigger()
     },
-    onShowDetail(value) {
-      this.loadingDetail = true;
+    onShowDetail (value) {
+      this.loadingDetail = true
       this.currentFuncionInfo = { ...this.currentFuncionInfo, ...value }
       this.showDetail()
       const { name } = value
@@ -109,16 +109,15 @@ export default {
         const input = Object.keys(inputSpecs)
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res, input }
       }).finally(() => {
-        this.loadingDetail = false;
+        this.loadingDetail = false
       })
       getStats(name).then((res) => {
         if (!res) return
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res }
-
       }).finally(() => {
-        this.loadingDetail = false;
+        this.loadingDetail = false
       })
-    },
-  },
+    }
+  }
 }
 </script>
