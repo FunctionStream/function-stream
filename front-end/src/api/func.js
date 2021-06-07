@@ -3,13 +3,13 @@ import request from '@/utils/request'
 const { post, get } = request;
 
 export const funcApi = {
-  list: '/function/list',
-  create: '/function/create',
-  info: ({ funcName }) => `/function/${funcName}/info`,
-  stats: ({ funcName }) => `/function/${funcName}/stats`,
-  status: ({ funcName }) => `/function/${funcName}/status`,
-  trigger: ({ funcName }) => `/function/${funcName}/trigger`,
-  deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
+  list: '/functions/public/default',
+  create: '/functions/public/default/myfunc',
+  info: ({ funcName }) => `/functions/${funcName}/info`,
+  stats: ({ funcName }) => `/functions/${funcName}/stats`,
+  status: ({ funcName }) => `/functions/${funcName}/status`,
+  trigger: ({ funcName }) => `/functions/${funcName}/trigger`,
+  deleteFunc: ({ funcName }) => `/functions/${funcName}/delete`,
 }
 
 export function getList() {
