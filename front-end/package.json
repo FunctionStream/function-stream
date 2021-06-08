@@ -3,6 +3,7 @@
   "version": "3.0.0",
   "private": true,
   "scripts": {
+    "api": "vue-cli-service serve --mode api",
     "start": "vue-cli-service serve",
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
@@ -26,6 +27,7 @@
     "moment": "^2.24.0",
     "nprogress": "^0.2.0",
     "store": "^2.0.12",
+    "uid": "^2.0.0",
     "viser-vue": "^2.4.6",
     "vue": "^2.6.10",
     "vue-clipboard2": "^0.2.1",

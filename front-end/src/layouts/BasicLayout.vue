@@ -22,24 +22,26 @@
     <template v-slot:headerContentRender>
       <div>
         <a-tooltip title="刷新页面">
-          <a-icon
-            type="reload"
-            style="font-size: 18px; cursor: pointer"
-            @click="
+          <a-icon type="reload"
+                  style="font-size: 18px; cursor: pointer"
+                  @click="
               () => {
                 $message.info('只是一个DEMO')
               }
-            "
-          />
+            " />
         </a-tooltip>
       </div>
     </template>
 
-    <setting-drawer v-if="isDev" :settings="settings" @change="handleSettingChange">
+    <setting-drawer v-if="isDev"
+                    :settings="settings"
+                    @change="handleSettingChange">
       <div style="margin: 12px 0">This is SettingDrawer custom footer content.</div>
     </setting-drawer>
     <template v-slot:rightContentRender>
-      <right-content :top-menu="settings.layout === 'topmenu'" :is-mobile="isMobile" :theme="settings.theme" />
+      <right-content :top-menu="settings.layout === 'topmenu'"
+                     :is-mobile="isMobile"
+                     :theme="settings.theme" />
     </template>
     <!-- custom footer / 自定义Footer -->
     <template v-slot:footerRender>
@@ -59,7 +61,6 @@ import { asyncRouterMap } from '@/config/router.config.js'
 import defaultSettings from '@/config/defaultSettings'
 import RightContent from '@/components/GlobalHeader/RightContent'
 import GlobalFooter from '@/components/GlobalFooter'
-import Ads from '@/components/Other/CarbonAds'
 import LogoSvg from '../assets/logo.svg?inline'
 
 export default {
@@ -69,7 +70,6 @@ export default {
     RightContent,
     GlobalFooter,
     LogoSvg,
-    Ads,
   },
   data() {
     return {
