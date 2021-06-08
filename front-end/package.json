@@ -3,6 +3,7 @@
   "version": "3.0.0",
   "private": true,
   "scripts": {
+    "api": "vue-cli-service serve --mode api",
     "start": "vue-cli-service serve",
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
