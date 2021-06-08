@@ -3,11 +3,11 @@ import request from '@/utils/request'
 const { post, get } = request;
 
 export const funcApi = {
-  list: '/functions/public/default',
-  create: '/functions/public/default/myfunc',
-  info: ({ funcName }) => `/functions/${funcName}/info`,
-  stats: ({ funcName }) => `/functions/${funcName}/stats`,
-  status: ({ funcName }) => `/functions/${funcName}/status`,
+  list: '/admin/v3/functions/public/default',
+  create: 'admin/v3/functions/public/default/myfunc',
+  info: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
+  stats: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stats`,
+  status: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/status`,
   trigger: ({ funcName }) => `/functions/${funcName}/trigger`,
   deleteFunc: ({ funcName }) => `/functions/${funcName}/delete`,
 }
