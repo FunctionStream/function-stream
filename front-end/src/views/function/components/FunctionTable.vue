@@ -24,63 +24,63 @@ const columns = [
   {
     title: 'Name',
     dataIndex: 'name',
-    key: 'name',
+    key: 'name'
   },
   {
     title: 'Status',
     dataIndex: 'status',
     key: 'status',
-    scopedSlots: { customRender: 'status' },
+    scopedSlots: { customRender: 'status' }
   },
   {
     title: 'Options',
     key: 'action',
-    scopedSlots: { customRender: 'action' },
-  },
+    scopedSlots: { customRender: 'action' }
+  }
 ]
 
 export default {
-  data() {
+  data () {
     return {
-      columns,
+      columns
     }
   },
   props: {
     data: {
       type: Array,
-      default: [],
+      default: () => []
     },
     onSelFunction: {
       type: Function,
-      default: (v) => {},
+      default: (v) => {}
     },
     onShowDetail: {
       type: Function,
-      default: (v) => {},
+      default: (v) => {}
     },
     loadingList: {
       type: Boolean,
-      default: false,
-    },
+      default: false
+    }
   },
   methods: {
-    onDelete(func) {
+    onDelete (func) {
       const { name = '' } = func
       const _this = this
       this.$confirm({
         title: 'Are you sure delete this function?',
         content: 'Some descriptions',
         okType: 'danger',
-        async onOk() {
+        async onOk () {
           try {
-            const res = await deleteFunc(name)
+            await deleteFunc(name)
             _this.$notification.success({ message: `"${name}" function deleted successfully` })
           } catch (error) {
             _this.$notification.error({ message: `"${name}" funciton deletion failed` })
           }
-        },
+        }
       })
-    },
-  },
+    }
+  }
 }
 </script>
