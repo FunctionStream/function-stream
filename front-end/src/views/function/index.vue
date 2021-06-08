@@ -46,7 +46,7 @@ export default {
       currentFunction: {},
       currentFuncionInfo: {},
       loadingList: false,
-      testname:''
+      loadingDetail= false,
     }
   },
   components: {
@@ -97,7 +97,8 @@ export default {
       this.currentFunction = value
       this.showTrigger()
     },
-    onShowDetail(value) {         //显示细节
+    onShowDetail(value) {
+      this.loadingDetail = true;
       this.currentFuncionInfo = { ...this.currentFuncionInfo, ...value }
       this.showDetail()
       const { name } = value
@@ -107,10 +108,6 @@ export default {
         const input = Object.keys(inputSpecs)
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res, input }
       })
-      // getTest(name).then((res) =>{
-      //   if(!res) return
-      //   this.testname = res
-      // })
       getStats(name).then((res) => {
         if (!res) return
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res }
