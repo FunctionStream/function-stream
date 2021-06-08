@@ -4,7 +4,7 @@
       <template slot="extra">
         <div class="table-operator">
           <a-button type="primary"
-                    icon="plus" 
+                    icon="plus"
                     @click="showDrawer">Add Function</a-button>
         </div>
       </template>
@@ -13,18 +13,18 @@
         <function-table :data="functionList"
                         :loadingList="loadingList"
                         :onSelFunction="onSelFunction"
-                        :onShowDetail="onShowDetail"/>
+                        :onShowDetail="onShowDetail" />
       </a-card>
     </page-header-wrapper>
 
     <!-- new funtion -->
     <add-form :visible="visibleDrawer" />
     <!-- trigger -->
-    <trigger :visible="visibleTrigger" 
-             :data="functionList" 
+    <trigger :visible="visibleTrigger"
+             :data="functionList"
              :currentFunction="currentFunction" />
     <!-- detail -->
-    <function-detail-vue :visible="visibleDetail" 
+    <function-detail-vue :visible="visibleDetail"
                          :currentFuncionInfo="currentFuncionInfo"
                          :loadingDetail="loadingDetail" />
   </div>
@@ -46,7 +46,7 @@ export default {
       currentFunction: {},
       currentFuncionInfo: {},
       loadingList: false,
-      loadingDetail= false,
+      loadingDetail: false,
     }
   },
   components: {
@@ -66,6 +66,7 @@ export default {
         res?.map(async (name, i) => {
           const res = await getStatus(name)
           this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
+          this.$set(this.functionList[i], 'statusInfo', res)
         })
       }
     } catch (e) { }
@@ -107,10 +108,15 @@ export default {
         const { inputSpecs = {} } = res
         const input = Object.keys(inputSpecs)
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res, input }
+      }).finally(() => {
+        this.loadingDetail = false;
       })
       getStats(name).then((res) => {
         if (!res) return
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res }
+
+      }).finally(() => {
+        this.loadingDetail = false;
       })
     },
   },
