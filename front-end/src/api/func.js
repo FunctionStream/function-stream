@@ -11,6 +11,8 @@ export const funcApi = {
   trigger: ({ funcName }) => `/function/${funcName}/trigger`,
   deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
   addFunc: ({ funcName }) => `/function/${funcName}/add`,
+  Images: ({ funcName }) => `/function/${funcName}/Images`,
+  delImage: ({ funcName }) => `/function/${funcName}/delImage`,
 }
 
 export function getList() {
@@ -43,6 +45,14 @@ export function deleteFunc(funcName) {
 
 export function addFunc (funcName, data) {
     return post(funcApi.addFunc({ funcName }), { data })
+}
+
+export function getImages(funcName) {
+  return get(funcApi.Images({ funcName }));
+}
+
+export function delImage(funcName) {
+  return post(funcApi.delImage({ funcName }));
 }
 
 

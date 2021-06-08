@@ -124,8 +124,7 @@
           "persistent://public/default/iutput-topic",
           "persistent://public/default/iutput-topic1"
         ],
-        isEdit: -1,
-        fileList:''
+        isEdit: -1
       };
     },
     props: {
@@ -150,7 +149,6 @@
           if (err) return
           // console.log('Received values of form: ', values)
           values.inputs = this.input
-          console.log(values)
           // console.log(values)
           addFunc(values.functionName, values)
             .then((res) => {
@@ -171,9 +169,7 @@
         if (e && e.fileList.length > 0) return [e.fileList[e.fileList.length - 1]];
         return [];
       },
-      fbeforeUpload(file) {
-        this.fileList = [...this.fileList, file];
-        console.log(this.fileList)
+      fbeforeUpload() {
         return false;
       },
       enterInput(e) { //输入input(支持逐个输入)

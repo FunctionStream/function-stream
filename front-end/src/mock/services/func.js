@@ -116,18 +116,26 @@ const trigger = (option) => {
 }
 
 const addFunc = (option) => {
-    console.log(option)
+    console.log("这是后端传值：",option)
     return 0
 }
 
 const deleteFunc = { result: 0 };
+
+const Images = [
+    "myfunc",
+    "abcd"
+]
+
+const delImage = { result: 0 }
 
 get(/\/function\/list/, list);
 get(/\/function\/create/, createFunc);
 get(/\/function\/[^/]*\/info/, info);
 get(/\/function\/[^/]*\/stats/, stats);
 get(/\/function\/[^/]*\/status/, status);
+get(/\/function\/[^/]*\/Images/, Images);
 post(/\/function\/[^/]*\/trigger/, trigger);
 post(/\/function\/[^/]*\/delete/, deleteFunc);
 post(/\/function\/[^/]*\/add/, addFunc);
-
+post(/\/function\/[^/]*\/delImage/, delImage);

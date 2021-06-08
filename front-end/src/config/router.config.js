@@ -22,7 +22,13 @@ export const asyncRouterMap = [
         meta: { title: 'menu.function', icon: 'table' },
         component: () => import('@/views/function/index'),
       },
-
+	  {
+        path: '/images',
+        name: 'images',
+        component: RouteView,
+        meta: { title: 'Images', icon: 'table' },
+        component: () => import('@/views/images/index'),
+	  }
     ]
   },
   {

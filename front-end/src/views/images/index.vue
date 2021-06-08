@@ -3,30 +3,26 @@
     <page-header-wrapper>
       <template slot="extra">
         <div class="table-operator">
-          <a-button type="primary"
-                    icon="plus" 
-                    @click="showDrawer">Add Function</a-button>
+          <a-button type="primary" icon="plus" @click="showDrawer">Add Iamges</a-button>
         </div>
       </template>
 
       <a-card :bordered="false">
-        <function-table :data="functionList"
-                        :loadingList="loadingList"
-                        :onSelFunction="onSelFunction"
-                        :onShowDetail="onShowDetail"/>
+        <function-table
+          :data="functionList"
+          :loadingList="loadingList"
+          :onSelFunction="onSelFunction"
+          :onShowDetail="onShowDetail"
+        />
       </a-card>
     </page-header-wrapper>
 
     <!-- new funtion -->
     <add-form :visible="visibleDrawer" />
     <!-- trigger -->
-    <trigger :visible="visibleTrigger" 
-             :data="functionList" 
-             :currentFunction="currentFunction" />
+    <trigger :visible="visibleTrigger" :data="functionList" :currentFunction="currentFunction" />
     <!-- detail -->
-    <function-detail-vue :visible="visibleDetail" 
-                         :currentFuncionInfo="currentFuncionInfo"
-                         :loadingDetail="loadingDetail" />
+    <function-detail-vue :visible="visibleDetail" :currentFuncionInfo="currentFuncionInfo" />
   </div>
 </template>
 <script>
@@ -34,7 +30,7 @@ import AddForm from './components/AddForm.vue'
 import FunctionDetailVue from './components/FunctionDetail.vue'
 import FunctionTable from './components/FunctionTable'
 import Trigger from './components/Trigger.vue'
-import { getList, getStatus, getInfo, getStats } from '@/api/func'
+import { getImages, delImages } from '@/api/func'
 
 export default {
   data() {
@@ -58,18 +54,20 @@ export default {
   async mounted() {
     this.loadingList = true
     try {
-      const res = await getList()
-      if (Array.isArray(res)) {
+      const res = await getImages()
+      if (res) {
+        // console.log(res)
         this.functionList = res?.map((name) => ({ key: name, name }))
 
         // get status
-        res?.map(async (name, i) => {
-          const res = await getStatus(name)
-          this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
-        })
+        // res?.map(async (name, i) => {
+        //   const res = await getStatus(name)
+        //   this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
+        // })
       }
-    } catch (e) { }
+    } catch (e) {}
     this.loadingList = false
+    console.log(this.functionList)
   },
   methods: {
     formatDate(date) {
@@ -104,7 +102,7 @@ export default {
       getInfo(name).then((res) => {
         if (!res) return
         const { inputSpecs = {} } = res
-        const input = Object.keys(inputSpecs)
+        const input = Object.keys(inputSpecs)?.[0]
         this.currentFuncionInfo = { ...this.currentFuncionInfo, ...res, input }
       })
       // getTest(name).then((res) =>{

@@ -14,6 +14,8 @@ const request = axios.create({
   timeout: 6000 // 请求超时时间
 })
 
+console.log(process.env.VUE_APP_API_BASE_URL)
+
 nProgress.configure({ showSpinner: false })
 
 // 异常拦截处理器
