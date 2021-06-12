@@ -122,4 +122,13 @@ export default {
 .ant-table-thead > tr >th,.ant-table-tbody > tr >td{
   text-align: center;
 }
+.ant-table-thead > tr >th:nth-child(1),.ant-table-tbody > tr >td:nth-child(1){
+  text-align: left;
+}
+.ant-table-thead > tr >th:nth-child(2),.ant-table-tbody > tr >td:nth-child(2){
+  width: 15%;
+}
+.ant-table-thead > tr >th:nth-child(3),.ant-table-tbody > tr >td:nth-child(3){
+  width: 30%;
+}
 </style>
