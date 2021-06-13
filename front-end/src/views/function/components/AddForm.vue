@@ -16,7 +16,7 @@
               <a-input
                 v-decorator="[`inputs[${index}]`,
                               {
-                                rules: [{ required: true, message: 'Please input your Input!' }],
+                                rules: [{ required: true, message: 'Please add your input topics' }],
                               }
                 ]"
                 class="inputDefault"
