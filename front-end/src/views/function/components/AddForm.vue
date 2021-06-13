@@ -37,11 +37,6 @@
         <a-button type="dashed" style="width: 100%" @click="addInput()">
           <a-icon type="plus" /> Add inputs
         </a-button>
-        <!-- <a-breadcrumb>
-          <a-breadcrumb-item v-for="(value,index) in input"><a @click="editInput(index)">{{value}}</a>
-            <a-icon type="close-circle" @click='deleteInputs(index)' />
-          </a-breadcrumb-item>
-        </a-breadcrumb> -->
       </a-row>
       <a-row>
         <a-form-item label="Output">
@@ -108,28 +103,28 @@
       </a-row>
 
       <a-form-item label="Dragger">
-          <a-upload-dragger
-            v-decorator="[
-              'data',
-              {
-                rules: [{ required: true, message: 'Please dragger function file' }],
-                valuePropName: 'fileList',
-                getValueFromEvent: normFile,
-              },
-            ]"
-            :before-upload="fbeforeUpload"
-            name="data">
-            <p class="ant-upload-drag-icon">
-              <a-icon type="inbox" />
-            </p>
-            <p class="ant-upload-text">
-              Click or drag file to this area to upload
-            </p>
-            <p class="ant-upload-hint">
-              Only jar files are supported
-            </p>
-          </a-upload-dragger>
-        </div>
+        <a-upload-dragger
+          v-decorator="[
+            'data',
+            {
+              rules: [{ required: true, message: 'Please dragger function file' }],
+              valuePropName: 'fileList',
+              getValueFromEvent: normFile,
+            },
+          ]"
+          :before-upload="fbeforeUpload"
+          name="data"
+          accept=".jar">
+          <p class="ant-upload-drag-icon">
+            <a-icon type="inbox" />
+          </p>
+          <p class="ant-upload-text">
+            Click or drag file to this area to upload
+          </p>
+          <p class="ant-upload-hint">
+            Only jar files are supported
+          </p>
+        </a-upload-dragger>
       </a-form-item>
     </a-form>
     <div
@@ -155,7 +150,7 @@
 </template>
 
 <script>
-  import { addFunc } from '@/api/func'
+import { addFunc } from '@/api/func'
   export default {
     data () {
       return {
@@ -182,19 +177,28 @@
       onReset () {
         // console.log('reset')
         this.form.resetFields()
+        this.input = ['']
       },
       onSub () {
         this.form.validateFields((err, values) => {
           if (err) return
-          console.log(values)
-          // console.log('Received values of form: ', values)
-          // values.inputs = this.input
-          // console.log(values)
-          // console.log(values)
-          addFunc(values.functionName, values)
-            .then((res) => {
-              // console.log("success!")
-            })
+          const _this = this
+          this.$confirm({
+            title: 'Are you sure to create this function?',
+            content: 'Some descriptions',
+            okType: 'primary',
+            async onOk () {
+              try {
+                await addFunc(values.functionName, values)
+                  .then((res) => {
+                    // console.log("success!")
+                    _this.$notification.success({ message: `" function created successfully` })
+                  })
+              } catch (error) {
+                _this.$notification.error({ message: ` funciton creation failed` })
+              }
+            }
+          })
         })
       },
       onRuntimeChg (value) {
@@ -223,42 +227,6 @@
         this.input.splice(index, 1)
         // console.log(key)
       }
-      // enterInput(e) { //输入input(支持逐个输入)
-      //   const value = e.target.value;
-      //   var pattern = /\ /;
-      //   // console.log(pattern.test(value));
-      //   if (!value) {
-      //     this.$message.error("不能为空!");
-      //     return
-      //   } else if (pattern.test(value)) {
-      //     this.$message.error("不能含有空格！！");
-      //     return
-      //   }
-      //   for (var i = 0; i < this.input.length; i++) {
-      //     if (value == this.input[i]) {
-      //       this.$message.error("已有该input！");
-      //       return
-      //     }
-      //   }
-      //   if (this.isEdit != -1) {
-      //     this.input.splice(this.isEdit, 1, value);
-      //     // this.form.resetFields('inputs');
-      //   } else {
-      //     this.input.push(value)
-      //     // this.form.resetFields('inputs');
-      //   }
-      //   this.isEdit = -1
-      // },
-      // deleteInputs(index) {
-      //   this.input.splice(index, 1);
-      // },
-      // editInput(index) {
-      //   this.form.setFieldsValue({
-      //     inputs: this.input[index]
-      //   })
-      //   this.isEdit = index
-      //   // console.log(this.form)
-      // }
     }
   }
 </script>
