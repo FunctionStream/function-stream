@@ -10,6 +10,7 @@ export const funcApi = {
   status: ({ funcName }) => `/function/${funcName}/status`,
   trigger: ({ funcName }) => `/function/${funcName}/trigger`,
   deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
+  addFunc: ({ funcName }) => `/function/${funcName}/add`,
 }
 
 export function getList() {
@@ -38,6 +39,10 @@ export function triggerFunc(funcName, data) {
 
 export function deleteFunc(funcName) {
   return post(funcApi.deleteFunc({ funcName }));
+}
+
+export function addFunc (funcName, data) {
+    return post(funcApi.addFunc({ funcName }), { data })
 }
 
 
