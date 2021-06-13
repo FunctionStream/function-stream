@@ -36,6 +36,9 @@ export default {
     'menu.account.settings': 'Account Settings',
     'menu.account.trigger': 'Trigger Error',
     'menu.account.logout': 'Logout',
-
+    // Function stream project menu
     'menu.function': 'Function',
+    'menu.settings': 'Settings',
+    'menu.settings.common': 'Common Setting',
+    'menu.settings.user-management': 'User Menagement'
 }

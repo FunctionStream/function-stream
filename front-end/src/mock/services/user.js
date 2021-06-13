@@ -332,6 +332,7 @@ const info = (options) => {
     }]
   }
 
+  // * actions, actionEntitySet 是后台传给前端的两种不同的数据格式(字符串形式和对象形式)， 根据需要自己取
   roleObj.permissions.push({
     'roleId': 'admin',
     'permissionId': 'support',
@@ -756,5 +757,19 @@ const userNav = (options) => {
   return json
 }
 
+const getToken = (options) => {
+  const loginData = {
+    token: '111.222',
+    username: 'aa',
+    role: 'manager',
+    permissionId: 'manager',
+    permissionName: '管理员'
+  }
+  const json = builder(loginData)
+  console.log('json', json)
+  return json
+}
+
 Mock.mock(/\/api\/user\/info/, 'get', info)
 Mock.mock(/\/api\/user\/nav/, 'get', userNav)
+Mock.mock(/\/api\/user\/login/, 'get', getToken)

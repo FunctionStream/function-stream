@@ -14,6 +14,8 @@ export default {
   'user.login.sign-in-with': '其他登录方式',
   'user.login.signup': '注册账户',
   'user.login.login': '登录',
+  'user.login.login-exception-label': '登录失败',
+  'user.login.login-exception': '请求用户信息失败，请重试',
   'user.register.register': '注册',
   'user.register.email.placeholder': '邮箱',
   'user.register.password.placeholder': '请至少输入 6 个字符。请不要使用容易被猜到的密码。',

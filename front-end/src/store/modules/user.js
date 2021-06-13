@@ -51,26 +51,26 @@ const user = {
     GetInfo ({ commit }) {
       return new Promise((resolve, reject) => {
         getInfo().then(response => {
-          const result = response.result
+          const userInfo = response.result
 
-          if (result.role && result.role.permissions.length > 0) {
-            const role = result.role
-            role.permissions = result.role.permissions
+          if (userInfo.role && userInfo.role.permissions.length > 0) {
+            const role = userInfo.role
+            // role.permissions = userInfo.role.permissions
             role.permissions.map(per => {
               if (per.actionEntitySet != null && per.actionEntitySet.length > 0) {
                 const action = per.actionEntitySet.map(action => { return action.action })
                 per.actionList = action
               }
             })
-            role.permissionList = role.permissions.map(permission => { return permission.permissionId })
-            commit('SET_ROLES', result.role)
-            commit('SET_INFO', result)
+            role._permissionList = role.permissions.map(permission => { return permission.permissionId })
+            commit('SET_ROLES', userInfo.role)
+            commit('SET_INFO', userInfo)
           } else {
             reject(new Error('getInfo: roles must be a non-null array !'))
           }
 
-          commit('SET_NAME', { name: result.name, welcome: welcome() })
-          commit('SET_AVATAR', result.avatar)
+          commit('SET_NAME', { name: userInfo.name, welcome: welcome() })
+          commit('SET_AVATAR', userInfo.avatar)
 
           resolve(response)
         }).catch(error => {
@@ -84,7 +84,7 @@ const user = {
       return new Promise((resolve) => {
         logout(state.token).then(() => {
           commit('SET_TOKEN', '')
-          commit('SET_ROLES', [])
+          // commit('SET_ROLES', [])
           storage.remove(ACCESS_TOKEN)
           resolve()
         }).catch(() => {

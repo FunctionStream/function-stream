@@ -1,9 +1,12 @@
 export default {
   'account.settings.menuMap.basic': 'Basic Settings',
+  'account.settings.menuMap.common': 'Common Settings',
+  'account.settings.menuMap.user-management': 'User Management',
   'account.settings.menuMap.security': 'Security Settings',
   'account.settings.menuMap.custom': 'Custom Settings',
   'account.settings.menuMap.binding': 'Account Binding',
   'account.settings.menuMap.notification': 'New Message Notification',
+  'account.settings.common.remember-me': 'Remember me',
   'account.settings.basic.avatar': 'Avatar',
   'account.settings.basic.change-avatar': 'Change avatar',
   'account.settings.basic.email': 'Email',

@@ -36,6 +36,8 @@ import FunctionTable from './components/FunctionTable'
 import Trigger from './components/Trigger.vue'
 import { getList, getStatus, getInfo, getStats } from '@/api/func'
 import moment from 'moment'
+import storage from 'store'
+import { MANUAL_EXIT } from '@/store/mutation-types.js'
 
 export default {
   data () {
@@ -55,6 +57,9 @@ export default {
     AddForm,
     Trigger,
     FunctionDetailVue
+  },
+  created () {
+    storage.set(MANUAL_EXIT, 'false')
   },
   async mounted () {
     this.loadingList = true

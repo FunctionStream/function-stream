@@ -35,5 +35,10 @@ export default {
     'menu.account.center': '个人中心',
     'menu.account.settings': '个人设置',
     'menu.account.trigger': '触发报错',
-    'menu.account.logout': '退出登录'
+    'menu.account.logout': '退出登录',
+    // Function stream project menu
+    'menu.function': 'Function',
+    'menu.settings': '设置',
+    'menu.settings.common': '通用设置',
+    'menu.settings.user-management': '用户管理'
 }

@@ -21,7 +21,7 @@ export default {
 
   'layouts.usermenu.dialog.title': '信息',
   'layouts.usermenu.dialog.content': '您确定要注销吗？',
-  'layouts.userLayout.title': 'Ant Design 是西湖区最具影响力的 Web 设计规范',
+  'layouts.userLayout.title': '弹性后端, 缩放自如',
   ...components,
   ...global,
   ...menu,
