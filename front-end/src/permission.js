@@ -68,8 +68,6 @@ router.beforeEach((to, from, next) => {
     }
   } else {
     if (allowList.includes(to.name)) {
-      console.log(storage.get(MANUAL_EXIT))
-      debugger
       if (to.name === 'login' && storage.get(REMEMBER_ME) === 'true' && storage.get(MANUAL_EXIT) !== 'true') {
         // todo winnd: 这部分是自动登录, 具体实现要和后台协商，因为前端不应该明文保存密码 ① 前后端协商token什么时候失效 ② 开关自动登录时向后台发送通知请求
         try {
