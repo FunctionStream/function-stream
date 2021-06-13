@@ -224,7 +224,6 @@ import { addFunc } from '@/api/func'
       },
       rmInput (index) {
         this.input.splice(index, 1)
-        // console.log(key)
       }
     }
   }
