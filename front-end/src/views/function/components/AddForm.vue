@@ -49,7 +49,7 @@
             v-decorator="[
               'output',
               {
-                rules: [{ required: true, message: 'Please enter output' }],
+                rules: [{ required: true, message: 'Please enter the output topic' }],
                 initialValue:'persistent://public/default/output-topic',
               },
             ]"
