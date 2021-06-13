@@ -175,7 +175,6 @@ import { addFunc } from '@/api/func'
         this.$parent.closeDrawer()
       },
       onReset () {
-        // console.log('reset')
         this.form.resetFields()
         this.input = ['']
       },
@@ -191,7 +190,6 @@ import { addFunc } from '@/api/func'
               try {
                 await addFunc(values.functionName, values)
                   .then((res) => {
-                    // console.log("success!")
                     _this.$notification.success({ message: `" function created successfully` })
                   })
               } catch (error) {
@@ -207,7 +205,6 @@ import { addFunc } from '@/api/func'
         })
       },
       normFile (e) {
-        // console.log('Upload event:', e);
         if (Array.isArray(e)) {
           return [e[e.length - 1]]
         }
