@@ -63,7 +63,7 @@
             v-decorator="[
               'log-topic',
               {
-                rules: [{ required: true, message: 'Please enter log-topic' }],
+                rules: [{ required: true, message: 'Please enter the log topic.' }],
                 initialValue:'persistent://public/default/log-topic',
               },
             ]"
