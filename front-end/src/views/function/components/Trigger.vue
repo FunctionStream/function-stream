@@ -48,33 +48,33 @@
 import { triggerFunc } from '@/api/func'
 
 export default {
-  data() {
+  data () {
     return {
       form: this.$form.createForm(this),
       triggerResult: '',
       triggerResultType: '',
-      triggering: false,
+      triggering: false
     }
   },
   props: {
     visible: {
       type: Boolean,
-      default: false,
+      default: false
     },
     data: {
       type: Array,
-      default: [],
+      default: () => []
     },
     currentFunction: {
       type: Object,
-      default: {},
-    },
+      default: () => {}
+    }
   },
   methods: {
-    onClose() {
+    onClose () {
       this.$parent.closeTrigger()
     },
-    onSub() {
+    onSub () {
       this.triggering = true
       this.triggerResult = ''
       this.triggerResultType = ''
@@ -92,14 +92,14 @@ export default {
             }, 500)
           })
       })
-    },
+    }
   },
   watch: {
-    currentFunction() {
+    currentFunction () {
       this.form.setFieldsValue({
-        functionName: this.currentFunction.name,
+        functionName: this.currentFunction.name
       })
-    },
-  },
+    }
+  }
 }
 </script>

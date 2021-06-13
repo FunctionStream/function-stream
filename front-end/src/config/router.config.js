@@ -1,11 +1,5 @@
 // eslint-disable-next-line
 import { UserLayout, BasicLayout, BlankLayout } from '@/layouts'
-import { bxAnaalyse } from '@/core/icons'
-
-const RouteView = {
-  name: 'RouteView',
-  render: h => h('router-view')
-}
 
 export const asyncRouterMap = [
   {
@@ -18,7 +12,6 @@ export const asyncRouterMap = [
       {
         path: '/function',
         name: 'function',
-        component: RouteView,
         meta: { title: 'menu.function', icon: 'table' },
         component: () => import('@/views/function/index'),
       },

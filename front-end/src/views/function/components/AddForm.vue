@@ -108,7 +108,6 @@
       </a-row>
 
       <a-form-item label="Dragger">
-        <div class="dropbox">
           <a-upload-dragger
             v-decorator="[
               'data',
