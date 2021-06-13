@@ -116,7 +116,7 @@ const trigger = (option) => {
 }
 
 const addFunc = (option) => {
-    console.log("这是后端传值：",option)
+    console.log("Test value return to the frontend：",option)
     return 0
 }
 
