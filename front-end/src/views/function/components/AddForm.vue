@@ -221,7 +221,6 @@ import { addFunc } from '@/api/func'
       },
       addInput () {
         this.input.push('')
-        // console.log(this.input)
       },
       rmInput (index) {
         this.input.splice(index, 1)
