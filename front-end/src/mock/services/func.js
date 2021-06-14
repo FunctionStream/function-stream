@@ -10,7 +10,9 @@ const list = [
     "abcd"
 ];
 
-const createFunc = "";
+const createFunc = (option) => {
+    return 0
+};
 
 const info = {
     "tenant": "public",
@@ -115,18 +117,12 @@ const trigger = (option) => {
     return `${data}!!!`;
 }
 
-const addFunc = (option) => {
-    console.log("Test value return to the frontend：",option)
-    return 0
-}
-
 const deleteFunc = { result: 0 };
 
 get(/\/function\/list/, list);
-get(/\/function\/create/, createFunc);
 get(/\/function\/[^/]*\/info/, info);
 get(/\/function\/[^/]*\/stats/, stats);
 get(/\/function\/[^/]*\/status/, status);
+post(/\/function\/[^/]*\/create/, createFunc);
 post(/\/function\/[^/]*\/trigger/, trigger);
 post(/\/function\/[^/]*\/delete/, deleteFunc);
-post(/\/function\/[^/]*\/add/, addFunc);
