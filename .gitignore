@@ -103,7 +103,12 @@ dist
 # TernJS port file
 .tern-port
 
-# IDEA Local files
+# IDEA files
 .idea
+
+# token part
 back-end/token/target/
 back-end/token/test.iml
+
+#itselt
+.gitignore

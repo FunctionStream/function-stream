@@ -1,4 +1,4 @@
-package token;
+package org.functionstream.functions.token;
 
 import com.google.gson.*;
 
@@ -28,8 +28,8 @@ public class Token {
         String userName = jsonObject.get("userName").getAsString();
         String password = jsonObject.get("password").getAsString();
 
-        //TODO Connect to the database
-        if("user-a".equals(userName)&&"pwd".equals(password)){
+        //Verify username and password from the database
+        if(TokenJDBC.checkAccount(userName,password)){
             jsonObject.remove("userName");
             jsonObject.remove("password");
             String token = createToken(userName);
@@ -43,7 +43,7 @@ public class Token {
     public static String createToken(String userName){
         Key signingKey = new SecretKeySpec(secret.getBytes(), signatureAlgorithm.getJcaName());
         Map<String, Object> claims = new HashMap<>();
-        claims.put("username", userName);
+        claims.put("userName", userName);
         JwtBuilder builder = Jwts.builder().setClaims(claims)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis()+SurvivalTime))
@@ -55,8 +55,8 @@ public class Token {
         return Jwts.parser().setSigningKey(secret.getBytes())
                 .parseClaimsJws(token).getBody();
     }
-    public static String getUsernameByToken(String token){
+    public static String getUserNameByToken(String token){
         Claims body = Jwts.parser().setSigningKey(secret.getBytes()).parseClaimsJws(token).getBody();
-        return body.get("username").toString();
+        return body.get("userName").toString();
     }
 }
