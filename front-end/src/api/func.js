@@ -4,21 +4,20 @@ const { post, get } = request;
 
 export const funcApi = {
   list: '/function/list',
-  create: '/function/create',
+  create: ({ funcName }) => `/function/${funcName}`,
   info: ({ funcName }) => `/function/${funcName}/info`,
   stats: ({ funcName }) => `/function/${funcName}/stats`,
   status: ({ funcName }) => `/function/${funcName}/status`,
   trigger: ({ funcName }) => `/function/${funcName}/trigger`,
   deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
-  addFunc: ({ funcName }) => `/function/${funcName}/add`,
 }
 
 export function getList() {
   return get(funcApi.list);
 }
 
-export function createFunc(data) {
-  return post(funcApi.create, { data });
+export function create(funcName,data) {
+  return post(funcApi.create({ funcName }), { data });
 }
 
 export function getInfo(funcName) {
@@ -40,10 +39,3 @@ export function triggerFunc(funcName, data) {
 export function deleteFunc(funcName) {
   return post(funcApi.deleteFunc({ funcName }));
 }
-
-export function addFunc (funcName, data) {
-    return post(funcApi.addFunc({ funcName }), { data })
-}
-
-
-
