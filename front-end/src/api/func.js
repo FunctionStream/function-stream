@@ -4,12 +4,12 @@ const { post, get } = request
 
 export const funcApi = {
   list: '/admin/v3/functions/public/default',
-  create: '/admin/v3/functions/public/default/myfunc',
+  create: '/function/create',
   info: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
   stats: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stats`,
   status: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/status`,
-  trigger: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/trigger`,
-  deleteFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`
+  trigger: ({ funcName }) => `/function/${funcName}/trigger`,
+  deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
 }
 
 export function getList () {
