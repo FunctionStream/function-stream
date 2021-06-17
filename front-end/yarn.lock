@@ -1145,6 +1145,11 @@
     "@types/istanbul-reports" "^1.1.1"
     "@types/yargs" "^13.0.0"
 
+"@lukeed/csprng@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.npm.taobao.org/@lukeed/csprng/download/@lukeed/csprng-1.0.0.tgz#733a122382749d27e2e46ec38f8c71c9d53a9636"
+  integrity sha1-czoSI4J0nSfi5G7Dj4xxydU6ljY=
+
 "@mrmlnc/readdir-enhanced@^2.2.1":
   version "2.2.1"
   resolved "https://registry.npm.taobao.org/@mrmlnc/readdir-enhanced/download/@mrmlnc/readdir-enhanced-2.2.1.tgz#524af240d1a360527b730475ecfa1344aa540dde"
@@ -10627,6 +10632,13 @@ uglify-to-browserify@~1.0.0:
   version "1.0.2"
   resolved "https://registry.npm.taobao.org/uglify-to-browserify/download/uglify-to-browserify-1.0.2.tgz#6e0924d6bda6b5afe349e39a6d632850a0f882b7"
   integrity sha1-bgkk1r2mta/jSeOabWMoUKD4grc=
+
+uid@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.npm.taobao.org/uid/download/uid-2.0.0.tgz#1773bec106e96955f1658f20272e2ccea414e8bc"
+  integrity sha1-F3O+wQbpaVXxZY8gJy4szqQU6Lw=
+  dependencies:
+    "@lukeed/csprng" "^1.0.0"
 
 umi-request@^1.2.11:
   version "1.2.19"

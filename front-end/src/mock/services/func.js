@@ -115,6 +115,11 @@ const trigger = (option) => {
     return `${data}!!!`;
 }
 
+const addFunc = (option) => {
+    console.log("Test value return to the frontend：",option)
+    return 0
+}
+
 const deleteFunc = { result: 0 };
 
 const startFunc = {result: 0};
@@ -130,4 +135,3 @@ post(/\/function\/[^/]*\/trigger/, trigger);
 post(/\/function\/[^/]*\/delete/, deleteFunc);
 post(/\/function\/[^/]*\/start/, startFunc);
 post(/\/function\/[^/]*\/stop/, stopFunc);
-
