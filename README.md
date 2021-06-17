@@ -35,7 +35,7 @@ webServicePort=3000
 * Start pulsar standalone with the command: `bin/pulsar standalone -nss`.
 * Start pulsar proxy with the command: `bin/pulsar proxy`.
 
-### Install Front-end
+### Setup front end
 
 > Note:  [Yarn](https://yarnpkg.com/) package management is recommended, the exact same version loaded with the demo site of this project (yarn.lock) . but you can also use npm.
 
