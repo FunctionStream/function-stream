@@ -59,4 +59,4 @@ yarn run build
 
 ## Access Function Stream
 
-* Access Pulsar manager UI at http://localhost:8000/.
+* Access Function Stream at http://localhost:8000/.
