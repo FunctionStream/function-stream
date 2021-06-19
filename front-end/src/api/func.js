@@ -1,45 +1,49 @@
 import request from '@/utils/request'
 
-const { post, get } = request;
+const { post, get } = request
 
 export const funcApi = {
-  list: '/function/list',
+  list: '/admin/v3/functions/public/default',
   create: '/function/create',
-  info: ({ funcName }) => `/function/${funcName}/info`,
-  stats: ({ funcName }) => `/function/${funcName}/stats`,
-  status: ({ funcName }) => `/function/${funcName}/status`,
+  info: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
+  stats: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stats`,
+  status: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/status`,
   trigger: ({ funcName }) => `/function/${funcName}/trigger`,
   deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
   startFunc: ({ funcName }) => `/function/${funcName}/start`,
   stopFunc: ({ funcName }) => `/function/${funcName}/stop`,
+  trigger: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/trigger`,
+  deleteFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/delete`,
+  startFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/start`,
+  stopFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stop`,
 }
 
-export function getList() {
-  return get(funcApi.list);
+export function getList () {
+  return get(funcApi.list)
 }
 
-export function createFunc(data) {
-  return post(funcApi.create, { data });
+export function createFunc (data) {
+  return post(funcApi.create, { data })
 }
 
-export function getInfo(funcName) {
-  return get(funcApi.info({ funcName }));
+export function getInfo (funcName) {
+  return get(funcApi.info({ funcName }))
 }
 
-export function getStats(funcName) {
-  return get(funcApi.stats({ funcName }));
+export function getStats (funcName) {
+  return get(funcApi.stats({ funcName }))
 }
 
-export function getStatus(funcName) {
-  return get(funcApi.status({ funcName }));
+export function getStatus (funcName) {
+  return get(funcApi.status({ funcName }))
 }
 
-export function triggerFunc(funcName, data) {
-  return post(funcApi.trigger({ funcName }), { data });
+export function triggerFunc (funcName, data) {
+  return post(funcApi.trigger({ funcName }), { data })
 }
 
-export function deleteFunc(funcName) {
-  return post(funcApi.deleteFunc({ funcName }));
+export function deleteFunc (funcName) {
+  return post(funcApi.deleteFunc({ funcName }))
 }
 
 export function startFunc(funcName) {
