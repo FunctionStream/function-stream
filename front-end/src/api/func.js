@@ -12,6 +12,10 @@ export const funcApi = {
   deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
   startFunc: ({ funcName }) => `/function/${funcName}/start`,
   stopFunc: ({ funcName }) => `/function/${funcName}/stop`,
+  trigger: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/trigger`,
+  deleteFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/delete`,
+  startFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/start`,
+  stopFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stop`,
 }
 
 export function getList () {
