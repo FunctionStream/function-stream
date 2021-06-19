@@ -39,3 +39,14 @@ export function triggerFunc (funcName, data) {
 export function deleteFunc (funcName) {
   return post(funcApi.deleteFunc({ funcName }))
 }
+<<<<<<< HEAD
+=======
+
+export function startFunc(funcName) {
+  return post(funcApi.startFunc({ funcName }));
+}
+
+export function stopFunc(funcName) {
+  return post(funcApi.stopFunc({ funcName }));
+}
+>>>>>>> better1719-table

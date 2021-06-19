@@ -122,6 +122,10 @@ const addFunc = (option) => {
 
 const deleteFunc = { result: 0 };
 
+const startFunc = {result: 0};
+
+const stopFunc = {result: 0};
+
 get(/\/function\/list/, list);
 get(/\/function\/create/, createFunc);
 get(/\/function\/[^/]*\/info/, info);
@@ -129,4 +133,5 @@ get(/\/function\/[^/]*\/stats/, stats);
 get(/\/function\/[^/]*\/status/, status);
 post(/\/function\/[^/]*\/trigger/, trigger);
 post(/\/function\/[^/]*\/delete/, deleteFunc);
-post(/\/function\/[^/]*\/add/, addFunc);
+post(/\/function\/[^/]*\/start/, startFunc);
+post(/\/function\/[^/]*\/stop/, stopFunc);
