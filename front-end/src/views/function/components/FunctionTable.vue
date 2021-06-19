@@ -103,7 +103,6 @@ export default {
       const { name = '' } = text
       const _this = this
       async function Stop () {
-
         try {
           const res = await stopFunc(name)
           text.status = false
