@@ -21,7 +21,7 @@
 
 <script>
 // import moment from 'moment';
-import { deleteFunc, startFunc } from '@/api/func'
+import { deleteFunc, startFunc, stopFunc } from '@/api/func'
 
 const columns = [
   {
@@ -84,10 +84,10 @@ export default {
         }
       })
     },
-    onStart(text) {
+    onStart (text) {
       const { name = '' } = text
       const _this = this
-      async function Start() {
+      async function Start () {
         try {
           const res = await startFunc(name)
           text.status = true
@@ -99,12 +99,12 @@ export default {
       }
       Start()
     },
-    onStop(text) {
+    onStop (text) {
       const { name = '' } = text
       const _this = this
-      async function Stop() {
+      async function Stop () {
         try {
-          const res = await startFunc(name)
+          const res = await stopFunc(name)
           text.status = false
           _this.$message.success('Function was stopped successfully.')
         } catch (error) {
@@ -113,8 +113,8 @@ export default {
         }
       }
       Stop()
-    },
-  },
+    }
+  }
 }
 </script>
 
