@@ -84,7 +84,6 @@ export default {
         }
       })
     },
-
     onStart (text) {
       const { name = '' } = text
       const _this = this
