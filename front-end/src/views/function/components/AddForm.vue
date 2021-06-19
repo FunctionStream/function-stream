@@ -8,10 +8,9 @@
               'FunctionName',
               {
                 rules: [{ required: true, message: 'Please enter the FunctionName' }],
-                initialValue:'FunctionName',
               },
             ]"
-            placeholder="Please enter output"
+            placeholder="Please enter the FunctionName"
             allowClear />
         </a-form-item>
       </a-row>
