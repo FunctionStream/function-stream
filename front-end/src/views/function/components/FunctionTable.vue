@@ -94,7 +94,7 @@ export default {
           _this.$message.success('Function was started successfully.')
         } catch (error) {
           _this.$message.error('Function startup failed!')
-          console.error(res)
+          console.error(error)
         }
       }
       Start()
@@ -109,7 +109,7 @@ export default {
           _this.$message.success('Function was stopped successfully.')
         } catch (error) {
           _this.$message.error('Function stop failed!')
-          console.error(res)
+          console.error(error)
         }
       }
       Stop()

@@ -47,5 +47,5 @@ export function startFunc(funcName) {
 }
 
 export function stopFunc(funcName) {
-  return post(funcApi.startFunc({ funcName }));
+  return post(funcApi.stopFunc({ funcName }));
 }
