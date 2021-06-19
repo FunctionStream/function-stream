@@ -15,7 +15,6 @@ export const asyncRouterMap = [
         meta: { title: 'menu.function', icon: 'table' },
         component: () => import('@/views/function/index')
       }
-
     ]
   },
   {

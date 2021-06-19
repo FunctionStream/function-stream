@@ -5,7 +5,7 @@ import notification from 'ant-design-vue/es/notification'
 import { VueAxios } from './axios'
 import { ACCESS_TOKEN } from '@/store/mutation-types'
 import nProgress from 'nprogress'
-import '@/components/NProgress/nprogress.less';
+import '@/components/NProgress/nprogress.less'
 
 // 创建 axios 实例
 const request = axios.create({
@@ -18,7 +18,7 @@ nProgress.configure({ showSpinner: false })
 
 // 异常拦截处理器
 const errorHandler = (error) => {
-  console.error(error);
+  console.error(error)
   if (error.response) {
     const data = error.response.data
     // 从 localstorage 获取 token
@@ -44,17 +44,17 @@ const errorHandler = (error) => {
     }
     if (error.response.status === 404) {
       notification.error({
-        message: '404 Not Found',
+        message: '404 Not Found'
       })
     }
   }
-  nProgress.done();
+  nProgress.done()
   return Promise.reject(error)
 }
 
 // request interceptor
 request.interceptors.request.use(config => {
-  nProgress.start();
+  nProgress.start()
   const token = storage.get(ACCESS_TOKEN)
   // 如果 token 存在
   // 让每个请求携带自定义 token 请根据实际情况自行修改
@@ -64,16 +64,15 @@ request.interceptors.request.use(config => {
   return config
 }, errorHandler)
 
-
 // response interceptor
 request.interceptors.response.use((response) => {
-  nProgress.done();
+  nProgress.done()
   return response.data
 }, errorHandler)
 
 const installer = {
   vm: {},
-  install(Vue) {
+  install (Vue) {
     Vue.use(VueAxios, request)
   }
 }
