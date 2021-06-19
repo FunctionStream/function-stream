@@ -9,7 +9,7 @@ export const funcApi = {
   stats: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stats`,
   status: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/status`,
   trigger: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/trigger`,
-  deleteFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`
+  deleteFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/delete`,
 }
 
 export function getList () {
