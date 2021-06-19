@@ -39,3 +39,11 @@ export function triggerFunc (funcName, data) {
 export function deleteFunc (funcName) {
   return post(funcApi.deleteFunc({ funcName }))
 }
+
+export function startFunc(funcName) {
+  return post(funcApi.startFunc({ funcName }));
+}
+
+export function stopFunc(funcName) {
+  return post(funcApi.stopFunc({ funcName }));
+}

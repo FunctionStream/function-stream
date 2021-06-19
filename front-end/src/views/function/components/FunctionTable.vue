@@ -11,6 +11,9 @@
       <a-divider type="vertical" />
       <a @click="onShowDetail(text)">Detail</a>
       <a-divider type="vertical" />
+      <a @click="onStart(text)" v-show="!text.status">Start</a>
+      <a @click="onStop(text)" v-show="text.status">Stop</a>
+      <a-divider type="vertical" />
       <a @click="onDelete(text)">Delete</a>
     </span>
   </a-table>
@@ -18,7 +21,7 @@
 
 <script>
 // import moment from 'moment';
-import { deleteFunc } from '@/api/func'
+import { deleteFunc, startFunc } from '@/api/func'
 
 const columns = [
   {
@@ -80,7 +83,52 @@ export default {
           }
         }
       })
-    }
-  }
+    },
+    onStart(text) {
+      const { name = '' } = text
+      const _this = this
+      async function Start() {
+        try {
+          const res = await startFunc(name)
+          text.status = true
+          _this.$message.success('Function was started successfully.')
+        } catch (error) {
+          _this.$message.error('Function startup failed!')
+          console.error(error)
+        }
+      }
+      Start()
+    },
+    onStop(text) {
+      const { name = '' } = text
+      const _this = this
+      async function Stop() {
+        try {
+          const res = await startFunc(name)
+          text.status = false
+          _this.$message.success('Function was stopped successfully.')
+        } catch (error) {
+          _this.$message.error('Function stop failed!')
+          console.error(error)
+        }
+      }
+      Stop()
+    },
+  },
 }
 </script>
+
+<style>
+.ant-table-thead > tr >th,.ant-table-tbody > tr >td{
+  text-align: center;
+}
+.ant-table-thead > tr >th:nth-child(1),.ant-table-tbody > tr >td:nth-child(1){
+  text-align: left;
+}
+.ant-table-thead > tr >th:nth-child(2),.ant-table-tbody > tr >td:nth-child(2){
+  width: 15%;
+}
+.ant-table-thead > tr >th:nth-child(3),.ant-table-tbody > tr >td:nth-child(3){
+  width: 30%;
+}
+</style>
