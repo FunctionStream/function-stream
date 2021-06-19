@@ -8,8 +8,8 @@ export const funcApi = {
   info: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
   stats: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stats`,
   status: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/status`,
-  trigger: ({ funcName }) => `/function/${funcName}/trigger`,
-  deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
+  trigger: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/trigger`,
+  deleteFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/delete`,
 }
 
 export function getList () {

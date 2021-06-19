@@ -10,10 +10,7 @@ const list = [
     "abcd"
 ];
 
-const createFunc = (option) => {
-  console.log("Test value return to the frontend：",option)
-  return 0
-}
+const createFunc = "";
 
 const info = {
     "tenant": "public",
@@ -118,12 +115,18 @@ const trigger = (option) => {
     return `${data}!!!`;
 }
 
+const addFunc = (option) => {
+    console.log("Test value return to the frontend：",option)
+    return 0
+}
+
 const deleteFunc = { result: 0 };
 
-get(/\/function\/list/, list);
-post(/\/function\/[^/]*/, createFunc);
-get(/\/function\/[^/]*\/info/, info);
-get(/\/function\/[^/]*\/stats/, stats);
-get(/\/function\/[^/]*\/status/, status);
-post(/\/function\/[^/]*\/trigger/, trigger);
-post(/\/function\/[^/]*\/delete/, deleteFunc);
+get(/\/admin\/v3\/functions\/public\/default/, list);
+get(/function\/create/, createFunc);
+get(/\/admin\/v3\/functions\/public\/default\/[^/]*/, info);
+get(/\/admin\/v3\/functions\/public\/default\/[^/]*\/stats/, stats);
+get(/\/admin\/v3\/functions\/public\/default\/[^/]*\/status/, status);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/trigger/, trigger);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/delete/, deleteFunc);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/add/, addFunc);
