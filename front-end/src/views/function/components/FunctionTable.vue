@@ -21,7 +21,7 @@
 
 <script>
 // import moment from 'moment';
-import { deleteFunc, startFunc } from '@/api/func'
+import { deleteFunc, startFunc, stopFunc } from '@/api/func'
 
 const columns = [
   {
