@@ -120,6 +120,10 @@ const addFunc = (option) => {
     return 0
 }
 
+const startFunc = {result: 0};
+
+const stopFunc = {result: 0};
+
 const deleteFunc = { result: 0 };
 
 get(/\/admin\/v3\/functions\/public\/default/, list);
@@ -130,3 +134,5 @@ get(/\/admin\/v3\/functions\/public\/default\/[^/]*\/status/, status);
 post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/trigger/, trigger);
 post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/delete/, deleteFunc);
 post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/add/, addFunc);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/start/, startFunc);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/stop/, stopFunc);

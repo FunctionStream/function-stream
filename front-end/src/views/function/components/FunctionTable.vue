@@ -84,6 +84,7 @@ export default {
         }
       })
     },
+
     onStart (text) {
       const { name = '' } = text
       const _this = this
@@ -103,6 +104,7 @@ export default {
       const { name = '' } = text
       const _this = this
       async function Stop () {
+
         try {
           const res = await stopFunc(name)
           text.status = false
