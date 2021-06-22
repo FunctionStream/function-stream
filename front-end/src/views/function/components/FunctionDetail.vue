@@ -182,6 +182,7 @@
 </template>
 <script>
 import { uid } from 'uid'
+import { update } from '@/api/func'
 
 export default {
   data () {
@@ -189,7 +190,8 @@ export default {
       editable: false,
       form: this.$form.createForm(this),
       loadingSave: false,
-      inputs: []
+      inputs: [],
+      file: ''
     }
   },
   props: {
@@ -251,19 +253,36 @@ export default {
       this.inputs = this.inputs?.filter(input => input.key !== key)
     },
     saveEdit () {
-      const _this = this
-      this.loadingSave = true
       this.form.validateFields((err, values) => {
-        if (!err) {
-          console.log('Received values of form: ', values)
-          setTimeout(() => {
-            this.loadingSave = false
-            _this.$notification.success({ message: `"${_this.currentFuncionInfo?.name}" function Modified successfully` })
-          }, 1000)
-        } else {
-          this.loadingSave = false
-        }
-      })
+          if (err) return
+          console.log(values)
+          const functionName = values.name
+          const data = new FormData()
+          if(values.data){
+          data.append('data', this.file)
+          }
+          const functionConfig = values
+          delete functionConfig.data
+          delete functionConfig.Name  //参数处理
+          data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
+          const _this = this
+          this.$confirm({
+            title: 'Are you sure to create this function?',
+            content: 'Some descriptions',
+            okType: 'primary',
+            async onOk () {
+              try {
+                await update(functionName, data)
+                  .then((res) => {
+                    _this.$notification.success({ message: `function "${functionName}" created successfully` })
+                  })
+              } catch (error) {
+                _this.$notification.error({ message: ` funciton "${functionName}" creation failed` })
+              }
+            }
+          })
+          this.file = ''
+        })
     },
     normFile (e) {
       console.log('Upload event:', e)
@@ -273,7 +292,8 @@ export default {
       if (e && e.fileList.length > 0) return [e.fileList[e.fileList.length - 1]]
       return []
     },
-    fbeforeUpload () {
+    fbeforeUpload (file) {
+    this.file = file
       return false
     }
   },
