@@ -274,6 +274,8 @@ export default {
               try {
                 await update(functionName, data)
                   .then((res) => {
+                    _this.$parent.refresh()
+                    _this.$parent.closeDetail()
                     _this.$notification.success({ message: `function "${functionName}" created successfully` })
                   })
               } catch (error) {

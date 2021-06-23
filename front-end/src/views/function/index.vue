@@ -56,24 +56,26 @@ export default {
     Trigger,
     FunctionDetailVue
   },
-  async mounted () {
-    this.loadingList = true
-    try {
-      const res = await getList()
-      if (Array.isArray(res)) {
-        this.functionList = res?.map((name) => ({ key: name, name }))
-
-        // get status
-        res?.map(async (name, i) => {
-          const res = await getStatus(name)
-          this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
-          this.$set(this.functionList[i], 'statusInfo', res)
-        })
-      }
-    } catch (e) { }
-    this.loadingList = false
+  mounted () {
+    this.refresh()
   },
   methods: {
+    async refresh () {
+      this.loadingList = true
+      try {
+        const res = await getList()
+        if (Array.isArray(res)) {
+          this.functionList = res?.map((name) => ({ key: name, name }))
+          // get status
+          res?.map(async (name, i) => {
+            const res = await getStatus(name)
+            this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
+            this.$set(this.functionList[i], 'statusInfo', res)
+          })
+        }
+      } catch (e) { }
+      this.loadingList = false
+    },
     formatDate (date) {
       return moment(date).format('YYYY/MM/DD')
     },

@@ -171,7 +171,6 @@ import { create } from '@/api/func'
         input: [''],
         editable: false,
         isEdit: -1,
-        file: '',
         fileList: ''
       }
     },
@@ -197,7 +196,7 @@ import { create } from '@/api/func'
           if (err) return
           const functionName = values.FunctionName
           const data = new FormData()
-          data.append('data', this.file)
+          data.append('data', this.fileList)
           const functionConfig = values
           delete functionConfig.data
           delete functionConfig.FunctionName  //参数处理
@@ -211,6 +210,8 @@ import { create } from '@/api/func'
               try {
                 await create(functionName, data)
                   .then((res) => {
+                    _this.$parent.refresh()
+                    _this.$parent.closeDrawer()
                     _this.$notification.success({ message: `function "${functionName}" created successfully` })
                   })
               } catch (error) {
@@ -219,9 +220,6 @@ import { create } from '@/api/func'
             }
           })
         })
-        this.timer = setTimeout(() => {   //设置延迟执行
-          location.reload()
-        }, 2000)
       },
       onRuntimeChg (value) {
         this.form.setFieldsValue({
@@ -236,9 +234,7 @@ import { create } from '@/api/func'
         return []
       },
       fbeforeUpload (file) {
-        this.fileList = [...this.fileList, file]
-        console.log(this.fileList)
-        this.file = file
+        this.fileList = file
         return false
       },
       addInput () {
