@@ -1,4 +1,4 @@
-package org.function.stream.gateway;
+package gateway;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;

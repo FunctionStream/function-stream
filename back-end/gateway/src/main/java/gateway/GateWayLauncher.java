@@ -1,4 +1,4 @@
-package org.function.stream.gateway;
+package gateway;
 
 import io.vertx.core.Launcher;
 
@@ -7,6 +7,7 @@ import io.vertx.core.Launcher;
  * @since 2021/6/23
  */
 public class GateWayLauncher extends Launcher {
+
 
 
 
