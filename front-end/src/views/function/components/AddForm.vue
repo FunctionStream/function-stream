@@ -2,6 +2,19 @@
   <a-drawer :width="720" :visible="visible" :body-style="{ paddingBottom: '40px' }" @close="onClose">
     <a-form :form="form" layout="vertical">
       <a-row>
+        <a-form-item label="FunctionName">
+          <a-input
+            v-decorator="[
+              'FunctionName',
+              {
+                rules: [{ required: true, message: 'Please enter the FunctionName' }],
+              },
+            ]"
+            placeholder="Please enter the FunctionName"
+            allowClear />
+        </a-form-item>
+      </a-row>
+      <a-row>
         <span :style="{marginRight:'8px'}">Inputs</span>
         <a-form-item
           :wrapper-col="{ span: 24 }"
@@ -150,7 +163,7 @@
 </template>
 
 <script>
-import { addFunc } from '@/api/func'
+import { create } from '@/api/func'
   export default {
     data () {
       return {
@@ -181,6 +194,7 @@ import { addFunc } from '@/api/func'
       onSub () {
         this.form.validateFields((err, values) => {
           if (err) return
+          console.log(values)
           const _this = this
           this.$confirm({
             title: 'Are you sure to create this function?',
@@ -188,12 +202,12 @@ import { addFunc } from '@/api/func'
             okType: 'primary',
             async onOk () {
               try {
-                await addFunc(values.functionName, values)
+                await create(values.FunctionName, values)
                   .then((res) => {
-                    _this.$notification.success({ message: `" function created successfully` })
+                    _this.$notification.success({ message: ` "${values.FunctionName}" function created successfully` })
                   })
               } catch (error) {
-                _this.$notification.error({ message: ` funciton creation failed` })
+                _this.$notification.error({ message: ` "${values.FunctionName}" funciton creation failed` })
               }
             }
           })
