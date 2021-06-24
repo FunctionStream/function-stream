@@ -43,8 +43,8 @@
                                      }
                        ]"
                        class="inputDefault"
-                       :disabled="!editable"
-                       :class="{editable:!editable}" />
+                       :disabled="true"
+                       :class="{editable:true}" />
             </a-form-item>
           </a-descriptions-item>
           <a-descriptions-item label="Runtime"
@@ -72,7 +72,7 @@
                         shape="circle"
                         type="dashed"
                         size="small"
-                        v-show="editable"
+                        v-show="false"
                         @click="addInput" />
             </span>
             <a-form-item :wrapper-col="{ span: 24 }"
@@ -88,8 +88,8 @@
                                          }
                            ]"
                            class="inputDefault"
-                           :disabled="!editable"
-                           :class="{editable:!editable}" />
+                           :disabled="true"
+                           :class="{editable:true}" />
                 </a-col>
                 <a-col>
                   <a-button icon="minus"
@@ -279,7 +279,8 @@ export default {
                     _this.$notification.success({ message: `function "${functionName}" created successfully` })
                   })
               } catch (error) {
-                _this.$notification.error({ message: ` funciton "${functionName}" creation failed` })
+                const errMessage = error.response.data.reason
+                _this.$notification.error({ message: ` funciton "${functionName}" creation failed, because ${errMessage}` })
               }
             }
           })
