@@ -10,9 +10,9 @@ export const funcApi = {
   stats: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stats`,
   status: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/status`,
   trigger: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/trigger`,
-  deleteFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/delete`,
-  startFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/start`,
-  stopFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stop`,
+  delete: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
+  stop: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stop`,
+  start: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/start`
 }
 
 export function getList () {
@@ -44,13 +44,16 @@ export function triggerFunc (funcName, data) {
 }
 
 export function deleteFunc (funcName) {
-  return post(funcApi.deleteFunc({ funcName }))
+  return request({
+    url: funcApi.delete({ funcName }),
+    method: 'delete'
+  })
 }
 
-export function startFunc(funcName) {
-  return post(funcApi.startFunc({ funcName }));
+export function startFunc (funcName) {
+  return post(funcApi.start({ funcName }))
 }
 
-export function stopFunc(funcName) {
-  return post(funcApi.stopFunc({ funcName }));
+export function stopFunc (funcName) {
+  return post(funcApi.stop({ funcName }))
 }

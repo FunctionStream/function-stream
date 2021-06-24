@@ -61,6 +61,10 @@ export default {
       type: Function,
       default: (v) => {}
     },
+    onRefreshFunc: {
+      type: Function,
+      default: () => {}
+    },
     loadingList: {
       type: Boolean,
       default: false
@@ -76,36 +80,19 @@ export default {
         okType: 'danger',
         async onOk () {
           try {
-            await deleteFunc(name).then((res) => {
-              _this.refresh()
-              _this.$notification.success({ message: `function "${name}" created successfully` })
-            })
+            await deleteFunc(name)
+            _this.onRefreshFunc()
+            _this.$notification.success({ message: `"${name}" function deleted successfully` })
           } catch (error) {
             _this.$notification.error({ message: `"${name}" funciton deletion failed` })
           }
         }
       })
     },
-    async refresh () {
-      this.loadingList = true
-      try {
-        const res = await getList()
-        if (Array.isArray(res)) {
-          this.functionList = res?.map((name) => ({ key: name, name }))
-          // get status
-          res?.map(async (name, i) => {
-            const res = await getStatus(name)
-            this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
-            this.$set(this.functionList[i], 'statusInfo', res)
-          })
-        }
-      } catch (e) { }
-      this.loadingList = false
-    },
-    onStart(text) {
+    onStart (text) {
       const { name = '' } = text
       const _this = this
-      async function Start() {
+      async function Start () {
         try {
           const res = await startFunc(name)
           text.status = true
@@ -117,10 +104,10 @@ export default {
       }
       Start()
     },
-    onStop(text) {
+    onStop (text) {
       const { name = '' } = text
       const _this = this
-      async function Stop() {
+      async function Stop () {
         try {
           const res = await stopFunc(name)
           text.status = false
@@ -131,8 +118,8 @@ export default {
         }
       }
       Stop()
-    },
-  },
+    }
+  }
 }
 </script>
 
