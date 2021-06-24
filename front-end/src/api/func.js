@@ -1,10 +1,11 @@
 import request from '@/utils/request'
 
-const { post, get } = request
+const { post, get, put } = request
 
 export const funcApi = {
   list: '/admin/v3/functions/public/default',
-  create: '/admin/v3/functions/public/default/myfunc',
+  create: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
+  update: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
   info: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
   stats: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stats`,
   status: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/status`,
@@ -18,8 +19,12 @@ export function getList () {
   return get(funcApi.list)
 }
 
-export function createFunc (data) {
-  return post(funcApi.create, { data })
+export function create (funcName, data) {
+  return post(funcApi.create({ funcName }), data, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+
+export function update (funcName, data) {
+  return put(funcApi.update({ funcName }), data, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 export function getInfo (funcName) {
