@@ -9,7 +9,7 @@
     "build": "vue-cli-service build",
     "test:unit": "vue-cli-service test:unit",
     "lint": "vue-cli-service lint",
-    "build:preview": "vue-cli-service build --mode preview",
+    "build:prod": "vue-cli-service build --mode api",
     "lint:nofix": "vue-cli-service lint --no-fix"
   },
   "dependencies": {
