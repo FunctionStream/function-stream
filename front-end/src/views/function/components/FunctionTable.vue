@@ -61,6 +61,10 @@ export default {
       type: Function,
       default: (v) => {}
     },
+    onRefreshFunc: {
+      type: Function,
+      default: () => {}
+    },
     loadingList: {
       type: Boolean,
       default: false
@@ -77,6 +81,7 @@ export default {
         async onOk () {
           try {
             await deleteFunc(name)
+            _this.onRefreshFunc()
             _this.$notification.success({ message: `"${name}" function deleted successfully` })
           } catch (error) {
             _this.$notification.error({ message: `"${name}" funciton deletion failed` })
@@ -84,10 +89,10 @@ export default {
         }
       })
     },
-    onStart(text) {
+    onStart (text) {
       const { name = '' } = text
       const _this = this
-      async function Start() {
+      async function Start () {
         try {
           const res = await startFunc(name)
           text.status = true
@@ -99,10 +104,10 @@ export default {
       }
       Start()
     },
-    onStop(text) {
+    onStop (text) {
       const { name = '' } = text
       const _this = this
-      async function Stop() {
+      async function Stop () {
         try {
           const res = await stopFunc(name)
           text.status = false
@@ -113,8 +118,8 @@ export default {
         }
       }
       Stop()
-    },
-  },
+    }
+  }
 }
 </script>
 
