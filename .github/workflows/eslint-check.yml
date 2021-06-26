@@ -12,7 +12,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: install dependencies
+      - name: Install dependencies
         run: yarn install
         working-directory: front-end
 
