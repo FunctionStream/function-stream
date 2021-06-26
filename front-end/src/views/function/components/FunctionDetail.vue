@@ -258,12 +258,12 @@ export default {
           console.log(values)
           const functionName = values.name
           const data = new FormData()
-          if(values.data){
+          if (values.data) {
           data.append('data', this.file)
           }
           const functionConfig = values
           delete functionConfig.data
-          delete functionConfig.Name  //参数处理
+          delete functionConfig.Name // 参数处理
           data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
           const _this = this
           this.$confirm({

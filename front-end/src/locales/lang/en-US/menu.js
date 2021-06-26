@@ -37,5 +37,5 @@ export default {
     'menu.account.trigger': 'Trigger Error',
     'menu.account.logout': 'Logout',
 
-    'menu.function': 'Function',
+    'menu.function': 'Function'
 }
