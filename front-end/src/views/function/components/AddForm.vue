@@ -199,7 +199,7 @@ import { create } from '@/api/func'
           data.append('data', this.fileList)
           const functionConfig = values
           delete functionConfig.data
-          delete functionConfig.FunctionName  //参数处理
+          delete functionConfig.FunctionName // 参数处理
           data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
           const _this = this
           this.$confirm({

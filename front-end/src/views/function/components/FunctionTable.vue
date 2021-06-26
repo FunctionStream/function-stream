@@ -94,6 +94,8 @@ export default {
       const _this = this
       async function Start () {
         try {
+          // fixme: res should be used, otherwise remove it
+          // eslint-disable-next-line no-unused-vars
           const res = await startFunc(name)
           text.status = true
           _this.$message.success('Function was started successfully.')
@@ -109,6 +111,8 @@ export default {
       const _this = this
       async function Stop () {
         try {
+          // fixme: res should be used, otherwise remove it
+          // eslint-disable-next-line no-unused-vars
           const res = await stopFunc(name)
           text.status = false
           _this.$message.success('Function was stopped successfully.')
