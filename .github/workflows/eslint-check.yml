@@ -16,6 +16,6 @@ jobs:
         run: yarn install
         working-directory: front-end
 
-      - name: run eslint
+      - name: Run eslint
         run: npx eslint . --ext .js,.jsx,.ts,.vue,.tsx
         working-directory: front-end
