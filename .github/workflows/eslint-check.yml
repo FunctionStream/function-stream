@@ -14,11 +14,11 @@ jobs:
 
       - name: install dependencies
         run: |
-          npm install eslint@5.16.0 --save-dev
-          npm install @vue/eslint-config-standard@4.0.0 --save-dev
-          npm install eslint-plugin-vue@5.2.3 --save-dev
-          npm install babel-eslint@10.0.1 --save-dev
-          npm install eslint-plugin-html@5.0.0 --save-dev
+          npm install eslint@5.16.0
+          npm install @vue/eslint-config-standard@4.0.0
+          npm install eslint-plugin-vue@5.2.3
+          npm install babel-eslint@10.0.1
+          npm install eslint-plugin-html@5.0.0
         working-directory: front-end
 
       - name: run eslint
