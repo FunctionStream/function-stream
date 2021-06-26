@@ -12,7 +12,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 安装依赖
+      - name: install dependencies
         run: |
           npm install eslint@5.16.0 --save-dev
           npm install @vue/eslint-config-standard@4.0.0 --save-dev
@@ -21,6 +21,6 @@ jobs:
           npm install eslint-plugin-html@5.0.0 --save-dev
         working-directory: front-end
 
-      - name: 跑eslint
+      - name: run eslint
         run: npx eslint . --ext .js,.jsx,.ts,.vue,.tsx
         working-directory: front-end
