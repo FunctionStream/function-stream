@@ -4,7 +4,11 @@ module.exports = {
     node: true
   },
   'extends': [
-    'plugin:vue/vue3-strongly-recommended',
+    'plugin:vue/vue3-recommended',
+    '@vue/prettier',
+    '@vue/prettier/@typescript-eslint',
+    'eslint:recommended',
+    '@vue/typescript/recommended'
   ],
   rules: {
     'no-console': 'off',
