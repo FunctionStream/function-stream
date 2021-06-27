@@ -1,6 +1,8 @@
 <template>
-  <template v-for="item in menus" :key="item.path">
+  <div>
     <component
+      v-for="item in menus"
+      :key="item.path"
       :is="item.children ? 'ElSubmenu' : 'ElMenuItem'"
       :index="item.path"
       :route="item"
@@ -12,22 +14,24 @@
       </template>
       <SubMenu :menus="item.children" />
     </component>
-  </template>
+  </div>
 </template>
 
 <script>
-import { ElMenuItem } from "element-plus";
+import { ElMenuItem } from 'element-plus'
 
 export default {
-  name: "SubMenu",
+  name: 'SubMenu',
   props: {
     menus: {
       type: Array,
-      default: [],
+      default: function () {
+        return []
+      },
     },
   },
   components: {
     ElMenuItem,
   },
-};
+}
 </script>

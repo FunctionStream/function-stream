@@ -7,7 +7,7 @@
 export default {
   methods: {
     backHome() {
-      this.$router.back();
+      this.$router.back()
     }
   },
 }

@@ -26,13 +26,13 @@
             @click="onStart(scope.row)"
             v-show="!scope.row.status"
             class="inline-block"
-            >Start</a
+          >Start</a
           >
           <a
             @click="onStop(scope.row)"
             v-show="scope.row.status"
             class="inline-block"
-            >Stop</a
+          >Stop</a
           >
           <el-divider direction="vertical" />
           <a @click="onDelete(scope.row)" class="inline-block">Delete</a>
@@ -46,14 +46,17 @@
 </template>
 
 <script>
-import { deleteFunc, startFunc, stopFunc } from "@/api/func";
+import { deleteFunc, startFunc, stopFunc } from '@/api/func'
 
 export default {
   props: {
     data: {
       type: Array,
-      default: [],
+      default: function () {
+        return []
+      },
     },
+
     onSelFunction: {
       type: Function,
       default: (v) => {},
@@ -65,54 +68,54 @@ export default {
   },
   methods: {
     onDelete(func) {
-      const { name = "" } = func;
-      const _this = this;
-      this.$confirm(_this.$t("func.deleteFuncNotice", [name]), "comp.noice", {
-        type: "warning",
+      const { name = '' } = func
+      const _this = this
+      this.$confirm(_this.$t('func.deleteFuncNotice', [name]), 'comp.noice', {
+        type: 'warning',
       })
         .then(async () => {
           try {
-            await deleteFunc(name);
-            _this.$store.dispatch("app/onRefresh");
-            _this.$message.success(_this.$t("func.deleteSuccess", [name]));
+            await deleteFunc(name)
+            _this.$store.dispatch('app/onRefresh')
+            _this.$message.success(_this.$t('func.deleteSuccess', [name]))
           } catch (error) {
-            this.$message.info(_this.$t("func.deleteFail", [name]));
+            this.$message.info(_this.$t('func.deleteFail', [name]))
           }
         })
         .catch(() => {
-          this.$message.info(_this.$t("func.cancelDelete", [name]));
-        });
+          this.$message.info(_this.$t('func.cancelDelete', [name]))
+        })
     },
     onStart(text) {
-      const { name = "" } = text;
-      const _this = this;
+      const { name = '' } = text
+      const _this = this
       async function Start() {
         try {
-          const res = await startFunc(name);
-          text.status = true;
-          _this.$message.success(_this.$t("func.startSuccess"));
+          const res = await startFunc(name)
+          text.status = true
+          _this.$message.success(_this.$t('func.startSuccess'))
         } catch (error) {
-          _this.$message.error(_this.$t("func.startFail"));
-          console.error(error);
+          _this.$message.error(_this.$t('func.startFail'))
+          console.error(error)
         }
       }
-      Start();
+      Start()
     },
     onStop(text) {
-      const { name = "" } = text;
-      const _this = this;
+      const { name = '' } = text
+      const _this = this
       async function Stop() {
         try {
-          await stopFunc(name);
-          text.status = false;
-          _this.$message.success(_this.$t("func.stopSuccess"));
+          await stopFunc(name)
+          text.status = false
+          _this.$message.success(_this.$t('func.stopSuccess'))
         } catch (error) {
-          _this.$message.error(_this.$t("func.stopFail"));
-          console.error(error);
+          _this.$message.error(_this.$t('func.stopFail'))
+          console.error(error)
         }
       }
-      Stop();
+      Stop()
     },
   },
-};
+}
 </script>

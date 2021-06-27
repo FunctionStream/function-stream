@@ -7,26 +7,26 @@ const app = {
     },
     actions: {
         onChangeSideCollapsed({ commit }, state: Boolean) {
-            commit('save', { sideCollapsed: state });
+            commit('save', { sideCollapsed: state })
         },
         onRefresh({ commit }, state = true) {
-            commit('save', { isRefresh: state });
+            commit('save', { isRefresh: state })
         }
     },
     mutations: {
         save(state, payload) {
             if (({}).toString.call(payload) !== '[object Object]') {
-                console.error("payload must be an object");
-                return;
+                console.error('payload must be an object')
+                return
             }
             for (const key in payload) {
                 if (Object.prototype.hasOwnProperty.call(payload, key)) {
-                    const value = payload[key];
-                    state[key] = value;
+                    const value = payload[key]
+                    state[key] = value
                 }
             }
         }
     },
 }
 
-export default app;
+export default app

@@ -1,5 +1,5 @@
-import { createStore } from 'vuex';
-import app from './modules/app';
+import { createStore } from 'vuex'
+import app from './modules/app'
 
 const store = createStore({
     modules: {
@@ -7,4 +7,4 @@ const store = createStore({
     }
 })
 
-export default store;
+export default store

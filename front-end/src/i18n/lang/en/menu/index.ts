@@ -1,6 +1,6 @@
 export default {
   function: 'Function',
-  Home: "Home",
+  Home: 'Home',
   exp: 'exp',
   test: 'test',
 }

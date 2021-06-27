@@ -5,7 +5,7 @@
         v-for="router in routes"
         :to="router"
         :key="router.path"
-        >{{ $t(router.name) }}</el-breadcrumb-item
+      >{{ $t(router.name) }}</el-breadcrumb-item
       >
     </el-breadcrumb>
     <div class="flex justify-between items-center mt-3">
@@ -21,15 +21,15 @@
 </template>
 
 <script>
-import { useRoute } from "vue-router";
+import { useRoute } from 'vue-router'
 export default {
   setup() {
-    const router = useRoute();
-    const routes = router.matched;
+    const router = useRoute()
+    const routes = router.matched
     return {
       router,
       routes,
-    };
+    }
   },
-};
+}
 </script>

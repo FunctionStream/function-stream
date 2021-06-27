@@ -30,38 +30,38 @@
   </div>
 </template>
 <script >
-import store from "store";
-import defaultConfig from "@/config/config";
-import { computed } from "vue";
-import { useStore } from "vuex";
+import store from 'store'
+import defaultConfig from '@/config/config'
+import { computed } from 'vue'
+import { useStore } from 'vuex'
 
 export default {
   setup() {
-    const store = useStore();
+    const store = useStore()
     const LangMap = {
-      "zh-cn": "中文",
-      en: "English",
-    };
+      'zh-cn': '中文',
+      en: 'English',
+    }
     return {
       LangMap,
       isCollapse: computed(() => store.state.app.sideCollapsed),
       onChangMenuCollapse: () =>
         store.dispatch(
-          "app/onChangeSideCollapsed",
+          'app/onChangeSideCollapsed',
           !store.state.app.sideCollapsed
         ),
-      onRefresh: () => store.dispatch("app/onRefresh"),
-    };
+      onRefresh: () => store.dispatch('app/onRefresh'),
+    }
   },
   created() {
-    const lang = store.get("lang") || defaultConfig?.defaultLang || "en";
-    this.$i18n.locale = lang;
+    const lang = store.get('lang') || defaultConfig?.defaultLang || 'en'
+    this.$i18n.locale = lang
   },
   methods: {
     onChangeLang(lang) {
-      this.$i18n.locale = lang;
-      store.set("lang", lang);
+      this.$i18n.locale = lang
+      store.set('lang', lang)
     },
   },
-};
+}
 </script>
