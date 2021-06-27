@@ -11,7 +11,7 @@ const defalutLang = defalutConfig?.defaultLang || 'en'
 const i18n = createI18n({
   locale: defalutLang, // set locale
   fallbackLocale: 'en', // set fallback locale
-  messages,
+  messages
 })
 
 export default i18n

@@ -27,10 +27,9 @@ export const getQueryParameters = (options) => {
   if (!search) {
     return {}
   }
-  return JSON.parse('{"' + decodeURIComponent(search)
-    .replace(/"/g, '\\"')
-    .replace(/&/g, '","')
-    .replace(/=/g, '":"') + '"}')
+  return JSON.parse(
+    '{"' + decodeURIComponent(search).replace(/"/g, '\\"').replace(/&/g, '","').replace(/=/g, '":"') + '"}'
+  )
 }
 
 export const getBody = (options) => {
