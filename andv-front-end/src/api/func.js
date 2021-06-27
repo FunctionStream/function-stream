@@ -15,45 +15,45 @@ export const funcApi = {
   start: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/start`
 }
 
-export function getList() {
+export function getList () {
   return get(funcApi.list)
 }
 
-export function create(funcName, data) {
+export function create (funcName, data) {
   return post(funcApi.create({ funcName }), data, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
-export function update(funcName, data) {
+export function update (funcName, data) {
   return put(funcApi.update({ funcName }), data, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
-export function getInfo(funcName) {
+export function getInfo (funcName) {
   return get(funcApi.info({ funcName }))
 }
 
-export function getStats(funcName) {
+export function getStats (funcName) {
   return get(funcApi.stats({ funcName }))
 }
 
-export function getStatus(funcName) {
+export function getStatus (funcName) {
   return get(funcApi.status({ funcName }))
 }
 
-export function triggerFunc(funcName, data) {
+export function triggerFunc (funcName, data) {
   return post(funcApi.trigger({ funcName }), { data })
 }
 
-export function deleteFunc(funcName) {
+export function deleteFunc (funcName) {
   return request({
     url: funcApi.delete({ funcName }),
     method: 'delete'
   })
 }
 
-export function startFunc(funcName) {
+export function startFunc (funcName) {
   return post(funcApi.start({ funcName }))
 }
 
-export function stopFunc(funcName) {
+export function stopFunc (funcName) {
   return post(funcApi.stop({ funcName }))
 }
