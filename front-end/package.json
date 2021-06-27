@@ -1,6 +1,6 @@
 {
   "name": "vue-antd-pro",
-  "version": "3.0.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "api": "vue-cli-service serve --mode api",
