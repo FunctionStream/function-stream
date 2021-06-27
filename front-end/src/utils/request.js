@@ -1,8 +1,8 @@
 import axios from 'axios'
-import { ElNotification } from 'element-plus';
+import { ElNotification } from 'element-plus'
 import { VueAxios } from './axios'
 import nProgress from 'nprogress'
-import 'nprogress/nprogress.css';
+import 'nprogress/nprogress.css'
 
 // 创建 axios 实例
 const request = axios.create({
@@ -15,7 +15,7 @@ const request = axios.create({
 
 // 异常拦截处理器
 const errorHandler = (error) => {
-  console.error(error);
+  console.error(error)
   if (error.response) {
     const data = error.response.data
     if (error.response.status === 403) {
@@ -36,13 +36,13 @@ const errorHandler = (error) => {
       })
     }
   }
-  nProgress.done();
+  nProgress.done()
   return Promise.reject(error)
 }
 
 // request interceptor
 request.interceptors.request.use(config => {
-  nProgress.start();
+  nProgress.start()
   // const token = storage.get(ACCESS_TOKEN)
   // 如果 token 存在
   // 让每个请求携带自定义 token 请根据实际情况自行修改
@@ -55,7 +55,7 @@ request.interceptors.request.use(config => {
 
 // response interceptor
 request.interceptors.response.use((response) => {
-  nProgress.done();
+  nProgress.done()
   return response.data
 }, errorHandler)
 

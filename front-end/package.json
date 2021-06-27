@@ -3,7 +3,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@ant-design/icons-vue": "^6.0.1",
@@ -23,6 +24,9 @@
     "@vitejs/plugin-vue": "^1.2.3",
     "@vue/compiler-sfc": "^3.0.5",
     "autoprefixer": "^9",
+    "babel-eslint": "^10.1.0",
+    "eslint": "^7.29.0",
+    "eslint-plugin-vue": "^7.12.1",
     "postcss": "^7",
     "tailwindcss": "npm:@tailwindcss/postcss7-compat",
     "typescript": "^4.3.2",
