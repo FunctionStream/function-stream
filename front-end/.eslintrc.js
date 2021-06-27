@@ -3,13 +3,7 @@ module.exports = {
   env: {
     node: true
   },
-  extends: [
-    'plugin:vue/vue3-recommended',
-    '@vue/prettier',
-    '@vue/prettier/@typescript-eslint',
-    'eslint:recommended',
-    '@vue/typescript/recommended'
-  ],
+  extends: ['plugin:vue/vue3-recommended', '@vue/prettier', 'eslint:recommended'],
   rules: {
     'no-console': 'off',
     'no-debugger': process.env.NODE_ENV === 'production' ? 'error' : 'off',
@@ -59,7 +53,10 @@ module.exports = {
       }
     ],
     'template-curly-spacing': 'off',
-    indent: 'off'
+    indent: 'off',
+    'no-unused-vars': 'off',
+    'no-empty': 'off',
+    'no-empty-function': 'off'
   },
   parserOptions: {
     parser: 'babel-eslint'
