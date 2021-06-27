@@ -4,6 +4,9 @@ dist
 dist-ssr
 *.local
 
+# vscode
+.vscode
+
 # Runtime data
 pids
 *.pid
