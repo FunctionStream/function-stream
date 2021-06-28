@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "strict": true,
+    "jsx": "preserve",
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "lib": [
+      "esnext",
+      "dom"
+    ],
+    "noImplicitAny": false,
+    "suppressImplicitAnyIndexErrors": true,
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": "./",
+    "paths": {
+      "@/layouts": [
+        "./src/layouts/index"
+      ],
+      "@/views/*": [
+        "./src/views/*"
+      ],
+      "@/config/*": [
+        "./src/config/*"
+      ],
+      "@/router/*": [
+        "./src/router/*"
+      ],
+      "@/components/*": [
+        "./src/components/*"
+      ],
+      "@/api/*": [
+        "./src/api/*"
+      ],
+      "@/utils/*": [
+        "./src/utils/*"
+      ],
+      "@/store/*": [
+        "./src/store/*"
+      ],
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue"
+  ]
+}

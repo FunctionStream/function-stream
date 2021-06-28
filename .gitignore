@@ -105,3 +105,5 @@ dist
 
 # vscode-root file
 **/.vscode-root
+
+.DS_Store
