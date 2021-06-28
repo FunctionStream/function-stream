@@ -7,6 +7,6 @@ import {
 export default {
   install(app) {
     app.component('GithubOutlined', GithubOutlined)
-
+    
   }
 }
