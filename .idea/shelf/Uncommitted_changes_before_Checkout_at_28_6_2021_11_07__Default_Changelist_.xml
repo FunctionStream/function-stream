@@ -1,0 +1,49 @@
+<changelist name="Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]" date="1624849762682" recycled="true" deleted="true">
+  <option name="PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/shelved.patch" />
+  <option name="DESCRIPTION" value="Uncommitted changes before Checkout at 28/6/2021 上午11:07 [Default Changelist]" />
+  <binary>
+    <option name="BEFORE_PATH" value="front-end/.prettierrc" />
+    <option name="AFTER_PATH" value="andv-front-end/.prettierrc" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/.prettierrc" />
+  </binary>
+  <binary>
+    <option name="BEFORE_PATH" value="front-end/public/avatar2.jpg" />
+    <option name="AFTER_PATH" value="andv-front-end/public/avatar2.jpg" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/avatar2.jpg" />
+  </binary>
+  <binary>
+    <option name="BEFORE_PATH" />
+    <option name="AFTER_PATH" value="andv-front-end/src/assets/logo.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/logo.png" />
+  </binary>
+  <binary>
+    <option name="BEFORE_PATH" value="front-end/src/assets/logo.png" />
+    <option name="AFTER_PATH" value="front-end/src/assets/logo.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/logo1.png" />
+  </binary>
+  <binary>
+    <option name="BEFORE_PATH" value="front-end/.env.api" />
+    <option name="AFTER_PATH" value="andv-front-end/.env.api" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/.env.api" />
+  </binary>
+  <binary>
+    <option name="BEFORE_PATH" />
+    <option name="AFTER_PATH" value="front-end/public/favicon.ico" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/favicon.ico" />
+  </binary>
+  <binary>
+    <option name="BEFORE_PATH" value="front-end/.browserslistrc" />
+    <option name="AFTER_PATH" value="andv-front-end/.browserslistrc" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/.browserslistrc" />
+  </binary>
+  <binary>
+    <option name="BEFORE_PATH" value="front-end/public/logo.png" />
+    <option name="AFTER_PATH" value="andv-front-end/public/logo.png" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/logo2.png" />
+  </binary>
+  <binary>
+    <option name="BEFORE_PATH" value="front-end/.env.preview" />
+    <option name="AFTER_PATH" value="andv-front-end/.env.preview" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Checkout_at_28_6_2021_上午11_07_[Default_Changelist]/.env.preview" />
+  </binary>
+</changelist>

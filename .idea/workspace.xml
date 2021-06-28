@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="53aaa2ed-bea4-4813-8407-dbdd12e69aca" name="Default Changelist" comment="merge from FunctionStream">
+      <change beforePath="$PROJECT_DIR$/.github/workflows/eslint-check.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/eslint-check.yml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Vue Single File Component" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="FunctionStream-main" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitSEFilterConfiguration">
+    <file-type-list>
+      <filtered-out-file-type name="LOCAL_BRANCH" />
+      <filtered-out-file-type name="REMOTE_BRANCH" />
+      <filtered-out-file-type name="TAG" />
+      <filtered-out-file-type name="COMMIT_BY_MESSAGE" />
+    </file-type-list>
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedIndex" value="1" />
+  </component>
+  <component name="ProjectId" id="1tqjQPhk2k1PMU60ra4g13tUr8q" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="ChangesTree.GroupingKeys" value="module" />
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="aspect.path.notification.shown" value="true" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="node.js.detected.package.eslint" value="true" />
+    <property name="node.js.detected.package.standard" value="true" />
+    <property name="node.js.path.for.package.eslint" value="project" />
+    <property name="node.js.path.for.package.standard" value="project" />
+    <property name="node.js.selected.package.eslint" value="(autodetect)" />
+    <property name="node.js.selected.package.standard" value="" />
+    <property name="nodejs_package_manager_path" value="yarn" />
+    <property name="settings.editor.selected.configurable" value="preferences.pluginManager" />
+    <property name="ts.external.directory.path" value="D:\idea\IntelliJ IDEA 2020.3.1\plugins\JavaScriptLanguage\jsLanguageServicesImpl\external" />
+    <property name="vue.rearranger.settings.migration" value="true" />
+  </component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\pulsar\function-stream\front-end\src\views\function\components" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration default="true" type="ArquillianJUnit" factoryName="" nameIsGenerated="true">
+      <option name="arquillianRunConfiguration">
+        <value>
+          <option name="containerStateName" value="" />
+        </value>
+      </option>
+      <option name="TEST_OBJECT" value="class" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="53aaa2ed-bea4-4813-8407-dbdd12e69aca" name="Default Changelist" comment="" />
+      <created>1623503498877</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1623503498877</updated>
+      <workItem from="1623503501260" duration="4906000" />
+      <workItem from="1623543955248" duration="13907000" />
+      <workItem from="1623573923006" duration="3763000" />
+      <workItem from="1623577931112" duration="2581000" />
+      <workItem from="1623632504591" duration="3366000" />
+      <workItem from="1623761341549" duration="262000" />
+      <workItem from="1623762694832" duration="1969000" />
+      <workItem from="1623810082429" duration="28000" />
+      <workItem from="1623828297954" duration="1769000" />
+      <workItem from="1623849563523" duration="85000" />
+      <workItem from="1623849694493" duration="2036000" />
+      <workItem from="1624017430716" duration="354000" />
+      <workItem from="1624019359469" duration="3970000" />
+      <workItem from="1624079874916" duration="471000" />
+      <workItem from="1624080448001" duration="134000" />
+      <workItem from="1624080701666" duration="83000" />
+      <workItem from="1624086016965" duration="812000" />
+      <workItem from="1624087560056" duration="515000" />
+      <workItem from="1624093167757" duration="1968000" />
+      <workItem from="1624109393124" duration="177000" />
+      <workItem from="1624173336003" duration="3231000" />
+      <workItem from="1624329352455" duration="5493000" />
+      <workItem from="1624345713142" duration="6970000" />
+      <workItem from="1624363292165" duration="33000" />
+      <workItem from="1624418408213" duration="154000" />
+      <workItem from="1624430456318" duration="995000" />
+      <workItem from="1624451232172" duration="217000" />
+      <workItem from="1624453504308" duration="28000" />
+      <workItem from="1624499957009" duration="757000" />
+      <workItem from="1624500813268" duration="68000" />
+      <workItem from="1624502128469" duration="15000" />
+      <workItem from="1624512180904" duration="29000" />
+      <workItem from="1624845214183" duration="306000" />
+      <workItem from="1624848187248" duration="3094000" />
+    </task>
+    <task id="LOCAL-00001" summary="update inputs">
+      <created>1623504027081</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1623504027081</updated>
+    </task>
+    <task id="LOCAL-00002" summary="update inputs">
+      <created>1623552003954</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1623552003954</updated>
+    </task>
+    <task id="LOCAL-00003" summary="update inputs">
+      <created>1623570357365</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1623570357365</updated>
+    </task>
+    <task id="LOCAL-00004" summary="update images">
+      <created>1623570842622</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1623570842622</updated>
+    </task>
+    <task id="LOCAL-00005" summary="fix bug and clean up comment">
+      <created>1623584177379</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1623584177379</updated>
+    </task>
+    <task id="LOCAL-00006" summary="clean up comments">
+      <created>1623585474877</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1623585474877</updated>
+    </task>
+    <task id="LOCAL-00007" summary="add Function Name field">
+      <created>1623651701829</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1623651701830</updated>
+    </task>
+    <task id="LOCAL-00008" summary="add Function Name field">
+      <created>1623851202948</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1623851202948</updated>
+    </task>
+    <task id="LOCAL-00009" summary="resolve conflicts">
+      <created>1624017772925</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1624017772926</updated>
+    </task>
+    <task id="LOCAL-00010" summary="resolve conflicts">
+      <created>1624019807190</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1624019807190</updated>
+    </task>
+    <task id="LOCAL-00011" summary="fix problems">
+      <created>1624024457971</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1624024457971</updated>
+    </task>
+    <task id="LOCAL-00012" summary="resolve conflicts">
+      <created>1624080160487</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1624080160488</updated>
+    </task>
+    <task id="LOCAL-00013" summary="resolve conflicts">
+      <created>1624080743826</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1624080743826</updated>
+    </task>
+    <task id="LOCAL-00014" summary="resolve conflicts">
+      <created>1624086220367</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1624086220368</updated>
+    </task>
+    <task id="LOCAL-00015" summary="resolve conflicts">
+      <created>1624094181839</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1624094181839</updated>
+    </task>
+    <task id="LOCAL-00016" summary="fix problems">
+      <created>1624109634741</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1624109634744</updated>
+    </task>
+    <task id="LOCAL-00017" summary="fix problems">
+      <created>1624332641246</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1624332641246</updated>
+    </task>
+    <task id="LOCAL-00018" summary="API joint for pulsar backend： update">
+      <created>1624346094806</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1624346094806</updated>
+    </task>
+    <task id="LOCAL-00019" summary="Solve the problem of refresh">
+      <created>1624451387375</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1624451387375</updated>
+    </task>
+    <task id="LOCAL-00020" summary="merge from FunctionStream">
+      <created>1624850067391</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1624850067391</updated>
+    </task>
+    <option name="localTasksCounter" value="21" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="FunctionStream-main" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="oldMeFiltersMigrated" value="true" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="update inputs" />
+    <MESSAGE value="update images" />
+    <MESSAGE value="fix bug and clean up comment" />
+    <MESSAGE value="clean up comments" />
+    <MESSAGE value="add Function Name field" />
+    <MESSAGE value="resolve conflicts" />
+    <MESSAGE value="fix problems" />
+    <MESSAGE value="API joint for pulsar backend： update" />
+    <MESSAGE value="Solve the problem of refresh" />
+    <MESSAGE value="merge from FunctionStream" />
+    <option name="LAST_COMMIT_MESSAGE" value="merge from FunctionStream" />
+  </component>
+</project>
