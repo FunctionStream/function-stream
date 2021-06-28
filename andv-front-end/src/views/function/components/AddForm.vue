@@ -194,7 +194,13 @@ import { create } from '@/api/func'
       onSub () {
         this.form.validateFields((err, values) => {
           if (err) return
-          console.log(values)
+          const functionName = values.FunctionName
+          const data = new FormData()
+          data.append('data', this.fileList)
+          const functionConfig = values
+          delete functionConfig.data
+          delete functionConfig.FunctionName // 参数处理
+          data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
           const _this = this
           this.$confirm({
             title: 'Are you sure to create this function?',
@@ -202,12 +208,14 @@ import { create } from '@/api/func'
             okType: 'primary',
             async onOk () {
               try {
-                await create(values.FunctionName, values)
+                await create(functionName, data)
                   .then((res) => {
-                    _this.$notification.success({ message: ` "${values.FunctionName}" function created successfully` })
+                    _this.$parent.refresh()
+                    _this.$parent.closeDrawer()
+                    _this.$notification.success({ message: `function "${functionName}" created successfully` })
                   })
               } catch (error) {
-                _this.$notification.error({ message: ` "${values.FunctionName}" funciton creation failed` })
+                _this.$notification.error({ message: ` funciton "${functionName}" creation failed` })
               }
             }
           })
@@ -226,8 +234,7 @@ import { create } from '@/api/func'
         return []
       },
       fbeforeUpload (file) {
-        this.fileList = [...this.fileList, file]
-        console.log(this.fileList)
+        this.fileList = file
         return false
       },
       addInput () {
