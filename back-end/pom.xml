@@ -29,9 +29,11 @@
         <vertx.version>4.1.0</vertx.version>
         <junit-jupiter.version>5.7.0</junit-jupiter.version>
         <spring.version>2.4.7</spring.version>
+        <guice.version>5.0.1</guice.version>
     </properties>
 
     <dependencies>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -41,12 +43,6 @@
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-starter</artifactId>
-                <version>${spring.version}</version>
-            </dependency>
-
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-api</artifactId>
