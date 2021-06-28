@@ -11,6 +11,6 @@ export default {
   table: {
     Name: '函数名',
     Status: '状态',
-    Options: '操作',
-  },
+    Options: '操作'
+  }
 }
