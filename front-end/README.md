@@ -1,23 +1,23 @@
-# Function-Stream
+# Function-Stream Client
 
 
 ## Editor Config
 
 ### IDEA / WebStorm
 
-install plugin `prettier` (may have been pre-installed in webstorm)
+* Install plugin `prettier` (may have been pre-installed in webstorm)
 
-set package path for `prettier` in IDE's preferences (either in-project or globally installed is ok)
+* Set package path for `prettier` in IDE's preferences (either in-project or globally installed is ok)
 
-set rules as `{**/*,*}.{js,ts,jsx,tsx,vue}`
+* Set rules as `{**/*,*}.{js,ts,jsx,tsx,vue}`
 
-check option `Format on Save`
+* Check option `Format on Save`
 
 ### VS Code
 
-install plugin `Prettier - Code formatter`
+* Install plugin `Prettier - Code formatter`
 
-add the following configs to `.vscode/settings.json`（create if doesn't exist'）
+* Add the following configs to `.vscode/settings.json`（create if doesn't exist'）
 ```json
 {
   "editor.formatOnSave": true,
