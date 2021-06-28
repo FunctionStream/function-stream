@@ -32,7 +32,7 @@ const errorHandler = (error) => {
     }
     if (error.response.status === 404) {
       ElNotification.error({
-        title: '404 Not Found',
+        title: '404 Not Found'
       })
     }
   }
@@ -41,7 +41,7 @@ const errorHandler = (error) => {
 }
 
 // request interceptor
-request.interceptors.request.use(config => {
+request.interceptors.request.use((config) => {
   nProgress.start()
   // const token = storage.get(ACCESS_TOKEN)
   // 如果 token 存在
@@ -51,7 +51,6 @@ request.interceptors.request.use(config => {
   // }
   return config
 }, errorHandler)
-
 
 // response interceptor
 request.interceptors.response.use((response) => {
@@ -68,7 +67,4 @@ const installer = {
 
 export default request
 
-export {
-  installer as VueAxios,
-  request as axios
-}
+export { installer as VueAxios, request as axios }

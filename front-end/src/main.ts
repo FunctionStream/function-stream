@@ -22,4 +22,3 @@ app.use(store)
 app.use(customComponents)
 
 app.mount('#app')
-
