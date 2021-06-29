@@ -1,0 +1,24 @@
+name: Cypress Test
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  cypress-run:
+    runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      CYPRESS_baseUrl: http://localhost:5000/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Cypress run
+        uses: cypress-io/github-action@v1
+        with:
+          start: yarn run serve
+          wait-on: http://localhost:5000/
+          config-file: cypress.json
+          spec: "cypress/integration/**/*"
+          working-directory: front-end
