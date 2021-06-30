@@ -2409,6 +2409,7 @@ prelude-ls@^1.2.1:
   integrity sha1-3rxkidem5rDnYRiIzsiAM30xY5Y=
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 prettier-linter-helpers@^1.0.0:
   version "1.0.0"
   resolved "https://registry.nlark.com/prettier-linter-helpers/download/prettier-linter-helpers-1.0.0.tgz#d23d41fe1375646de2d0104d3454a3008802cf7b"
@@ -2421,11 +2422,16 @@ prettier@^2.3.2:
   resolved "https://registry.nlark.com/prettier/download/prettier-2.3.2.tgz?cache=0&sync_timestamp=1624696193562&other_urls=https%3A%2F%2Fregistry.nlark.com%2Fprettier%2Fdownload%2Fprettier-2.3.2.tgz#ef280a05ec253712e486233db5c6f23441e7342d"
   integrity sha1-7ygKBewlNxLkhiM9tcbyNEHnNC0=
 =======
+=======
+>>>>>>> 5c9176cb5131431ed88db8884167cae6264b0c4f
 pretty-bytes@^5.6.0:
   version "5.6.0"
   resolved "https://registry.npm.taobao.org/pretty-bytes/download/pretty-bytes-5.6.0.tgz#356256f643804773c82f64723fe78c92c62beaeb"
   integrity sha1-NWJW9kOAR3PIL2RyP+eMksYr6us=
+<<<<<<< HEAD
 >>>>>>> test: test framework cypress
+=======
+>>>>>>> 5c9176cb5131431ed88db8884167cae6264b0c4f
 
 pretty-hrtime@^1.0.3:
   version "1.0.3"
