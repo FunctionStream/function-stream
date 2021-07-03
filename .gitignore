@@ -107,3 +107,6 @@ dist
 **/.vscode-root
 
 .DS_Store
+
+# IDE / Editor
+.idea
