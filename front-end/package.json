@@ -9,7 +9,7 @@
   "dependencies": {
     "@ant-design/icons-vue": "^6.0.1",
     "axios": "^0.21.1",
-    "element-plus": "^1.0.2-beta.48",
+    "element-plus": "^1.0.2-beta.54",
     "mockjs": "^1.1.0",
     "nprogress": "^0.2.0",
     "store": "^2.0.12",

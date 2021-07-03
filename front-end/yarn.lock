@@ -823,10 +823,10 @@ electron-to-chromium@^1.3.723:
   resolved "https://registry.nlark.com/electron-to-chromium/download/electron-to-chromium-1.3.755.tgz?cache=0&sync_timestamp=1624413852822&other_urls=https%3A%2F%2Fregistry.nlark.com%2Felectron-to-chromium%2Fdownload%2Felectron-to-chromium-1.3.755.tgz#4b6101f13de910cf3f0a1789ddc57328133b9332"
   integrity sha1-S2EB8T3pEM8/CheJ3cVzKBM7kzI=
 
-element-plus@^1.0.2-beta.48:
-  version "1.0.2-beta.48"
-  resolved "https://registry.nlark.com/element-plus/download/element-plus-1.0.2-beta.48.tgz#8da99decd397b9975cd894d389096d2ed58c699e"
-  integrity sha1-jamd7NOXuZdc2JTTiQltLtWMaZ4=
+element-plus@^1.0.2-beta.54:
+  version "1.0.2-beta.54"
+  resolved "https://registry.yarnpkg.com/element-plus/-/element-plus-1.0.2-beta.54.tgz#70eda3fc0ef4c28a1cdc6bffec8f9c34ef83cc16"
+  integrity sha512-XXgZMnVt2ECtLyxJLVMq+faTxcYKNy9ZTaQ4cgbITgR/iGF5iXPHHjn1J1DWNLIKJ0XQRo8atAM1fyOpJsyJzw==
   dependencies:
     "@popperjs/core" "^2.4.4"
     "@types/lodash" "^4.14.161"
