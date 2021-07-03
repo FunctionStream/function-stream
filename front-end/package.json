@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss7-compat": "^2.2.2",
-    "@types/node": "^15.12.4",
+    "@types/node": "^16.0.0",
     "@vitejs/plugin-vue": "^1.2.3",
     "@vue/compiler-sfc": "^3.1.4",
     "@vue/eslint-config-prettier": "^6.0.0",

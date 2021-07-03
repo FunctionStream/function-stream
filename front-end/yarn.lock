@@ -287,10 +287,10 @@
   resolved "https://registry.nlark.com/@types/lodash/download/@types/lodash-4.14.170.tgz#0d67711d4bf7f4ca5147e9091b847479b87925d6"
   integrity sha1-DWdxHUv39MpRR+kJG4R0ebh5JdY=
 
-"@types/node@^15.12.4":
-  version "15.12.4"
-  resolved "https://registry.nlark.com/@types/node/download/@types/node-15.12.4.tgz?cache=0&sync_timestamp=1624050221758&other_urls=https%3A%2F%2Fregistry.nlark.com%2F%40types%2Fnode%2Fdownload%2F%40types%2Fnode-15.12.4.tgz#e1cf817d70a1e118e81922c4ff6683ce9d422e26"
-  integrity sha1-4c+BfXCh4RjoGSLE/2aDzp1CLiY=
+"@types/node@^16.0.0":
+  version "16.0.0"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-16.0.0.tgz#067a6c49dc7a5c2412a505628e26902ae967bf6f"
+  integrity sha512-TmCW5HoZ2o2/z2EYi109jLqIaPIi9y/lc2LmDCWzuCi35bcaQ+OtUh6nwBiFK7SOu25FAU5+YKdqFZUwtqGSdg==
 
 "@types/parse-json@^4.0.0":
   version "4.0.0"
