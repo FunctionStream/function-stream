@@ -9,11 +9,11 @@
   "dependencies": {
     "@ant-design/icons-vue": "^6.0.1",
     "axios": "^0.21.1",
-    "element-plus": "^1.0.2-beta.48",
+    "element-plus": "^1.0.2-beta.54",
     "mockjs": "^1.1.0",
     "nprogress": "^0.2.0",
     "store": "^2.0.12",
-    "vue": "^3.0.5",
+    "vue": "^3.1.4",
     "vue-i18n": "^9.1.6",
     "vue-router": "4",
     "vuex": "^4.0.2"
@@ -22,7 +22,7 @@
     "@tailwindcss/postcss7-compat": "^2.2.2",
     "@types/node": "^15.12.4",
     "@vitejs/plugin-vue": "^1.2.3",
-    "@vue/compiler-sfc": "^3.0.5",
+    "@vue/compiler-sfc": "^3.1.4",
     "@vue/eslint-config-prettier": "^6.0.0",
     "autoprefixer": "^9",
     "babel-eslint": "^10.1.0",
