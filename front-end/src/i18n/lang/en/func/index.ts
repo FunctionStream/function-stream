@@ -11,6 +11,6 @@ export default {
   table: {
     Name: 'Name',
     Status: 'Status',
-    Options: 'Options',
+    Options: 'Options'
   }
 }
