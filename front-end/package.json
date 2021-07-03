@@ -33,7 +33,7 @@
     "prettier": "^2.3.2",
     "tailwindcss": "npm:@tailwindcss/postcss7-compat",
     "typescript": "^4.3.2",
-    "vite": "2.3.7",
+    "vite": "2.3.8",
     "vue-tsc": "^0.0.24"
   }
 }
