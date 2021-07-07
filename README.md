@@ -14,7 +14,7 @@ You can join [our slack workspace](https://join.slack.com/t/functionstreamgroup/
 
 Function Stream uses [Apache Pulsar](https://pulsar.apache.org/) as the underlying messaging and processing engine, relying heavily on pulsar's features. Before we set up the function stream, we need to install apache pulsar.
 
-* Download the modified version pulsar server package from [here](https://functionstream.oss-cn-hongkong.aliyuncs.com/apache-pulsar-2.8.0-SNAPSHOT.zip?versionId=CAEQHxiBgMCAq4vwzhciIGQxMGMxMGI4NjQ0ODRmMzE4NGI0YWE3MjlhNmYyNTc4). 
+* Download the modified version pulsar server package from [here](https://functionstream.oss-cn-hongkong.aliyuncs.com/apache-pulsar-2.8.1-SNAPSHOT.zip?versionId=CAEQHxiBgMDFwbmL0RciIDM5NTBlYmNhNGQzMzQ1ODM4Yjk5MjA0NmE5ODZiNGNl). 
 * You can skip this step if just want to start the pulsar proxy with default config. Configure `conf/proxy.conf` as below:
 ```
 # The ZooKeeper quorum connection string (as a comma-separated list)

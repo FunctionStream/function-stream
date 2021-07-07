@@ -8,8 +8,10 @@ export const funcApi = {
   info: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}`,
   stats: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stats`,
   status: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/status`,
-  trigger: ({ funcName }) => `/function/${funcName}/trigger`,
-  deleteFunc: ({ funcName }) => `/function/${funcName}/delete`,
+  trigger: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/trigger`,
+  deleteFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/delete`,
+  startFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/start`,
+  stopFunc: ({ funcName }) => `/admin/v3/functions/public/default/${funcName}/stop`,
 }
 
 export function getList () {
@@ -38,4 +40,12 @@ export function triggerFunc (funcName, data) {
 
 export function deleteFunc (funcName) {
   return post(funcApi.deleteFunc({ funcName }))
+}
+
+export function startFunc(funcName) {
+  return post(funcApi.startFunc({ funcName }));
+}
+
+export function stopFunc(funcName) {
+  return post(funcApi.stopFunc({ funcName }));
 }

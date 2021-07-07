@@ -120,13 +120,19 @@ const addFunc = (option) => {
     return 0
 }
 
+const startFunc = {result: 0};
+
+const stopFunc = {result: 0};
+
 const deleteFunc = { result: 0 };
 
-get(/\/function\/list/, list);
-get(/\/function\/create/, createFunc);
-get(/\/function\/[^/]*\/info/, info);
-get(/\/function\/[^/]*\/stats/, stats);
-get(/\/function\/[^/]*\/status/, status);
-post(/\/function\/[^/]*\/trigger/, trigger);
-post(/\/function\/[^/]*\/delete/, deleteFunc);
-post(/\/function\/[^/]*\/add/, addFunc);
+get(/\/admin\/v3\/functions\/public\/default/, list);
+get(/function\/create/, createFunc);
+get(/\/admin\/v3\/functions\/public\/default\/[^/]*/, info);
+get(/\/admin\/v3\/functions\/public\/default\/[^/]*\/stats/, stats);
+get(/\/admin\/v3\/functions\/public\/default\/[^/]*\/status/, status);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/trigger/, trigger);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/delete/, deleteFunc);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/add/, addFunc);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/start/, startFunc);
+post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/stop/, stopFunc);
