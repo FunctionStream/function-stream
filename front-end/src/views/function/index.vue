@@ -81,6 +81,7 @@
         this.visibleDetail = true
       },
       onShowDetail(v) {
+        console.log('v in index', v)
         this.loadingDetail = true
         this.currentFunctionInfo = { ...this.currentFunctionInfo, ...v }
         this.showDetail()

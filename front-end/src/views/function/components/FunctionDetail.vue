@@ -154,6 +154,7 @@
         this.file = file.raw
       },
       onReset() {
+        const ref = 'info'
         const inputs = {}
         const inputArr = this.currentFunctionInfo?.input?.map((input, i) => {
           const key = `input_${i}`
