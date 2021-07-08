@@ -1,74 +1,67 @@
 <template>
-  <el-drawer size="40%" @open="onOpen" @close="onClose">
+  <el-drawer :visible="visible" size="40%" @open="onOpen" @close="onClose">
     <!-- function info -->
-    <el-form
-      ref="currentFunctionInfo"
-      v-loading="loadingDetail"
-      :rules="rules"
-      style="padding: 0 20px"
-      :model="currentFunctionInfo"
-    >
+    <el-form ref="info" v-loading="loadingDetail" :rules="rules" style="padding: 0 20px" :model="info">
       <el-descriptions title="function info" border size="small">
         <template #extra>
           <el-button v-if="!editable" type="primary" size="small" @click="onChgEditable"> Edit </el-button>
           <span v-else>
-            <el-button
-              type="primary"
-              :style="{ marginRight: '16px' }"
-              size="small"
-              @click="saveEdit('currentFunctionInfo')"
-            >
+            <el-button type="primary" :style="{ marginRight: '16px' }" size="small" @click="saveEdit('info')">
               Save
             </el-button>
-            <el-button size="small" @click="cancelEdit"> Cancel </el-button>
+            <el-button size="small" @click="cancelEdit('info')"> Cancel </el-button>
           </span>
         </template>
         <el-descriptions-item label="Name" class="inputDefault">
-          <el-form-item v-if="editable">
-            <el-input v-model="currentFunctionInfo.name" readonly />
+          <el-form-item :class="{ editable: !editable }">
+            <el-input v-model="info.name" readonly />
           </el-form-item>
-          <el-input v-else v-model="currentFunctionInfo.name" readonly />
         </el-descriptions-item>
         <el-descriptions-item label="Runtime" :span="2">
           {{ currentFunctionInfo.runtime }}
         </el-descriptions-item>
         <el-descriptions-item class="inputDefault" label="Classname" :span="3">
-          <el-form-item v-if="editable" prop="className" :wrapper-col="{ span: 24 }" :style="{ width: '100%' }">
+          <el-form-item
+            :class="{ editable: !editable }"
+            prop="className"
+            :wrapper-col="{ span: 24 }"
+            :style="{ width: '100%' }"
+          >
             <el-input
-              v-model="currentFunctionInfo.className"
+              v-model="info.className"
               class="inputDefault"
               :readonly="!editable"
               :class="{ editable: !editable }"
             />
           </el-form-item>
-          <el-input v-else v-model="currentFunctionInfo.className" readonly />
         </el-descriptions-item>
         <el-descriptions-item label="input" :span="3">
-          <el-form-item v-if="editable" prop="input">
-            <el-input
-              v-model="currentFunctionInfo.input"
-              class="inputDefault"
-              :readonly="!editable"
-              :class="{ editable: !editable }"
-            />
+          <el-form-item
+            v-for="item in inputs"
+            :key="item.key"
+            prop="input"
+            :wrapper-col="{ span: 24 }"
+            :style="{ width: '100%' }"
+          >
+            <el-input v-model="item.input" class="inputDefault" :disabled="true" :class="{ editable: !editable }" />
           </el-form-item>
-          <el-input v-else v-model="currentFunctionInfo.input" readonly />
         </el-descriptions-item>
         <el-descriptions-item class="inputDefault" label="Output" :span="3">
-          <el-form-item v-if="editable" prop="output">
+          <el-form-item prop="output">
             <el-input
-              v-model="currentFunctionInfo.output"
+              v-model="info.output"
               class="inputDefault"
               :readonly="!editable"
               :class="{ editable: !editable }"
             />
           </el-form-item>
-          <el-input v-else v-model="currentFunctionInfo.output" readonly />
         </el-descriptions-item>
         <el-descriptions-item v-if="editable" class="uploadBox" label="File" :span="3">
           <el-upload
             drag
             name="data"
+            :on-change="getFile"
+            :auto-upload="false"
             style="
                {
                 width: 100%;
@@ -96,8 +89,12 @@
         </el-descriptions-item>
       </el-descriptions>
       <el-descriptions title="Status" border size="small" :column="2" :style="{ margin: '24px 0' }">
-        <el-descriptions-item label="Number of instances"> 0 </el-descriptions-item>
-        <el-descriptions-item label="Number of running"> 0 </el-descriptions-item>
+        <el-descriptions-item label="Number of instances">
+          {{ (currentFunctionInfo.statusInfo && currentFunctionInfo.statusInfo.numInstances) || 0 }}
+        </el-descriptions-item>
+        <el-descriptions-item label="Number of running">
+          {{ (currentFunctionInfo.statusInfo && currentFunctionInfo.statusInfo.numRunning) || 0 }}
+        </el-descriptions-item>
       </el-descriptions>
     </el-form>
   </el-drawer>
@@ -125,14 +122,15 @@
       return {
         editable: false,
         rules: {
-          funcName: [{ require: true, message: 'Please input your Function name!', trigger: 'change' }],
+          Name: [{ require: true, message: 'Please input your Function name!', trigger: 'change' }],
           className: [{ required: true, message: 'Please input your className!', trigger: 'change' }],
           input: [{ required: true, message: 'Please input your Input!', trigger: 'change' }],
           output: [{ required: true, message: 'Please input your Output!', trigger: 'change' }]
         },
         inputs: [],
         file: '',
-        beforeEditInfo: {}
+        beforeEditInfo: {},
+        info: {}
       }
     },
     computed: {
@@ -146,9 +144,15 @@
         if (this.visible) {
           this.onReset()
         }
+        if (!this.loadingDetail) {
+          Object.assign(this.info, this.currentFunctionInfo)
+        }
       }
     },
     methods: {
+      getFile(file) {
+        this.file = file.raw
+      },
       onReset() {
         const inputs = {}
         const inputArr = this.currentFunctionInfo?.input?.map((input, i) => {
@@ -158,7 +162,12 @@
         })
 
         this.inputs = inputArr
+        Object.assign(this.info, this.currentFunctionInfo)
 
+        // this.$refs[ref].resetFields()
+        // this.info.className = this.currentFunctionInfo.className
+        // this.$refs.ref.resetFields()
+        // console.log(form)
         /* this.form.setFieldsValue({
           name: this.currentFunctionInfo?.name,
           className: this.currentFunctionInfo?.className,
@@ -167,7 +176,7 @@
         }) */
       },
       onOpen() {
-        console.log('loadingdetail in onopen', this.loadingDetail)
+        this.info = this.currentFunctionInfo
       },
       onClose() {
         this.editable = false
@@ -184,42 +193,36 @@
       cancelEdit() {
         this.onReset()
         this.editable = false
-        setTimeout(() => {
-          this.onReset()
-        })
+        // this.$refs[form].resetFields()
+        // setTimeout(() => {
+        //   // 恢复删除的
+        //   // this.onReset()
+        // })
       },
       saveEdit(form) {
         this.$refs[form].validate((valid) => {
           if (valid) {
-            alert('submit')
-          } else {
-            console.log('error commit')
-            return false
-          }
-        })
-        this.$refs[form].validateField((err, values) => {
-          if (err) return
-          console.log(values)
-          const functionName = values.name
-          const data = new FormData()
-          if (values.data) {
-            data.append('data', this.file)
-          }
-          const functionConfig = values
-          delete functionConfig.data
-          delete functionConfig.Name // 参数处理
-          data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
-          const _this = this
-          this.$confirm({
-            title: 'Are you sure to create this function?',
-            content: 'Some descriptions',
-            okType: 'primary',
-            async onOk() {
+            const functionName = this.info.name
+            const data = new FormData()
+            if (this.file) {
+              data.append('data', this.file)
+            }
+            const functionConfig = this.info
+            delete functionConfig.data
+            delete functionConfig.Name // 参数处理
+            data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
+            const _this = this
+            this.$confirm('Some descriptions', 'Are you sure to create this function?', {
+              confirmButtonText: 'OK',
+              cancelButtonText: 'Cancel',
+              type: 'primary'
+            }).then(() => {
               try {
-                await update(functionName, data).then((res) => {
-                  _this.$parent.refresh()
-                  _this.$parent.closeDetail()
-                  _this.$notification.success({ message: `function "${functionName}" created successfully` })
+                update(functionName, data).then((res) => {
+                  console.log(this.$parent.$parent.refresh())
+                  // this.$parent.refresh()
+                  // _this.$parent.closeDetail()
+                  // _this.$notification.success({ message: `function "${functionName}" created successfully` })
                 })
               } catch (error) {
                 const errMessage = error.response.data.reason
@@ -227,9 +230,12 @@
                   message: ` funciton "${functionName}" creation failed, because ${errMessage}`
                 })
               }
-            }
-          })
-          this.file = ''
+            })
+            this.file = ''
+          } else {
+            console.log('error commit')
+            return false
+          }
         })
       }
     }
@@ -243,6 +249,9 @@
     color: #000000a6;
   }
   .editable {
+    line-height: 20px;
+  }
+  .editable >>> .el-input__inner {
     border-color: #fff;
   }
   .editable:hover {

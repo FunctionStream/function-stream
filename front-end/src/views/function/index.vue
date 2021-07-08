@@ -14,6 +14,7 @@
     />
     <FunctionDetailVue
       v-model="visibleDetail"
+      :visible="visibleDetail"
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
     />
@@ -55,6 +56,24 @@
       this.loading = false
     },
     methods: {
+      async refresh() {
+        this.loadingList = true
+        try {
+          const res = await getList()
+          if (Array.isArray(res)) {
+            this.functionList = res?.map((name) => ({ key: name, name }))
+            // get status
+            // fixme this use of map should be replaced ↓↓
+            // eslint-disable-next-line no-unused-expressions
+            res?.map(async (name, i) => {
+              const res = await getStatus(name)
+              this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
+              this.$set(this.functionList[i], 'statusInfo', res)
+            })
+          }
+        } catch (e) {}
+        this.loadingList = false
+      },
       closeDetail() {
         this.visibleDetail = false
       },
@@ -66,11 +85,11 @@
         this.currentFunctionInfo = { ...this.currentFunctionInfo, ...v }
         this.showDetail()
         const { name } = v
-        getInfo(v)
+        getInfo(name)
           .then((res) => {
             if (!res) return
-            const { inputSpaces = {} } = res
-            const input = Object.keys(inputSpaces)
+            const { inputSpecs = {} } = res
+            const input = Object.keys(inputSpecs)
             this.currentFunctionInfo = { ...this.currentFunctionInfo, ...res, input }
           })
           .finally(() => {
@@ -83,7 +102,6 @@
           })
           .finally(() => {
             this.loadingDetail = false
-            console.log('cfi in onshowdetail', this.currentFunctionInfo)
           })
       },
       async refreshFunc() {
@@ -110,3 +128,12 @@
     }
   }
 </script>
+
+<style>
+  .el-form-item__error {
+    position: relative;
+  }
+  .el-form-item {
+    margin-bottom: 0;
+  }
+</style>
