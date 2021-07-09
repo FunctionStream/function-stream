@@ -13,7 +13,7 @@
       :onRefreshFunc="onRreshFunc"
     />
     <FunctionDetailVue
-      v-model="visibleDetail"
+      :value="visibleDetail"
       :visible="visibleDetail"
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
