@@ -14,7 +14,6 @@
     />
     <FunctionDetailVue
       v-model="visibleDetail"
-      :visible="visibleDetail"
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
     />
@@ -131,10 +130,5 @@
 </script>
 
 <style>
-  .el-form-item__error {
-    position: relative;
-  }
-  .el-form-item {
-    margin-bottom: 0;
-  }
+
 </style>

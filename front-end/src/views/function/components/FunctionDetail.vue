@@ -153,6 +153,10 @@
       getFile(file) {
         this.file = file.raw
       },
+      resetFields() {
+        const form = 'info'
+        this.$refs[form].resetFields()
+      },
       onReset() {
         const ref = 'info'
         const inputs = {}
@@ -163,8 +167,8 @@
         })
 
         this.inputs = inputArr
-        Object.assign(this.info, this.currentFunctionInfo)
-
+        // Object.assign(this.info, this.currentFunctionInfo)
+        this.resetFields()
         // this.$refs[ref].resetFields()
         // this.info.className = this.currentFunctionInfo.className
         // this.$refs.ref.resetFields()
