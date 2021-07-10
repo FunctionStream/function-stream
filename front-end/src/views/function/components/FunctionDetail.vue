@@ -2,7 +2,7 @@
   <el-drawer :visible="visible" size="40%" @open="onOpen" @close="onClose">
     <!-- function info -->
     <el-form ref="info" v-loading="loadingDetail" :rules="rules" style="padding: 0 20px" :model="info">
-      <el-descriptions title="function info" border size="small">
+      <el-descriptions class="inputMargin" title="function info" border size="small">
         <template #extra>
           <el-button v-if="!editable" type="primary" size="small" @click="onChgEditable"> Edit </el-button>
           <span v-else>
@@ -46,12 +46,13 @@
             <el-input v-model="info.output" :readonly="!editable" :class="{ editable: !editable }" />
           </el-form-item>
         </el-descriptions-item>
-        <el-descriptions-item v-if="editable" class="uploadBox" label="File" :span="3">
+        <el-descriptions-item v-if="editable" label="File" :span="3">
           <el-upload
             drag
             name="data"
             :on-change="getFile"
             :auto-upload="false"
+            class="upload"
             style="
                {
                 width: 100%;
@@ -221,6 +222,7 @@
 </script>
 
 <style scoped>
+<<<<<<< HEAD
   .editable :deep(.el-input__inner) {
     border-color: #fff;
   }
@@ -229,5 +231,18 @@
   }
   .uploadBox :deep(.el-upload-dragger) {
     width: 100%;
+=======
+  .editable ::v-deep(.el-input__inner) {
+    border-color: #fff;
+  }
+  .upload ::v-deep(.el-upload) {
+    width: 100%;
+  }
+  .upload ::v-deep(.el-upload-dragger) {
+    width: 100%;
+  }
+  .inputMargin ::v-deep(.el-form-item) {
+    margin-bottom: 0;
+>>>>>>> 6eea3b8c3501c5bd1a3d4655366a85201edcdff5
   }
 </style>
