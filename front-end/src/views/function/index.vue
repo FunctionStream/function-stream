@@ -13,8 +13,7 @@
       :onRefreshFunc="onRreshFunc"
     />
     <FunctionDetailVue
-      :value="visibleDetail"
-      :visible="visibleDetail"
+      v-model="visibleDetail"
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
     />
@@ -81,7 +80,6 @@
         this.visibleDetail = true
       },
       onShowDetail(v) {
-        console.log('v in index', v)
         this.loadingDetail = true
         this.currentFunctionInfo = { ...this.currentFunctionInfo, ...v }
         this.showDetail()
@@ -129,12 +127,3 @@
     }
   }
 </script>
-
-<style>
-  .el-form-item__error {
-    position: relative;
-  }
-  .el-form-item {
-    margin-bottom: 0;
-  }
-</style>

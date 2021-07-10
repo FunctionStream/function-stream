@@ -12,7 +12,7 @@
             <el-button size="small" @click="cancelEdit('info')"> Cancel </el-button>
           </span>
         </template>
-        <el-descriptions-item label="Name" class="inputDefault">
+        <el-descriptions-item label="Name">
           <el-form-item :class="{ editable: !editable }">
             <el-input v-model="info.name" readonly />
           </el-form-item>
@@ -20,19 +20,14 @@
         <el-descriptions-item label="Runtime" :span="2">
           {{ currentFunctionInfo.runtime }}
         </el-descriptions-item>
-        <el-descriptions-item class="inputDefault" label="Classname" :span="3">
+        <el-descriptions-item label="Classname" :span="3">
           <el-form-item
             :class="{ editable: !editable }"
             prop="className"
             :wrapper-col="{ span: 24 }"
             :style="{ width: '100%' }"
           >
-            <el-input
-              v-model="info.className"
-              class="inputDefault"
-              :readonly="!editable"
-              :class="{ editable: !editable }"
-            />
+            <el-input v-model="info.className" :readonly="!editable" :class="{ editable: !editable }" />
           </el-form-item>
         </el-descriptions-item>
         <el-descriptions-item label="input" :span="3">
@@ -43,17 +38,12 @@
             :wrapper-col="{ span: 24 }"
             :style="{ width: '100%' }"
           >
-            <el-input v-model="item.input" class="inputDefault" :disabled="true" :class="{ editable: !editable }" />
+            <el-input v-model="item.input" :disabled="true" :class="{ editable: !editable }" />
           </el-form-item>
         </el-descriptions-item>
-        <el-descriptions-item class="inputDefault" label="Output" :span="3">
+        <el-descriptions-item label="Output" :span="3">
           <el-form-item prop="output">
-            <el-input
-              v-model="info.output"
-              class="inputDefault"
-              :readonly="!editable"
-              :class="{ editable: !editable }"
-            />
+            <el-input v-model="info.output" :readonly="!editable" :class="{ editable: !editable }" />
           </el-form-item>
         </el-descriptions-item>
         <el-descriptions-item v-if="editable" class="uploadBox" label="File" :span="3">
@@ -146,6 +136,7 @@
         }
         if (!this.loadingDetail) {
           Object.assign(this.info, this.currentFunctionInfo)
+          this.onReset()
         }
       }
     },
@@ -155,26 +146,16 @@
       },
       onReset() {
         const ref = 'info'
-        const inputs = {}
         const inputArr = this.currentFunctionInfo?.input?.map((input, i) => {
           const key = `input_${i}`
-          Object.assign(inputs, { [key]: input })
+          Object.assign(this.inputs, { [key]: input })
           return { key, input }
         })
 
+        console.log('reset', this.inputs)
         this.inputs = inputArr
         Object.assign(this.info, this.currentFunctionInfo)
-
-        // this.$refs[ref].resetFields()
-        // this.info.className = this.currentFunctionInfo.className
-        // this.$refs.ref.resetFields()
-        // console.log(form)
-        /* this.form.setFieldsValue({
-          name: this.currentFunctionInfo?.name,
-          className: this.currentFunctionInfo?.className,
-          output: this.currentFunctionInfo?.output,
-          ...inputs
-        }) */
+        this.$refs[ref].clearValidate()
       },
       onOpen() {
         this.info = this.currentFunctionInfo
@@ -194,11 +175,6 @@
       cancelEdit() {
         this.onReset()
         this.editable = false
-        // this.$refs[form].resetFields()
-        // setTimeout(() => {
-        //   // 恢复删除的
-        //   // this.onReset()
-        // })
       },
       saveEdit(form) {
         this.$refs[form].validate((valid) => {
@@ -221,6 +197,7 @@
               try {
                 update(functionName, data).then((res) => {
                   console.log(this.$parent.$parent.refresh())
+                  this.editable = false
                   // this.$parent.refresh()
                   // _this.$parent.closeDetail()
                   // _this.$notification.success({ message: `function "${functionName}" created successfully` })
@@ -244,18 +221,13 @@
 </script>
 
 <style scoped>
-  .inputDefault {
-    background: #00000000;
-    cursor: auto;
-    color: #000000a6;
-  }
-  .editable {
-    line-height: 20px;
-  }
-  .editable >>> .el-input__inner {
+  .editable :deep(.el-input__inner) {
     border-color: #fff;
   }
-  .editable:hover {
-    border-color: #00000000;
+  .uploadBox :deep(.el-upload) {
+    width: 100%;
+  }
+  .uploadBox :deep(.el-upload-dragger) {
+    width: 100%;
   }
 </style>
