@@ -8,9 +8,7 @@
         <slot name="header" />
       </header>
       <el-scrollbar class="flex-1 baselayout-content-scrollbar">
-        <div>
-          <slot name="content" />
-        </div>
+        <slot name="content" />
         <slot name="footer" />
       </el-scrollbar>
     </div>
@@ -23,11 +21,14 @@
     overflow: hidden;
     z-index: 10;
   }
+
   .baselayout-content-scrollbar .el-scrollbar__view {
     min-height: 95%;
+    height: 100%;
     display: flex;
     /* width: 100%; */
     flex-direction: column;
     justify-content: space-between;
   }
+
 </style>

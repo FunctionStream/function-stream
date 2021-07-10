@@ -1,24 +1,34 @@
 <template>
-  <PageHeaderWrapper>
-    <template #extra>
-      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
-        {{ $t('func.addFunc') }}
-      </el-button>
-    </template>
-    <Func v-loading="loading" :data="functionList" />
-  </PageHeaderWrapper>
+    <PageHeaderWrapper>
+      <template #extra>
+        <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
+          {{ $t('func.addFunc') }}
+        </el-button>
+      </template>
+      <Func v-loading="loading" :data="functionList" />
+    </PageHeaderWrapper>
+
+    <X6_index />
 </template>
 <script>
   import Func from './components/Func.vue'
   import { getList, getStatus } from '@/api/func'
+  import X6_index from '@/views/data-flow-diagram/X6_index.vue'
+
   export default {
     components: {
-      Func
+      Func,
+      X6_index
     },
     data() {
       return {
         functionList: [],
         loading: false
+      }
+    },
+    methods: {
+      add() {
+        this.a++
       }
     },
     async created() {
