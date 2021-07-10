@@ -66,8 +66,8 @@
             // eslint-disable-next-line no-unused-expressions
             res?.map(async (name, i) => {
               const res = await getStatus(name)
-              this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
-              this.$set(this.functionList[i], 'statusInfo', res)
+              this.functionList[i].status = !!res?.instances?.[0]?.status?.running
+              this.functionList[i].statusInfo = res
             })
           }
         } catch (e) {}

@@ -189,26 +189,32 @@
             delete functionConfig.data
             delete functionConfig.Name // 参数处理
             data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
-            const _this = this
             this.$confirm('Some descriptions', 'Are you sure to create this function?', {
               confirmButtonText: 'OK',
               cancelButtonText: 'Cancel',
               type: 'primary'
             }).then(() => {
-              try {
-                update(functionName, data).then((res) => {
-                  console.log(this.$parent.$parent.refresh())
+              // try {
+              update(functionName, data)
+                .then((res) => {
                   this.editable = false
-                  // this.$parent.refresh()
-                  // _this.$parent.closeDetail()
-                  // _this.$notification.success({ message: `function "${functionName}" created successfully` })
+                  this.$notify.success({ message: `function "${functionName}" created successfully` })
                 })
-              } catch (error) {
-                const errMessage = error.response.data.reason
-                _this.$notification.error({
-                  message: ` funciton "${functionName}" creation failed, because ${errMessage}`
+                .catch((err) => {
+                  console.log('err', err)
+                  const errMessage = err.response.data.reason
+                  this.$notify.error({
+                    title: 'Error',
+                    message: ` funciton "${functionName}" creation failed, because ${errMessage}`
+                  })
+                  this.editable = false
                 })
-              }
+              // } catch (error) {
+
+              // _this.$notification.error({
+              //   message: ` funciton "${functionName}" creation failed, because ${errMessage}`
+              // })
+              // }
             })
             this.file = ''
           } else {
@@ -222,16 +228,6 @@
 </script>
 
 <style scoped>
-<<<<<<< HEAD
-  .editable :deep(.el-input__inner) {
-    border-color: #fff;
-  }
-  .uploadBox :deep(.el-upload) {
-    width: 100%;
-  }
-  .uploadBox :deep(.el-upload-dragger) {
-    width: 100%;
-=======
   .editable ::v-deep(.el-input__inner) {
     border-color: #fff;
   }
@@ -243,6 +239,5 @@
   }
   .inputMargin ::v-deep(.el-form-item) {
     margin-bottom: 0;
->>>>>>> 6eea3b8c3501c5bd1a3d4655366a85201edcdff5
   }
 </style>
