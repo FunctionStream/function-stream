@@ -209,12 +209,6 @@
                   })
                   this.editable = false
                 })
-              // } catch (error) {
-
-              // _this.$notification.error({
-              //   message: ` funciton "${functionName}" creation failed, because ${errMessage}`
-              // })
-              // }
             })
             this.file = ''
           } else {
