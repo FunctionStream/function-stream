@@ -1,27 +1,38 @@
 <template>
   <PageHeaderWrapper>
     <template #extra>
-      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
-        {{ $t('func.addFunc') }}
+      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="showAddFunc">
+        {{ $t("func.addFunc") }}
       </el-button>
     </template>
-    <Func v-loading="loading" :data="functionList" />
+    <Func :data="functionList" v-loading="loading" />
+    <add-func v-model="visibleAdd" :functionList="functionList" :refresh="refresh"/>
   </PageHeaderWrapper>
 </template>
 <script>
-  import Func from './components/Func.vue'
-  import { getList, getStatus } from '@/api/func'
-  export default {
-    components: {
-      Func
+import Func from './components/Func.vue'
+import AddFunc from './components/AddFunc.vue'
+import { getList, getStatus } from '@/api/func'
+export default {
+  data() {
+    return {
+      functionList: [],
+      loading: false,
+      visibleAdd: false
+    }
+  },
+  components: {
+    AddFunc,
+    Func,
+  },
+  created() {
+    this.refresh()
+  },
+  methods: {
+    showAddFunc(){
+      this.visibleAdd = true
     },
-    data() {
-      return {
-        functionList: [],
-        loading: false
-      }
-    },
-    async created() {
+    async refresh(){        //刷新页面
       try {
         this.loading = true
         const res = await getList()
@@ -38,4 +49,5 @@
       this.loading = false
     }
   }
+}
 </script>
