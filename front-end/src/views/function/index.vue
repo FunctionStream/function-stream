@@ -1,5 +1,4 @@
 <template>
-  <div>
     <PageHeaderWrapper>
       <template #extra>
         <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
@@ -9,8 +8,7 @@
       <Func v-loading="loading" :data="functionList" />
     </PageHeaderWrapper>
 
-    <X6_index></X6_index>
-  </div>
+    <X6_index />
 </template>
 <script>
   import Func from './components/Func.vue'
