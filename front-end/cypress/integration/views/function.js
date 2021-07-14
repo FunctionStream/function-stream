@@ -2,6 +2,6 @@
 describe('Tests the Function Page', () => {
   it('Visits the Function Page', () => {
     cy.visit('/function')
-    cy.wait(5000)
+    cy.wait(11000)
   })
 })
