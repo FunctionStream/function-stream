@@ -13,5 +13,6 @@ jobs:
       - name: Cypress run
         uses: cypress-io/github-action@v2
         with:
-          build: yarn run build
-          start: yarn run serve
+          build: npm run build
+          start: npm run serve
+          working-directory: front-end
