@@ -5,6 +5,9 @@ on: [push]
 jobs:
   cypress-run:
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      CYPRESS_baseUrl: http://localhost:5000/
     steps:
       - name: Checkout
         uses: actions/checkout@v2
