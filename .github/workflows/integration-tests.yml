@@ -15,4 +15,7 @@ jobs:
         with:
           # build: yarn run build
           start: yarn run serve
+          wait-on: http://localhost:5000/
+          config-file: cypress.json
+          spec: "cypress/integration/**/*"
           working-directory: front-end
