@@ -26,3 +26,23 @@ jobs:
           config-file: cypress.json
           spec: "cypress/integration/**/*"
           working-directory: andv-front-end
+  
+  cypress-run-vue3:
+    runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      CYPRESS_baseUrl: http://localhost:5000/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      # Install NPM dependencies, cache them correctly
+      # and run all Cypress tests
+      - name: Cypress run
+        uses: cypress-io/github-action@v2
+        with:
+          build: yarn run build
+          start: yarn run serve
+          wait-on: http://localhost:5000/
+          config-file: cypress.json
+          spec: "cypress/integration/**/*"
+          working-directory: front-end        
