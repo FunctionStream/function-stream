@@ -1,4 +1,5 @@
 import { Graph, Shape } from '@antv/x6/lib'
+import { fsBoxMenu, showFSBoxMenu } from '@/views/data-flow-diagram/store.js'
 
 // 盒子样式 (todo 暂定 可能需要大改)
 const SHAPE_CONFIG = {
@@ -103,7 +104,6 @@ FSMiddleRect.config({
       leftPort: { position: 'left', label: { position: 'left' }, ...SHAPE_CONFIG.DEFAULT_PORT_STYLE }
     },
     items: [
-      // todo 线条现在只能从上往下
       // todo 这里的文字要用户自己双击加上
       // { id: 'top_port1', group: 'topPort', attrs: { text: { text: 'top_port1' } } },
       { id: 'right_port1', group: 'rightPort', attrs: { text: { text: 'right_port1' } } },
@@ -131,7 +131,7 @@ class FSGraph {
     const attrs = this.getInitGraphConfig(containerDom, ...x6GraphConfig)
 
     this._graph = new Graph(attrs)
-    this.registerEdgeConnectedEvent()
+    this._registerEvent()
 
     return this._graph
   }
@@ -156,6 +156,12 @@ class FSGraph {
     return config
   }
 
+  _registerEvent() {
+    // this.registerEdgeConnectedEvent()
+    this.registerRightClickEvent()
+    this.registerDbclickEvent()
+  }
+
   registerEdgeConnectedEvent() {
     // 这个可能用不到
     // this._graph.on('edge:connected', ({ previousView, currentView }) => {
@@ -171,6 +177,25 @@ class FSGraph {
     //
     //   debugger
     // })
+  }
+
+  registerRightClickEvent() {
+    this._graph.on('cell:contextmenu', ({ e, x, y, cell, view }) => {
+      debugger
+      showFSBoxMenu.value = true
+      fsBoxMenu.value = { e, x, y, cell, view }
+    })
+  }
+
+  registerDbclickEvent() {
+    this._graph.on('cell:dblclick', ({ e, x, y, cell, view }) => {
+      const { target } = e
+      const parentElement = target.parentElement
+      if ([...parentElement.classList].includes('x6-port-label')) {
+        // todo 双击节点
+        console.log(target.textContent)
+      }
+    })
   }
 }
 

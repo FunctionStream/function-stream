@@ -4,15 +4,19 @@
       <div ref="container" class="container1"></div>
     </div>
     <div class="right">
-      <div ref="app2Dom"></div>
+      <div ref="app2Dom"><!--这是画布--></div>
     </div>
   </div>
+  <ul v-show="showFSBoxMenu" class="menu">
+    <li class="delete" @click="deleteFuncItem">删除</li>
+  </ul>
 </template>
 
 <script>
   import { onMounted, ref } from 'vue'
   import { Addon } from '@antv/x6/lib'
   import { FSBusiness } from '@/utils/fs-graph.js'
+  import { fsBoxMenu, showFSBoxMenu } from '@/views/data-flow-diagram/store.js'
 
   const { FSBox, FSGraph } = FSBusiness
   const { Stencil } = Addon
@@ -20,6 +24,15 @@
 
   export default {
     setup() {
+
+      const deleteFuncItem = () => {
+        const { view } = fsBoxMenu.value
+        view.cell.remove()
+        // todo 删除有连接的线
+        showFSBoxMenu.value = false
+        fsBoxMenu.value = {}
+      }
+
       const app2Dom = ref(null)
       const container = ref(null)
       const outBtnClick = () => {
@@ -56,7 +69,9 @@
       return {
         app2Dom,
         container,
-        outBtnClick
+        outBtnClick,
+        showFSBoxMenu,
+        deleteFuncItem
       }
     }
   }
@@ -85,4 +100,18 @@
     flex: 1;
     position: relative;
   }
+
+  ul.menu {
+    position: fixed;
+    top: 100px;
+    left: 500px;
+    width: 100px;
+    background: pink;
+    z-index: 999;
+  }
+
+  ul.menu li{
+    cursor: pointer;
+  }
+
 </style>
