@@ -1,0 +1,21 @@
+name: Eslint Check
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: yarn install
+        working-directory: front-end
+
+      - name: Run eslint
+        run: npx eslint . --ext .js,.jsx,.ts,.vue,.tsx
+        working-directory: front-end
