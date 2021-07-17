@@ -12,8 +12,9 @@
 <script>
   import { onMounted, ref } from 'vue'
   import { Addon } from '@antv/x6/lib'
-  import { FSGraph, FunctionReact } from '@/utils/fs-graph.js'
+  import { FSBusiness } from '@/utils/fs-graph.js'
 
+  const { FSBox, FSGraph } = FSBusiness
   const { Stencil } = Addon
   const MOCK_FUNC_LIST = ['func1', 'func2', 'func3']
 
@@ -30,7 +31,7 @@
       // fixme 添加删除功能
       // fixme 添加回退功能,(删错的情况下), 与ctrl+z, ctrl+shift+z绑定
       onMounted(() => {
-        const graph = new FSGraph(app2Dom.value, {})
+        const graph = new FSGraph(app2Dom.value)
 
         const stencil = new Stencil({
           title: 'component',
@@ -42,14 +43,12 @@
           collapsable: true,
           stencilGraphWidth: 200,
           stencilGraphHeight: 180,
-          groups: [
-            { name: 'function', title: 'Group(Collapsable)' }
-          ]
+          groups: [{ name: 'function', title: 'Group(Collapsable)' }]
         })
 
         container.value.appendChild(stencil.container)
 
-        const mockFuncNodeList = MOCK_FUNC_LIST.map(funcName => new FunctionReact(funcName) )
+        const mockFuncNodeList = MOCK_FUNC_LIST.map((funcName) => new FSBox(funcName))
 
         stencil.load(mockFuncNodeList, 'function')
       })
@@ -67,7 +66,6 @@
   .flow-wrapper {
     display: flex;
     height: 100%;
-    background: orange;
   }
 
   .flow-wrapper .left {
@@ -86,6 +84,5 @@
   .flow-wrapper .right {
     flex: 1;
     position: relative;
-    background: pink;
   }
 </style>
