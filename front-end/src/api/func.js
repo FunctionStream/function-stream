@@ -40,7 +40,7 @@ export function getStatus(funcName) {
 }
 
 export function triggerFunc(funcName, data) {
-  return post(funcApi.trigger({ funcName }), data ,{ headers: { 'Content-Type': 'multipart/form-data' } })
+  return post(funcApi.trigger({ funcName }), data, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 export function deleteFunc(funcName) {
@@ -55,5 +55,5 @@ export function startFunc(funcName) {
 }
 
 export function stopFunc(funcName) {
-  return post(funcApi.stop({funcName}))
+  return post(funcApi.stop({ funcName }))
 }

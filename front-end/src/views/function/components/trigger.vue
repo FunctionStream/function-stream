@@ -4,13 +4,14 @@
       <el-row>
         <el-form-item v-if="currentFunction.name" prop="functionName">
           <span>functionName</span>
-          <el-select v-model="TriggerForm.functionName" placeholder="please select a function" style="width: 368px;" size="small">
-            <el-option
-              v-for="(item,index) in data"
-              :key="item.index"
-              :label="item.name"
-              :value="item.key">
-              {{item.name}}
+          <el-select
+            v-model="TriggerForm.functionName"
+            placeholder="please select a function"
+            style="width: 368px"
+            size="small"
+          >
+            <el-option v-for="item in data" :key="item.index" :label="item.name" :value="item.key">
+              {{ item.name }}
             </el-option>
           </el-select>
         </el-form-item>
@@ -19,19 +20,22 @@
         <el-form-item prop="data">
           <span>data</span>
           <el-input
+            v-model="TriggerForm.data"
             autosize
             type="textarea"
             placeholder="please enter the data"
-            v-model="TriggerForm.data"
-            style="width: 368px;"/>
+            style="width: 368px"
+          />
         </el-form-item>
       </el-row>
     </el-form>
     <el-row type="flex" justify="end">
-      <el-button type="primary" :loading="triggering" @click="onSub('TriggerForm')" style="margin-bottom: 24px"> Trigger </el-button>
+      <el-button type="primary" :loading="triggering" style="margin-bottom: 24px" @click="onSub('TriggerForm')">
+        Trigger
+      </el-button>
     </el-row>
     <el-card class="box-card">
-      <div slot="header" class="clearfix">
+      <div class="clearfix">
         <span>Result</span>
         <span style="float: right; padding: 3px 0">{{ triggerResultType }}</span>
       </div>
@@ -47,22 +51,6 @@
 
   export default {
     name: 'TriggerVue',
-    data () {
-      return {
-        TriggerForm: {},
-        triggerResult: '',
-        triggerResultType: '',
-        triggering: false,
-        rules: {
-          functionName: [
-            { required: true, message: 'Please select a function!', trigger: 'blur' }
-          ],
-          data: [
-            { required: true, message: 'Please select a function!', trigger: 'blur' }
-          ]
-        }
-      }
-    },
     props: {
       visible: {
         type: Boolean,
@@ -81,8 +69,41 @@
         default: () => {}
       }
     },
+    data() {
+      return {
+        TriggerForm: {},
+        triggerResult: '',
+        triggerResultType: '',
+        triggering: false,
+        rules: {
+          functionName: [{ required: true, message: 'Please select a function!', trigger: 'blur' }],
+          data: [{ required: true, message: 'Please select a function!', trigger: 'blur' }]
+        }
+      }
+    },
+    watch: {
+      currentFunc() {
+        this.TriggerForm.setFieldsValue({
+          functionName: this.currentFunction.name
+        })
+      }
+    },
+    async onOk() {
+      try {
+        await triggerFunc(this.TriggerForm.functionName, this.TriggerForm.data).then((res) => {
+          this.triggerResult = res
+          this.triggerResultType = typeof res
+        })
+      } catch (error) {
+        this.$message.error('Function trigger failed!')
+      } finally {
+        setTimeout(() => {
+          this.triggering = false
+        }, 500)
+      }
+    },
     methods: {
-      onClose () {
+      onClose() {
         this.$parent.closeTrigger()
       },
       onSub(subName) {
@@ -93,7 +114,7 @@
             this.triggering = true
             const values = this.TriggerForm
             const formData = new FormData()
-            const functionName = values.functionName
+            /* const functionName = values.functionName*/
             const functionData = values.data
             //参数处理
             if (typeof functionData === 'string') {
@@ -101,32 +122,8 @@
             } else {
               formData.append('data', functionData)
             }
-            const _this = this
-
-            async function onOk() {
-              try {
-                await triggerFunc(functionName, formData)
-                  .then((res) => {
-                    _this.triggerResult = res
-                    _this.triggerResultType = typeof res
-                  })
-              } catch (error) {
-                _this.$message.error('Function trigger failed!')
-              } finally {
-                setTimeout(() => {
-                  _this.triggering = false
-                }, 500)
-              }
-            }
-            onOk()
+            this.onOk()
           }
-        })
-      }
-    },
-    watch: {
-      currentFunc () {
-        this.TriggerForm.setFieldsValue({
-          functionName : this.currentFunction.name
         })
       }
     }
@@ -140,17 +137,17 @@
   .item {
     padding: 18px 0;
   }
-  .clearfix{
+  .clearfix {
     border-bottom: 1px solid;
   }
   .clearfix:after {
     display: table;
-    content: "";
+    content: '';
   }
   .clearfix:after {
-    clear: both
+    clear: both;
   }
-  .box-card{
+  .box-card {
     width: 368px;
     display: block;
     margin-left: 46px;
@@ -158,7 +155,7 @@
   .el-form-item__content {
     margin-left: 46px !important;
   }
-  .el-row{
+  .el-row {
     width: 416px;
   }
 </style>
