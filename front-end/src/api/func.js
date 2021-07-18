@@ -40,7 +40,7 @@ export function getStatus(funcName) {
 }
 
 export function triggerFunc(funcName, data) {
-  return post(funcApi.trigger({ funcName }), { data })
+  return post(funcApi.trigger({ funcName }), data ,{ headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 export function deleteFunc(funcName) {
