@@ -88,20 +88,6 @@
         })
       }
     },
-    async onOk() {
-      try {
-        await triggerFunc(this.TriggerForm.functionName, this.TriggerForm.data).then((res) => {
-          this.triggerResult = res
-          this.triggerResultType = typeof res
-        })
-      } catch (error) {
-        this.$message.error('Function trigger failed!')
-      } finally {
-        setTimeout(() => {
-          this.triggering = false
-        }, 500)
-      }
-    },
     methods: {
       onClose() {
         this.$parent.closeTrigger()
@@ -114,7 +100,7 @@
             this.triggering = true
             const values = this.TriggerForm
             const formData = new FormData()
-            /* const functionName = values.functionName*/
+            const functionName = values.functionName
             const functionData = values.data
             //参数处理
             if (typeof functionData === 'string') {
@@ -122,7 +108,20 @@
             } else {
               formData.append('data', functionData)
             }
-            this.onOk()
+            const _this = this
+            triggerFunc(functionName, formData)
+              .then((res) => {
+                _this.triggerResult = res
+                _this.triggerResultType = typeof res
+              })
+              .catch((error) => {
+                _this.$message.error('Function trigger failed!')
+              })
+              .finally(() => {
+                setTimeout(() => {
+                  _this.triggering = false
+                }, 500)
+              })
           }
         })
       }
