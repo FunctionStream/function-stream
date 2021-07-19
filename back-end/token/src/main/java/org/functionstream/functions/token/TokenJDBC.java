@@ -9,11 +9,10 @@ public class TokenJDBC {
     private static final String username = "root";
     private static final String password = "root";
 
-    public static boolean checkAccount(String userIn, String passwordIn){
+    public static boolean checkAccount(String userIn, String passwordIn) throws Exception {
         Connection connection = null;
         PreparedStatement preparedStatement = null;
         ResultSet resultSet = null;
-        boolean flag=false;
         try {
             Class.forName(DRIVER_CLASS);
             connection = DriverManager.getConnection(url, username, password);
@@ -22,32 +21,19 @@ public class TokenJDBC {
             preparedStatement.setString(1,userIn);
             preparedStatement.setString(2,passwordIn);
             resultSet = preparedStatement.executeQuery();
-            flag = resultSet.next();
+            return resultSet.next();
         } catch (ClassNotFoundException | SQLException e) {
-            e.printStackTrace();
+            throw new Exception("GetTokenFunction:SQL Exception");
         } finally {
             if(null != resultSet){
-                try {
-                    resultSet.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
+                resultSet.close();
             }
             if(null != preparedStatement){
-                try {
-                    preparedStatement.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
+                preparedStatement.close();
             }
             if(null != connection){
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
+                connection.close();
             }
         }
-        return flag;
     }
 }

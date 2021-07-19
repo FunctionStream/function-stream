@@ -36,28 +36,20 @@ public class GetTokenFunction implements Function<String,String> {
             String token = createToken(userName);
             jsonObject.add("token",new Gson().toJsonTree(token));
         }else {
-            throw new Exception("incorrect username or password");
+            throw new Exception("GetTokenFunction:incorrect username or password");
         }
         return jsonObject.toString();
     }
 
-    public static String createToken(String userName){
+    private static String createToken(String userName){
         Key signingKey = new SecretKeySpec(secret.getBytes(), signatureAlgorithm.getJcaName());
         Map<String, Object> claims = new HashMap<>();
-        claims.put("userName", userName);
+        claims.put("role", userName);
         JwtBuilder builder = Jwts.builder().setClaims(claims)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis()+SurvivalTime))
                 .signWith(signatureAlgorithm,signingKey);
 
         return builder.compact();
-    }
-    public static Claims parseToken(String token) {
-        return Jwts.parser().setSigningKey(secret.getBytes())
-                .parseClaimsJws(token).getBody();
-    }
-    public static String getUserNameByToken(String token){
-        Claims body = Jwts.parser().setSigningKey(secret.getBytes()).parseClaimsJws(token).getBody();
-        return body.get("userName").toString();
     }
 }
