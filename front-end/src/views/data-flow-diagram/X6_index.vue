@@ -8,6 +8,7 @@
     </div>
   </div>
   <ul v-show="showFSBoxMenu" class="menu">
+    <!-- todo 菜单样式需要完善    -->
     <li class="delete" @click="deleteFuncItem">删除</li>
   </ul>
 </template>
@@ -24,6 +25,8 @@
 
   export default {
     setup() {
+      const app2Dom = ref(null)
+      const container = ref(null)
 
       const deleteFuncItem = () => {
         const { view } = fsBoxMenu.value
@@ -33,16 +36,6 @@
         fsBoxMenu.value = {}
       }
 
-      const app2Dom = ref(null)
-      const container = ref(null)
-      const outBtnClick = () => {
-        console.log('outBtnClick')
-      }
-
-      // fixme priority 1 连接节点, 右键删除连接线
-      // fixme 方块拖到右边的画布以后再拖到左边会被盖住, 应该删掉或者修改index, 改成碰到边3了就拖不过去
-      // fixme 添加删除功能
-      // fixme 添加回退功能,(删错的情况下), 与ctrl+z, ctrl+shift+z绑定
       onMounted(() => {
         const graph = new FSGraph(app2Dom.value)
 
@@ -69,7 +62,6 @@
       return {
         app2Dom,
         container,
-        outBtnClick,
         showFSBoxMenu,
         deleteFuncItem
       }
@@ -110,8 +102,7 @@
     z-index: 999;
   }
 
-  ul.menu li{
+  ul.menu li {
     cursor: pointer;
   }
-
 </style>
