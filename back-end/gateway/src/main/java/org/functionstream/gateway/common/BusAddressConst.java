@@ -1,10 +1,14 @@
 package org.functionstream.gateway.common;
 
+/**
+ * @author HALOXIAO
+ * @since 2021/7/21
+ */
 public interface BusAddressConst {
 
     /**
-     * 检查服务健康状态
+     * HEALTH_CHECK
      */
-    String HEALTH_CHECK = "server:health";
+    String HEALTH_CHECK = "health:check";
 
 }

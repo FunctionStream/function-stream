@@ -9,12 +9,7 @@
     <packaging>pom</packaging>
     <version>0.1-SNAPSHOT</version>
 
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.4.7</version>
-        <relativePath/>
-    </parent>
+
 
     <modules>
         <module>gateway</module>
@@ -23,13 +18,18 @@
 
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <vertx.version>4.1.0</vertx.version>
         <junit-jupiter.version>5.7.0</junit-jupiter.version>
         <spring.version>2.4.7</spring.version>
         <guice.version>5.0.1</guice.version>
+        <guice-multibindings.version>4.2.0</guice-multibindings.version>
+        <yaml.version>1.28</yaml.version>
+        <log4j.version>2.14.1</log4j.version>
+        <slf4j.version>1.7.31</slf4j.version>
+        <quarkus.platform.version>2.0.2.Final</quarkus.platform.version>
     </properties>
 
     <dependencies>
@@ -40,17 +40,27 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
+            <version>1.18.20</version>
         </dependency>
+
     </dependencies>
 
     <dependencyManagement>
         <dependencies>
 
+
+
             <dependency>
-                <groupId>com.google.inject</groupId>
-                <artifactId>guice</artifactId>
-                <version>5.0.1</version>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
+
+
+
+
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-api</artifactId>
@@ -62,14 +72,9 @@
                 <artifactId>junit-jupiter-engine</artifactId>
                 <version>${junit-jupiter.version}</version>
                 <scope>test</scope>
+
             </dependency>
-            <dependency>
-                <groupId>io.vertx</groupId>
-                <artifactId>vertx-stack-depchain</artifactId>
-                <version>${vertx.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
+
 
         </dependencies>
     </dependencyManagement>
