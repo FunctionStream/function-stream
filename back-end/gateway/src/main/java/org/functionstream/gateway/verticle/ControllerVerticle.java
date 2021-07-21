@@ -24,15 +24,14 @@ public class ControllerVerticle extends AbstractVerticle {
     public void start(Promise<Void> promise) throws Exception {
         Router router = Router.router(vertx);
         router.route("/health/check").handler(this::healthCheck);
-        //TODO 这些东西用Guice进行注入
-        vertx.createHttpServer().requestHandler(router).listen(8080,res->{
+        //TODO 这些配置可以用Guice进行注入
+        vertx.createHttpServer().requestHandler(router).listen(8080, res -> {
             if (res.succeeded()) {
-
                 promise.complete();
             } else {
                 promise.fail(res.cause());
             }
-        })
+        });
 
     }
 
@@ -46,7 +45,6 @@ public class ControllerVerticle extends AbstractVerticle {
                 });
 
     }
-
 
 
 }
