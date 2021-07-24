@@ -1,6 +1,8 @@
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import org.junit.Assert;
 import org.junit.Test;
 import org.functionstream.functions.token.TokenJDBC;
@@ -21,6 +23,7 @@ public class TokenTest {
 
     @Test
     public void testGetToken() throws Exception {
+        String secret="21232f297a57a5a743894a0e4a801fc3";
         String userName="user-a";
         String password="pwd";
         String input="{\"requestId\":\"1\",\"userName\":\"user-a\",\"password\":\"pwd\"}";
@@ -31,6 +34,8 @@ public class TokenTest {
         JsonElement element = parser.parse(actual);
         JsonObject jsonObject = element.getAsJsonObject();
         String token = jsonObject.get("token").getAsString();
-        Assert.assertTrue("GetTokenFunction:token can't match",token.matches("\\w+[.]\\w+[.]\\w+"));
+        Claims body = Jwts.parser().setSigningKey(secret.getBytes()).parseClaimsJws(token).getBody();
+        String role = body.get("role").toString();
+        Assert.assertEquals("GetTokenFunction:token can't match", "user-a", role);
     }
 }
