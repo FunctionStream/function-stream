@@ -2,7 +2,7 @@
   <el-drawer size="40%" @open="onOpen" @close="onClose">
     <!-- function info -->
     <el-form ref="info" v-loading="loadingDetail" :rules="rules" style="padding: 0 20px" :model="info"
-label-position="top">
+      label-position="top"
       <el-descriptions class="inputMargin" title="function info" border size="small">
         <template #extra>
           <el-button v-if="!editable" type="primary" size="small" @click="onChgEditable"> Edit </el-button>
