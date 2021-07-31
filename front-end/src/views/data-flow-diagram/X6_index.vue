@@ -40,16 +40,15 @@
         const graph = new FSGraph(app2Dom.value)
 
         const stencil = new Stencil({
-          title: 'component',
+          title: 'function type',
           target: graph,
           search(cell, keyword) {
             return cell.shape.indexOf(keyword) !== -1
           },
           placeholder: '',
-          collapsable: true,
           stencilGraphWidth: 200,
           stencilGraphHeight: 180,
-          groups: [{ name: 'function', title: 'Group(Collapsable)' }]
+          groups: [{ name: 'function', title: 'function group1' }]
         })
 
         container.value.appendChild(stencil.container)
