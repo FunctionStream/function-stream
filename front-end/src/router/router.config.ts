@@ -7,7 +7,7 @@ export const asyncRouterMap = [
     name: 'menu.Home',
     component: BaseLayout,
     meta: { title: 'Home' },
-    redirect: '/stream-flow-diagram',
+    redirect: '/function',
     children: [
       {
         path: '/function',
@@ -17,7 +17,7 @@ export const asyncRouterMap = [
       },
       {
         path: '/stream-flow-diagram',
-        name: '数据流',
+        name: 'menu.functionFlow',
         meta: { title: 'stream-flow-diagram', icon: 'el-icon-s-grid' },
         component: () => import('@/views/data-flow-diagram/X6_index.vue')
       }

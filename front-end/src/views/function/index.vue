@@ -1,14 +1,12 @@
 <template>
-    <PageHeaderWrapper>
-      <template #extra>
-        <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
-          {{ $t('func.addFunc') }}
-        </el-button>
-      </template>
-      <Func v-loading="loading" :data="functionList" />
-    </PageHeaderWrapper>
-
-    <X6_index />
+  <PageHeaderWrapper>
+    <template #extra>
+      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
+        {{ $t('func.addFunc') }}
+      </el-button>
+    </template>
+    <Func v-loading="loading" :data="functionList" />
+  </PageHeaderWrapper>
 </template>
 <script>
   import Func from './components/Func.vue'
