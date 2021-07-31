@@ -1,3 +1,6 @@
+// x6业务模板: https://x6.antv.vision/zh/examples/gallery#category-%E6%A0%87%E7%AD%BE
+//            https://x6.antv.vision/zh/examples/showcase/practices#validate-connection
+// x6文档:     https://x6.antv.vision/zh
 import { Graph, Shape } from '@antv/x6/lib'
 import { fsBoxMenu, showFSBoxMenu } from '@/views/data-flow-diagram/store.js'
 
@@ -85,7 +88,7 @@ const GRAPH_CONFIG = {
   } // 连接的线条样式
 }
 
-/***********中间层开始****************/
+/***********中间层开始 这是对x6的第一层包装****************/
 class FSMiddleRect extends Shape.Rect {}
 
 FSMiddleRect.config({
@@ -115,7 +118,7 @@ FSMiddleRect.config({
 
 /***********中间层结束****************/
 
-/***********业务层开始****************/
+/***********业务层开始 这是对x6的第二层包装,就是function stream自己的业务****************/
 class FSBox {
   constructor(funcName, x6CellConfig) {
     const attrs = {
