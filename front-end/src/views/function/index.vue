@@ -10,7 +10,7 @@
       :data="functionList"
       :onShowDetail="onShowDetail"
       :loadingList="loadingList"
-      :onRefreshFunc="onRreshFunc"
+      :onRefreshFunc="onRefreshFunc"
     />
     <FunctionDetailVue
       v-model="visibleDetail"
@@ -23,106 +23,92 @@
   import Func from './components/Func.vue'
   import FunctionDetailVue from './components/FunctionDetail'
   import { getList, getStatus, getInfo, getStats } from '@/api/func'
+  import { ref } from '@vue/reactivity'
   export default {
     components: {
       FunctionDetailVue,
       Func
     },
-    data() {
-      return {
-        functionList: [],
-        loading: false,
-        visibleDetail: false,
-        currentFunctionInfo: {},
-        loadingDetail: false,
-        loadingList: false
-      }
-    },
-    async created() {
-      try {
-        this.loading = true
+    setup() {
+      // get function list
+      const functionList = ref([])
+      const getFunctionList = async () => {
         const res = await getList()
         if (Array.isArray(res)) {
-          this.functionList = res?.map((name) => ({ key: name, name }))
+          functionList.value = res?.map((name) => ({ key: name, name }))
           // get status
           res?.map(async (name, i) => {
             const res = await getStatus(name)
-            this.functionList[i]['status'] = !!res?.numRunning
-            this.functionList[i]['statusInfo'] = res
+            functionList.value[i]['status'] = !!res?.numRunning
+            functionList.value[i]['statusInfo'] = res
           })
         }
-      } catch (e) {}
-      this.loading = false
-    },
-    methods: {
-      async refresh() {
-        this.loadingList = true
-        try {
-          const res = await getList()
-          if (Array.isArray(res)) {
-            this.functionList = res?.map((name) => ({ key: name, name }))
-            // get status
-            // fixme this use of map should be replaced ↓↓
-            // eslint-disable-next-line no-unused-expressions
-            res?.map(async (name, i) => {
-              const res = await getStatus(name)
-              this.functionList[i].status = !!res?.instances?.[0]?.status?.running
-              this.functionList[i].statusInfo = res
-            })
-          }
-        } catch (e) {}
-        this.loadingList = false
-      },
-      closeDetail() {
-        this.visibleDetail = false
-      },
-      showDetail() {
-        this.visibleDetail = true
-      },
-      onShowDetail(v) {
-        this.loadingDetail = true
-        this.currentFunctionInfo = { ...this.currentFunctionInfo, ...v }
-        this.showDetail()
+      }
+
+      const loading = ref(true)
+      const initFuncList = () => {
+        loading.value = true
+        getFunctionList().then(() => {
+          loading.value = false
+        })
+      }
+      initFuncList()
+
+      // function detail
+      const visibleDetail = ref(false)
+      const loadingDetail = ref(false)
+      const currentFunctionInfo = ref(null)
+      const closeDetail = () => {
+        visibleDetail.value = false
+      }
+      const showDetail = () => {
+        visibleDetail.value = true
+      }
+      const onShowDetail = (v) => {
+        loadingDetail.value = true
+        currentFunctionInfo.value = { ...currentFunctionInfo.value, ...v }
+        showDetail()
         const { name } = v
         getInfo(name)
           .then((res) => {
             if (!res) return
             const { inputSpecs = {} } = res
             const input = Object.keys(inputSpecs)
-            this.currentFunctionInfo = { ...this.currentFunctionInfo, ...res, input }
+            currentFunctionInfo.value = { ...currentFunctionInfo.value, ...res, input }
           })
           .finally(() => {
-            this.loadingDetail = false
+            loadingDetail.value = false
           })
         getStats(name)
           .then((res) => {
             if (!res) return
-            this.currentFunctionInfo = { ...this.currentFunctionInfo, ...res }
+            currentFunctionInfo.value = { ...currentFunctionInfo.value, ...res }
           })
           .finally(() => {
-            this.loadingDetail = false
+            loadingDetail.value = false
           })
-      },
-      async refreshFunc() {
-        const _this = this
-        this.loadingList = true
-        try {
-          const res = await getList()
-          if (Array.isArray(res)) {
-            _this.functionList = res?.map((name) => ({ key: name, name }))
-            // get status
-            // eslint-disable-next-line no-unused-expressions
-            res?.map(async (name, i) => {
-              const res = await getStatus(name)
-              _this.$set(_this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
-              _this.$set(_this.functionList[i], 'statusInfo', res)
-            })
-          }
-        } catch (e) {}
-        this.loadingList = false
-      },
-      onRreshFunc() {
-        this.refreshFunc()
+      }
+
+      // refresh function
+      const loadingList = ref(false)
+      const onRefreshFunc = () => {
+        loadingList.value = true
+        getFunctionList.then(() => {
+          loadingList.value = false
+        })
+      }
+
+      return {
+        loading,
+        functionList,
+        loadingList,
+        loadingDetail,
+        visibleDetail,
+        currentFunctionInfo,
+        closeDetail,
+        showDetail,
+        onShowDetail,
+        onRefreshFunc
       }
     }
   }
