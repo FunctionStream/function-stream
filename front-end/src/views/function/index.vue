@@ -32,7 +32,7 @@ export default {
     showAddFunc(){
       this.visibleAdd = true
     },
-    async refresh(){        //刷新页面
+      async refresh() {
       try {
         this.loading = true
         const res = await getList()
