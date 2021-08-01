@@ -10,7 +10,7 @@
              :model="form"
              label-width="80px"
              label-position="top"
-             style="width: 90%;margin: 25px"
+      style="width: 90%; margin: 25px"
              size="small"
              :inline="true" >
       <el-form-item label="FunctionName:"
