@@ -138,7 +138,7 @@ export default {
   data() {
     return {
       file:'',
-      form: {
+        form: {
         functionName: '',
         inputs: [''],
         output: '',
