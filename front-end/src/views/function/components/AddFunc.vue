@@ -7,7 +7,7 @@
     <el-form ref="addForm"
              class="addFunc"
              :rules="rules"
-             :model="form"
+      :model="form"
              label-width="80px"
              label-position="top"
       style="width: 90%; margin: 25px"
