@@ -123,8 +123,8 @@ const stopFunc = { result: 0 }
 
 const deleteFunc = { result: 0 }
 
-get(/\/admin\/v3\/functions\/public\/default/, list)
 get(/\/admin\/v3\/functions\/public\/default\/[^/]*/, info)
+get(/\/admin\/v3\/functions\/public\/default/, list)
 get(/\/admin\/v3\/functions\/public\/default\/[^/]*\/stats/, stats)
 get(/\/admin\/v3\/functions\/public\/default\/[^/]*\/status/, status)
 post(/\/admin\/v3\/functions\/public\/default\/[^/]*\/trigger/, trigger)

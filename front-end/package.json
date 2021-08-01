@@ -4,15 +4,20 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test:open": "cypress open"
   },
   "dependencies": {
     "@ant-design/icons-vue": "^6.0.1",
     "axios": "^0.21.1",
+    "cypress": "^7.7.0",
     "element-plus": "^1.0.2-beta.48",
     "mockjs": "^1.1.0",
+    "moment": "^2.29.1",
+    "node-uuid": "^1.4.8",
     "nprogress": "^0.2.0",
     "store": "^2.0.12",
+    "uid": "^2.0.0",
     "vue": "^3.0.5",
     "vue-i18n": "^9.1.6",
     "vue-router": "4",
@@ -31,7 +36,7 @@
     "eslint-plugin-vue": "^7.12.1",
     "postcss": "^7",
     "prettier": "^2.3.2",
-    "tailwindcss": "npm:@tailwindcss/postcss7-compat",
+    "tailwindcss": "npm:@tailwindcss/postcss7-compat@^2.2.4",
     "typescript": "^4.3.2",
     "vite": "2.3.7",
     "vue-tsc": "^0.0.24"
