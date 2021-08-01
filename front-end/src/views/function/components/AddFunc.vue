@@ -210,7 +210,7 @@ export default {
     deleteInput(index){
       this.form.inputs.splice(index,1)
     },
-    resetField(formName){
+      resetField(formName) {
       this.$refs[formName].resetFields()
     },
     getFile(file){
