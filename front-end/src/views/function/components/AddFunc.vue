@@ -125,7 +125,7 @@
 <script>
 import { create } from '@/api/func'
 export default {
-  props:{
+    props: {
       functionList: {
       type: Object,
       default: () => {},
