@@ -167,7 +167,7 @@ export default {
       this.$refs.addForm.validate(async valid =>{
         if(!valid) return
         if(!this.file){
-          this.$message('还没添加文件')
+            this.$message('还没添加文件')
           return
         }
         const functionConfig = JSON.parse(JSON.stringify(this.form).replace(/logTopic/g,'log-topic'))
