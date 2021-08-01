@@ -31,7 +31,7 @@
                     v-for="(value,index) in form.inputs"
                     :prop="'inputs.'+index"
                     :key="index"
-                    :rules="{
+        :rules="{
                       required: true, message: '请输入Input', trigger: 'blur'
                     }">
         <el-input style="width: 95%"
