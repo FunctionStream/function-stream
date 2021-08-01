@@ -28,7 +28,7 @@
         Inputs:
       </a>
       <el-form-item style="width: 100%;margin-top: 5px"
-                    v-for="(value,index) in form.inputs"
+        v-for="(value, index) in form.inputs"
         :prop="'inputs.' + index"
                     :key="index"
                     :rules="{
