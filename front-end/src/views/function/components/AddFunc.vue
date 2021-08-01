@@ -40,7 +40,7 @@
                   clearable>
         </el-input>
         <i style="float: right;font-size: 30px;width: 5%"
-           v-show="form.inputs.length!==1"
+           style="float: right;font-size: 30px;width: 5%"
            class="el-icon-circle-close"
            @click="deleteInput(index)">
         </i>
