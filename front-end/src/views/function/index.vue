@@ -21,7 +21,7 @@ export default {
         visibleAdd: false
     }
   },
-  components: {
+    components: {
     AddFunc,
     Func,
   },
