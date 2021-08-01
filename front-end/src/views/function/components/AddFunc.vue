@@ -29,7 +29,7 @@
       </a>
       <el-form-item style="width: 100%;margin-top: 5px"
                     v-for="(value,index) in form.inputs"
-                    :prop="'inputs.'+index"
+        :prop="'inputs.' + index"
                     :key="index"
                     :rules="{
                       required: true, message: '请输入Input', trigger: 'blur'
