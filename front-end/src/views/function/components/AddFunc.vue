@@ -93,7 +93,7 @@
         <el-upload
           :limit="1"
           drag
-          ref="file"
+          drag
           accept=".jar"
           action="0.0//不写会报错，神奇"
           :auto-upload="false"
