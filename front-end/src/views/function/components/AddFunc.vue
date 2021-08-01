@@ -238,5 +238,5 @@ export default {
 }
 /*.el-drawer rtl ::v-deep(.el-drawer__container ::-webkit-scrollbar){*/
 /*  display: none;*/
-/*}*/
+  /*}*/
 </style>
