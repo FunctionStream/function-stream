@@ -33,7 +33,7 @@
                     :key="index"
                     :rules="{
                       required: true, message: '请输入Input', trigger: 'blur'
-                    }">
+        }"
         <el-input style="width: 95%"
                   placeholder="请输入Input"
                   v-model="form.inputs[index]"
