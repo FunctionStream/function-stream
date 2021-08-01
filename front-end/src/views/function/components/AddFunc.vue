@@ -39,7 +39,7 @@
                   placeholder="请输入Input"
                   clearable>
         </el-input>
-        <i style="float: right;font-size: 30px;width: 5%"
+        <i
            style="float: right;font-size: 30px;width: 5%"
            class="el-icon-circle-close"
            @click="deleteInput(index)">
