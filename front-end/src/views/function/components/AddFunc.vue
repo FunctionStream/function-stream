@@ -211,7 +211,7 @@ export default {
       this.form.inputs.splice(index,1)
     },
       resetField(formName) {
-      this.$refs[formName].resetFields()
+        this.$refs[formName].resetFields()
     },
     getFile(file){
       this.file = file.raw
