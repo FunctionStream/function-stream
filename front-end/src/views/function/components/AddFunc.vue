@@ -11,7 +11,7 @@
              label-width="80px"
              label-position="top"
              style="width: 90%;margin: 25px"
-             size="small"
+      size="small"
              :inline="true" >
       <el-form-item label="FunctionName:"
                     style="width: 100%"
