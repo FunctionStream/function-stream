@@ -36,7 +36,7 @@
         }"
         <el-input style="width: 95%"
                   placeholder="请输入Input"
-                  v-model="form.inputs[index]"
+                  placeholder="请输入Input"
                   clearable>
         </el-input>
         <i style="float: right;font-size: 30px;width: 5%"
