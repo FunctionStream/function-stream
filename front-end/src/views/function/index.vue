@@ -2,7 +2,7 @@
   <PageHeaderWrapper>
     <template #extra>
       <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="showAddFunc">
-        {{ $t("func.addFunc") }}
+        {{ $t('func.addFunc') }}
       </el-button>
     </template>
     <Func
@@ -17,10 +17,7 @@
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
     />
-    <add-func 
-      v-model="visibleAdd" 
-      :functionList="functionList" 
-      :refresh="refresh" />
+    <add-func v-model="visibleAdd" :functionList="functionList" :refresh="refresh" />
   </PageHeaderWrapper>
 </template>
 <script>
@@ -46,7 +43,7 @@
       }
     },
     created() {
-        this.refresh()
+      this.refresh()
     },
     methods: {
       async refresh() {
@@ -67,7 +64,7 @@
         } catch (e) {}
         this.loadingList = false
       },
-      showAddFunc(){
+      showAddFunc() {
         this.visibleAdd = true
       },
       closeDetail() {
@@ -123,5 +120,4 @@
       }
     }
   }
-}
 </script>

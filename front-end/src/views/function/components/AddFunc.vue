@@ -6,11 +6,11 @@
   >
     <el-form ref="addForm"
              class="addFunc"
-      :rules="rules"
-      :model="form"
+             :rules="rules"
+             :model="form"
              label-width="80px"
              label-position="top"
-      style="width: 90%; margin: 25px"
+             style="width: 90%;margin: 25px"
              size="small"
              :inline="true" >
       <el-form-item label="FunctionName:"
@@ -28,19 +28,19 @@
         Inputs:
       </a>
       <el-form-item style="width: 100%;margin-top: 5px"
-        v-for="(value, index) in form.inputs"
-        :prop="'inputs.' + index"
+                    v-for="(value,index) in form.inputs"
+                    :prop="'inputs.'+index"
                     :key="index"
                     :rules="{
                       required: true, message: '请输入Input', trigger: 'blur'
-        }"
+                    }">
         <el-input style="width: 95%"
                   placeholder="请输入Input"
-                  placeholder="请输入Input"
+                  v-model="form.inputs[index]"
                   clearable>
         </el-input>
-        <i
-           style="float: right;font-size: 30px;width: 5%"
+        <i style="float: right;font-size: 30px;width: 5%"
+           v-show="form.inputs.length!==1"
            class="el-icon-circle-close"
            @click="deleteInput(index)">
         </i>
@@ -93,7 +93,7 @@
         <el-upload
           :limit="1"
           drag
-          drag
+          ref="file"
           accept=".jar"
           action="0.0//不写会报错，神奇"
           :auto-upload="false"
@@ -125,8 +125,8 @@
 <script>
 import { create } from '@/api/func'
 export default {
-    props: {
-      functionList: {
+  props:{
+    functionList: {
       type: Object,
       default: () => {},
     },
@@ -184,17 +184,17 @@ export default {
           type: 'warning'
         }).then(() => {
           create(functionName, data)
-              .then((res) => {
-                this.$notify({
-                  type: 'success',
-                  message: '添加成功'
-                })
-                this.$refs.addForm.resetFields()        //清空已输入的数据
-                this.file = ''                          //清空文件
-                this.$refs.file.clearFiles()            //清空已上传文件列表
-                this.$refs.addFuncDrawer.handleClose()  //关闭drawer
-                this.refresh()                          //刷新table上的数据
+            .then((res) => {
+              this.$notify({
+                type: 'success',
+                message: '添加成功'
               })
+              this.$refs.addForm.resetFields()        //清空已输入的数据
+              this.file = ''                          //清空文件
+              this.$refs.file.clearFiles()            //清空已上传文件列表
+              this.$refs.addFuncDrawer.handleClose()  //关闭drawer
+              this.refresh()                          //刷新table上的数据
+            })
         }).catch(() => {
           this.$notify({
             type: 'info',
