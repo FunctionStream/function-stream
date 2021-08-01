@@ -229,7 +229,7 @@ export default {
 .el-form-item--mini.el-form-item, .el-form-item--small.el-form-item{
   margin-bottom: 0px;
 }
-.addFunc ::v-deep(.el-form-item__error){
+  .addFunc ::v-deep(.el-form-item__error) {
   position: relative;
   float: left;
 }
