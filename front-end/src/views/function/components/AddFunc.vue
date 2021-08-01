@@ -180,7 +180,7 @@ export default {
         console.log(data)
         this.$confirm('即将添加函数','提示',{
           confirmButtonText: '确定',
-          cancelButtonText: '取消',
+            cancelButtonText: '取消',
           type: 'warning'
         }).then(() => {
           create(functionName, data)
