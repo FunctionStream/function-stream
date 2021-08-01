@@ -18,7 +18,7 @@ export default {
     return {
       functionList: [],
       loading: false,
-      visibleAdd: false
+        visibleAdd: false
     }
   },
   components: {
