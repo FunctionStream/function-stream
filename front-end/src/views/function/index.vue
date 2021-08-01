@@ -6,7 +6,7 @@
       </el-button>
     </template>
     <Func :data="functionList" v-loading="loading" />
-    <add-func v-model="visibleAdd" :functionList="functionList" :refresh="refresh"/>
+    <add-func v-model="visibleAdd" :functionList="functionList" :refresh="refresh" />
   </PageHeaderWrapper>
 </template>
 <script>
