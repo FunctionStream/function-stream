@@ -107,3 +107,5 @@ dist
 **/.vscode-root
 
 .DS_Store
+
+.idea

@@ -50,6 +50,10 @@
         type: Function,
         default: (v) => {}
       },
+      visibleDetail: {
+        type: Boolean,
+        default: false
+      },
       onShowDetail: {
         type: Function,
         default: (v) => {}
