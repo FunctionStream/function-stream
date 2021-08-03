@@ -23,10 +23,9 @@
   import Sider from '@/components/Sider.vue'
   import Header from '@/components/Header.vue'
   import Footer from '@/components/Footer.vue'
-  import { ref } from 'vue'
+  import { computed, ref } from 'vue'
   import { asyncRouterMap } from '@/router/router.config'
   import Config from '@/config/config'
-  import { computed } from 'vue'
   import { useStore } from 'vuex'
 
   export default {

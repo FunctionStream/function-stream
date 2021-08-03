@@ -22,7 +22,7 @@
 <script>
   import Func from './components/Func.vue'
   import FunctionDetailVue from './components/FunctionDetail'
-  import { getList, getStatus } from '@/api/func'
+  import { getList, getStatus, getInfo, getStats } from '@/api/func'
   import X6_index from '@/views/data-flow-diagram/X6_index.vue'
   export default {
     components: {
