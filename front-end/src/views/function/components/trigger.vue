@@ -1,5 +1,5 @@
 <template>
-  <el-drawer v-model="visible" :size="460" @close="onClose">
+  <el-drawer :size="460" @close="onClose">
     <el-form ref="TriggerForm" :model="TriggerForm" :rules="rules">
       <el-row>
         <el-form-item v-if="currentFunction.name" prop="functionName">
@@ -89,7 +89,7 @@
       }
     },
     methods: {
-      onClose () {
+      onClose() {
         this.$parent.$parent.closeTrigger()
       },
       onSub(subName) {
