@@ -214,7 +214,7 @@ export default {
         this.$refs[formName].resetFields()
     },
     getFile(file){
-      this.file = file.raw
+        this.file = file.raw
     }
   }
 }
