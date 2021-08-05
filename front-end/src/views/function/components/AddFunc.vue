@@ -233,7 +233,7 @@ export default {
   position: relative;
   float: left;
 }
-.el-drawer ::v-deep(.el-drawer__body){
+  .el-drawer ::v-deep(.el-drawer__body) {
   overflow: auto!important;
 }
 /*.el-drawer rtl ::v-deep(.el-drawer__container ::-webkit-scrollbar){*/
