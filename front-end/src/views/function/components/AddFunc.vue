@@ -221,7 +221,7 @@ export default {
 </script>
 <style scoped>
 .upload ::v-deep(.el-upload){
-  width: 100%;
+    width: 100%;
 }
 .upload ::v-deep(.el-upload-dragger){
   width: 100%;
