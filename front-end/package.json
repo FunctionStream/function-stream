@@ -24,6 +24,8 @@
     "vuex": "^4.0.2"
   },
   "devDependencies": {
+    "@antv/x6": "^1.24.5",
+    "@antv/x6-vue-shape": "^1.2.8",
     "@tailwindcss/postcss7-compat": "^2.2.2",
     "@types/node": "^15.12.4",
     "@vitejs/plugin-vue": "^1.2.3",
