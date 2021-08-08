@@ -2,7 +2,7 @@
   <el-drawer size="40%" @open="onOpen" @close="onClose">
     <!-- function info -->
     <el-form
-      ref="info"
+      ref="infoRef"
       v-loading="loadingDetail"
       :rules="rules"
       style="padding: 0 20px"
@@ -11,9 +11,9 @@
     >
       <el-descriptions class="inputMargin" title="function info" border size="small">
         <template #extra>
-          <el-button v-if="!editable" type="primary" size="small" @click="onChgEditable"> Edit </el-button>
+          <el-button v-if="!editable" type="primary" size="small" @click="editable = true"> Edit </el-button>
           <span v-else>
-            <el-button type="primary" :style="{ marginRight: '16px' }" size="small" @click="saveEdit('info')">
+            <el-button type="primary" :style="{ marginRight: '16px' }" size="small" @click="saveEdit()">
               Save
             </el-button>
             <el-button size="small" @click="cancelEdit('info')"> Cancel </el-button>
@@ -39,13 +39,13 @@
         </el-descriptions-item>
         <el-descriptions-item label="input" :span="3">
           <el-form-item
-            v-for="item in inputs"
+            v-for="item in inputs.value"
             :key="item.key"
             prop="input"
             :wrapper-col="{ span: 24 }"
             :style="{ width: '100%' }"
           >
-            <el-input v-model="item.input" :disabled="true" :class="{ editable: !editable }" />
+            <el-input v-model="item.input" readonly :class="{ editable: !editable }" />
           </el-form-item>
         </el-descriptions-item>
         <el-descriptions-item label="Output" :span="3">
@@ -101,6 +101,8 @@
 
 <script>
   import { update } from '@/api/func'
+  import { computed, getCurrentInstance, onUpdated, reactive, ref, toRefs, watch } from '@vue/runtime-core'
+  import { ElMessage, ElMessageBox } from 'element-plus'
   export default {
     name: 'FunctionDetailVue',
     props: {
@@ -117,19 +119,122 @@
         default: () => {}
       }
     },
-    data() {
+    emits: ['closeDrawer'],
+    setup(props, context) {
+      const infoRef = ref(null)
+
+      // open and close drawer
+      const info = reactive({})
+      const editable = ref(false)
+      const loadingSave = ref(false)
+      const inputs = reactive({})
+      const onOpen = () => {
+        info.value = props.currentFunctionInfo
+      }
+      const onClose = () => {
+        editable.value = false
+        loadingSave.value = false
+        inputs.value = []
+
+        // TODO why emit this method here?
+        context.emit('closeDrawer')
+      }
+
+      // get uploaded file
+      const file = reactive({})
+      const getFile = (f) => {
+        // TODO check the file type before upload
+        file.value = f.raw
+      }
+
+      // reset the function detail form
+      const onReset = () => {
+        const inputArr = props.currentFunctionInfo?.input?.map((input, i) => {
+          const key = `input_${i}`
+          inputs.value = {
+            [key]: input
+          }
+          return { key, input }
+        })
+        inputs.value = inputArr
+
+        Object.keys(props.currentFunctionInfo).forEach((item) => {
+          // info.value[item] = props.currentFunctionInfo[item]
+          info[item] = props.currentFunctionInfo[item]
+        })
+        infoRef.value.clearValidate()
+      }
+
+      const cancelEdit = () => {
+        onReset()
+        editable.value = false
+      }
+
+      // TODO Update computed & watch methods to composition API
+
+      const rules = {
+        Name: [{ require: true, message: 'Please input your Function name!', trigger: 'change' }],
+        className: [{ required: true, message: 'Please input your className!', trigger: 'change' }],
+        input: [{ required: true, message: 'Please input your Input!', trigger: 'change' }],
+        output: [{ required: true, message: 'Please input your Output!', trigger: 'change' }]
+      }
+      const saveEdit = () => {
+        console.log(info)
+        infoRef.value.validate((valid) => {
+          if (valid) {
+            const functionName = info.value.name
+            const data = new FormData()
+            if (file.value) {
+              data.append('data', file.value)
+            }
+            const functionConfig = info
+            delete functionConfig.data
+            delete functionConfig.Name
+            console.log('functionConfig', functionConfig)
+            data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
+            ElMessageBox.confirm('Are you sure to edit this function?', 'Tip', {
+              confirmButtonText: 'OK',
+              cancelButtonText: 'Cancel',
+              type: 'warning'
+            }).then(() => {
+              update(functionName, data)
+                .then((res) => {
+                  editable.value = false
+                  ElMessage({
+                    type: 'success',
+                    message: 'Edit successfully'
+                  })
+                })
+                .catch((err) => {
+                  const errMessage = err.response.data.reason
+                  ElMessage({
+                    type: 'error',
+                    message: 'Edit failed because ${errMessage}'
+                  })
+                })
+              onReset()
+              editable.value = false
+            })
+            file.value = ''
+          } else {
+            console.log('error commit')
+            return false
+          }
+        })
+      }
+
       return {
-        editable: false,
-        rules: {
-          Name: [{ require: true, message: 'Please input your Function name!', trigger: 'change' }],
-          className: [{ required: true, message: 'Please input your className!', trigger: 'change' }],
-          input: [{ required: true, message: 'Please input your Input!', trigger: 'change' }],
-          output: [{ required: true, message: 'Please input your Output!', trigger: 'change' }]
-        },
-        inputs: [],
-        file: '',
-        beforeEditInfo: {},
-        info: {}
+        onReset,
+        onClose,
+        onOpen,
+        getFile,
+        cancelEdit,
+        saveEdit,
+        info,
+        editable,
+        inputs,
+        infoRef,
+        rules
       }
     },
     computed: {
@@ -147,83 +252,6 @@
           Object.assign(this.info, this.currentFunctionInfo)
           this.onReset()
         }
-      }
-    },
-    methods: {
-      getFile(file) {
-        this.file = file.raw
-      },
-      onReset() {
-        const ref = 'info'
-        const inputArr = this.currentFunctionInfo?.input?.map((input, i) => {
-          const key = `input_${i}`
-          Object.assign(this.inputs, { [key]: input })
-          return { key, input }
-        })
-
-        console.log('reset', this.inputs)
-        this.inputs = inputArr
-        Object.assign(this.info, this.currentFunctionInfo)
-        this.$refs[ref].clearValidate()
-      },
-      onOpen() {
-        this.info = this.currentFunctionInfo
-      },
-      onClose() {
-        this.editable = false
-        this.loadingSave = false
-        this.inputs = []
-
-        this.$parent.currentFunctionInfo = {}
-        this.$parent.$parent.closeDetail()
-      },
-      onChgEditable() {
-        this.editable = true
-        this.onReset()
-      },
-      cancelEdit() {
-        this.onReset()
-        this.editable = false
-      },
-      saveEdit(form) {
-        this.$refs[form].validate((valid) => {
-          if (valid) {
-            const functionName = this.info.name
-            const data = new FormData()
-            if (this.file) {
-              data.append('data', this.file)
-            }
-            const functionConfig = this.info
-            delete functionConfig.data
-            delete functionConfig.Name // 参数处理
-            data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
-            this.$confirm('Some descriptions', 'Are you sure to create this function?', {
-              confirmButtonText: 'OK',
-              cancelButtonText: 'Cancel',
-              type: 'primary'
-            }).then(() => {
-              // try {
-              update(functionName, data)
-                .then((res) => {
-                  this.editable = false
-                  this.$notify.success({ message: `function "${functionName}" created successfully` })
-                })
-                .catch((err) => {
-                  console.log('err', err)
-                  const errMessage = err.response.data.reason
-                  this.$notify.error({
-                    title: 'Error',
-                    message: ` funciton "${functionName}" creation failed, because ${errMessage}`
-                  })
-                  this.editable = false
-                })
-            })
-            this.file = ''
-          } else {
-            console.log('error commit')
-            return false
-          }
-        })
       }
     }
   }

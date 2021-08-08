@@ -98,6 +98,11 @@
         })
       }
 
+      const closeDrawer = () => {
+        currentFunctionInfo.value = {}
+        closeDetail()
+      }
+
       return {
         loading,
         functionList,
@@ -108,7 +113,8 @@
         closeDetail,
         showDetail,
         onShowDetail,
-        onRefreshFunc
+        onRefreshFunc,
+        closeDrawer
       }
     }
   }
