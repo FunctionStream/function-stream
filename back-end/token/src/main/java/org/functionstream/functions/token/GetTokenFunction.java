@@ -37,7 +37,7 @@ public class GetTokenFunction implements Function<String, String> {
         String password = jsonObject.get("password").getAsString();
 
         //Verify username and password from the database
-        if (TokenJdbc.checkAccount(userName, password)) {
+        if (TokenJdbcUtils.checkAccount(userName, password)) {
             jsonObject.remove("userName");
             jsonObject.remove("password");
             String token = createToken(userName);
