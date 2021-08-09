@@ -16,6 +16,12 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import org.apache.pulsar.functions.api.Context;
 import org.apache.pulsar.functions.api.Function;
 
+class UserNameOrPasswordException extends Exception {
+    public UserNameOrPasswordException(String message) {
+        super(message);
+    }
+}
+
 public class GetTokenFunction implements Function<String, String> {
 
     private static String SECRET = "21232f297a57a5a743894a0e4a801fc3";
@@ -31,13 +37,13 @@ public class GetTokenFunction implements Function<String, String> {
         String password = jsonObject.get("password").getAsString();
 
         //Verify username and password from the database
-        if (TokenJDBC.checkAccount(userName, password)) {
+        if (TokenJdbc.checkAccount(userName, password)) {
             jsonObject.remove("userName");
             jsonObject.remove("password");
             String token = createToken(userName);
             jsonObject.add("token", new Gson().toJsonTree(token));
         } else {
-            throw new Exception("GetTokenFunction:incorrect username or password");
+            throw new UserNameOrPasswordException("GetTokenFunction:incorrect username or password");
         }
         return jsonObject.toString();
     }

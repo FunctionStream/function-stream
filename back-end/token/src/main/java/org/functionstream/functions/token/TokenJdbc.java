@@ -6,7 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-public class TokenJDBC {
+public class TokenJdbc {
 
     private static final String DRIVER_CLASS = "com.mysql.cj.jdbc.Driver";
     private static final String URL = "jdbc:mysql://localhost:3306/test?characterEncoding=utf8&useSSL=false&serverTimezone=CST";
@@ -27,7 +27,7 @@ public class TokenJDBC {
             resultSet = preparedStatement.executeQuery();
             return resultSet.next();
         } catch (ClassNotFoundException | SQLException e) {
-            throw new Exception("GetTokenFunction:SQL Exception");
+            throw new SQLException("GetTokenFunction:SQL Exception");
         } finally {
             if (null != resultSet) {
                 resultSet.close();
