@@ -1,3 +1,5 @@
+package org.functionstream.functions.token;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -5,8 +7,6 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import org.junit.Assert;
 import org.junit.Test;
-import org.functionstream.functions.token.TokenJdbcUtils;
-import org.functionstream.functions.token.GetTokenFunction;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
 import org.powermock.api.mockito.PowerMockito;
