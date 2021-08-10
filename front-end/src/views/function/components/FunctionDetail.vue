@@ -134,10 +134,6 @@
       const onClose = () => {
         editable.value = false
         loadingSave.value = false
-        inputs.value = []
-
-        // TODO why emit this method here?
-        context.emit('closeDrawer')
       }
 
       // get uploaded file
@@ -166,12 +162,11 @@
       }
 
       const cancelEdit = () => {
-        onReset()
         editable.value = false
+        onReset()
       }
 
-      // TODO Update computed & watch methods to composition API
-
+      // save edit function detail
       const rules = {
         Name: [{ require: true, message: 'Please input your Function name!', trigger: 'change' }],
         className: [{ required: true, message: 'Please input your className!', trigger: 'change' }],
@@ -179,7 +174,6 @@
         output: [{ required: true, message: 'Please input your Output!', trigger: 'change' }]
       }
       const saveEdit = () => {
-        console.log(info)
         infoRef.value.validate((valid) => {
           if (valid) {
             const functionName = info.value.name
@@ -190,7 +184,6 @@
             const functionConfig = info
             delete functionConfig.data
             delete functionConfig.Name
-            console.log('functionConfig', functionConfig)
             data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
             ElMessageBox.confirm('Are you sure to edit this function?', 'Tip', {
               confirmButtonText: 'OK',
@@ -198,21 +191,23 @@
               type: 'warning'
             }).then(() => {
               update(functionName, data)
-                .then((res) => {
+                .then(() => {
                   editable.value = false
                   ElMessage({
                     type: 'success',
                     message: 'Edit successfully'
                   })
+                  console.log(info)
                 })
                 .catch((err) => {
-                  const errMessage = err.response.data.reason
-                  ElMessage({
-                    type: 'error',
-                    message: 'Edit failed because ${errMessage}'
-                  })
+                  if (err.response) {
+                    const errMessage = err.response.data.reason
+                    ElMessage({
+                      type: 'error',
+                      message: ` funciton "${functionName}" creation failed, because ${errMessage}`
+                    })
+                  }
                 })
-              onReset()
               editable.value = false
             })
             file.value = ''
