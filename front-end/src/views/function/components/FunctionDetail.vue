@@ -187,7 +187,13 @@
             const functionName = info.value.name
             const data = new FormData()
             if (file.value) {
-              data.append('data', file.value)
+              const fileName = file.value.name
+              if (fileName.substr(fileName.lastIndexOf('.') + 1) !== 'jar') {
+                ElMessage.error('Only jar files are supported, please check the type of your uploaded file.')
+                return
+              } else {
+                data.append('data', file.value)
+              }
             }
             const functionConfig = info
             delete functionConfig.data
