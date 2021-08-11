@@ -45,7 +45,7 @@
             :wrapper-col="{ span: 24 }"
             :style="{ width: '100%' }"
           >
-            <el-input v-model="item.input" readonly :class="{ editable: !editable }" />
+            <el-input v-model="item.input" disabled readonly :class="{ editable: !editable }" />
           </el-form-item>
         </el-descriptions-item>
         <el-descriptions-item label="Output" :span="3">
@@ -61,6 +61,7 @@
             action=""
             :auto-upload="false"
             class="upload"
+            accept=".jar"
             style="
                {
                 width: 100%;
@@ -100,8 +101,9 @@
 </template>
 
 <script>
+  import { uid } from 'uid'
   import { update } from '@/api/func'
-  import { computed, getCurrentInstance, onUpdated, reactive, ref, toRefs, watch } from '@vue/runtime-core'
+  import { reactive, ref } from '@vue/runtime-core'
   import { ElMessage, ElMessageBox } from 'element-plus'
   export default {
     name: 'FunctionDetailVue',
@@ -119,8 +121,7 @@
         default: () => {}
       }
     },
-    emits: ['closeDrawer'],
-    setup(props, context) {
+    setup(props) {
       const infoRef = ref(null)
 
       // open and close drawer
@@ -139,8 +140,16 @@
       // get uploaded file
       const file = reactive({})
       const getFile = (f) => {
-        // TODO check the file type before upload
         file.value = f.raw
+      }
+
+      // operation about input field
+      const addInput = () => {
+        const inputName = `input_${uid(3)}`
+        inputs.value = [...inputs.value, { key: inputName, input: '' }]
+      }
+      const rmInput = (key) => {
+        inputs.value = inputs.value.filter((input) => input.key !== key)
       }
 
       // reset the function detail form
@@ -155,7 +164,6 @@
         inputs.value = inputArr
 
         Object.keys(props.currentFunctionInfo).forEach((item) => {
-          // info.value[item] = props.currentFunctionInfo[item]
           info[item] = props.currentFunctionInfo[item]
         })
         infoRef.value.clearValidate()
@@ -225,6 +233,8 @@
         getFile,
         cancelEdit,
         saveEdit,
+        addInput,
+        rmInput,
         info,
         editable,
         inputs,
