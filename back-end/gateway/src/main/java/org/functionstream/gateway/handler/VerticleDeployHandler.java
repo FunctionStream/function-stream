@@ -10,7 +10,6 @@ import javax.enterprise.event.Observes;
 import javax.enterprise.inject.Instance;
 
 /**
- * @author HALOXIAO
  * @since 2021/7/21
  */
 @ApplicationScoped
