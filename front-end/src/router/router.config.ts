@@ -15,6 +15,12 @@ export const asyncRouterMap = [
         name: 'menu.function',
         meta: { title: 'function', icon: 'el-icon-s-grid' },
         component: () => import('@/views/function/index.vue')
+      },
+      {
+        path: '/functionHub',
+        name: 'menu.functionHub',
+        meta: { title: 'functionHub', icon: 'el-icon-s-grid' },
+        component: () => import('@/views/functionHub/index.vue')
       }
     ]
   },
