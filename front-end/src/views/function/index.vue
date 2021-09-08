@@ -1,7 +1,7 @@
 <template>
   <PageHeaderWrapper>
     <template #extra>
-      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
+      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="showAddFunc">
         {{ $t('func.addFunc') }}
       </el-button>
     </template>
@@ -17,42 +17,33 @@
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
     />
+    <add-func v-model="visibleAdd" :functionList="functionList" :refresh="refresh" />
   </PageHeaderWrapper>
 </template>
 <script>
   import Func from './components/Func.vue'
+  import AddFunc from './components/AddFunc.vue'
   import FunctionDetailVue from './components/FunctionDetail'
   import { getList, getStatus, getInfo, getStats } from '@/api/func'
   export default {
     components: {
       FunctionDetailVue,
+      AddFunc,
       Func
     },
     data() {
       return {
         functionList: [],
         loading: false,
+        visibleAdd: false,
         visibleDetail: false,
         currentFunctionInfo: {},
         loadingDetail: false,
         loadingList: false
       }
     },
-    async created() {
-      try {
-        this.loading = true
-        const res = await getList()
-        if (Array.isArray(res)) {
-          this.functionList = res?.map((name) => ({ key: name, name }))
-          // get status
-          res?.map(async (name, i) => {
-            const res = await getStatus(name)
-            this.functionList[i]['status'] = !!res?.numRunning
-            this.functionList[i]['statusInfo'] = res
-          })
-        }
-      } catch (e) {}
-      this.loading = false
+    created() {
+      this.refresh()
     },
     methods: {
       async refresh() {
@@ -72,6 +63,9 @@
           }
         } catch (e) {}
         this.loadingList = false
+      },
+      showAddFunc() {
+        this.visibleAdd = true
       },
       closeDetail() {
         this.visibleDetail = false
