@@ -1,5 +1,4 @@
 import BaseLayout from '@/layouts/BaseLayout.vue'
-import { RouterView } from 'vue-router'
 
 // RouteView
 export const asyncRouterMap = [
@@ -15,6 +14,12 @@ export const asyncRouterMap = [
         name: 'menu.function',
         meta: { title: 'function', icon: 'el-icon-s-grid' },
         component: () => import('@/views/function/index.vue')
+      },
+      {
+        path: '/stream-flow-diagram',
+        name: 'menu.functionFlow',
+        meta: { title: 'stream-flow-diagram', icon: 'el-icon-s-grid' },
+        component: () => import('@/views/data-flow-diagram/X6_index.vue')
       }
     ]
   },
