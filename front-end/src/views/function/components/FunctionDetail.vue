@@ -101,10 +101,10 @@
 </template>
 
 <script>
-  import { uid } from 'uid'
   import { update } from '@/api/func'
   import { reactive, ref } from '@vue/runtime-core'
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import { uid } from 'uid'
   export default {
     name: 'FunctionDetailVue',
     props: {
