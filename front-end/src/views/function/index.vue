@@ -1,7 +1,7 @@
 <template>
   <PageHeaderWrapper>
     <template #extra>
-      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
+      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="showAddFunc">
         {{ $t('func.addFunc') }}
       </el-button>
     </template>
@@ -36,17 +36,56 @@
         loadingList: false
       }
     },
-    async created() {
-      try {
-        this.loading = true
-        const res = await getList()
-        if (Array.isArray(res)) {
-          this.functionList = res?.map((name) => ({ key: name, name }))
-          // get status
-          res?.map(async (name, i) => {
-            const res = await getStatus(name)
-            this.functionList[i]['status'] = !!res?.numRunning
-            this.functionList[i]['statusInfo'] = res
+    created() {
+      this.refresh()
+    },
+    methods: {
+      async refresh() {
+        this.loadingList = true
+        try {
+          const res = await getList()
+          if (Array.isArray(res)) {
+            this.functionList = res?.map((name) => ({ key: name, name }))
+            // get status
+            // fixme this use of map should be replaced ↓↓
+            // eslint-disable-next-line no-unused-expressions
+            res?.map(async (name, i) => {
+              const res = await getStatus(name)
+              this.functionList[i].status = !!res?.instances?.[0]?.status?.running
+              this.functionList[i].statusInfo = res
+            })
+          }
+        } catch (e) {}
+        this.loadingList = false
+      },
+      showAddFunc() {
+        this.visibleAdd = true
+      },
+      closeDetail() {
+        this.visibleDetail = false
+      },
+      showDetail() {
+        this.visibleDetail = true
+      },
+      onShowDetail(v) {
+        this.loadingDetail = true
+        this.currentFunctionInfo = { ...this.currentFunctionInfo, ...v }
+        this.showDetail()
+        const { name } = v
+        getInfo(name)
+          .then((res) => {
+            if (!res) return
+            const { inputSpecs = {} } = res
+            const input = Object.keys(inputSpecs)
+            this.currentFunctionInfo = { ...this.currentFunctionInfo, ...res, input }
+          })
+          .finally(() => {
+            this.loadingDetail = false
+          })
+        getStats(name)
+          .then((res) => {
+            if (!res) return
+            this.currentFunctionInfo = { ...this.currentFunctionInfo, ...res }
           })
         }
       } catch (e) {}

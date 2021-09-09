@@ -10,7 +10,8 @@
     "test:unit": "vue-cli-service test:unit",
     "lint": "vue-cli-service lint",
     "build:prod": "vue-cli-service build --mode api",
-    "lint:nofix": "vue-cli-service lint --no-fix"
+    "lint:nofix": "vue-cli-service lint --no-fix",
+    "test:open": "cypress open"
   },
   "dependencies": {
     "@ant-design-vue/pro-layout": "^1.0.7",
@@ -18,6 +19,7 @@
     "ant-design-vue": "^1.7.2",
     "axios": "^0.19.0",
     "core-js": "^3.1.2",
+    "cypress": "^7.7.0",
     "enquire.js": "^2.1.6",
     "lodash.clonedeep": "^4.5.0",
     "lodash.get": "^4.4.2",
