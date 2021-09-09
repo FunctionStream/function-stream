@@ -211,7 +211,6 @@
                     type: 'success',
                     message: 'Edit successfully'
                   })
-                  console.log(info)
                 })
                 .catch((err) => {
                   if (err.response) {
@@ -221,6 +220,7 @@
                       message: ` funciton "${functionName}" creation failed, because ${errMessage}`
                     })
                   }
+                  onReset()
                 })
               editable.value = false
             })
