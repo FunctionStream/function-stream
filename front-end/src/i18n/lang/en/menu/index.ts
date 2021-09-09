@@ -4,4 +4,5 @@ export default {
   exp: 'exp',
   test: 'test',
   functionHub: 'Function Hub',
+  functionFlow: 'Function Flow'
 }
