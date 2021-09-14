@@ -51,8 +51,8 @@
             // eslint-disable-next-line no-unused-expressions
             res?.map(async (name, i) => {
               const res = await getStatus(name)
-              this.functionList[i].status = !!res?.instances?.[0]?.status?.running
-              this.functionList[i].statusInfo = res
+              this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
+              this.$set(this.functionList[i], 'statusInfo', res)
             })
           }
         } catch (e) {}
@@ -60,55 +60,6 @@
       },
       showAddFunc() {
         this.visibleAdd = true
-      },
-      closeDetail() {
-        this.visibleDetail = false
-      },
-      showDetail() {
-        this.visibleDetail = true
-      },
-      onShowDetail(v) {
-        this.loadingDetail = true
-        this.currentFunctionInfo = { ...this.currentFunctionInfo, ...v }
-        this.showDetail()
-        const { name } = v
-        getInfo(name)
-          .then((res) => {
-            if (!res) return
-            const { inputSpecs = {} } = res
-            const input = Object.keys(inputSpecs)
-            this.currentFunctionInfo = { ...this.currentFunctionInfo, ...res, input }
-          })
-          .finally(() => {
-            this.loadingDetail = false
-          })
-        getStats(name)
-          .then((res) => {
-            if (!res) return
-            this.currentFunctionInfo = { ...this.currentFunctionInfo, ...res }
-          })
-        }
-      } catch (e) {}
-      this.loading = false
-    },
-    methods: {
-      async refresh() {
-        this.loadingList = true
-        try {
-          const res = await getList()
-          if (Array.isArray(res)) {
-            this.functionList = res?.map((name) => ({ key: name, name }))
-            // get status
-            // fixme this use of map should be replaced ↓↓
-            // eslint-disable-next-line no-unused-expressions
-            res?.map(async (name, i) => {
-              const res = await getStatus(name)
-              this.$set(this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
-              this.$set(this.functionList[i], 'statusInfo', res)
-            })
-          }
-        } catch (e) {}
-        this.loadingList = false
       },
       showTrigger() {
         this.visibleTrigger = true
