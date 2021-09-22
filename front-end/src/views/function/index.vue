@@ -1,7 +1,7 @@
 <template>
   <PageHeaderWrapper>
     <template #extra>
-      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4">
+      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="showAddFunc">
         {{ $t('func.addFunc') }}
       </el-button>
     </template>
@@ -17,16 +17,19 @@
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
     />
+    <add-func v-model="visibleAdd" :functionList="functionList" :refresh="refresh" />
   </PageHeaderWrapper>
 </template>
 <script>
   import Func from './components/Func.vue'
+  import AddFunc from './components/AddFunc.vue'
   import FunctionDetailVue from './components/FunctionDetail'
   import { getList, getStatus, getInfo, getStats } from '@/api/func'
   import { ref } from '@vue/reactivity'
   export default {
     components: {
       FunctionDetailVue,
+      AddFunc,
       Func
     },
     setup() {
@@ -89,6 +92,12 @@
           })
       }
 
+      // add function
+      const visibleAdd = ref(false)
+      const showAddFunc = () => {
+        visibleAdd.value = true
+      }
+      
       // refresh function
       const loadingList = ref(false)
       const onRefreshFunc = () => {
