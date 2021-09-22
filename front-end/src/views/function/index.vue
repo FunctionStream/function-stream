@@ -97,7 +97,7 @@
       const showAddFunc = () => {
         visibleAdd.value = true
       }
-      
+
       // refresh function
       const loadingList = ref(false)
       const onRefreshFunc = () => {
