@@ -123,7 +123,8 @@
         showDetail,
         onShowDetail,
         onRefreshFunc,
-        closeDrawer
+        closeDrawer,
+        showAddFunc
       }
     }
   }
