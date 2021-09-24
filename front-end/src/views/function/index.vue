@@ -17,7 +17,7 @@
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
     />
-    <add-func v-model="visibleAdd" :functionList="functionList" :refresh="refresh" />
+    <add-func v-model="visibleAdd" @onRefresh="onRefreshFunc" />
   </PageHeaderWrapper>
 </template>
 <script>
@@ -102,7 +102,7 @@
       const loadingList = ref(false)
       const onRefreshFunc = () => {
         loadingList.value = true
-        getFunctionList.then(() => {
+        getFunctionList().then(() => {
           loadingList.value = false
         })
       }
@@ -118,6 +118,7 @@
         loadingList,
         loadingDetail,
         visibleDetail,
+        visibleAdd,
         currentFunctionInfo,
         closeDetail,
         showDetail,
