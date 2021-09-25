@@ -92,12 +92,6 @@
           })
       }
 
-      // add function
-      const visibleAdd = ref(false)
-      const showAddFunc = () => {
-        visibleAdd.value = true
-      }
-
       // refresh function
       const loadingList = ref(false)
       const onRefreshFunc = () => {
@@ -123,8 +117,38 @@
         showDetail,
         onShowDetail,
         onRefreshFunc,
-        closeDrawer,
-        showAddFunc
+        closeDrawer
+      }
+    },
+    data() {
+      return {
+        visibleAdd: false
+      }
+    },
+    created() {
+      this.refresh()
+    },
+    methods: {
+      async refresh() {
+        this.loadingList = true
+        try {
+          const res = await getList()
+          if (Array.isArray(res)) {
+            this.functionList = res?.map((name) => ({ key: name, name }))
+            // get status
+            // fixme this use of map should be replaced ↓↓
+            // eslint-disable-next-line no-unused-expressions
+            res?.map(async (name, i) => {
+              const res = await getStatus(name)
+              this.functionList[i].status = !!res?.instances?.[0]?.status?.running
+              this.functionList[i].statusInfo = res
+            })
+          }
+        } catch (e) {}
+        this.loadingList = false
+      },
+      showAddFunc() {
+        this.visibleAdd = true
       }
     }
   }
