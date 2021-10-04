@@ -1,7 +1,7 @@
 <template>
   <PageHeaderWrapper>
     <template #extra>
-      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="showAddFunc">
+      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="onShowAddFunc">
         {{ $t('func.addFunc') }}
       </el-button>
     </template>
@@ -92,6 +92,12 @@
           })
       }
 
+      //Add Function
+      const visibleAdd = ref(false)
+      const onShowAddFunc = () => {
+        visibleAdd.value = true
+      }
+
       // refresh function
       const loadingList = ref(false)
       const onRefreshFunc = () => {
@@ -117,39 +123,9 @@
         closeDetail,
         showDetail,
         onShowDetail,
+        onShowAddFunc,
         onRefreshFunc,
         closeDrawer
-      }
-    },
-    data() {
-      return {
-        visibleAdd: false
-      }
-    },
-    created() {
-      this.refresh()
-    },
-    methods: {
-      async refresh() {
-        this.loadingList = true
-        try {
-          const res = await getList()
-          if (Array.isArray(res)) {
-            this.functionList = res?.map((name) => ({ key: name, name }))
-            // get status
-            // fixme this use of map should be replaced ↓↓
-            // eslint-disable-next-line no-unused-expressions
-            res?.map(async (name, i) => {
-              const res = await getStatus(name)
-              this.functionList[i].status = !!res?.instances?.[0]?.status?.running
-              this.functionList[i].statusInfo = res
-            })
-          }
-        } catch (e) {}
-        this.loadingList = false
-      },
-      showAddFunc() {
-        this.visibleAdd = true
       }
     }
   }

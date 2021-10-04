@@ -1,5 +1,5 @@
 <template>
-  <el-drawer ref="addFuncDrawer" size="40%" title="AddFunction">
+  <el-drawer ref="addFuncDrawer" size="40%" title="AddFunction" @close="onClose">
     <el-form
       ref="addForm"
       class="addFunc"
@@ -7,15 +7,17 @@
       :model="form"
       label-width="80px"
       label-position="top"
-      style="width: 90%; margin: 25px"
+      style="width: 90%; margin: 0 15px 75px"
       size="small"
       :inline="true"
     >
       <el-form-item label="FunctionName:" style="width: 100%" prop="functionName">
         <el-input v-model="form.functionName" placeholder="请输入FunctionName" clearable> </el-input>
       </el-form-item>
-      <a style="color: red; font-size: 14px"> *&nbsp; </a>
-      <a style="font-size: 14px"> Inputs: </a>
+      <div class="topic">
+        <a style="color: red; font-size: 14px"> *&nbsp; </a>
+        <a style="font-size: 14px"> Inputs: </a>
+      </div>
       <el-form-item
         v-for="(value, index) in form.inputs"
         :key="index"
@@ -27,7 +29,13 @@
           trigger: 'blur'
         }"
       >
-        <el-input v-model="form.inputs[index]" style="width: 95%" placeholder="请输入Input" clearable> </el-input>
+        <el-input
+          v-model="form.inputs[index]"
+          :style="form.inputs.length === 1 ? 'width:100%' : 'width:95%'"
+          placeholder="请输入Input"
+          clearable
+        >
+        </el-input>
         <i
           v-show="form.inputs.length !== 1"
           style="float: right; font-size: 30px; width: 5%"
@@ -36,13 +44,15 @@
         >
         </i>
       </el-form-item>
-      <el-button
-        style="width: 100%; font-size: 20px; margin-top: 5px"
-        size="mini"
-        class="el-icon-circle-plus-outline"
-        @click="addInput"
-      >
-      </el-button>
+      <el-form-item style="width: 100%">
+        <el-button
+          style="width: 100%; font-size: 20px; margin-top: 5px"
+          size="mini"
+          class="el-icon-circle-plus-outline"
+          @click="addInput"
+        >
+        </el-button>
+      </el-form-item>
       <el-form-item label="Output:" style="width: 100%" prop="output">
         <el-input v-model="form.output" placeholder="请输入Output" clearable> </el-input>
       </el-form-item>
@@ -52,22 +62,15 @@
       <el-form-item label="ClassName:" style="width: 66%" prop="className">
         <el-input v-model="form.className" placeholder="请输入ClassName" clearable> </el-input>
       </el-form-item>
-      <el-form-item label="Runtime:" style="width: 30%" prop="runtime">
-        <el-select v-model="form.runtime">
+      <el-form-item label="Runtime:" style="width: 33%; margin-left: 5px" prop="runtime">
+        <el-select v-model="form.runtime" style="width: 100%">
           <el-option label="JAVA" value="JAVA"> </el-option>
           <el-option label="GO" value="GO"> </el-option>
         </el-select>
       </el-form-item>
       <el-form-item class="upload" label="File:" prop="file" style="width: 100%">
-        <el-upload
-          ref="fileToUpload"
-          :limit="1"
-          drag
-          accept=".jar"
-          action="0.0//不写会报错，神奇"
-          :auto-upload="false"
-          :on-change="getFile"
-        >
+        <el-upload ref="fileToUpload" drag :limit="1" accept=".jar" action=""
+:auto-upload="false" :on-change="getFile">
           <i class="el-icon-upload"></i>
           <div class="el-upload__text">将文件拖到此处，或点击上传</div>
           <div class="el-upload__tip">目前只支持jar文件上传</div>
@@ -139,41 +142,61 @@
           const functionName = functionConfig.FunctionName
           delete functionConfig.functionName
           data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
-          ElMessageBox.confirm('即将添加函数', '提示', {
-            confirmButtonText: '确定',
-            cancelButtonText: '取消',
-            type: 'warning'
-          })
-            .then(() => {
-              create(functionName, data).then((res) => {
-                ElMessage({
-                  type: 'success',
-                  message: '添加成功'
-                })
-                addForm.value.resetFields() //清空已输入的数据
-                file.value = '' //清空文件
-                fileToUpload.value.clearFiles() //清空已上传文件列表
-                addFuncDrawer.value.handleClose() //关闭drawer
-                contest.emit('onRefresh') //刷新table上的数据
-              })
-            })
-            .catch(() => {
-              ElMessage({
-                type: 'info',
-                message: '添加失败'
-              })
-            })
+          creationSubmit(data, functionName)
         })
       }
+
+      //Network request
+      const creationSubmit = (data, functionName) => {
+        ElMessageBox.confirm('即将添加函数', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+          .then(() => {
+            create(functionName, data).then(() => {
+              ElMessage({
+                type: 'success',
+                message: '添加成功'
+              })
+              onClose()
+              contest.emit('onRefresh') //刷新table上的数据
+            })
+          })
+          .catch((err) => {
+            let errMessage = ''
+            if (err.response) {
+              errMessage = err.response.data.reason
+            }
+            ElMessage({
+              type: 'info',
+              message: ` funciton creation failed, because ${errMessage}`
+            })
+          })
+      }
+
+      const onClose = () => {
+        addForm.value.resetFields() //清空已输入的数据
+        file.value = '' //清空文件
+        form.inputs = ['']
+        fileToUpload.value.clearFiles() //清空已上传文件列表
+        addFuncDrawer.value.handleClose() //关闭drawer
+      }
+
+      //add and delete inputs
       const addInput = () => {
         form.inputs.push('')
       }
       const deleteInput = (index) => {
         form.inputs.splice(index, 1)
       }
+
+      //restAllField
       const resetField = (formName) => {
         formName.resetFields()
       }
+
+      //get uploaded file
       const getFile = (fileToUp) => {
         file.value = fileToUp.raw
       }
@@ -183,6 +206,8 @@
         deleteInput,
         addInput,
         onSubmit,
+        onClose,
+        creationSubmit,
         rules,
         form,
         file,
@@ -194,15 +219,30 @@
   }
 </script>
 <style scoped>
+  .topic {
+    line-height: 32px;
+    display: block;
+    text-align: left;
+  }
+  .upload ::v-deep(.el-input) {
+    border: black;
+  }
   .upload ::v-deep(.el-upload) {
     width: 100%;
   }
   .upload ::v-deep(.el-upload-dragger) {
     width: 100%;
   }
+  .el-form-item {
+    margin-top: 5px;
+    margin-right: 0;
+  }
   .el-form-item--mini.el-form-item,
   .el-form-item--small.el-form-item {
-    margin-bottom: 0px;
+    margin-bottom: 0;
+  }
+  .addFunc ::v-deep(.el-form-item__label) {
+    padding: 0;
   }
   .addFunc ::v-deep(.el-form-item__error) {
     position: relative;
@@ -211,7 +251,4 @@
   .el-drawer ::v-deep(.el-drawer__body) {
     overflow: auto !important;
   }
-  /*.el-drawer rtl ::v-deep(.el-drawer__container ::-webkit-scrollbar){*/
-  /*  display: none;*/
-  /*}*/
 </style>
