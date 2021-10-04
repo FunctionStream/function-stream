@@ -139,7 +139,7 @@
             }
           }
           const functionConfig = JSON.parse(JSON.stringify(form).replace(/logTopic/g, 'log-topic'))
-          const functionName = functionConfig.FunctionName
+          const functionName = functionConfig.functionName
           delete functionConfig.functionName
           data.append('functionConfig', new Blob([JSON.stringify(functionConfig)], { type: 'application/json' }))
           creationSubmit(data, functionName)
