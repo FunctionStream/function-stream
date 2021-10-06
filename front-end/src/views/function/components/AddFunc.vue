@@ -7,7 +7,7 @@
       :model="form"
       label-width="80px"
       label-position="top"
-      style="width: 90%; margin: 0 15px 75px"
+      style="width: 95%; margin: 0 auto"
       size="small"
       :inline="true"
     >
@@ -90,7 +90,7 @@
         }"
       >
         <el-button type="primary" @click="onSubmit">立即创建</el-button>
-        <el-button @click="resetField('addForm')">重置</el-button>
+        <el-button @click="resetField()">重置</el-button>
       </div>
     </el-form>
   </el-drawer>
@@ -176,10 +176,7 @@
       }
 
       const onClose = () => {
-        addForm.value.resetFields() //清空已输入的数据
-        file.value = '' //清空文件
-        form.inputs = ['']
-        fileToUpload.value.clearFiles() //清空已上传文件列表
+        resetField()
         addFuncDrawer.value.handleClose() //关闭drawer
       }
 
@@ -192,8 +189,11 @@
       }
 
       //restAllField
-      const resetField = (formName) => {
-        formName.resetFields()
+      const resetField = () => {
+        addForm.value.resetFields() //清空已输入的数据
+        file.value = '' //清空文件
+        form.inputs = ['']
+        fileToUpload.value.clearFiles() //清空已上传文件列表
       }
 
       //get uploaded file
