@@ -63,7 +63,8 @@
         </el-select>
       </el-form-item>
       <el-form-item class="upload" label="File:" prop="file" style="width: 100%">
-        <el-upload ref="fileToUpload" drag :limit="1" accept=".jar" action="" :auto-upload="false" :on-change="getFile">
+        <el-upload ref="fileToUpload" drag :limit="1" accept=".jar" action=""
+:auto-upload="false" :on-change="getFile">
           <i class="el-icon-upload"></i>
           <div class="el-upload__text">将文件拖到此处，或点击上传</div>
           <div class="el-upload__tip">目前只支持jar文件上传</div>
