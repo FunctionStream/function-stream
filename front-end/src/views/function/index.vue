@@ -1,7 +1,7 @@
 <template>
   <PageHeaderWrapper>
     <template #extra>
-      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="showAddFunc">
+      <el-button icon="el-icon-circle-plus-outline" type="primary" class="mr-4" @click="onShowAddFunc">
         {{ $t('func.addFunc') }}
       </el-button>
     </template>
@@ -94,11 +94,18 @@
             loadingDetail.value = false
           })
       }
+
+      //Add Function
+      const visibleAdd = ref(false)
+      const onShowAddFunc = () => {
+        visibleAdd.value = true
+      }
+
       // refresh function
       const loadingList = ref(false)
       const onRefreshFunc = () => {
         loadingList.value = true
-        getFunctionList.then(() => {
+        getFunctionList().then(() => {
           loadingList.value = false
         })
       }
@@ -127,10 +134,12 @@
         loadingList,
         loadingDetail,
         visibleDetail,
+        visibleAdd,
         currentFunctionInfo,
         closeDetail,
         showDetail,
         onShowDetail,
+        onShowAddFunc,
         onRefreshFunc,
         closeDrawer,
         visibleTrigger,
