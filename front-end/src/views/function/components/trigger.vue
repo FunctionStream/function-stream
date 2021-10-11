@@ -1,6 +1,6 @@
 <template>
   <el-drawer :size="460" @close="onClose">
-    <el-form ref="TriggerForm" :model="TriggerForm" :rules="rules">
+    <el-form ref="TriggerFormRef" v-loading="visibleTrigger" :model="TriggerForm" :rules="rules">
       <el-row>
         <el-form-item v-if="currentFunction.name" prop="functionName">
           <span>functionName</span>
@@ -48,6 +48,9 @@
 
 <script>
   import { triggerFunc } from '@/api/func'
+  import { reactive, ref, watch } from '@vue/runtime-core'
+  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { uid } from 'uid'
 
   export default {
     name: 'TriggerVue',
@@ -69,36 +72,27 @@
         default: () => {}
       }
     },
-    data() {
-      return {
-        TriggerForm: {},
-        triggerResult: '',
-        triggerResultType: '',
-        triggering: false,
-        rules: {
-          functionName: [{ required: true, message: 'Please select a function!', trigger: 'blur' }],
-          data: [{ required: true, message: 'Please select a function!', trigger: 'blur' }]
-        }
+    setup(props) {
+      const TriggerForm = reactive({})
+      const TriggerFormRef = ref(null)
+      const triggerResult = ref('')
+      const triggerResultType = ref('')
+      const triggering = ref(false)
+      const rules = reactive({
+        functionName: [{ required: true, message: 'Please select a function!', trigger: 'blur' }],
+        data: [{ required: true, message: 'Please select a function!', trigger: 'blur' }]
+      })
+
+      const onClose = () => {
+        triggering.value = false
       }
-    },
-    watch: {
-      currentFunc() {
-        this.TriggerForm.setFieldsValue({
-          functionName: this.currentFunction.name
-        })
-      }
-    },
-    methods: {
-      onClose() {
-        this.$parent.$parent.closeTrigger()
-      },
-      onSub(subName) {
-        this.triggerResult = ''
-        this.triggerResultType = ''
-        this.$refs[subName].validate((err) => {
-          if (err) {
-            this.triggering = true
-            const values = this.TriggerForm
+      const onSub = (subName) => {
+        triggerResult.value = ''
+        triggerResultType.value = ''
+        TriggerFormRef.value.validate((valid) => {
+          if (valid) {
+            triggering.value = true
+            const values = TriggerForm
             const formData = new FormData()
             const functionName = values.functionName
             const functionData = values.data
@@ -108,22 +102,43 @@
             } else {
               formData.append('data', functionData)
             }
-            const _this = this
             triggerFunc(functionName, formData)
               .then((res) => {
-                _this.triggerResult = res
-                _this.triggerResultType = typeof res
+                triggerResult.value = res
+                triggerResultType.value = typeof res
               })
-              .catch((error) => {
-                _this.$message.error('Function trigger failed!')
+              .catch((err) => {
+                if (err.response) {
+                  const errMessage = err.response.data.reason
+                  ElMessage({
+                    type: 'error',
+                    message: ` Funciton "${functionName}" trigger failed, because ${errMessage}`
+                  })
+                }
               })
               .finally(() => {
                 setTimeout(() => {
-                  _this.triggering = false
+                  triggering.value = false
                 }, 500)
               })
           }
         })
+      }
+      const currentFunc = () => {
+        TriggerFormRef.value.setFieldsValue({
+          functionName: props.currentFunction.name
+        })
+      }
+      return {
+        TriggerForm,
+        TriggerFormRef,
+        triggerResult,
+        triggerResultType,
+        triggering,
+        rules,
+        onClose,
+        onSub,
+        currentFunc
       }
     }
   }
