@@ -25,7 +25,7 @@
 <script>
   import Func from './components/Func.vue'
   import TriggerVue from './components/trigger.vue'
-  import { reactive, ref } from '@vue/runtime-core'
+  import { ref } from '@vue/runtime-core'
   import { getList, getStatus, getInfo, getStats } from '@/api/func'
   import AddFunc from './components/AddFunc.vue'
   import FunctionDetailVue from './components/FunctionDetail'

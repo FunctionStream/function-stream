@@ -48,8 +48,8 @@
 
 <script>
   import { triggerFunc } from '@/api/func'
-  import { reactive, ref, watch } from '@vue/runtime-core'
-  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { reactive, ref } from '@vue/runtime-core'
+  import { ElMessage } from 'element-plus'
   import { uid } from 'uid'
 
   export default {
