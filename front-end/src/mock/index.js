@@ -11,4 +11,3 @@ if (import.meta.env.DEV) {
   })
   console.log('[dev] mock mounted')
 }
-
