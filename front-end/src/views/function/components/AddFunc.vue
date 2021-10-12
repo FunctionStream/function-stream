@@ -36,17 +36,11 @@
           clearable
         >
         </el-input>
-        <i
-          v-show="form.inputs.length !== 1"
-          style="float: right; font-size: 30px; width: 5%"
-          class="el-icon-circle-close"
-          @click="deleteInput(index)"
-        >
-        </i>
+        <i v-show="form.inputs.length !== 1" class="el-icon-circle-close addInputIcon" @click="deleteInput(index)"> </i>
       </el-form-item>
       <el-form-item style="width: 100%">
         <el-button
-          style="width: 100%; font-size: 20px; margin-top: 5px"
+          style="width: 100%; font-size: 1em; margin-top: 5px"
           size="mini"
           class="el-icon-circle-plus-outline"
           @click="addInput"
@@ -233,6 +227,9 @@
   .upload ::v-deep(.el-upload-dragger) {
     width: 100%;
   }
+  .upload ::v-deep(.el-upload__tip) {
+    margin: 0;
+  }
   .el-form-item {
     margin-top: 5px;
     margin-right: 0;
@@ -247,6 +244,17 @@
   .addFunc ::v-deep(.el-form-item__error) {
     position: relative;
     float: left;
+  }
+  .addInputIcon {
+    font-size: 1.5em;
+    width: 5%;
+    text-align: center;
+    vertical-align: middle;
+    padding-left: 0.1em;
+  }
+  .addInputIcon:hover {
+    cursor: pointer;
+    color: #40a3ff;
   }
   .el-drawer ::v-deep(.el-drawer__body) {
     overflow: auto !important;
