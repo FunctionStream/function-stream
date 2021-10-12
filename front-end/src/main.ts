@@ -10,6 +10,7 @@ import antdIcon from './core/antdv_icon'
 import i18n from './i18n'
 import store from '@/store/index'
 import customComponents from '@/components/index'
+import 'regenerator-runtime/runtime.js'
 
 const app = createApp(App)
 
