@@ -123,6 +123,7 @@
     },
     setup(props) {
       const infoRef = ref(null)
+
       // open and close drawer
       const info = reactive({})
       const editable = ref(false)
@@ -135,11 +136,13 @@
         editable.value = false
         loadingSave.value = false
       }
+
       // get uploaded file
       const file = reactive({})
       const getFile = (f) => {
         file.value = f.raw
       }
+
       // operation about input field
       const addInput = () => {
         const inputName = `input_${uid(3)}`
@@ -148,6 +151,7 @@
       const rmInput = (key) => {
         inputs.value = inputs.value.filter((input) => input.key !== key)
       }
+
       // reset the function detail form
       const onReset = () => {
         const inputArr = props.currentFunctionInfo?.input?.map((input, i) => {
@@ -158,15 +162,18 @@
           return { key, input }
         })
         inputs.value = inputArr
+
         Object.keys(props.currentFunctionInfo).forEach((item) => {
           info[item] = props.currentFunctionInfo[item]
         })
         infoRef.value.clearValidate()
       }
+
       const cancelEdit = () => {
         editable.value = false
         onReset()
       }
+
       // save edit function detail
       const rules = {
         Name: [{ require: true, message: 'Please input your Function name!', trigger: 'change' }],
@@ -224,6 +231,7 @@
           }
         })
       }
+
       return {
         onReset,
         onClose,
@@ -259,6 +267,7 @@
     }
   }
 </script>
+
 <style scoped>
   .editable ::v-deep(.el-input__inner) {
     border-color: #fff;

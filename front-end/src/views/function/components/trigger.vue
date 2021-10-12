@@ -50,7 +50,6 @@
   import { triggerFunc } from '@/api/func'
   import { reactive, ref } from '@vue/runtime-core'
   import { ElMessage } from 'element-plus'
-  import { uid } from 'uid'
 
   export default {
     name: 'TriggerVue',

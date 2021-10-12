@@ -4,7 +4,8 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "lint": "eslint --fix --ext .js,.vue src"
+    "lint": "eslint src",
+    "test:open": "cypress open"
   },
   "dependencies": {
     "@ant-design/icons-vue": "^6.0.1",
