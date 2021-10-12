@@ -9,6 +9,7 @@
   import { Socket, NodeEditor, Control, Output, Input, Component, Engine } from 'rete'
   import ConnectionPlugin from 'rete-connection-plugin'
   import VueRenderPlugin from 'rete-vue-render-plugin'
+  // FIXME throw error when import it.
   // import ContextMenuPlugin from 'rete-context-menu-plugin'
   import AreaPlugin from 'rete-area-plugin'
   import VueNumControl from './NumControl.vue'

@@ -11,26 +11,49 @@
 </template>
 
 <script>
+  import { ref } from '@vue/reactivity'
+  import { onMounted } from '@vue/runtime-core'
   export default {
-    props: ['readonly', 'emitter', 'ikey', 'getData', 'putData'],
-    data() {
-      return {
-        value: 0
-      }
-    },
-    mounted() {
-      this.value = this.getData(this.ikey)
-    },
-    methods: {
-      change(e) {
-        this.value = +e.target.value
-        this.update()
+    props: {
+      emitter: {
+        type: Object,
+        default: null
       },
-      update() {
-        if (this.ikey) {
-          this.putData(this.ikey, this.value)
+      ikey: {
+        type: String,
+        default: null
+      },
+      getData: {
+        type: Function,
+        default: () => {}
+      },
+      putData: {
+        type: Function,
+        default: () => {}
+      },
+      readonly: Boolean
+    },
+    setup(props) {
+      const value = ref('')
+      onMounted(() => {
+        value.value = props.getData(props.ikey)
+      })
+
+      function change(e) {
+        value.value = +e.target.value
+        update()
+      }
+
+      function update() {
+        if (props.ikey) {
+          props.putData(props.ikey, value.value)
         }
-        this.emitter.trigger('process')
+        props.emitter.trigger('process')
+      }
+
+      return {
+        value,
+        change
       }
     }
   }
