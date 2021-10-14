@@ -12,8 +12,10 @@
 
 <script>
   import { ref } from '@vue/reactivity'
-  import { onMounted } from '@vue/runtime-core'
-  export default {
+  import { defineComponent, onMounted } from '@vue/runtime-core'
+
+  export default defineComponent({
+    naem: 'NumControl',
     props: {
       emitter: {
         type: Object,
@@ -53,8 +55,9 @@
 
       return {
         value,
-        change
+        change,
+        update
       }
     }
-  }
+  })
 </script>

@@ -1,7 +1,5 @@
 <template>
-  <div>
-    <Editor />
-  </div>
+  <Editor />
 </template>
 
 <script>
