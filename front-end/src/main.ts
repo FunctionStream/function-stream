@@ -2,6 +2,7 @@ import { createApp } from 'vue/dist/vue.esm-bundler'
 import App from './App.vue'
 import './style.css'
 import './mock'
+import 'regenerator-runtime/runtime.js'
 
 import ElementPlus from 'element-plus'
 import { VueAxios } from '@/utils/request'
@@ -10,7 +11,6 @@ import antdIcon from './core/antdv_icon'
 import i18n from './i18n'
 import store from '@/store/index'
 import customComponents from '@/components/index'
-import 'regenerator-runtime/runtime.js'
 
 const app = createApp(App)
 

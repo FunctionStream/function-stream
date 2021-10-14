@@ -13,17 +13,17 @@
 </template>
 
 <script>
+  import { defineComponent, onMounted, reactive, ref } from '@vue/runtime-core'
   import { Socket, NodeEditor, Control, Output, Input, Component, Engine } from 'rete'
+  import AreaPlugin from 'rete-area-plugin'
   import ConnectionPlugin from 'rete-connection-plugin'
   import VueRenderPlugin from 'rete-vue-render-plugin'
   // FIXME throw an error when import ContextMenuPlugin
   // import { ContextMenuPlugin } from 'rete-context-menu-plugin'
   import DockPlugin from 'rete-dock-plugin'
-  import AreaPlugin from 'rete-area-plugin'
-  import { defineComponent, onMounted, reactive, ref } from '@vue/runtime-core'
-
   import VueNumControl from './NumControl.vue'
   import VueTopicControl from './TopicControl.vue'
+
   export default defineComponent({
     setup(props) {
       let editor = reactive({})
