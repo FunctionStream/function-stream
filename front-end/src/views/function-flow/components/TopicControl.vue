@@ -47,6 +47,11 @@
         value.value = e.target.value
         props.putData(props.ikey, value.value)
       }
+
+      return {
+        value,
+        change
+      }
     }
   }
 </script>
