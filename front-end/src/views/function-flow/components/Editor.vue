@@ -20,7 +20,7 @@
   // FIXME throw an error when import ContextMenuPlugin
   // import { ContextMenuPlugin } from 'rete-context-menu-plugin'
   import DockPlugin from 'rete-dock-plugin'
-  import VueRenderPlugin from 'rete-vue-render'
+  import VueRenderPlugin from 'rete-vue-render-plugin'
   import VueNumControl from './NumControl.vue'
   import VueTopicControl from './TopicControl.vue'
 
