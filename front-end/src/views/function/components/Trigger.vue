@@ -1,6 +1,12 @@
 <template>
   <el-drawer :size="460" @close="onClose">
-    <el-form ref="TriggerFormRef" v-loading="visibleTrigger" :model="TriggerForm" :rules="rules">
+    <el-form
+      ref="TriggerFormRef"
+      v-loading="visibleTrigger"
+      :model="TriggerForm"
+      :rules="rules"
+      style="padding-left: 46px"
+    >
       <el-row>
         <el-form-item v-if="currentFunction.name" prop="functionName">
           <span>functionName</span>
@@ -24,7 +30,7 @@
             autosize
             type="textarea"
             placeholder="please enter the data"
-            style="width: 368px"
+            style="width: 368px; display: block"
           />
         </el-form-item>
       </el-row>
@@ -143,7 +149,7 @@
   }
 </script>
 
-<style>
+<style scoped>
   .text {
     font-size: 14px;
   }
