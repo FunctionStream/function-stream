@@ -54,7 +54,7 @@
 
 <script>
   import { triggerFunc } from '@/api/func'
-  import { reactive, ref } from '@vue/runtime-core'
+  import { reactive, ref, watchEffect } from '@vue/runtime-core'
   import { ElMessage } from 'element-plus'
 
   export default {
@@ -78,7 +78,11 @@
       }
     },
     setup(props) {
-      const TriggerForm = reactive({})
+      const createForm = () => ({
+        functionName: '',
+        data: null
+      })
+      const TriggerForm = reactive(createForm())
       const TriggerFormRef = ref(null)
       const triggerResult = ref('')
       const triggerResultType = ref('')
@@ -90,10 +94,11 @@
 
       const onClose = () => {
         triggering.value = false
-      }
-      const onSub = (subName) => {
+        Object.assign(TriggerForm, createForm())
         triggerResult.value = ''
         triggerResultType.value = ''
+      }
+      const onSub = (subName) => {
         TriggerFormRef.value.validate((valid) => {
           if (valid) {
             triggering.value = true
@@ -129,11 +134,11 @@
           }
         })
       }
-      const currentFunc = () => {
-        TriggerFormRef.value.setFieldsValue({
-          functionName: props.currentFunction.name
-        })
-      }
+      watchEffect(() => {
+        if (props.currentFunction) {
+          TriggerForm.functionName = props.currentFunction.name
+        }
+      })
       return {
         TriggerForm,
         TriggerFormRef,
@@ -142,8 +147,7 @@
         triggering,
         rules,
         onClose,
-        onSub,
-        currentFunc
+        onSub
       }
     }
   }
