@@ -1,14 +1,16 @@
 <template>
-  <Editor />
+  <div id="app">
+    <Rete />
+  </div>
 </template>
 
 <script>
-  import Editor from './components/Editor.vue'
+  import Rete from './components/Rete.vue'
 
   export default {
     name: 'App',
     components: {
-      Editor
+      Rete
     }
   }
 </script>
