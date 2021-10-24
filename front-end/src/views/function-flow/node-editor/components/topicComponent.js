@@ -2,15 +2,17 @@ import { Component, Input, Output } from 'rete'
 import { TopicControl } from '../controls/topicControl.js'
 import { TopicSocket } from '../sockets/sockets'
 
-export class FuncComponent extends Component {
+export class TopicComponent extends Component {
   constructor() {
-    super('test-func')
-    this.contextMenuName = 'Add my comp'
+    super('topic component')
   }
+
   builder(node) {
-    const inp1 = new Input('in', 'Input', TopicSocket)
+    const inp = new Input('in', 'Input', TopicSocket)
     const out = new Output('out', 'Output', TopicSocket)
-    return node.addInput(inp1).addOutput(out)
+    const topicControl = new TopicControl(this.editor, 'preview', false)
+
+    return node.addInput(inp).addOutput(out).addControl(topicControl)
   }
   rename(component) {
     return component.contextMenuName || component.name

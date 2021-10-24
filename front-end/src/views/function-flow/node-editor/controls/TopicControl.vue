@@ -1,10 +1,10 @@
 <template>
   <div>
-    <text>test-setting</text>
     <input
       type="topic"
       :readonly="readonly"
       :value="value"
+      placeholder="enter name here"
       @input="change($event)"
       @dblclick.stop=""
       @pointerdown.stop=""
