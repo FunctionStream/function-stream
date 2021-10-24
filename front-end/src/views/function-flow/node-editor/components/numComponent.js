@@ -1,5 +1,6 @@
 import Rete from 'rete'
-import CustomNode from '../../components/Node.vue'
+// FIXME console an error when import and use CustomNode
+// import CustomNode from '../../components/Node.vue'
 import { NumControl } from '../controls/numControl.js'
 import { NumSocket } from '../sockets/sockets'
 
