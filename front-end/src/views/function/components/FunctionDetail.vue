@@ -11,8 +11,8 @@
     >
       <el-descriptions class="inputMargin" title="function info" border size="small">
         <template #extra>
-          <el-button v-if="!editable" type="primary" size="small" @click="editable = true"> Edit </el-button>
-          <span v-else>
+          <el-button v-show="!editable" type="primary" size="small" @click="editable = true"> Edit </el-button>
+          <span v-show="editable">
             <el-button type="primary" :style="{ marginRight: '16px' }" size="small" @click="saveEdit()">
               Save
             </el-button>
