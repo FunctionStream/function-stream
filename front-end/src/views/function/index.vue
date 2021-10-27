@@ -23,7 +23,7 @@
 <script>
   import Func from './components/Func.vue'
   import AddFunc from './components/AddFunc.vue'
-  import FunctionDetailVue from './components/FunctionDetail'
+  import FunctionDetailVue from './components/FuncDetail.vue'
   import { getList, getStatus, getInfo, getStats } from '@/api/func'
   import { ref } from '@vue/reactivity'
   export default {

@@ -1,6 +1,6 @@
 <template>
   <el-form :model="info">
-    <el-drawer :visibleDetail="visibleDrawer" size="40%" :direction="direction">
+    <el-drawer v-model="visibilityBinding" size="40%" :direction="direction">
       <el-descriptions title="Node detail" :column="2" border class="description" style="padding: 0 20px">
         <template #extra>
           <el-button v-show="!editable" type="primary" @click="editable = true">Edit</el-button>
@@ -54,16 +54,11 @@
 
   export default defineComponent({
     name: 'Detail',
-    props: {
-      visibleDrawer: {
-        type: Boolean,
-        default: false
-      }
-    },
-    setup() {
-      const drawer = ref(true)
+    emits: ['hideDrawer'],
+    setup(props, { emit }) {
       const direction = ref('rtl')
       const editable = ref(false)
+      const visibilityBinding = ref(false)
 
       const info = {
         image: 'streamnative/pulsar-functions-go-sample:2.8.1',
@@ -107,13 +102,14 @@
       function cancelEdit() {
         editable.value = false
       }
+
       return {
         direction,
-        drawer,
         info,
         editable,
         saveEdit,
-        cancelEdit
+        cancelEdit,
+        visibilityBinding
       }
     }
   })

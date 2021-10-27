@@ -1,6 +1,6 @@
 <template>
   <div id="rete" ref="rete">
-    <Detail v-model="visibleDrawer" />
+    <Detail ref="detail" />
     <div class="dock dock-menu"></div>
   </div>
 </template>
@@ -9,7 +9,7 @@
   import AreaPlugin from 'rete-area-plugin'
   import ConnectionPlugin from 'rete-connection-plugin'
   import DockPlugin from 'rete-dock-plugin'
-  import Detail from './Detail.vue'
+  import Detail from './NodeDetail.vue'
   import Rete from 'rete'
   import VueRenderPlugin from 'rete-vue-render-plugin'
   // FIXME Console an error when import and use rete-context-menu-plugin
@@ -25,12 +25,13 @@
     components: { Detail },
     setup() {
       const rete = ref(null)
-      const visibleDrawer = ref(false)
+      const detail = ref(null)
 
       onMounted(() => {
         init(rete.value)
       })
 
+      // Init node editor
       async function init(container) {
         var components = [new NumComponent(), new AddComponent(), new FuncComponent(), new TopicComponent()]
 
@@ -79,8 +80,7 @@
         })
         editor.on('rendernode', ({ el, node }) => {
           el.addEventListener('dblclick', () => {
-            console.log('on')
-            visibleDrawer.value = true
+            detail.value.visibilityBinding = true
           })
         })
 
@@ -92,8 +92,8 @@
       }
 
       return {
-        rete,
-        visibleDrawer
+        detail,
+        rete
       }
     }
   })
