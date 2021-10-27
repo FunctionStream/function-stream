@@ -6,11 +6,11 @@
 </template>
 
 <script>
+  import { defineComponent, onMounted, ref } from '@vue/runtime-core'
+  import Rete from 'rete'
   import AreaPlugin from 'rete-area-plugin'
   import ConnectionPlugin from 'rete-connection-plugin'
   import DockPlugin from 'rete-dock-plugin'
-  import Detail from './NodeDetail.vue'
-  import Rete from 'rete'
   import VueRenderPlugin from 'rete-vue-render-plugin'
   // FIXME Console an error when import and use rete-context-menu-plugin
   // import ContextMenuPlugin from 'rete-context-menu-plugin'
@@ -18,7 +18,7 @@
   import { FuncComponent } from '../node-editor/components/funcComponent'
   import { NumComponent } from '../node-editor/components/numComponent'
   import { TopicComponent } from '../node-editor/components/topicComponent'
-  import { defineComponent, onMounted, ref } from '@vue/runtime-core'
+  import Detail from './NodeDetail.vue'
 
   export default defineComponent({
     name: 'Rete',

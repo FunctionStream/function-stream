@@ -4,7 +4,16 @@
 
 <script>
   export default {
-    props: ['type', 'socket']
+    props: {
+      type: {
+        type: String,
+        default: ''
+      },
+      socket: {
+        type: Object,
+        default: null
+      }
+    }
   }
 </script>
 

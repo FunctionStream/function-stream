@@ -1,5 +1,4 @@
 import { Component, Input, Output } from 'rete'
-import { TopicControl } from '../controls/topicControl.js'
 import { TopicSocket } from '../sockets/sockets'
 
 export class FuncComponent extends Component {
