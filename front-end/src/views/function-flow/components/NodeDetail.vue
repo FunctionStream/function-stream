@@ -60,6 +60,7 @@
       const editable = ref(false)
       const visibilityBinding = ref(false)
 
+      // hard code
       const info = {
         image: 'streamnative/pulsar-functions-go-sample:2.8.1',
         name: 'test-ex',
