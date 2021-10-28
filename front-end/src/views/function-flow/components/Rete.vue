@@ -1,6 +1,6 @@
 <template>
   <div id="rete" ref="rete">
-    <Detail ref="detail" />
+    <Detail ref="detail" :nodeName="nodeName" />
     <div class="dock dock-menu"></div>
   </div>
 </template>
@@ -25,7 +25,10 @@
     components: { Detail },
     setup() {
       const rete = ref(null)
+
+      // node detail
       const detail = ref(null)
+      const nodeName = ref('')
 
       onMounted(() => {
         init(rete.value)
@@ -33,7 +36,13 @@
 
       // Init node editor
       async function init(container) {
-        var components = [new NumComponent(), new AddComponent(), new FuncComponent(), new TopicComponent()]
+        var components = [
+          new NumComponent(),
+          new AddComponent(),
+          new FuncComponent('test-ex'),
+          new FuncComponent('test-ex2'),
+          new TopicComponent()
+        ]
 
         var editor = new Rete.NodeEditor('fs-flow@0.1.0', container)
         editor.use(ConnectionPlugin)
@@ -80,6 +89,7 @@
         })
         editor.on('rendernode', ({ el, node }) => {
           el.addEventListener('dblclick', () => {
+            nodeName.value = node.name
             detail.value.visibilityBinding = true
           })
         })
@@ -93,7 +103,8 @@
 
       return {
         detail,
-        rete
+        rete,
+        nodeName
       }
     }
   })

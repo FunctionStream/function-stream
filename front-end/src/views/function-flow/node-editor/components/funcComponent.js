@@ -2,8 +2,8 @@ import { Component, Input, Output } from 'rete'
 import { TopicSocket } from '../sockets/sockets'
 
 export class FuncComponent extends Component {
-  constructor() {
-    super('test-func')
+  constructor(props) {
+    super(props)
     this.contextMenuName = 'Add my comp'
   }
   builder(node) {
