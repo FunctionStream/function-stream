@@ -1,4 +1,4 @@
-const getType = obj => Object.prototype.toString.call(obj)
+const getType = (obj) => Object.prototype.toString.call(obj)
 
 const isObject = (target) => (typeof target === 'object' || typeof target === 'function') && target !== null
 
@@ -7,7 +7,7 @@ const canTraverse = {
   '[object Set]': true,
   '[object Array]': true,
   '[object Object]': true,
-  '[object Arguments]': true,
+  '[object Arguments]': true
 }
 const mapTag = '[object Map]'
 const setTag = '[object Set]'
@@ -27,7 +27,7 @@ const handleRegExp = (target) => {
 
 const handleFunc = (func) => {
   // 箭头函数直接返回自身
-  if(!func.prototype) return func
+  if (!func.prototype) return func
   const bodyReg = /(?<={)(.|\n)+(?=})/m
   const paramReg = /(?<=\().+(?=\)\s+{)/
   const funcString = func.toString()
@@ -45,7 +45,7 @@ const handleFunc = (func) => {
 
 const handleNotTraverse = (target, tag) => {
   const Ctor = target.constructor
-  switch(tag) {
+  switch (tag) {
     case boolTag:
       return new Object(Boolean.prototype.valueOf.call(target))
     case numberTag:
@@ -54,7 +54,7 @@ const handleNotTraverse = (target, tag) => {
       return new Object(String.prototype.valueOf.call(target))
     case symbolTag:
       return new Object(Symbol.prototype.valueOf.call(target))
-    case errorTag: 
+    case errorTag:
     case dateTag:
       return new Ctor(target)
     case regexpTag:
@@ -66,42 +66,44 @@ const handleNotTraverse = (target, tag) => {
   }
 }
 
-export default function deepClone (target, map = new WeakMap()){
-  if(!isObject(target)) 
+export default function deepClone(target, map = new WeakMap()) {
+  if (!isObject(target)) {
     return target
-  let type = getType(target)
+  }
+  const type = getType(target)
   let cloneTarget
-  if(!canTraverse[type]) {
+  if (!canTraverse[type]) {
     // 处理不能遍历的对象
     return handleNotTraverse(target, type)
-  }else {
+  } else {
     // 这波操作相当关键，可以保证对象的原型不丢失！
-    let ctor = target.constructor
+    const ctor = target.constructor
     cloneTarget = new ctor()
   }
 
-  if(map.get(target)) 
+  if (map.get(target)) {
     return target
+  }
   map.set(target, true)
 
-  if(type === mapTag) {
+  if (type === mapTag) {
     //处理Map
     target.forEach((item, key) => {
       cloneTarget.set(deepClone(key, map), deepClone(item, map))
     })
   }
   
-  if(type === setTag) {
+  if (type === setTag) {
     //处理Set
-    target.forEach(item => {
+    target.forEach((item) => {
       cloneTarget.add(deepClone(item, map))
     })
   }
 
   // 处理数组和对象
-  for (let prop in target) {
-    if (target.hasOwnProperty(prop)) {
-        cloneTarget[prop] = deepClone(target[prop], map)
+  for (const prop in target) {
+    if (Object.prototype.hasOwnProperty.call(target, prop)) {
+      cloneTarget[prop] = deepClone(target[prop], map)
     }
   }
   return cloneTarget
