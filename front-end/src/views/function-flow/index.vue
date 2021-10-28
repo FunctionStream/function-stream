@@ -5,7 +5,7 @@
 </template>
 
 <script>
-  import Rete from './components/Rete.vue'
+  import Rete from './components/Editor.vue'
 
   export default {
     name: 'App',

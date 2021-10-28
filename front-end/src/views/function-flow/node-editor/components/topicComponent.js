@@ -1,4 +1,6 @@
 import { Component, Input, Output } from 'rete'
+// FIXME console an error when import and use CustomNode
+// import CustomNode from '../../components/Node.vue'
 import { TopicControl } from '../controls/topicControl'
 import { TopicSocket } from '../sockets/sockets'
 
