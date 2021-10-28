@@ -57,6 +57,7 @@
 <script>
   import { defineComponent, reactive, ref, watchEffect } from 'vue'
   import { info1 } from '../../../mock/services/flow'
+  import deepClone from '../../../utils/deepClone'
 
   export default defineComponent({
     name: 'Detail',
@@ -72,7 +73,8 @@
       const visibilityBinding = ref(false)
       const nodeDetail = ref(null)
       // Simulate fetching backend data
-      const info = reactive(info1)
+      const nodeInfo = deepClone(info1)
+      const info = reactive(nodeInfo)
 
       // Show node detail
       watchEffect(() => {
@@ -86,8 +88,9 @@
         editable.value = false
       }
       function resetField() {
-        console.log(info1.replicas)
-        console.log(info.replicas)
+        Object.keys(info1).forEach((item) => {
+          info[item] = info1[item]
+        })
       }
       function cancelEdit() {
         resetField()
