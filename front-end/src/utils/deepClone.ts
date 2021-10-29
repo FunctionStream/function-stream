@@ -34,7 +34,7 @@ const handleFunc = (func) => {
   // 分别匹配 函数参数 和 函数体
   const param = paramReg.exec(funcString)
   const body = bodyReg.exec(funcString)
-  if(!body) return null
+  if (!body) return null
   if (param) {
     const paramArr = param[0].split(',')
     return new Function(...paramArr, body[0])
@@ -92,7 +92,6 @@ export default function deepClone(target, map = new WeakMap()) {
       cloneTarget.set(deepClone(key, map), deepClone(item, map))
     })
   }
-  
   if (type === setTag) {
     //处理Set
     target.forEach((item) => {
