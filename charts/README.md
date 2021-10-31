@@ -14,13 +14,11 @@ This is the helm chart for installing FunctionStream on kubernetes.
 
     ```bash
     kubectl create namespace <k8s-namespace>
-
     ```
 3. Install the FunctionStream.
 
     ```bash
-    cd charts
-    helm install function-stream . -n <k8s-namespace>
+    helm install function-stream . -n <k8s-namespace> --values {Your values yaml file}
     ```
 
 4. Verify that the Function Stream is installed successfully.
@@ -38,7 +36,7 @@ This is the helm chart for installing FunctionStream on kubernetes.
 
 ## Uninstall
 
-Use the following command to uninstall FunctionMesh operator.
+* Use the following command to uninstall FunctionMesh operator.
 
     ```bash
     helm uninstall function-stream -n <k8s-namespace>
