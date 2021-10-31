@@ -4,6 +4,7 @@ import io.functionmesh.compute.mesh.models.V1alpha1FunctionMesh;
 import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.apis.CustomObjectsApi;
 import io.kubernetes.client.util.Config;
+import io.kubernetes.client.util.Yaml;
 import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
@@ -21,6 +22,8 @@ public class KubernetesServiceImpl implements KubernetesService {
 
     public KubernetesServiceImpl() throws IOException {
         api = new CustomObjectsApi(Config.defaultClient());
+        // This line must be added during debugging.
+        Yaml.addModelMap("compute.functionmesh.io/v1alpha1", "FunctionMesh", V1alpha1FunctionMesh.class);
     }
 
     @Override

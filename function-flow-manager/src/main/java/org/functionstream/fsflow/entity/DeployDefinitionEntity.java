@@ -6,6 +6,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+/**
+ * The deployment definition entity obtained from the front end.
+ */
 @Getter
 @Setter
 @NoArgsConstructor

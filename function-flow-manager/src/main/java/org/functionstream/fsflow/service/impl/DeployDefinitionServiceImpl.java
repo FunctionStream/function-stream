@@ -7,6 +7,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import com.google.gson.Gson;
 import io.functionmesh.compute.mesh.models.V1alpha1FunctionMesh;
 import io.functionmesh.compute.mesh.models.V1alpha1FunctionMeshSpecPodResources;
+import io.functionmesh.compute.mesh.models.V1alpha1FunctionMeshSpecPulsar;
 import io.kubernetes.client.util.Yaml;
 import java.io.IOException;
 import java.util.Map;
@@ -66,6 +67,11 @@ public class DeployDefinitionServiceImpl implements DeployDefinitionService {
                         entry("cpu", "0.2"),
                         entry("memory", "200M")
                 ));
+                if (function.getPulsar() == null) {
+                    function.setPulsar(new V1alpha1FunctionMeshSpecPulsar());
+                }
+                // Set config for the function to use the default config.
+                function.getPulsar().setPulsarConfig("pulsar-function-config");
             });
         }
 

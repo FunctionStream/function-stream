@@ -1,6 +1,5 @@
 package org.functionstream.fsflow.controller;
 
-
 import com.google.common.collect.Maps;
 import io.functionmesh.compute.mesh.models.V1alpha1FunctionMesh;
 import io.kubernetes.client.openapi.ApiException;
@@ -21,6 +20,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Function flow api.
+ * Responsible for managing the deployment of function flows
+ */
 @Slf4j
 @RestController
 @RequestMapping(value = "/flow")
@@ -53,6 +56,12 @@ public class FunctionFlowController {
         return crd;
     }
 
+    /**
+     * Deploy the function flow
+     *
+     * @param name             Then name of this function flow. It is globally unique
+     * @param deployDefinition The deployment definition entity obtained from the front-end
+     */
     @RequestMapping(value = "/deploy/{name}", method = RequestMethod.PUT)
     public ResponseEntity<Map<String, Object>> deployFlow(
             @PathVariable String name,
@@ -63,18 +72,26 @@ public class FunctionFlowController {
         try {
             Response k8sResponse = kubernetesService.createFunctionMesh(k8sNamespace, crd);
             if (!k8sResponse.isSuccessful()) {
-                result.put("error", "Failed to deploy function flow to k8s: " + k8sResponse.message());
+                result.put("error", "Failed to deploy function flow to k8s: " + k8sResponse.body());
+                return ResponseEntity.ok(result);
             }
         } catch (IOException | ApiException e) {
             log.error("Failed to deploy function mesh: ", e);
             result.put("error", "Failed to deploy function flow: " + e);
-            ResponseEntity.ok(result);
+            return ResponseEntity.ok(result);
         }
 
         result.put("message", "Deploy function flow success.");
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * Update the function flow
+     *
+     * @param name             Then name of this function flow. It is globally unique
+     * @param deployDefinition The deployment definition entity obtained from the front-end
+     * @return
+     */
     @RequestMapping(value = "/deploy/{name}", method = RequestMethod.PATCH)
     public ResponseEntity<Map<String, Object>> updateFlow(
             @PathVariable String name,
@@ -86,17 +103,24 @@ public class FunctionFlowController {
             Response k8sResponse = kubernetesService.replaceFunctionMesh(k8sNamespace, name, crd);
             if (!k8sResponse.isSuccessful()) {
                 result.put("error", "Failed to update function flow to k8s: " + k8sResponse.message());
+                return ResponseEntity.ok(result);
             }
         } catch (IOException | ApiException e) {
             log.error("Failed to update function mesh: ", e);
             result.put("error", "Failed to update function flow: " + e);
             ResponseEntity.ok(result);
+            return ResponseEntity.ok(result);
         }
 
         result.put("message", "Update function flow success.");
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * Delete the function flow
+     *
+     * @param name Then name of this function flow. It is globally unique
+     */
     @RequestMapping(value = "/deploy/{name}", method = RequestMethod.DELETE)
     public ResponseEntity<Map<String, Object>> deleteFlow(
             @PathVariable String name) {
@@ -106,11 +130,13 @@ public class FunctionFlowController {
             Response k8sResponse = kubernetesService.deleteFunctionMesh(k8sNamespace, name);
             if (!k8sResponse.isSuccessful()) {
                 result.put("error", "Failed to delete function flow to k8s: " + k8sResponse.message());
+                return ResponseEntity.ok(result);
             }
         } catch (IOException | ApiException e) {
             log.error("Failed to delete function mesh: ", e);
             result.put("error", "Failed to delete function flow: " + e);
             ResponseEntity.ok(result);
+            return ResponseEntity.ok(result);
         }
 
         result.put("message", "Delete function flow success.");
