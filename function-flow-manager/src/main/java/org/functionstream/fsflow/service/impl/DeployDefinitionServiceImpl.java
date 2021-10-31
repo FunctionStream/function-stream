@@ -27,9 +27,6 @@ public class DeployDefinitionServiceImpl implements DeployDefinitionService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final YAMLMapper yamlMapper = new YAMLMapper();
 
-    public DeployDefinitionServiceImpl() {
-    }
-
     @Override
     public synchronized V1alpha1FunctionMesh getFunctionMeshCRD(String name, DeployDefinitionEntity deployDefinition)
             throws IOException {

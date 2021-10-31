@@ -16,6 +16,8 @@ public class DeployDefinitionEntity {
     public String apiVersion;
     public String kind;
     public String version;
+    public DeployDefinitionEntity.Metadata metadata;
+    public DeployDefinitionEntity.Spec spec;
 
     @Getter
     @Setter
@@ -24,14 +26,10 @@ public class DeployDefinitionEntity {
         public String name;
     }
 
-    public DeployDefinitionEntity.Metadata metadata;
-
     @Getter
     @Setter
     @NoArgsConstructor
     private static class Spec {
         public List<JsonObject> functions;
     }
-
-    public DeployDefinitionEntity.Spec spec;
 }

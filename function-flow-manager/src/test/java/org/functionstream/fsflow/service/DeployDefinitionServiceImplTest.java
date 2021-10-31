@@ -10,15 +10,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.functionstream.fsflow.FunctionMeshAssertUtil;
 import org.functionstream.fsflow.entity.DeployDefinitionEntity;
 import org.functionstream.fsflow.service.impl.DeployDefinitionServiceImpl;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @Slf4j
 public class DeployDefinitionServiceImplTest {
-    @Before
+    @BeforeEach
     public void setup() {
         // This line must be added during unit tests.
         Yaml.addModelMap("compute.functionmesh.io/v1alpha1", "FunctionMesh", V1alpha1FunctionMesh.class);
+        log.info("Added model map.");
     }
 
     @Test
