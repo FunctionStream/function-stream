@@ -96,7 +96,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   export default {
     name: 'AddFunc',
-    emits: ['onRefresh'],
+    emits: ['onRefresh', 'refresh'],
     setup(props, contest) {
       const addForm = ref(null)
       const addFuncDrawer = ref(null)
@@ -139,7 +139,6 @@
           creationSubmit(data, functionName)
         })
       }
-
       //Network request
       const creationSubmit = (data, functionName) => {
         ElMessageBox.confirm('即将添加函数', '提示', {
@@ -168,12 +167,10 @@
             })
           })
       }
-
       const onClose = () => {
         resetField()
         addFuncDrawer.value.handleClose() //关闭drawer
       }
-
       //add and delete inputs
       const addInput = () => {
         form.inputs.push('')
@@ -181,7 +178,6 @@
       const deleteInput = (index) => {
         form.inputs.splice(index, 1)
       }
-
       //restAllField
       const resetField = () => {
         addForm.value.resetFields() //清空已输入的数据
@@ -189,7 +185,6 @@
         form.inputs = ['']
         fileToUpload.value.clearFiles() //清空已上传文件列表
       }
-
       //get uploaded file
       const getFile = (fileToUp) => {
         file.value = fileToUp.raw
