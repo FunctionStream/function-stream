@@ -106,16 +106,6 @@ const status = {
   ]
 }
 
-/* const trigger = (option) => {
-  console.log(option)
-  const { body } = option
-  const {
-    data: { data }
-  } = JSON.parse(body)
-  console.log(JSON.parse(body))
-
-  return `${data}!!!`
-} */
 const trigger = (option) => {
   const { body } = option
   const data = body.get('data')
