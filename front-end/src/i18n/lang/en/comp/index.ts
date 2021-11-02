@@ -1,4 +1,5 @@
 // components lang
 export default {
-  emptyData: 'not data'
+  emptyData: 'not data',
+  notice: 'Notice'
 }

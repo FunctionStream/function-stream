@@ -16,6 +16,11 @@ export const asyncRouterMap = [
         component: () => import('@/views/function/index.vue')
       },
       {
+        path: '/functionHub',
+        name: 'menu.functionHub',
+        meta: { title: 'functionHub', icon: 'el-icon-s-grid' },
+        component: () => import('@/views/functionHub/index.vue')
+      },
         path: '/stream-flow-diagram',
         name: 'menu.functionFlow',
         meta: { title: 'stream-flow-diagram', icon: 'el-icon-s-grid' },

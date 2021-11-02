@@ -3,5 +3,6 @@ export default {
   Home: 'Home',
   exp: 'exp',
   test: 'test',
+  functionHub: 'Function Hub',
   functionFlow: 'Function Flow'
 }
