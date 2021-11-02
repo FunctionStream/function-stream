@@ -96,7 +96,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   export default {
     name: 'AddFunc',
-    emits: ['onRefresh'],
+    emits: ['onRefresh', 'refresh'],
     setup(props, contest) {
       const addForm = ref(null)
       const addFuncDrawer = ref(null)

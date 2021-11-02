@@ -97,6 +97,7 @@
         Object.assign(TriggerForm, createForm())
         triggerResult.value = ''
         triggerResultType.value = ''
+        TriggerForm.functionName = props.currentFunction.name
       }
       const onSub = (subName) => {
         TriggerFormRef.value.validate((valid) => {
