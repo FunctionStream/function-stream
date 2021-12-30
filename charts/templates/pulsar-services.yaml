@@ -31,3 +31,4 @@ spec:
     name: pulsar
   selector:
     app: pulsar
+  type: LoadBalancer

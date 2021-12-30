@@ -106,7 +106,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { uid } from 'uid'
   export default {
-    name: 'FunctionDetailVue',
+    name: 'FunctionDetail',
     props: {
       visible: {
         type: Boolean,
