@@ -46,9 +46,17 @@
           return []
         }
       },
+      visibleTrigger: {
+        type: Boolean,
+        default: false
+      },
       onSelFunction: {
         type: Function,
         default: (v) => {}
+      },
+      onRreshFunc: {
+        type: Function,
+        default: () => {}
       },
       visibleDetail: {
         type: Boolean,

@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@ant-design/icons-vue": "^6.0.1",
+    "@babel/polyfill": "^7.12.1",
     "axios": "^0.21.1",
     "cypress": "^7.7.0",
     "element-plus": "^1.0.2-beta.48",
@@ -16,6 +17,12 @@
     "moment": "^2.29.1",
     "node-uuid": "^1.4.8",
     "nprogress": "^0.2.0",
+    "regenerator-runtime": "^0.13.9",
+    "rete": "^1.4.5",
+    "rete-area-plugin": "^0.2.1",
+    "rete-connection-plugin": "^0.9.0",
+    "rete-dock-plugin": "^0.2.1",
+    "rete-vue-render-plugin": "^1.0.0-rc2",
     "store": "^2.0.12",
     "uid": "^2.0.0",
     "vue": "^3.0.5",
@@ -24,8 +31,6 @@
     "vuex": "^4.0.2"
   },
   "devDependencies": {
-    "@antv/x6": "^1.24.5",
-    "@antv/x6-vue-shape": "^1.2.8",
     "@tailwindcss/postcss7-compat": "^2.2.2",
     "@types/node": "^15.12.4",
     "@vitejs/plugin-vue": "^1.2.3",

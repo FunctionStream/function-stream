@@ -1,7 +1,8 @@
 import { createApp } from 'vue/dist/vue.esm-bundler'
 import App from './App.vue'
-import './style.css'
+import 'regenerator-runtime/runtime.js'
 import './mock'
+import './style.css'
 
 import ElementPlus from 'element-plus'
 import { VueAxios } from '@/utils/request'

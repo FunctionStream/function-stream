@@ -8,30 +8,35 @@
     <Func
       v-loading="loading"
       :data="functionList"
-      :onShowDetail="onShowDetail"
+      :onSelFunction="onSelFunction"
       :loadingList="loadingList"
-      :onRefreshFunc="onRefreshFunc"
+      :onRefreshFunc="onRreshFunc"
+      :onShowDetail="onShowDetail"
     />
+    <TriggerVue v-model="visibleTrigger" :data="functionList" :currentFunction="currentFunction" />
     <FunctionDetailVue
       v-model="visibleDetail"
       :currentFunctionInfo="currentFunctionInfo"
       :loadingDetail="loadingDetail"
     />
-    <add-func v-model="visibleAdd" :functionList="functionList" :refresh="refresh" />
+    <add-func v-model="visibleAdd" :onRefresh="onRefreshFunc" />
   </PageHeaderWrapper>
 </template>
 <script>
   import Func from './components/Func.vue'
+  import TriggerVue from './components/Trigger.vue'
+  import { ref } from '@vue/runtime-core'
+  import { getList, getStatus, getInfo, getStats } from '@/api/func'
   import AddFunc from './components/AddFunc.vue'
   import FunctionDetailVue from './components/FunctionDetail'
-  import { getList, getStatus, getInfo, getStats } from '@/api/func'
-  import { ref } from '@vue/reactivity'
   export default {
     components: {
+      Func,
+      TriggerVue,
       FunctionDetailVue,
-      AddFunc,
-      Func
+      AddFunc
     },
+
     setup() {
       // get function list
       const functionList = ref([])
@@ -47,7 +52,6 @@
           })
         }
       }
-
       const loading = ref(true)
       const initFuncList = () => {
         loading.value = true
@@ -56,7 +60,6 @@
         })
       }
       initFuncList()
-
       // function detail
       const visibleDetail = ref(false)
       const loadingDetail = ref(false)
@@ -91,7 +94,6 @@
             loadingDetail.value = false
           })
       }
-
       // refresh function
       const loadingList = ref(false)
       const onRefreshFunc = () => {
@@ -100,10 +102,23 @@
           loadingList.value = false
         })
       }
-
       const closeDrawer = () => {
         currentFunctionInfo.value = {}
         closeDetail()
+      }
+
+      //trigger
+      const visibleTrigger = ref(false)
+      const currentFunction = ref(null)
+      const showTrigger = () => {
+        visibleTrigger.value = true
+      }
+      const closeTrigger = () => {
+        visibleTrigger.value = false
+      }
+      const onSelFunction = (v) => {
+        currentFunction.value = v
+        showTrigger()
       }
 
       return {
@@ -117,7 +132,12 @@
         showDetail,
         onShowDetail,
         onRefreshFunc,
-        closeDrawer
+        closeDrawer,
+        visibleTrigger,
+        currentFunction,
+        showTrigger,
+        closeTrigger,
+        onSelFunction
       }
     },
     data() {
@@ -126,10 +146,10 @@
       }
     },
     created() {
-      this.refresh()
+      this.reFresh()
     },
     methods: {
-      async refresh() {
+      async reFresh() {
         this.loadingList = true
         try {
           const res = await getList()
@@ -149,7 +169,30 @@
       },
       showAddFunc() {
         this.visibleAdd = true
+      },
+      async refreshFunc() {
+        const _this = this
+        this.loadingList = true
+        try {
+          const res = await getList()
+          if (Array.isArray(res)) {
+            _this.functionList = res?.map((name) => ({ key: name, name }))
+            // get status
+            // eslint-disable-next-line no-unused-expressions
+            res?.map(async (name, i) => {
+              const res = await getStatus(name)
+              _this.$set(_this.functionList[i], 'status', !!res?.instances?.[0]?.status?.running)
+              _this.$set(_this.functionList[i], 'statusInfo', res)
+            })
+          }
+        } catch (e) {}
+        this.loadingList = false
+      },
+      onRreshFunc() {
+        this.refreshFunc()
       }
     }
   }
 </script>
+
+<style></style>

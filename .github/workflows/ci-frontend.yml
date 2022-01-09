@@ -1,9 +1,11 @@
-name: Eslint Check
+name: CI - Frontend
 on:
-  push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+  push:
+    branches:
+      - branch-*
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,4 +20,8 @@ jobs:
 
       - name: Run eslint
         run: npx eslint . --ext .js,.jsx,.ts,.vue,.tsx
+        working-directory: front-end
+
+      - name: Build
+        run: yarn build
         working-directory: front-end

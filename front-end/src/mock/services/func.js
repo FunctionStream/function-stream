@@ -107,12 +107,8 @@ const status = {
 }
 
 const trigger = (option) => {
-  console.log(option)
   const { body } = option
-  const {
-    data: { data }
-  } = JSON.parse(body)
-  console.log(JSON.parse(body))
+  const data = body.get('data')
 
   return `${data}!!!`
 }
