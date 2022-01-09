@@ -8,10 +8,10 @@ import org.junit.jupiter.api.Assertions;
 @Slf4j
 public class FunctionMeshAssertUtil {
     public static void assertFunctionMesh(V1alpha1FunctionMesh functionMesh, String name) {
-        assert functionMesh.getMetadata() != null;
+        Assertions.assertNotNull(functionMesh.getMetadata());
         Assertions.assertEquals(name, functionMesh.getMetadata().getName());
-        assert functionMesh.getSpec() != null;
-        assert functionMesh.getSpec().getFunctions() != null;
+        Assertions.assertNotNull(functionMesh.getSpec());
+        Assertions.assertNotNull(functionMesh.getSpec().getFunctions());
         Assertions.assertEquals(2, functionMesh.getSpec().getFunctions().size());
         assertFunction(functionMesh.getSpec().getFunctions().get(0), "test-ex", "persistent://public/default/a1",
                 "persistent://public/default/a2");
@@ -30,24 +30,24 @@ public class FunctionMeshAssertUtil {
         Assertions.assertEquals(1, function.getReplicas());
         Assertions.assertEquals(5, function.getMaxReplicas());
         Assertions.assertEquals("persistent://public/default/logging-function-logs", function.getLogTopic());
-        assert function.getInput() != null;
-        assert function.getInput().getTopics() != null;
+        Assertions.assertNotNull(function.getInput());
+        Assertions.assertNotNull(function.getInput().getTopics());
         Assertions.assertEquals(1, function.getInput().getTopics().size());
         Assertions.assertEquals(inputTopic, function.getInput().getTopics().get(0));
         Assertions.assertEquals("java.lang.String", function.getInput().getTypeClassName());
-        assert function.getOutput() != null;
+        Assertions.assertNotNull(function.getOutput());
         Assertions.assertEquals(outputTopic, function.getOutput().getTopic());
         Assertions.assertEquals("java.lang.String", function.getOutput().getTypeClassName());
-        assert function.getPulsar() != null;
+        Assertions.assertNotNull(function.getPulsar());
         Assertions.assertEquals("pulsar-function-config", function.getPulsar().getPulsarConfig());
-        assert function.getResources() != null;
-        assert function.getResources().getRequests() != null;
+        Assertions.assertNotNull(function.getResources());
+        Assertions.assertNotNull(function.getResources().getRequests());
         Assertions.assertEquals("0.1", function.getResources().getRequests().get("cpu"));
         Assertions.assertEquals("10M", function.getResources().getRequests().get("memory"));
-        assert function.getResources().getLimits() != null;
+        Assertions.assertNotNull(function.getResources().getLimits());
         Assertions.assertEquals("0.2", function.getResources().getLimits().get("cpu"));
         Assertions.assertEquals("200M", function.getResources().getLimits().get("memory"));
-        assert function.getGolang() != null;
+        Assertions.assertNotNull(function.getGolang());
         Assertions.assertEquals("/pulsar/examples/go-exclamation-func", function.getGolang().getGo());
     }
 }

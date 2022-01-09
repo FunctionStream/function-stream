@@ -1,5 +1,8 @@
 {
   "version": "v0.1",
+  "metadata": {
+    "name": "test"
+  },
   "spec": {
     "functions": [
       {
