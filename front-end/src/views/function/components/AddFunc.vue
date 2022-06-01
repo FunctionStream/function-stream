@@ -96,8 +96,8 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   export default {
     name: 'AddFunc',
-    emits: ['onRefresh', 'refresh'],
-    setup(props, contest) {
+    emits: ['onRefresh'],
+    setup(props, context) {
       const addForm = ref(null)
       const addFuncDrawer = ref(null)
       const fileToUpload = ref(null)
@@ -153,7 +153,7 @@
                 message: '添加成功'
               })
               onClose()
-              contest.emit('onRefresh') //刷新table上的数据
+              context.emit('onRefresh') //刷新table上的数据
             })
           })
           .catch((err) => {

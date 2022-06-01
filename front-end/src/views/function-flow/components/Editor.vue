@@ -1,200 +1,95 @@
 <template>
-  <div>
-    <div class="wrapper">
-      <div class="editor">
-        <div class="container">
-          <div ref="nodeEditor" class="node-editor"></div>
-        </div>
-        <div class="dock dock-menu"></div>
-      </div>
-    </div>
-    <canvas id="canvasOutput"></canvas>
+  <div id="rete" ref="rete">
+    <Detail ref="detail" :nodeName="nodeName" />
+    <div class="dock dock-menu"></div>
   </div>
 </template>
 
 <script>
-  import { defineComponent, onMounted, reactive, ref } from '@vue/runtime-core'
-  import { Component, Control, Engine, Input, NodeEditor, Output, Socket } from 'rete'
+  import { defineComponent, onMounted, ref } from '@vue/runtime-core'
+  import Rete from 'rete'
   import AreaPlugin from 'rete-area-plugin'
   import ConnectionPlugin from 'rete-connection-plugin'
-  // FIXME throw an error when import ContextMenuPlugin
-  // import { ContextMenuPlugin } from 'rete-context-menu-plugin'
   import DockPlugin from 'rete-dock-plugin'
   import VueRenderPlugin from 'rete-vue-render-plugin'
-  import VueNumControl from './NumControl.vue'
-  import VueTopicControl from './TopicControl.vue'
+  // FIXME Console an error when import and use rete-context-menu-plugin
+  // import ContextMenuPlugin from 'rete-context-menu-plugin'
+  import { FuncComponent } from '../node-editor/components/funcComponent'
+  import { TopicComponent } from '../node-editor/components/topicComponent'
+  import Detail from './NodeDetail.vue'
 
   export default defineComponent({
-    setup(props) {
-      let editor = reactive({})
-      let engine = reactive({})
-      const nodeEditor = ref(null)
+    name: 'Rete',
+    components: { Detail },
+    setup() {
+      const rete = ref(null)
 
-      onMounted(async () => {
-        const numSocket = new Socket('Number value')
-        const topicSocket = new Socket('Topic value')
+      // node detail
+      const detail = ref(null)
+      const nodeName = ref('')
 
-        class NumControl extends Control {
-          constructor(emitter, key, readonly) {
-            super(key)
-            this.component = VueNumControl
-            this.props = { emitter, ikey: key, readonly }
-          }
+      onMounted(() => {
+        init(rete.value)
+      })
 
-          setValue(val) {
-            this.vueContext.value = val
-          }
-        }
+      // Init node editor
+      async function init(container) {
+        var components = [new FuncComponent('test-ex'), new FuncComponent('test-ex2'), new TopicComponent()]
 
-        class TopicControl extends Control {
-          constructor(emitter, key, readonly) {
-            super(key)
-            this.component = VueTopicControl
-            this.props = { emitter, ikey: key, readonly }
-          }
-
-          setValue(val) {
-            this.VueContext.value = val
-          }
-        }
-
-        class NumComponent extends Component {
-          constructor() {
-            super('Number')
-          }
-
-          builder(node) {
-            const out1 = new Output('num', 'Number', numSocket)
-            return node.addControl(new NumControl(editor, 'num')).addOutput(out1)
-          }
-
-          worker(node, inputs, outputs) {
-            outputs['num'] = node.data.num
-          }
-        }
-
-        class AddComponent extends Component {
-          constructor() {
-            super('Add')
-          }
-          builder(node) {
-            const inp1 = new Input('num', 'Number', numSocket)
-            const inp2 = new Input('num2', 'Number2', numSocket)
-            const out = new Output('num', 'Number', numSocket)
-
-            inp1.addControl(new NumControl(editor, 'num'))
-            inp2.addControl(new NumControl(editor, 'num2'))
-
-            return node.addInput(inp1).addInput(inp2).addControl(new NumControl(editor, 'preview', true)).addOutput(out)
-          }
-          worker(node, inputs, outputs) {
-            const n1 = inputs['num'].length ? inputs['num'][0] : node.data.num1
-            const n2 = inputs['num2'].length ? inputs['num2'][0] : node.data.num2
-            const sum = n1 + n2
-
-            this.editor.nodes
-              .find((n) => n.id == node.id)
-              .controls.get('preview')
-              .setValue(sum)
-            outputs['num'] = sum
-          }
-        }
-
-        class TestFunc extends Component {
-          constructor() {
-            super('test-func')
-            this.contextMenuName = 'Add my comp'
-          }
-
-          builder(node) {
-            const inp1 = new Input('in', 'Input', topicSocket)
-            const out = new Output('out', 'Output', topicSocket)
-            const log = new Output('log', 'Log', topicSocket)
-
-            const topicControl = new TopicControl(this.editor, 'preview', false)
-
-            return node.addInput(inp1).addOutput(log).addOutput(out).addControl(topicControl)
-          }
-
-          rename(component) {
-            return component.contextMenuName || component.name
-          }
-
-          worker(node, inputs, outputs) {}
-        }
-
-        const components = [new NumComponent(), new AddComponent(), new TestFunc()]
-
-        editor = new NodeEditor('fs-flow@0.1.0', nodeEditor.value)
+        var editor = new Rete.NodeEditor('fs-flow@0.1.0', container)
         editor.use(ConnectionPlugin)
         editor.use(VueRenderPlugin)
         // editor.use(ContextMenuPlugin)
-        editor.use(AreaPlugin, {
-          background: false,
-          snap: false,
-          scaleExtent: { min: 1, max: 2 },
-          translateExtent: { width: 5000, height: 4000 }
-        })
+        editor.use(AreaPlugin)
         editor.use(DockPlugin, {
           container: document.querySelector('.dock'),
           itemClass: 'item',
           plugins: [VueRenderPlugin]
         })
 
-        engine = new Engine('fs-flow@0.1.0')
+        var engine = new Rete.Engine('fs-flow@0.1.0')
 
         components.map((c) => {
           editor.register(c)
           engine.register(c)
         })
 
-        const n1 = await components[0].createNode({ num: 2 })
-        const n2 = await components[0].createNode({ num: 0 })
-        const add = await components[1].createNode()
-        // const testFunc = await components[2].createNode()
-
-        n1.position = [80, 200]
-        n2.position = [80, 400]
-        add.position = [500, 240]
-
-        editor.addNode(n1)
-        editor.addNode(n2)
-        editor.addNode(add)
-        // editor.addNode(testFunc)
-
-        editor.connect(n1.outputs.get('num'), add.inputs.get('num'))
-        editor.connect(n2.outputs.get('num'), add.inputs.get('num2'))
-
-        editor.on('process nodecreated noderemoved connectioncreated connectionremoved', async () => {
-          console.log('process')
-          await engine.abort()
-          await engine.process(editor.toJSON())
+        editor.on('zoom', ({ source }) => {
+          return source !== 'dblclick'
+        })
+        editor.on('rendernode', ({ el, node }) => {
+          el.addEventListener('dblclick', () => {
+            nodeName.value = node.name
+            detail.value.visibilityBinding = true
+          })
         })
 
         editor.view.resize()
         AreaPlugin.zoomAt(editor)
-        editor.trigger('process')
-      })
+
+        return editor
+      }
 
       return {
-        nodeEditor,
-        editor,
-        engine
+        detail,
+        rete,
+        nodeName
       }
     }
   })
 </script>
 
 <style>
-  .node-editor {
-    text-align: left;
-    height: 100vh;
-    width: 100vw;
+  #rete {
+    width: 100%;
+    height: 1000px;
   }
+
   .node .control input,
   .node .input-control input {
     width: 140px;
   }
+
   select,
   input {
     width: 100%;
@@ -227,23 +122,16 @@
   .dock-menu .dock-item {
     margin: 8em;
   }
-
   .dock {
     height: 100px;
     overflow-x: auto;
     overflow-y: hidden;
     white-space: nowrap;
   }
-
   .dock-item {
     display: inline-block;
     vertical-align: top;
     transform: scale(0.8);
     transform-origin: 50% 0;
-  }
-
-  .container {
-    flex: 1;
-    overflow: hidden;
   }
 </style>

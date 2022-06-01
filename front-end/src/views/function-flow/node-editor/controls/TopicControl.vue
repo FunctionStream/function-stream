@@ -1,21 +1,22 @@
 <template>
-  <input
-    type="number"
-    :readonly="readonly"
-    :value="value"
-    @input="change($event)"
-    @dblclick.stop=""
-    @pointerdown.stop=""
-    @pointermove.stop=""
-  />
+  <div>
+    <input
+      type="topic"
+      :readonly="readonly"
+      :value="value"
+      placeholder="enter name here"
+      @input="change($event)"
+      @dblclick.stop=""
+      @pointerdown.stop=""
+      @pointermove.stop=""
+    />
+  </div>
 </template>
 
 <script>
   import { ref } from '@vue/reactivity'
-  import { defineComponent, onMounted } from '@vue/runtime-core'
-
-  export default defineComponent({
-    naem: 'NumControl',
+  import { onMounted } from '@vue/runtime-core'
+  export default {
     props: {
       emitter: {
         type: Object,
@@ -38,26 +39,19 @@
     setup(props) {
       const value = ref('')
       onMounted(() => {
+        props.putData('some-setting', value.value)
         value.value = props.getData(props.ikey)
       })
 
       function change(e) {
-        value.value = +e.target.value
-        update()
-      }
-
-      function update() {
-        if (props.ikey) {
-          props.putData(props.ikey, value.value)
-        }
-        props.emitter.trigger('process')
+        value.value = e.target.value
+        props.putData(props.ikey, value.value)
       }
 
       return {
         value,
-        change,
-        update
+        change
       }
     }
-  })
+  }
 </script>
