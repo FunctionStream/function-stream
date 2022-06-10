@@ -6,7 +6,7 @@ Users can manage Pulsar Functions through this platform, including creating, edi
 
 This project is still in its early stages, if you are interested in this project and want to contribute to it or suggest ideas, feel free to join us.
 
-You can join [our slack workspace](https://join.slack.com/t/functionstreamgroup/shared_invite/zt-rkqk9pcy-ARS3Y~wb_7z7lojZII5m4g ) to discuss things about the project together.
+You can join [our slack workspace](https://join.slack.com/t/functionstreamgroup/shared_invite/zt-1ar3ihzpd-Tfqc1EkN6WxtW67clikH~Q ) to discuss things about the project together.
 
 ## Install
 
