@@ -3,21 +3,24 @@ package org.functionstream.fsflow.controller;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.functionstream.fsflow.FunctionFlowManagerApplication;
+import org.functionstream.fsflow.service.TokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultHandlers;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.context.WebApplicationContext;
 
 import javax.annotation.Resource;
+import java.util.Map;
 
-import static org.functionstream.fsflow.controller.TokenController.tokens;
 
 @Slf4j
 @SpringBootTest(classes = {FunctionFlowManagerApplication.class}, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -27,6 +30,8 @@ class UserControllerTest {
     @Autowired
     WebApplicationContext webApplicationContext;
 
+    @Autowired
+    private TokenService tokenService;
     @Resource
     private MockMvc mockMvc;
 
@@ -40,27 +45,25 @@ class UserControllerTest {
     @SneakyThrows
     @Test
     void login() {
+        String requestBody = "{username:admin,password:functionstream}";
         mockMvc.perform(MockMvcRequestBuilders
-                        .get("/user/login")
-                        .param("username", "admin")
-                        .param("password", "functionstream"))
+                        .post("/user/login")
+                        .contentType(MediaType.APPLICATION_JSON).content(requestBody)
+                        .accept(MediaType.APPLICATION_JSON))
                 .andExpect(MockMvcResultMatchers.status().isOk())
                 .andDo(MockMvcResultHandlers.print())
                 .andExpect(MockMvcResultMatchers.jsonPath("msg").value("success"))
                 .andReturn();
-        System.out.println(tokens);
     }
 
     @SneakyThrows
     @Test
     void logout() {
-        mockMvc.perform(MockMvcRequestBuilders
-                .get("/user/login")
-                .param("username", "admin")
-                .param("password", "functionstream"));
+        String token = tokenService.generateToken("admin");
 
         mockMvc.perform(MockMvcRequestBuilders
-                        .post("/user/logout"))
+                        .post("/user/logout")
+                .header("token", token))
                 .andExpect(MockMvcResultMatchers.status().isOk())
                 .andDo(MockMvcResultHandlers.print())
                 .andExpect(MockMvcResultMatchers.jsonPath("msg").value("success"))
@@ -69,21 +72,17 @@ class UserControllerTest {
 
     @SneakyThrows
     @Test
-    void test1() {
-        mockMvc.perform(MockMvcRequestBuilders
-                .get("/user/login")
-                .param("username", "admin")
-                .param("password", "functionstream"));
+    void checkToken() {
 
-        String s = tokens.pollFirst();
-        tokens.add(s);
+        String token = tokenService.generateToken("admin");
         mockMvc.perform(MockMvcRequestBuilders
                         .post("/user/check")
-                        .header("token", s))
+                        .header("token", token))
 
                 .andExpect(MockMvcResultMatchers.status().isOk())
                 .andDo(MockMvcResultHandlers.print())
                 .andExpect(MockMvcResultMatchers.jsonPath("msg").value("success"))
                 .andReturn();
     }
+
 }
