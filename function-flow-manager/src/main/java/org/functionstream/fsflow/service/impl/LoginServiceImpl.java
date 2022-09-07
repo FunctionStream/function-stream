@@ -11,6 +11,7 @@ public class LoginServiceImpl implements LoginService {
     private String account_p;
     @Value("${function-stream.password}")
     private String password_p;
+
     @Override
     public UserEntity login(String username, String password) {
         if (!username.isEmpty() && !password.isEmpty()) {
