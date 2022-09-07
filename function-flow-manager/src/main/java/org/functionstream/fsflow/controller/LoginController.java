@@ -35,7 +35,6 @@ public class LoginController {
     public ResponseEntity login(@RequestBody UserEntity user) {
         String username = user.getUsername();
         String password = user.getPassword();
-        JSONObject jsonObject = new JSONObject();
         try {
             loginService.login(username, password);
             //create JWT
