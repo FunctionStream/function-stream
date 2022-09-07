@@ -9,6 +9,6 @@ public interface TokenService {
 
     String getToken(String key);
 
-    void removeToken(String key);
+    Boolean removeToken(String key);
 
 }

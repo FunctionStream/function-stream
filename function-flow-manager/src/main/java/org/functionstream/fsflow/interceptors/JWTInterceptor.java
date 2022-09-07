@@ -7,6 +7,8 @@ import org.functionstream.fsflow.service.TokenService;
 import org.functionstream.fsflow.service.impl.JWTTokenServiceImpl;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.support.WebApplicationContextUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -23,21 +25,21 @@ public class JWTInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-
         if (tokenService == null) {
             BeanFactory factory = WebApplicationContextUtils
                     .getRequiredWebApplicationContext(request.getServletContext());
             tokenService = (TokenService) factory
                     .getBean("JWTTokenServiceImpl");
         }
-
         HashMap<String, Object> map = new HashMap<>();
 
         String token = request.getHeader("token");
+
         if (token.isEmpty() || !tokenService.getToken(token).equals(token)) {
             map.put("msg", "token null");
             map.put("state", false);
-            String json = new ObjectMapper().writeValueAsString(map);
+            String json = new ObjectMapper()
+                    .writeValueAsString(new ResponseEntity<>("token null", HttpStatus.BAD_REQUEST));
             response.getWriter().println(json);
             return false;
         }

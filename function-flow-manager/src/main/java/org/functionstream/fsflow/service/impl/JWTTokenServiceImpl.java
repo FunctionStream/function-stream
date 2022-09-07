@@ -58,8 +58,9 @@ public class JWTTokenServiceImpl implements TokenService {
     }
 
     @Override
-    public void removeToken(String key) {
+    public Boolean removeToken(String key) {
         tokens.remove(key);
+        return true;
     }
 
     public static DecodedJWT verify(String token) {

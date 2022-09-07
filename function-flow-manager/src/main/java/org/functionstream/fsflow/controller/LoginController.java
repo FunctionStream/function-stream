@@ -6,9 +6,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.functionstream.fsflow.entity.UserEntity;
 import org.functionstream.fsflow.service.LoginService;
 import org.functionstream.fsflow.service.TokenService;
+import org.jose4j.json.internal.json_simple.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
@@ -28,31 +32,31 @@ public class LoginController {
     private ConcurrentHashMap<String, Object> map = new ConcurrentHashMap<>();
 
     @PostMapping("/user/login")
-    public Map<String, Object> login(@RequestBody UserEntity user) {
+    public ResponseEntity login(@RequestBody UserEntity user) {
         String username = user.getUsername();
         String password = user.getPassword();
-
+        JSONObject jsonObject = new JSONObject();
         try {
             loginService.login(username, password);
             //create JWT
-            String token = tokenService.generateToken(username);
-            map.put("state", true);
             map.put("msg", "success");
-            map.put("token", token);
+            map.put("state", true);
+            map.put("token",tokenService.generateToken(username));
+            return new ResponseEntity<>(map,HttpStatus.OK);
         } catch (Exception e) {
+            map.put("msg", "failed");
             map.put("state", false);
-            map.put("msg", e.getMessage());
+            return new ResponseEntity<>(map,HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        return map;
     }
 
 
     @PostMapping("/user/logout")
-    public Map<String, Object> logout(HttpServletRequest request) {
+    public ResponseEntity logout(HttpServletRequest request) {
         String token = request.getHeader("token");
         tokenService.removeToken(token);
         map.put("msg", "success");
         map.put("state", true);
-        return map;
+        return new ResponseEntity<>(map,HttpStatus.OK);
     }
 }
