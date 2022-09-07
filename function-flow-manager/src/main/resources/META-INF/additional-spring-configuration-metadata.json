@@ -1,8 +1,0 @@
-{
-  "properties": [
-    {
-      "name": "function-stream.account",
-      "type": "java.lang.String",
-      "description": "Description for function-stream.account."
-  }
-] }
