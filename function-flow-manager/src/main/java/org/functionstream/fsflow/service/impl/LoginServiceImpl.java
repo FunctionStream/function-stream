@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 public class LoginServiceImpl implements LoginService {
     @Value("${function-stream.account}")
     private String account_p;
-
     @Value("${function-stream.password}")
     private String password_p;
     @Override
