@@ -15,7 +15,7 @@ public class JWTTokenServiceImpl implements TokenService {
 
     private static final String SING = "!@#Qq1";
 
-    public TreeSet<String> tokens =new TreeSet<>();
+    public TreeSet<String> tokens = new TreeSet<>();
 
     @Override
     public String generateToken(String id) {

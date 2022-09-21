@@ -36,11 +36,10 @@ public class JWTInterceptor implements HandlerInterceptor {
         String token = request.getHeader("token");
 
         if (token.isEmpty() || !tokenService.getToken(token).equals(token)) {
-            map.put("msg", "token null");
-            map.put("state", false);
             String json = new ObjectMapper()
-                    .writeValueAsString(new ResponseEntity<>("token null", HttpStatus.BAD_REQUEST));
+                    .writeValueAsString(new ResponseEntity<>("token null or invalid", HttpStatus.BAD_REQUEST));
             response.getWriter().println(json);
+            request.getRequestDispatcher("/user/login");
             return false;
         }
         try {
@@ -61,6 +60,7 @@ public class JWTInterceptor implements HandlerInterceptor {
         map.put("state", false);
         String json = new ObjectMapper().writeValueAsString(map);
         response.getWriter().println(json);
+        request.getRequestDispatcher("/user/login");
         return false;
     }
 }
