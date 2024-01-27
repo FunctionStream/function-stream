@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/server"
 	"github.com/spf13/cobra"
 )
 
@@ -15,5 +15,5 @@ var (
 )
 
 func exec(*cobra.Command, []string) {
-	lib.Run()
+	server.Run()
 }
