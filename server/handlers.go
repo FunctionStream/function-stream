@@ -14,7 +14,10 @@ import (
 
 func StartRESTHandlers() error {
 	r := mux.NewRouter()
-	manager := lib.NewFunctionManager()
+	manager, err := lib.NewFunctionManager()
+	if err != nil {
+		slog.Error("Error creating function manager", err)
+	}
 
 	r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
