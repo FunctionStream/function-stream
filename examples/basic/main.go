@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bufio"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -15,17 +14,8 @@ type Person struct {
 
 func main() {
 	_, _ = fmt.Fprintln(os.Stderr, "Hello from Go!")
-	reader := bufio.NewReader(os.Stdin)
-	lengthBytes := make([]byte, 8)
-	_, err := reader.Read(lengthBytes)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "Failed to read length:", err)
-		os.Exit(1)
-	}
 
-	length := binary.BigEndian.Uint64(lengthBytes)
-	dataBytes := make([]byte, length)
-	_, err = reader.Read(dataBytes)
+	dataBytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "Failed to read data:", err)
 		os.Exit(1)
@@ -43,14 +33,6 @@ func main() {
 	jsonBytes, err := json.Marshal(person)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "Failed to encode JSON:", err)
-		os.Exit(1)
-	}
-
-	lengthBytes = make([]byte, 8)
-	binary.BigEndian.PutUint64(lengthBytes, uint64(len(jsonBytes)))
-	_, err = os.Stdout.Write(lengthBytes)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "Failed to write length to stdout:", err)
 		os.Exit(1)
 	}
 

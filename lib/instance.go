@@ -2,7 +2,7 @@ package lib
 
 import (
 	"context"
-	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/functionstream/functionstream/common"
@@ -17,14 +17,17 @@ import (
 
 type FunctionInstance struct {
 	ctx        context.Context
+	cancelFunc context.CancelFunc
 	definition model.Function
 	pc         pulsar.Client
 	readyCh    chan bool
 }
 
 func NewFunctionInstance(definition model.Function, pc pulsar.Client) *FunctionInstance {
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	return &FunctionInstance{
-		ctx:        context.TODO(),
+		ctx:        ctx,
+		cancelFunc: cancelFunc,
 		definition: definition,
 		pc:         pc,
 		readyCh:    make(chan bool),
@@ -53,11 +56,8 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	inCh := make(chan []byte, 100)
-	stdin := common.NewChanReader(inCh)
-
-	outCh := make(chan []byte, 100)
-	stdout := common.NewChanWriter(outCh)
+	stdin := common.NewChanReader()
+	stdout := common.NewChanWriter()
 
 	config := wazero.NewModuleConfig().
 		WithStdout(stdout).WithStderr(os.Stderr).WithStdin(stdin)
@@ -88,63 +88,52 @@ func (instance *FunctionInstance) Run() {
 
 	}
 
-	go func() {
-		for {
-			msg, err := consumer.Receive(instance.ctx)
-			if err != nil {
-				slog.ErrorContext(instance.ctx, "Error receiving message", err)
-				return
-			}
-			payload := msg.Payload()
-			lengthBytes := make([]byte, 8)
-			binary.BigEndian.PutUint64(lengthBytes, uint64(len(payload)))
-			inCh <- lengthBytes
-			inCh <- payload
-		}
-	}()
-
-	go func() {
-		output := common.NewChanReader(outCh)
-		for {
-			lengthBytes := make([]byte, 8)
-			_, err = output.Read(lengthBytes)
-			if err != nil {
-				slog.ErrorContext(instance.ctx, "Error reading length", err)
-				return
-			}
-
-			length := binary.BigEndian.Uint64(lengthBytes)
-			dataBytes := make([]byte, length)
-			_, err = output.Read(dataBytes)
-			if err != nil {
-				slog.ErrorContext(instance.ctx, "Error reading data", err)
-				return
-			}
-			_, err = producer.Send(instance.ctx, &pulsar.ProducerMessage{
-				Payload: dataBytes,
-			})
-			if err != nil {
-				slog.ErrorContext(instance.ctx, "Error sending message", err)
-				return
-			}
-		}
-	}()
-
 	instance.readyCh <- true
 
-	// InstantiateModule runs the "_start" function, WASI's "main".
-	_, err = r.InstantiateWithConfig(instance.ctx, wasmBytes, config)
-	if err != nil {
-		if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
-			slog.ErrorContext(instance.ctx, "Function exit with code", "code", exitErr.ExitCode())
-			return
-		} else if !ok {
-			slog.ErrorContext(instance.ctx, "Error instantiating function", err)
+	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
+		if errors.Is(err, context.Canceled) {
+			slog.InfoContext(instance.ctx, "function instance has been stopped")
 			return
 		}
+		slog.ErrorContext(ctx, message, args...)
+	}
+
+	for {
+		msg, err := consumer.Receive(instance.ctx)
+		if err != nil {
+			handleErr(instance.ctx, err, "Error receiving message")
+			return
+		}
+		stdin.ResetBuffer(msg.Payload())
+
+		// Trigger the "_start" function, WASI's "main".
+		_, err = r.InstantiateWithConfig(instance.ctx, wasmBytes, config)
+		if err != nil {
+			if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
+				handleErr(instance.ctx, err, "Function exit with code", "code", exitErr.ExitCode())
+			} else if !ok {
+				handleErr(instance.ctx, err, "Error instantiating function")
+			}
+			return
+		}
+
+		output := stdout.GetAndReset()
+		producer.SendAsync(instance.ctx, &pulsar.ProducerMessage{
+			Payload: output,
+		}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
+			if err != nil {
+				handleErr(instance.ctx, err, "Error sending message", "error", err, "messageId", id)
+				return
+			}
+		})
 	}
 }
 
 func (instance *FunctionInstance) WaitForReady() {
 	<-instance.readyCh
+}
+
+func (instance *FunctionInstance) Stop() {
+	instance.cancelFunc()
+	instance.pc.Close()
 }

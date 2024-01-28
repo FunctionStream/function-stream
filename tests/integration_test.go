@@ -78,4 +78,28 @@ func TestBasicFunction(t *testing.T) {
 	if out.Money != 1 {
 		t.Fatalf("expected 1, got %d", out.Money)
 	}
+
+	err = fm.DeleteFunction(f.Name)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	funcList := fm.ListFunctions()
+	if len(funcList) != 0 {
+		t.Fatalf("expected 0, got %d", len(funcList))
+	}
 }
+
+//func TestRest(t *testing.T) {
+//	cfg := apiClient.NewConfiguration()
+//	cli := apiClient.NewAPIClient(cfg)
+//
+//	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), "test").Function(
+//		apiClient.Function{Archive: "/Users/rbt/code/functionstream/bin/example_basic.wasm", Inputs: []string{"a"}, Output: "b"}).Execute()
+//	if err != nil {
+//		t.Fatalf(err.Error())
+//	}
+//	if res.StatusCode != 200 {
+//		t.Fatalf("expected 200, got %d", res.StatusCode)
+//	}
+//}

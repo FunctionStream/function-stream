@@ -34,3 +34,27 @@ func (fm *FunctionManager) StartFunction(f model.Function) {
 	instance.WaitForReady()
 	fm.functionsLock.Unlock()
 }
+
+func (fm *FunctionManager) DeleteFunction(name string) error {
+	fm.functionsLock.Lock()
+	instance, exist := fm.functions[name]
+	if !exist {
+		return common.ErrorFunctionNotFound
+	}
+	delete(fm.functions, name)
+	fm.functionsLock.Unlock()
+	if instance != nil {
+		instance.Stop()
+	}
+	return nil
+}
+
+func (fm *FunctionManager) ListFunctions() (result []string) {
+	fm.functionsLock.Lock()
+	defer fm.functionsLock.Unlock()
+	result = make([]string, len(fm.functions))
+	for k := range fm.functions {
+		result = append(result, k)
+	}
+	return
+}

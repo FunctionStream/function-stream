@@ -12,7 +12,7 @@ type Config struct {
 
 func GetConfig() *Config {
 	return &Config{
-		ListenAddr: getEnvWithDefault("PORT", ":7000"),
+		ListenAddr: getEnvWithDefault("PORT", ":7300"),
 		PulsarURL:  getEnvWithDefault("PULSAR_URL", "pulsar://localhost:6650"),
 	}
 }

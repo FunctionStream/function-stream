@@ -6,11 +6,8 @@ import (
 )
 
 func TestChanReader_Read_HappyPath(t *testing.T) {
-	ch := make(chan []byte, 1)
-	ch <- []byte("Hello, world!")
-	close(ch)
-
-	reader := NewChanReader(ch)
+	reader := NewChanReader()
+	reader.ResetBuffer([]byte("Hello, world!"))
 	buffer := make([]byte, 13)
 
 	n, err := reader.Read(buffer)
@@ -28,10 +25,8 @@ func TestChanReader_Read_HappyPath(t *testing.T) {
 }
 
 func TestChanReader_Read_EmptyChannel(t *testing.T) {
-	ch := make(chan []byte)
-	close(ch)
-
-	reader := NewChanReader(ch)
+	reader := NewChanReader()
+	reader.ResetBuffer([]byte(""))
 	buffer := make([]byte, 10)
 
 	n, err := reader.Read(buffer)
@@ -45,11 +40,8 @@ func TestChanReader_Read_EmptyChannel(t *testing.T) {
 }
 
 func TestChanReader_Read_BufferSmallerThanData(t *testing.T) {
-	ch := make(chan []byte, 1)
-	ch <- []byte("Hello, world!")
-	close(ch)
-
-	reader := NewChanReader(ch)
+	reader := NewChanReader()
+	reader.ResetBuffer([]byte("Hello, world!"))
 	buffer := make([]byte, 5)
 
 	n, err := reader.Read(buffer)
@@ -67,11 +59,8 @@ func TestChanReader_Read_BufferSmallerThanData(t *testing.T) {
 }
 
 func TestChanReader_Read_BufferLargerThanData(t *testing.T) {
-	ch := make(chan []byte, 1)
-	ch <- []byte("Hello")
-	close(ch)
-
-	reader := NewChanReader(ch)
+	reader := NewChanReader()
+	reader.ResetBuffer([]byte("Hello"))
 	buffer := make([]byte, 10)
 
 	n, err := reader.Read(buffer)
