@@ -34,11 +34,6 @@ func NewFunctionInstance(definition model.Function, pc pulsar.Client) *FunctionI
 	}
 }
 
-type Person struct {
-	Name  string `json:"name"`
-	Money int    `json:"money"`
-}
-
 func (instance *FunctionInstance) Run() {
 	r := wazero.NewRuntime(instance.ctx)
 	defer func(runtime wazero.Runtime, ctx context.Context) {
@@ -78,6 +73,9 @@ func (instance *FunctionInstance) Run() {
 		slog.ErrorContext(instance.ctx, "Error creating consumer", err)
 		return
 	}
+	defer func() {
+		consumer.Close()
+	}()
 
 	producer, err := instance.pc.CreateProducer(pulsar.ProducerOptions{
 		Topic: instance.definition.Output,
@@ -85,8 +83,10 @@ func (instance *FunctionInstance) Run() {
 	if err != nil {
 		slog.ErrorContext(instance.ctx, "Error creating producer", err)
 		return
-
 	}
+	defer func() {
+		producer.Close()
+	}()
 
 	instance.readyCh <- true
 
@@ -135,5 +135,4 @@ func (instance *FunctionInstance) WaitForReady() {
 
 func (instance *FunctionInstance) Stop() {
 	instance.cancelFunc()
-	instance.pc.Close()
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
@@ -40,10 +41,23 @@ func StartRESTHandlers() error {
 			http.Error(w, fmt.Errorf("failed to parse function definition: %w", err).Error(), http.StatusBadRequest)
 			return
 		}
+		function.Name = functionName
 
 		slog.Info("Starting function", slog.Any("name", functionName))
 		manager.StartFunction(function)
 	}).Methods("POST")
+
+	r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		functionName := vars["function_name"]
+
+		slog.Info("Deleting function", slog.Any("name", functionName))
+		err := manager.DeleteFunction(functionName)
+		if errors.Is(err, common.ErrorFunctionNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+	}).Methods("DELETE")
 
 	return http.ListenAndServe(common.GetConfig().ListenAddr, r)
 }

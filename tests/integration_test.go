@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/restclient"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -17,6 +16,9 @@ type Person struct {
 }
 
 func TestBasicFunction(t *testing.T) {
+	cfg := restclient.NewConfiguration()
+	cli := restclient.NewAPIClient(cfg)
+
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL: "pulsar://localhost:6650",
 	})
@@ -24,9 +26,9 @@ func TestBasicFunction(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 
-	f := model.Function{
-		Name:    "test",
-		Archive: "../bin/example_basic.wasm",
+	name := "func-" + strconv.Itoa(rand.Int())
+	f := restclient.Function{
+		Archive: "./bin/example_basic.wasm",
 		Inputs:  []string{"test-input-" + strconv.Itoa(rand.Int())},
 		Output:  "test-output-" + strconv.Itoa(rand.Int()),
 	}
@@ -46,12 +48,13 @@ func TestBasicFunction(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 
-	fm, err := lib.NewFunctionManager()
+	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), name).Function(f).Execute()
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-
-	fm.StartFunction(f)
+	if res.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
+	}
 
 	p := Person{Name: "rbt", Money: 0}
 	jsonBytes, err := json.Marshal(p)
@@ -79,27 +82,11 @@ func TestBasicFunction(t *testing.T) {
 		t.Fatalf("expected 1, got %d", out.Money)
 	}
 
-	err = fm.DeleteFunction(f.Name)
+	res, err = cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), name).Execute()
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-
-	funcList := fm.ListFunctions()
-	if len(funcList) != 0 {
-		t.Fatalf("expected 0, got %d", len(funcList))
+	if res.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
 	}
 }
-
-//func TestRest(t *testing.T) {
-//	cfg := apiClient.NewConfiguration()
-//	cli := apiClient.NewAPIClient(cfg)
-//
-//	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), "test").Function(
-//		apiClient.Function{Archive: "/Users/rbt/code/functionstream/bin/example_basic.wasm", Inputs: []string{"a"}, Output: "b"}).Execute()
-//	if err != nil {
-//		t.Fatalf(err.Error())
-//	}
-//	if res.StatusCode != 200 {
-//		t.Fatalf("expected 200, got %d", res.StatusCode)
-//	}
-//}

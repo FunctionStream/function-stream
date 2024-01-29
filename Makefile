@@ -8,7 +8,9 @@ build_example:
 lint:
 	golangci-lint run
 
-test: build build_example
+build_all: build build_example
+
+test:
 	go test ./... -timeout 10m
 
 gen_rest_client:
