@@ -1,0 +1,36 @@
+name: Benchmark
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.21' ]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+      - uses: acifani/setup-tinygo@v2
+        with:
+          tinygo-version: '0.30.0'
+      - run: docker-compose -f ./tests/docker-compose.yaml up -d
+      - run: make build_all
+      - name: Wait for Pulsar service
+        run: until curl http://localhost:8080/metrics > /dev/null 2>&1 ; do sleep 1; done
+      - run: make bench
+      - name: Collect Docker Compose logs
+        if: failure()
+        run: docker-compose -f ./tests/docker-compose.yaml logs || true
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: BenchmarkStressForBasicFunc Profile
+          path: ./BenchmarkStressForBasicFunc.pprof

@@ -13,6 +13,9 @@ build_all: build build_example
 test:
 	go test ./... -timeout 10m
 
+bench:
+	export FS_TEST_WORK_DIR="$(shell pwd)" && go test -bench=. ./benchmark -timeout 10m
+
 gen_rest_client:
 	mkdir -p restclient
 	openapi-generator generate -i ./openapi.yaml -g go -o restclient \

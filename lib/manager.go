@@ -26,13 +26,13 @@ func NewFunctionManager() (*FunctionManager, error) {
 	}, nil
 }
 
-func (fm *FunctionManager) StartFunction(f model.Function) {
+func (fm *FunctionManager) StartFunction(f model.Function) error {
 	fm.functionsLock.Lock()
+	defer fm.functionsLock.Unlock()
 	instance := NewFunctionInstance(f, fm.pc)
 	fm.functions[f.Name] = instance
 	go instance.Run()
-	instance.WaitForReady()
-	fm.functionsLock.Unlock()
+	return instance.WaitForReady()
 }
 
 func (fm *FunctionManager) DeleteFunction(name string) error {

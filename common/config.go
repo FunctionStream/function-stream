@@ -10,11 +10,16 @@ type Config struct {
 	PulsarURL  string
 }
 
+var loadedConfig *Config
+
 func GetConfig() *Config {
-	return &Config{
-		ListenAddr: getEnvWithDefault("PORT", ":7300"),
-		PulsarURL:  getEnvWithDefault("PULSAR_URL", "pulsar://localhost:6650"),
+	if loadedConfig == nil {
+		loadedConfig = &Config{
+			ListenAddr: getEnvWithDefault("PORT", ":7300"),
+			PulsarURL:  getEnvWithDefault("PULSAR_URL", "pulsar://localhost:6650"),
+		}
 	}
+	return loadedConfig
 }
 
 func getEnvWithDefault(key string, defaultVal string) string {

@@ -10,11 +10,6 @@ import (
 	"testing"
 )
 
-type Person struct {
-	Name  string `json:"name"`
-	Money int    `json:"money"`
-}
-
 func TestBasicFunction(t *testing.T) {
 	cfg := restclient.NewConfiguration()
 	cli := restclient.NewAPIClient(cfg)

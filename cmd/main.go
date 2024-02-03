@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/functionstream/functionstream/cmd/perf"
 	"github.com/functionstream/functionstream/cmd/server"
 	"github.com/spf13/cobra"
 	"os"
@@ -17,6 +18,7 @@ var (
 
 func init() {
 	rootCmd.AddCommand(server.Cmd)
+	rootCmd.AddCommand(perf.Cmd)
 }
 
 func main() {

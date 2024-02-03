@@ -2,11 +2,11 @@ package lib
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/pkg/errors"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -20,7 +20,7 @@ type FunctionInstance struct {
 	cancelFunc context.CancelFunc
 	definition model.Function
 	pc         pulsar.Client
-	readyCh    chan bool
+	readyCh    chan error
 }
 
 func NewFunctionInstance(definition model.Function, pc pulsar.Client) *FunctionInstance {
@@ -30,7 +30,7 @@ func NewFunctionInstance(definition model.Function, pc pulsar.Client) *FunctionI
 		cancelFunc: cancelFunc,
 		definition: definition,
 		pc:         pc,
-		readyCh:    make(chan bool),
+		readyCh:    make(chan error),
 	}
 }
 
@@ -47,7 +47,7 @@ func (instance *FunctionInstance) Run() {
 		panic("abort")
 	}).Export("abort").Instantiate(instance.ctx)
 	if err != nil {
-		slog.ErrorContext(instance.ctx, "Error instantiating function module", err)
+		instance.readyCh <- errors.Wrap(err, "Error instantiating function module")
 		return
 	}
 
@@ -55,13 +55,13 @@ func (instance *FunctionInstance) Run() {
 	stdout := common.NewChanWriter()
 
 	config := wazero.NewModuleConfig().
-		WithStdout(stdout).WithStderr(os.Stderr).WithStdin(stdin)
+		WithStdout(stdout).WithStdin(stdin)
 
 	wasi_snapshot_preview1.MustInstantiate(instance.ctx, r)
 
 	wasmBytes, err := os.ReadFile(instance.definition.Archive)
 	if err != nil {
-		slog.ErrorContext(instance.ctx, "Error reading wasm file", err)
+		instance.readyCh <- errors.Wrap(err, "Error reading wasm file")
 		return
 	}
 
@@ -70,7 +70,7 @@ func (instance *FunctionInstance) Run() {
 		SubscriptionName: fmt.Sprintf("function-stream-%s", instance.definition.Name),
 	})
 	if err != nil {
-		slog.ErrorContext(instance.ctx, "Error creating consumer", err)
+		instance.readyCh <- errors.Wrap(err, "Error creating consumer")
 		return
 	}
 	defer func() {
@@ -81,14 +81,14 @@ func (instance *FunctionInstance) Run() {
 		Topic: instance.definition.Output,
 	})
 	if err != nil {
-		slog.ErrorContext(instance.ctx, "Error creating producer", err)
+		instance.readyCh <- errors.Wrap(err, "Error creating producer")
 		return
 	}
 	defer func() {
 		producer.Close()
 	}()
 
-	instance.readyCh <- true
+	instance.readyCh <- nil
 
 	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
 		if errors.Is(err, context.Canceled) {
@@ -129,8 +129,12 @@ func (instance *FunctionInstance) Run() {
 	}
 }
 
-func (instance *FunctionInstance) WaitForReady() {
-	<-instance.readyCh
+func (instance *FunctionInstance) WaitForReady() error {
+	err := <-instance.readyCh
+	if err != nil {
+		slog.ErrorContext(instance.ctx, "Error starting function instance", err)
+	}
+	return err
 }
 
 func (instance *FunctionInstance) Stop() {
