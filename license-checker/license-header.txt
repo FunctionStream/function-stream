@@ -11,10 +11,3 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package tests
-
-type Person struct {
-	Name  string `json:"name"`
-	Money int    `json:"money"`
-}

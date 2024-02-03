@@ -10,11 +10,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-version: '3'
-services:
-  pulsar:
-    image: apachepulsar/pulsar:3.1.2
-    command: bin/pulsar standalone
-    ports:
-      - "6650:6650"
-      - "8080:8080"
+name: License Check
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run license check
+        run: ./license-checker/license-checker.sh
