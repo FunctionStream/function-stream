@@ -22,8 +22,9 @@ import (
 )
 
 type Person struct {
-	Name  string `json:"name"`
-	Money int    `json:"money"`
+	Name     string `json:"name"`
+	Money    int    `json:"money"`
+	Expected int    `json:"expected"`
 }
 
 func main() {

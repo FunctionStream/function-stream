@@ -52,8 +52,9 @@ func New(config Config) Perf {
 }
 
 type Person struct {
-	Name  string `json:"name"`
-	Money int    `json:"money"`
+	Name     string `json:"name"`
+	Money    int    `json:"money"`
+	Expected int    `json:"expected"`
 }
 
 func (p *perf) Run(ctx context.Context) {
@@ -172,7 +173,7 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 		count++
 
 		go func() {
-			person := Person{Name: "rbt", Money: c}
+			person := Person{Name: "rbt", Money: c, Expected: c + 1}
 			jsonBytes, err := json.Marshal(person)
 			if err != nil {
 				slog.Error(
@@ -205,7 +206,7 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 				)
 				os.Exit(1)
 			}
-			if out.Money != c+1 {
+			if out.Money != out.Expected {
 				slog.Error(
 					"Unexpected value for money",
 					slog.Any("money", out.Money),

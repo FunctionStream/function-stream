@@ -150,6 +150,11 @@ func (instance *FunctionInstance) Run() {
 				handleErr(instance.ctx, err, "Error sending message", "error", err, "messageId", id)
 				return
 			}
+			err = consumer.Ack(msg)
+			if err != nil {
+				handleErr(instance.ctx, err, "Error acknowledging message", "error", err, "messageId", id)
+				return
+			}
 		})
 	}
 }
