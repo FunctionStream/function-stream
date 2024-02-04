@@ -21,6 +21,7 @@ import (
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -32,19 +33,25 @@ import (
 type FunctionInstance struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
-	definition model.Function
+	definition *model.Function
 	pc         pulsar.Client
 	readyCh    chan error
+	index      int32
 }
 
-func NewFunctionInstance(definition model.Function, pc pulsar.Client) *FunctionInstance {
+func NewFunctionInstance(definition *model.Function, pc pulsar.Client, index int32) *FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
+	ctx.Value(logrus.Fields{
+		"function-name":  definition.Name,
+		"function-index": index,
+	})
 	return &FunctionInstance{
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
 		definition: definition,
 		pc:         pc,
 		readyCh:    make(chan error),
+		index:      index,
 	}
 }
 
@@ -82,6 +89,7 @@ func (instance *FunctionInstance) Run() {
 	consumer, err := instance.pc.Subscribe(pulsar.ConsumerOptions{
 		Topics:           instance.definition.Inputs,
 		SubscriptionName: fmt.Sprintf("function-stream-%s", instance.definition.Name),
+		Type:             pulsar.Failover,
 	})
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating consumer")
@@ -159,12 +167,8 @@ func (instance *FunctionInstance) Run() {
 	}
 }
 
-func (instance *FunctionInstance) WaitForReady() error {
-	err := <-instance.readyCh
-	if err != nil {
-		slog.ErrorContext(instance.ctx, "Error starting function instance", err)
-	}
-	return err
+func (instance *FunctionInstance) WaitForReady() chan error {
+	return instance.readyCh
 }
 
 func (instance *FunctionInstance) Stop() {

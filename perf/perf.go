@@ -33,6 +33,7 @@ import (
 type Config struct {
 	PulsarURL   string
 	RequestRate float64
+	Func        *restclient.Function
 }
 
 type Perf interface {
@@ -64,10 +65,15 @@ func (p *perf) Run(ctx context.Context) {
 	)
 
 	name := "perf-" + strconv.Itoa(rand.Int())
-	f := restclient.Function{
-		Archive: "./bin/example_basic.wasm",
-		Inputs:  []string{"test-input-" + strconv.Itoa(rand.Int())},
-		Output:  "test-output-" + strconv.Itoa(rand.Int()),
+	var f restclient.Function
+	if p.config.Func != nil {
+		f = *p.config.Func
+	} else {
+		f = restclient.Function{
+			Archive: "./bin/example_basic.wasm",
+			Inputs:  []string{"test-input-" + strconv.Itoa(rand.Int())},
+			Output:  "test-output-" + strconv.Itoa(rand.Int()),
+		}
 	}
 
 	client, err := pulsar.NewClient(pulsar.ClientOptions{

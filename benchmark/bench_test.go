@@ -16,13 +16,18 @@ package benchmark
 
 import (
 	"context"
+	"github.com/apache/pulsar-client-go/pulsaradmin"
+	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/perf"
+	"github.com/functionstream/functionstream/restclient"
 	"github.com/functionstream/functionstream/server"
 	"io"
 	"log/slog"
+	"math/rand"
 	"os"
 	"runtime/pprof"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -50,9 +55,37 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 		})
 	}()
 
+	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
+	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
+	cfg := &pulsaradmin.Config{}
+	admin, err := pulsaradmin.NewClient(cfg)
+	if err != nil {
+		panic(err)
+	}
+	replicas := int32(5)
+	createTopic := func(t string) {
+		tn, err := utils.GetTopicName(t)
+		if err != nil {
+			panic(err)
+		}
+		err = admin.Topics().Create(*tn, int(replicas))
+		if err != nil {
+			panic(err)
+		}
+
+	}
+	createTopic(inputTopic)
+	createTopic(outputTopic)
+
 	pConfig := perf.Config{
 		PulsarURL:   "pulsar://localhost:6650",
-		RequestRate: 20000.0,
+		RequestRate: 100000.0,
+		Func: &restclient.Function{
+			Archive:  "./bin/example_basic.wasm",
+			Inputs:   []string{inputTopic},
+			Output:   outputTopic,
+			Replicas: &replicas,
+		},
 	}
 
 	b.ReportAllocs()

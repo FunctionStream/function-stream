@@ -18,4 +18,5 @@ import "errors"
 
 var (
 	ErrorFunctionNotFound = errors.New("function not found")
+	ErrorFunctionExists   = errors.New("function already exists")
 )

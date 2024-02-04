@@ -81,6 +81,8 @@ components:
             type: string
         output:
           type: string
+        replicas:
+          type: integer
         config:
           type: object
           additionalProperties:

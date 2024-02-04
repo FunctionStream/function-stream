@@ -18,11 +18,12 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
+	"log/slog"
 	"sync"
 )
 
 type FunctionManager struct {
-	functions     map[string]*FunctionInstance
+	functions     map[string][]*FunctionInstance
 	functionsLock sync.Mutex
 	pc            pulsar.Client
 }
@@ -35,29 +36,43 @@ func NewFunctionManager() (*FunctionManager, error) {
 		return nil, err
 	}
 	return &FunctionManager{
-		functions: make(map[string]*FunctionInstance),
+		functions: make(map[string][]*FunctionInstance),
 		pc:        pc,
 	}, nil
 }
 
-func (fm *FunctionManager) StartFunction(f model.Function) error {
+func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
-	instance := NewFunctionInstance(f, fm.pc)
-	fm.functions[f.Name] = instance
-	go instance.Run()
-	return instance.WaitForReady()
+	if _, exist := fm.functions[f.Name]; exist {
+		fm.functionsLock.Unlock()
+		return common.ErrorFunctionExists
+	}
+	fm.functions[f.Name] = make([]*FunctionInstance, f.Replicas)
+	for i := int32(0); i < f.Replicas; i++ {
+		instance := NewFunctionInstance(f, fm.pc, i)
+		fm.functions[f.Name][i] = instance
+		go instance.Run()
+		if err := <-instance.WaitForReady(); err != nil {
+			if err != nil {
+				slog.ErrorContext(instance.ctx, "Error starting function instance", err)
+			}
+			fm.functionsLock.Unlock()
+			return err
+		}
+	}
+	return nil
 }
 
 func (fm *FunctionManager) DeleteFunction(name string) error {
 	fm.functionsLock.Lock()
-	instance, exist := fm.functions[name]
+	instances, exist := fm.functions[name]
 	if !exist {
 		return common.ErrorFunctionNotFound
 	}
 	delete(fm.functions, name)
 	fm.functionsLock.Unlock()
-	if instance != nil {
+	for _, instance := range instances {
 		instance.Stop()
 	}
 	return nil
