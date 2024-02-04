@@ -15,7 +15,6 @@
 package lib
 
 import (
-	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"log/slog"
@@ -23,21 +22,19 @@ import (
 )
 
 type FunctionManager struct {
-	functions     map[string][]*FunctionInstance
-	functionsLock sync.Mutex
-	pc            pulsar.Client
+	functions         map[string][]*FunctionInstance
+	functionsLock     sync.Mutex
+	eventQueueFactory EventQueueFactory
 }
 
 func NewFunctionManager() (*FunctionManager, error) {
-	pc, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL: common.GetConfig().PulsarURL,
-	})
+	eventQueueFactory, err := NewPulsarEventQueueFactory()
 	if err != nil {
 		return nil, err
 	}
 	return &FunctionManager{
-		functions: make(map[string][]*FunctionInstance),
-		pc:        pc,
+		functions:         make(map[string][]*FunctionInstance),
+		eventQueueFactory: eventQueueFactory,
 	}, nil
 }
 
@@ -50,7 +47,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	}
 	fm.functions[f.Name] = make([]*FunctionInstance, f.Replicas)
 	for i := int32(0); i < f.Replicas; i++ {
-		instance := NewFunctionInstance(f, fm.pc, i)
+		instance := NewFunctionInstance(f, fm.eventQueueFactory, i)
 		fm.functions[f.Name][i] = instance
 		go instance.Run()
 		if err := <-instance.WaitForReady(); err != nil {
