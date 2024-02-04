@@ -28,7 +28,10 @@ type Person struct {
 
 func main() {
 	_, _ = fmt.Fprintln(os.Stderr, "Hello from Go!")
+}
 
+//export process
+func process() {
 	dataBytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "Failed to read data:", err)

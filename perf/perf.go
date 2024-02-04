@@ -135,10 +135,9 @@ func (p *perf) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			r := float64(ops) / float64(reportInterval/time.Second)
 			slog.Info(fmt.Sprintf(`Stats - Total ops: %6.1f ops/s - Failed ops: %6.1f ops/s
 			Latency ms: 50%% %5.1f - 95%% %5.1f - 99%% %5.1f - 99.9%% %5.1f - max %6.1f`,
-				r,
+				float64(ops)/float64(reportInterval/time.Second),
 				float64(failureCount)/float64(reportInterval/time.Second),
 				q.Query(0.5),
 				q.Query(0.95),

@@ -52,7 +52,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	pConfig := perf.Config{
 		PulsarURL:   "pulsar://localhost:6650",
-		RequestRate: 500.0,
+		RequestRate: 20000.0,
 	}
 
 	b.ReportAllocs()
