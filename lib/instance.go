@@ -29,12 +29,12 @@ import (
 )
 
 type FunctionInstance struct {
-	ctx          context.Context
-	cancelFunc   context.CancelFunc
-	definition   *model.Function
-	queueFactory EventQueueFactory
-	readyCh      chan error
-	index        int32
+	ctx        context.Context
+	cancelFunc context.CancelFunc
+	definition *model.Function
+	newQueue   EventQueueFactory
+	readyCh    chan error
+	index      int32
 }
 
 func NewFunctionInstance(definition *model.Function, queueFactory EventQueueFactory, index int32) *FunctionInstance {
@@ -44,12 +44,12 @@ func NewFunctionInstance(definition *model.Function, queueFactory EventQueueFact
 		"function-index": index,
 	})
 	return &FunctionInstance{
-		ctx:          ctx,
-		cancelFunc:   cancelFunc,
-		definition:   definition,
-		queueFactory: queueFactory,
-		readyCh:      make(chan error),
-		index:        index,
+		ctx:        ctx,
+		cancelFunc: cancelFunc,
+		definition: definition,
+		newQueue:   queueFactory,
+		readyCh:    make(chan error),
+		index:      index,
 	}
 }
 
@@ -84,7 +84,7 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	queue, err := instance.queueFactory.NewEventQueue(instance.ctx, instance.definition)
+	queue, err := instance.newQueue(instance.ctx, instance.definition)
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating event queue")
 		return
@@ -118,14 +118,17 @@ func (instance *FunctionInstance) Run() {
 	instance.readyCh <- nil
 
 	for e := range queue.GetRecvChan() {
-		stdin.ResetBuffer(e.GetPayload())
+		payload, ackFunc := e()
+		stdin.ResetBuffer(payload)
 		_, err = process.Call(instance.ctx)
 		if err != nil {
 			handleErr(instance.ctx, err, "Error calling process function")
 			return
 		}
 		output := stdout.GetAndReset()
-		queue.GetSendChan() <- NewSinkEventImpl(output, e)
+		queue.GetSendChan() <- func() ([]byte, func()) {
+			return output, ackFunc
+		}
 	}
 }
 

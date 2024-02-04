@@ -19,9 +19,14 @@ import (
 	"os"
 )
 
+const (
+	PulsarQueueType = "pulsar"
+)
+
 type Config struct {
 	ListenAddr string
 	PulsarURL  string
+	QueueType  string
 }
 
 var loadedConfig *Config
@@ -31,6 +36,7 @@ func GetConfig() *Config {
 		loadedConfig = &Config{
 			ListenAddr: getEnvWithDefault("PORT", ":7300"),
 			PulsarURL:  getEnvWithDefault("PULSAR_URL", "pulsar://localhost:6650"),
+			QueueType:  getEnvWithDefault("QUEUE_TYPE", PulsarQueueType),
 		}
 	}
 	return loadedConfig
