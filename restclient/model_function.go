@@ -21,11 +21,12 @@ var _ MappedNullable = &Function{}
 
 // Function struct for Function
 type Function struct {
-	Name    *string            `json:"name,omitempty"`
-	Archive string             `json:"archive"`
-	Inputs  []string           `json:"inputs"`
-	Output  string             `json:"output"`
-	Config  *map[string]string `json:"config,omitempty"`
+	Name     *string            `json:"name,omitempty"`
+	Archive  string             `json:"archive"`
+	Inputs   []string           `json:"inputs"`
+	Output   string             `json:"output"`
+	Replicas *int32             `json:"replicas,omitempty"`
+	Config   *map[string]string `json:"config,omitempty"`
 }
 
 type _Function Function
@@ -154,6 +155,38 @@ func (o *Function) SetOutput(v string) {
 	o.Output = v
 }
 
+// GetReplicas returns the Replicas field value if set, zero value otherwise.
+func (o *Function) GetReplicas() int32 {
+	if o == nil || IsNil(o.Replicas) {
+		var ret int32
+		return ret
+	}
+	return *o.Replicas
+}
+
+// GetReplicasOk returns a tuple with the Replicas field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Function) GetReplicasOk() (*int32, bool) {
+	if o == nil || IsNil(o.Replicas) {
+		return nil, false
+	}
+	return o.Replicas, true
+}
+
+// HasReplicas returns a boolean if a field has been set.
+func (o *Function) HasReplicas() bool {
+	if o != nil && !IsNil(o.Replicas) {
+		return true
+	}
+
+	return false
+}
+
+// SetReplicas gets a reference to the given int32 and assigns it to the Replicas field.
+func (o *Function) SetReplicas(v int32) {
+	o.Replicas = &v
+}
+
 // GetConfig returns the Config field value if set, zero value otherwise.
 func (o *Function) GetConfig() map[string]string {
 	if o == nil || IsNil(o.Config) {
@@ -202,6 +235,9 @@ func (o Function) ToMap() (map[string]interface{}, error) {
 	toSerialize["archive"] = o.Archive
 	toSerialize["inputs"] = o.Inputs
 	toSerialize["output"] = o.Output
+	if !IsNil(o.Replicas) {
+		toSerialize["replicas"] = o.Replicas
+	}
 	if !IsNil(o.Config) {
 		toSerialize["config"] = o.Config
 	}

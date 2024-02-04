@@ -65,30 +65,32 @@ func TestBasicFunction(t *testing.T) {
 		t.Fatalf("expected 200, got %d", res.StatusCode)
 	}
 
-	p := Person{Name: "rbt", Money: 0}
-	jsonBytes, err := json.Marshal(p)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	_, err = producer.Send(context.Background(), &pulsar.ProducerMessage{
-		Payload: jsonBytes,
-	})
-	if err != nil {
-		return
-	}
+	for i := 0; i < 10; i++ {
+		p := Person{Name: "rbt", Money: 0}
+		jsonBytes, err := json.Marshal(p)
+		if err != nil {
+			t.Fatalf(err.Error())
+		}
+		_, err = producer.Send(context.Background(), &pulsar.ProducerMessage{
+			Payload: jsonBytes,
+		})
+		if err != nil {
+			return
+		}
 
-	msg, err := consumer.Receive(context.Background())
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	payload := msg.Payload()
-	var out Person
-	err = json.Unmarshal(payload, &out)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	if out.Money != 1 {
-		t.Fatalf("expected 1, got %d", out.Money)
+		msg, err := consumer.Receive(context.Background())
+		if err != nil {
+			t.Fatalf(err.Error())
+		}
+		payload := msg.Payload()
+		var out Person
+		err = json.Unmarshal(payload, &out)
+		if err != nil {
+			t.Fatalf(err.Error())
+		}
+		if out.Money != 1 {
+			t.Fatalf("expected 1, got %d", out.Money)
+		}
 	}
 
 	res, err = cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), name).Execute()

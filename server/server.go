@@ -21,6 +21,7 @@ import (
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/restclient"
 	"github.com/gorilla/mux"
 	"io"
 	"log/slog"
@@ -66,16 +67,22 @@ func (s *Server) startRESTHandlers() error {
 			return
 		}
 
-		var function model.Function
+		var function restclient.Function
 		err = json.Unmarshal(body, &function)
 		if err != nil {
 			http.Error(w, fmt.Errorf("failed to parse function definition: %w", err).Error(), http.StatusBadRequest)
 			return
 		}
-		function.Name = functionName
+		function.Name = &functionName
+
+		f, err := constructFunction(&function)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
 		slog.Info("Starting function", slog.Any("name", functionName))
-		err = s.manager.StartFunction(function)
+		err = s.manager.StartFunction(f)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -100,4 +107,27 @@ func (s *Server) startRESTHandlers() error {
 func (s *Server) Close() error {
 	slog.Info("Shutting down function stream server")
 	return nil
+}
+
+func constructFunction(function *restclient.Function) (*model.Function, error) {
+	if function.Name == nil {
+		return nil, errors.New("function name is required")
+	}
+	f := &model.Function{
+		Name:    *function.Name,
+		Archive: function.Archive,
+		Inputs:  function.Inputs,
+		Output:  function.Output,
+	}
+	if function.Replicas != nil {
+		f.Replicas = *function.Replicas
+	} else {
+		f.Replicas = 1
+	}
+	if function.Config != nil {
+		f.Config = *function.Config
+	} else {
+		f.Config = make(map[string]string)
+	}
+	return f, nil
 }

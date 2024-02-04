@@ -8,6 +8,7 @@ Name | Type | Description | Notes
 **Archive** | **string** |  | 
 **Inputs** | **[]string** |  | 
 **Output** | **string** |  | 
+**Replicas** | Pointer to **int32** |  | [optional] 
 **Config** | Pointer to **map[string]string** |  | [optional] 
 
 ## Methods
@@ -113,6 +114,31 @@ and a boolean to check if the value has been set.
 
 SetOutput sets Output field to given value.
 
+
+### GetReplicas
+
+`func (o *Function) GetReplicas() int32`
+
+GetReplicas returns the Replicas field if non-nil, zero value otherwise.
+
+### GetReplicasOk
+
+`func (o *Function) GetReplicasOk() (*int32, bool)`
+
+GetReplicasOk returns a tuple with the Replicas field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetReplicas
+
+`func (o *Function) SetReplicas(v int32)`
+
+SetReplicas sets Replicas field to given value.
+
+### HasReplicas
+
+`func (o *Function) HasReplicas() bool`
+
+HasReplicas returns a boolean if a field has been set.
 
 ### GetConfig
 

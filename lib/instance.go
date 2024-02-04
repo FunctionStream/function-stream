@@ -21,6 +21,7 @@ import (
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -32,19 +33,25 @@ import (
 type FunctionInstance struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
-	definition model.Function
+	definition *model.Function
 	pc         pulsar.Client
 	readyCh    chan error
+	index      int32
 }
 
-func NewFunctionInstance(definition model.Function, pc pulsar.Client) *FunctionInstance {
+func NewFunctionInstance(definition *model.Function, pc pulsar.Client, index int32) *FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
+	ctx.Value(logrus.Fields{
+		"function-name":  definition.Name,
+		"function-index": index,
+	})
 	return &FunctionInstance{
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
 		definition: definition,
 		pc:         pc,
 		readyCh:    make(chan error),
+		index:      index,
 	}
 }
 
@@ -69,7 +76,7 @@ func (instance *FunctionInstance) Run() {
 	stdout := common.NewChanWriter()
 
 	config := wazero.NewModuleConfig().
-		WithStdout(stdout).WithStdin(stdin)
+		WithStdout(stdout).WithStdin(stdin).WithStderr(os.Stderr)
 
 	wasi_snapshot_preview1.MustInstantiate(instance.ctx, r)
 
@@ -82,6 +89,7 @@ func (instance *FunctionInstance) Run() {
 	consumer, err := instance.pc.Subscribe(pulsar.ConsumerOptions{
 		Topics:           instance.definition.Inputs,
 		SubscriptionName: fmt.Sprintf("function-stream-%s", instance.definition.Name),
+		Type:             pulsar.Failover,
 	})
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating consumer")
@@ -102,8 +110,6 @@ func (instance *FunctionInstance) Run() {
 		producer.Close()
 	}()
 
-	instance.readyCh <- nil
-
 	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
 		if errors.Is(err, context.Canceled) {
 			slog.InfoContext(instance.ctx, "function instance has been stopped")
@@ -111,6 +117,24 @@ func (instance *FunctionInstance) Run() {
 		}
 		slog.ErrorContext(ctx, message, args...)
 	}
+
+	// Trigger the "_start" function, WASI's "main".
+	mod, err := r.InstantiateWithConfig(instance.ctx, wasmBytes, config)
+	if err != nil {
+		if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
+			handleErr(instance.ctx, err, "Function exit with code", "code", exitErr.ExitCode())
+		} else if !ok {
+			handleErr(instance.ctx, err, "Error instantiating function")
+		}
+		return
+	}
+	process := mod.ExportedFunction("process")
+	if process == nil {
+		instance.readyCh <- errors.New("No process function found")
+		return
+	}
+
+	instance.readyCh <- nil
 
 	for {
 		msg, err := consumer.Receive(instance.ctx)
@@ -120,14 +144,9 @@ func (instance *FunctionInstance) Run() {
 		}
 		stdin.ResetBuffer(msg.Payload())
 
-		// Trigger the "_start" function, WASI's "main".
-		_, err = r.InstantiateWithConfig(instance.ctx, wasmBytes, config)
+		_, err = process.Call(instance.ctx)
 		if err != nil {
-			if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
-				handleErr(instance.ctx, err, "Function exit with code", "code", exitErr.ExitCode())
-			} else if !ok {
-				handleErr(instance.ctx, err, "Error instantiating function")
-			}
+			handleErr(instance.ctx, err, "Error calling process function")
 			return
 		}
 
@@ -139,16 +158,17 @@ func (instance *FunctionInstance) Run() {
 				handleErr(instance.ctx, err, "Error sending message", "error", err, "messageId", id)
 				return
 			}
+			err = consumer.Ack(msg)
+			if err != nil {
+				handleErr(instance.ctx, err, "Error acknowledging message", "error", err, "messageId", id)
+				return
+			}
 		})
 	}
 }
 
-func (instance *FunctionInstance) WaitForReady() error {
-	err := <-instance.readyCh
-	if err != nil {
-		slog.ErrorContext(instance.ctx, "Error starting function instance", err)
-	}
-	return err
+func (instance *FunctionInstance) WaitForReady() chan error {
+	return instance.readyCh
 }
 
 func (instance *FunctionInstance) Stop() {

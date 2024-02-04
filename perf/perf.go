@@ -33,6 +33,7 @@ import (
 type Config struct {
 	PulsarURL   string
 	RequestRate float64
+	Func        *restclient.Function
 }
 
 type Perf interface {
@@ -52,8 +53,9 @@ func New(config Config) Perf {
 }
 
 type Person struct {
-	Name  string `json:"name"`
-	Money int    `json:"money"`
+	Name     string `json:"name"`
+	Money    int    `json:"money"`
+	Expected int    `json:"expected"`
 }
 
 func (p *perf) Run(ctx context.Context) {
@@ -63,10 +65,15 @@ func (p *perf) Run(ctx context.Context) {
 	)
 
 	name := "perf-" + strconv.Itoa(rand.Int())
-	f := restclient.Function{
-		Archive: "./bin/example_basic.wasm",
-		Inputs:  []string{"test-input-" + strconv.Itoa(rand.Int())},
-		Output:  "test-output-" + strconv.Itoa(rand.Int()),
+	var f restclient.Function
+	if p.config.Func != nil {
+		f = *p.config.Func
+	} else {
+		f = restclient.Function{
+			Archive: "./bin/example_basic.wasm",
+			Inputs:  []string{"test-input-" + strconv.Itoa(rand.Int())},
+			Output:  "test-output-" + strconv.Itoa(rand.Int()),
+		}
 	}
 
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
@@ -135,10 +142,9 @@ func (p *perf) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			r := float64(ops) / float64(reportInterval/time.Second)
 			slog.Info(fmt.Sprintf(`Stats - Total ops: %6.1f ops/s - Failed ops: %6.1f ops/s
 			Latency ms: 50%% %5.1f - 95%% %5.1f - 99%% %5.1f - 99.9%% %5.1f - max %6.1f`,
-				r,
+				float64(ops)/float64(reportInterval/time.Second),
 				float64(failureCount)/float64(reportInterval/time.Second),
 				q.Query(0.5),
 				q.Query(0.95),
@@ -173,7 +179,7 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 		count++
 
 		go func() {
-			person := Person{Name: "rbt", Money: c}
+			person := Person{Name: "rbt", Money: c, Expected: c + 1}
 			jsonBytes, err := json.Marshal(person)
 			if err != nil {
 				slog.Error(
@@ -206,7 +212,7 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 				)
 				os.Exit(1)
 			}
-			if out.Money != c+1 {
+			if out.Money != out.Expected {
 				slog.Error(
 					"Unexpected value for money",
 					slog.Any("money", out.Money),

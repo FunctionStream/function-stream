@@ -22,13 +22,17 @@ import (
 )
 
 type Person struct {
-	Name  string `json:"name"`
-	Money int    `json:"money"`
+	Name     string `json:"name"`
+	Money    int    `json:"money"`
+	Expected int    `json:"expected"`
 }
 
 func main() {
 	_, _ = fmt.Fprintln(os.Stderr, "Hello from Go!")
+}
 
+//export process
+func process() {
 	dataBytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "Failed to read data:", err)

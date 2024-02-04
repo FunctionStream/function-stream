@@ -3,7 +3,7 @@ module github.com/functionstream/functionstream
 go 1.21
 
 require (
-	github.com/apache/pulsar-client-go v0.11.1
+	github.com/apache/pulsar-client-go v0.12.0
 	github.com/bmizerany/perks v0.0.0-20230307044200-03f9df79da1e
 	github.com/gorilla/mux v1.8.1
 	github.com/pkg/errors v0.9.1
@@ -33,6 +33,8 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
+	github.com/hashicorp/errwrap v1.0.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.17.5 // indirect
