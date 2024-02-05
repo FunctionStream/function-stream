@@ -8,7 +8,8 @@ import (
 type Event func() ([]byte, func())
 
 type QueueConfig struct {
-	Name string
+	Inputs []string
+	Output string
 }
 
 type EventQueueFactory func(ctx context.Context, config *QueueConfig, function *model.Function) (EventQueue, error)

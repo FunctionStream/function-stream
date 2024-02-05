@@ -52,7 +52,7 @@ func NewPulsarEventQueueFactory(ctx context.Context) (func(ctx context.Context, 
 				initRecvChan.Do(func() {
 					recvChan = make(chan Event)
 					consumer, err := pc.Subscribe(pulsar.ConsumerOptions{
-						Topics:           f.Inputs,
+						Topics:           config.Inputs,
 						SubscriptionName: fmt.Sprintf("function-stream-%s", f.Name),
 						Type:             pulsar.Failover,
 					})
@@ -82,7 +82,7 @@ func NewPulsarEventQueueFactory(ctx context.Context) (func(ctx context.Context, 
 				initSendChan.Do(func() {
 					sendChan = make(chan Event)
 					producer, err := pc.CreateProducer(pulsar.ProducerOptions{
-						Topic: f.Output,
+						Topic: config.Output,
 					})
 					if err != nil {
 						e = errors.Wrap(err, "Error creating producer")

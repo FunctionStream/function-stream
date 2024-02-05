@@ -84,7 +84,7 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	queue, err := instance.newQueue(instance.ctx, &QueueConfig{Name: ""}, instance.definition)
+	queue, err := instance.newQueue(instance.ctx, &QueueConfig{Inputs: instance.definition.Inputs, Output: instance.definition.Output}, instance.definition)
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating event queue")
 		return
