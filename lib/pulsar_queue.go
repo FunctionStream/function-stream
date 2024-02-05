@@ -63,15 +63,13 @@ func NewPulsarEventQueueFactory(ctx context.Context) (func(ctx context.Context, 
 					go func() {
 						defer consumer.Close()
 						for msg := range consumer.Chan() {
-							recvChan <- func() ([]byte, func()) {
-								return msg.Payload(), func() {
-									err := consumer.Ack(msg)
-									if err != nil {
-										handleErr(ctx, err, "Error acknowledging message", "error", err)
-										return
-									}
+							recvChan <- NewAckableEvent(msg.Payload(), func() {
+								err := consumer.Ack(msg)
+								if err != nil {
+									handleErr(ctx, err, "Error acknowledging message", "error", err)
+									return
 								}
-							}
+							})
 						}
 					}()
 				})
@@ -89,15 +87,14 @@ func NewPulsarEventQueueFactory(ctx context.Context) (func(ctx context.Context, 
 					}
 					go func() {
 						for e := range sendChan {
-							payload, ackFunc := e()
 							producer.SendAsync(ctx, &pulsar.ProducerMessage{
-								Payload: payload,
+								Payload: e.GetPayload(),
 							}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
 								if err != nil {
 									handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)
 									return
 								}
-								ackFunc()
+								e.Ack()
 							})
 						}
 					}()
