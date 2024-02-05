@@ -2,7 +2,6 @@ package lib
 
 import (
 	"context"
-	"github.com/functionstream/functionstream/common/model"
 )
 
 type Event interface {
@@ -11,7 +10,8 @@ type Event interface {
 }
 
 type SourceQueueConfig struct {
-	Topics []string
+	Topics  []string
+	SubName string
 }
 
 type SinkQueueConfig struct {
@@ -21,8 +21,8 @@ type SinkQueueConfig struct {
 //type EventQueueFactory func(ctx context.Context, config *QueueConfig, function *model.Function) (EventQueue, error)
 
 type EventQueueFactory interface {
-	NewSourceChan(ctx context.Context, config *SourceQueueConfig, function *model.Function) (<-chan Event, error)
-	NewSinkChan(ctx context.Context, config *SinkQueueConfig, function *model.Function) (chan<- Event, error)
+	NewSourceChan(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error)
+	NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error)
 }
 
 type EventQueue interface {

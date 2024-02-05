@@ -16,6 +16,7 @@ package lib
 
 import (
 	"context"
+	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/pkg/errors"
@@ -108,12 +109,12 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	sourceChan, err := instance.queueFactory.NewSourceChan(instance.ctx, &SourceQueueConfig{Topics: instance.definition.Inputs}, instance.definition)
+	sourceChan, err := instance.queueFactory.NewSourceChan(instance.ctx, &SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)})
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating source event queue")
 		return
 	}
-	sinkChan, err := instance.queueFactory.NewSinkChan(instance.ctx, &SinkQueueConfig{Topic: instance.definition.Output}, instance.definition)
+	sinkChan, err := instance.queueFactory.NewSinkChan(instance.ctx, &SinkQueueConfig{Topic: instance.definition.Output})
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
 		return

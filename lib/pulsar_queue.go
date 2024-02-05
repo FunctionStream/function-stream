@@ -2,24 +2,22 @@ package lib
 
 import (
 	"context"
-	"fmt"
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/functionstream/functionstream/common/model"
 	"github.com/pkg/errors"
 	"log/slog"
 )
 
 type PulsarEventQueueFactory struct {
-	newSourceChan func(ctx context.Context, config *SourceQueueConfig, f *model.Function) (<-chan Event, error)
-	newSinkChan   func(ctx context.Context, config *SinkQueueConfig, f *model.Function) (chan<- Event, error)
+	newSourceChan func(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error)
+	newSinkChan   func(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error)
 }
 
-func (f *PulsarEventQueueFactory) NewSourceChan(ctx context.Context, config *SourceQueueConfig, function *model.Function) (<-chan Event, error) {
-	return f.newSourceChan(ctx, config, function)
+func (f *PulsarEventQueueFactory) NewSourceChan(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
+	return f.newSourceChan(ctx, config)
 }
 
-func (f *PulsarEventQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig, function *model.Function) (chan<- Event, error) {
-	return f.newSinkChan(ctx, config, function)
+func (f *PulsarEventQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
+	return f.newSinkChan(ctx, config)
 }
 
 func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueueFactory, error) {
@@ -43,11 +41,11 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 		slog.ErrorContext(ctx, message, args...)
 	}
 	return &PulsarEventQueueFactory{
-		newSourceChan: func(ctx context.Context, config *SourceQueueConfig, f *model.Function) (<-chan Event, error) {
+		newSourceChan: func(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
 			c := make(chan Event)
 			consumer, err := pc.Subscribe(pulsar.ConsumerOptions{
 				Topics:           config.Topics,
-				SubscriptionName: fmt.Sprintf("function-stream-%s", f.Name),
+				SubscriptionName: config.SubName,
 				Type:             pulsar.Failover,
 			})
 			if err != nil {
@@ -67,7 +65,7 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 			}()
 			return c, nil
 		},
-		newSinkChan: func(ctx context.Context, config *SinkQueueConfig, f *model.Function) (chan<- Event, error) {
+		newSinkChan: func(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
 			c := make(chan Event)
 			producer, err := pc.CreateProducer(pulsar.ProducerOptions{
 				Topic: config.Topic,

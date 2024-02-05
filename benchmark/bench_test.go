@@ -79,7 +79,80 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	pConfig := perf.Config{
 		PulsarURL:   "pulsar://localhost:6650",
-		RequestRate: 100000.0,
+		RequestRate: 200000.0,
+		Func: &restclient.Function{
+			Archive:  "./bin/example_basic.wasm",
+			Inputs:   []string{inputTopic},
+			Output:   outputTopic,
+			Replicas: &replicas,
+		},
+	}
+
+	b.ReportAllocs()
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	defer cancel()
+
+	profile := "BenchmarkStressForBasicFunc.pprof"
+	file, err := os.Create(profile)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	err = pprof.StartCPUProfile(file)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	perf.New(pConfig).Run(ctx)
+
+	pprof.StopCPUProfile()
+
+	err = s.Close()
+	if err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
+	prepareEnv()
+
+	s := server.New()
+	go func() {
+		common.RunProcess(func() (io.Closer, error) {
+			go s.Run()
+			return s, nil
+		})
+	}()
+
+	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
+	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
+	cfg := &pulsaradmin.Config{}
+	admin, err := pulsaradmin.NewClient(cfg)
+	if err != nil {
+		panic(err)
+	}
+	replicas := int32(5)
+	createTopic := func(t string) {
+		tn, err := utils.GetTopicName(t)
+		if err != nil {
+			panic(err)
+		}
+		err = admin.Topics().Create(*tn, int(replicas))
+		if err != nil {
+			panic(err)
+		}
+
+	}
+	createTopic(inputTopic)
+	createTopic(outputTopic)
+
+	pConfig := perf.Config{
+		PulsarURL:   "pulsar://localhost:6650",
+		RequestRate: 200000.0,
 		Func: &restclient.Function{
 			Archive:  "./bin/example_basic.wasm",
 			Inputs:   []string{inputTopic},
