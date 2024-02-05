@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/pkg/errors"
 	"log/slog"
@@ -23,9 +22,9 @@ func (e *PulsarEvent) GetPayload() []byte {
 	return e.msg.Payload()
 }
 
-func NewPulsarEventQueueFactory(ctx context.Context) (func(ctx context.Context, config *QueueConfig, f *model.Function) (EventQueue, error), error) {
+func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (func(ctx context.Context, config *QueueConfig, f *model.Function) (EventQueue, error), error) {
 	pc, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL: common.GetConfig().PulsarURL,
+		URL: config.PulsarURL,
 	})
 	if err != nil {
 		return nil, err

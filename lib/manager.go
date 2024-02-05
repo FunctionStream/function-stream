@@ -28,8 +28,8 @@ type FunctionManager struct {
 	eventQueueFactory EventQueueFactory
 }
 
-func NewFunctionManager() (*FunctionManager, error) {
-	eventQueueFactory, err := NewPulsarEventQueueFactory(context.Background())
+func NewFunctionManager(config *Config) (*FunctionManager, error) {
+	eventQueueFactory, err := config.QueueBuilder(context.Background(), config)
 	if err != nil {
 		return nil, err
 	}

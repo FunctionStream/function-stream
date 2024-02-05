@@ -33,7 +33,7 @@ type Server struct {
 }
 
 func New() *Server {
-	manager, err := lib.NewFunctionManager()
+	manager, err := lib.NewFunctionManager(GetConfig())
 	if err != nil {
 		slog.Error("Error creating function manager", err)
 	}
@@ -101,7 +101,7 @@ func (s *Server) startRESTHandlers() error {
 		}
 	}).Methods("DELETE")
 
-	return http.ListenAndServe(common.GetConfig().ListenAddr, r)
+	return http.ListenAndServe(GetConfig().ListenAddr, r)
 }
 
 func (s *Server) Close() error {

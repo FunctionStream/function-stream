@@ -126,17 +126,14 @@ func (instance *FunctionInstance) Run() {
 
 	instance.readyCh <- nil
 	for e := range recvChan {
-		payload, ackFunc := e()
-		stdin.ResetBuffer(payload)
+		stdin.ResetBuffer(e.GetPayload())
 		_, err = process.Call(instance.ctx)
 		if err != nil {
 			handleErr(instance.ctx, err, "Error calling process function")
 			return
 		}
 		output := stdout.GetAndReset()
-		sendChan <- func() ([]byte, func()) {
-			return output, ackFunc
-		}
+		sendChan <- NewAckableEvent(output, e.Ack)
 	}
 }
 
