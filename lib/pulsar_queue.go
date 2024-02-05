@@ -10,18 +10,6 @@ import (
 	"sync"
 )
 
-type PulsarMessageQueueFactory struct {
-	pc pulsar.Client
-}
-
-type PulsarEvent struct {
-	msg pulsar.Message
-}
-
-func (e *PulsarEvent) GetPayload() []byte {
-	return e.msg.Payload()
-}
-
 func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (func(ctx context.Context, config *QueueConfig, f *model.Function) (EventQueue, error), error) {
 	pc, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL: config.PulsarURL,
@@ -51,7 +39,7 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (func(ctx c
 				initRecvChan.Do(func() {
 					recvChan = make(chan Event)
 					consumer, err := pc.Subscribe(pulsar.ConsumerOptions{
-						Topics:           config.Inputs,
+						Topics:           config.Topics,
 						SubscriptionName: fmt.Sprintf("function-stream-%s", f.Name),
 						Type:             pulsar.Failover,
 					})
@@ -78,8 +66,12 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (func(ctx c
 				var sendChan chan Event
 				initSendChan.Do(func() {
 					sendChan = make(chan Event)
+					if len(config.Topics) > 1 {
+						e = errors.New("Pulsar sink queue only supports one output topic")
+						return
+					}
 					producer, err := pc.CreateProducer(pulsar.ProducerOptions{
-						Topic: config.Output,
+						Topic: config.Topics[0],
 					})
 					if err != nil {
 						e = errors.Wrap(err, "Error creating producer")

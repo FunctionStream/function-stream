@@ -84,12 +84,6 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	queue, err := instance.newQueue(instance.ctx, &QueueConfig{Inputs: instance.definition.Inputs, Output: instance.definition.Output}, instance.definition)
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error creating event queue")
-		return
-	}
-
 	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
 		if errors.Is(err, context.Canceled) {
 			slog.InfoContext(instance.ctx, "function instance has been stopped")
@@ -113,14 +107,28 @@ func (instance *FunctionInstance) Run() {
 		instance.readyCh <- errors.New("No process function found")
 		return
 	}
-	recvChan, err := queue.GetRecvChan()
+
+	sourceQ, err := instance.newQueue(instance.ctx, &QueueConfig{Topics: instance.definition.Inputs}, instance.definition)
 	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error getting recv channel")
+		instance.readyCh <- errors.Wrap(err, "Error creating source event queue")
 		return
 	}
-	sendChan, err := queue.GetSendChan()
+
+	recvChan, err := sourceQ.GetRecvChan()
 	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error getting send channel")
+		instance.readyCh <- errors.Wrap(err, "Error getting source channel")
+		return
+	}
+
+	sinkQ, err := instance.newQueue(instance.ctx, &QueueConfig{Topics: []string{instance.definition.Output}}, instance.definition)
+	if err != nil {
+		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
+		return
+	}
+
+	sendChan, err := sinkQ.GetSendChan()
+	if err != nil {
+		instance.readyCh <- errors.Wrap(err, "Error getting sink channel")
 		return
 	}
 

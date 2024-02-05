@@ -11,8 +11,7 @@ type Event interface {
 }
 
 type QueueConfig struct {
-	Inputs []string
-	Output string
+	Topics []string
 }
 
 type EventQueueFactory func(ctx context.Context, config *QueueConfig, function *model.Function) (EventQueue, error)
