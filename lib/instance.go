@@ -84,12 +84,11 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	queue, err := instance.newQueue(instance.ctx, instance.definition)
+	queue, err := instance.newQueue(instance.ctx, &QueueConfig{Name: ""}, instance.definition)
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating event queue")
 		return
 	}
-	defer queue.Close()
 
 	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
 		if errors.Is(err, context.Canceled) {
@@ -114,10 +113,19 @@ func (instance *FunctionInstance) Run() {
 		instance.readyCh <- errors.New("No process function found")
 		return
 	}
+	recvChan, err := queue.GetRecvChan()
+	if err != nil {
+		instance.readyCh <- errors.Wrap(err, "Error getting recv channel")
+		return
+	}
+	sendChan, err := queue.GetSendChan()
+	if err != nil {
+		instance.readyCh <- errors.Wrap(err, "Error getting send channel")
+		return
+	}
 
 	instance.readyCh <- nil
-
-	for e := range queue.GetRecvChan() {
+	for e := range recvChan {
 		payload, ackFunc := e()
 		stdin.ResetBuffer(payload)
 		_, err = process.Call(instance.ctx)
@@ -126,7 +134,7 @@ func (instance *FunctionInstance) Run() {
 			return
 		}
 		output := stdout.GetAndReset()
-		queue.GetSendChan() <- func() ([]byte, func()) {
+		sendChan <- func() ([]byte, func()) {
 			return output, ackFunc
 		}
 	}

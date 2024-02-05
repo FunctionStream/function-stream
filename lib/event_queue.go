@@ -7,10 +7,13 @@ import (
 
 type Event func() ([]byte, func())
 
-type EventQueueFactory func(ctx context.Context, function *model.Function) (EventQueue, error)
+type QueueConfig struct {
+	Name string
+}
+
+type EventQueueFactory func(ctx context.Context, config *QueueConfig, function *model.Function) (EventQueue, error)
 
 type EventQueue interface {
-	GetSendChan() chan<- Event
-	GetRecvChan() <-chan Event
-	Close()
+	GetSendChan() (chan<- Event, error)
+	GetRecvChan() (<-chan Event, error)
 }

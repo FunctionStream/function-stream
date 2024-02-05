@@ -15,6 +15,7 @@
 package lib
 
 import (
+	"context"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"log/slog"
@@ -28,7 +29,7 @@ type FunctionManager struct {
 }
 
 func NewFunctionManager() (*FunctionManager, error) {
-	eventQueueFactory, err := NewPulsarEventQueueFactory()
+	eventQueueFactory, err := NewPulsarEventQueueFactory(context.Background())
 	if err != nil {
 		return nil, err
 	}
