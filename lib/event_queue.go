@@ -10,11 +10,20 @@ type Event interface {
 	Ack()
 }
 
-type QueueConfig struct {
+type SourceQueueConfig struct {
 	Topics []string
 }
 
-type EventQueueFactory func(ctx context.Context, config *QueueConfig, function *model.Function) (EventQueue, error)
+type SinkQueueConfig struct {
+	Topic string
+}
+
+//type EventQueueFactory func(ctx context.Context, config *QueueConfig, function *model.Function) (EventQueue, error)
+
+type EventQueueFactory interface {
+	NewSourceChan(ctx context.Context, config *SourceQueueConfig, function *model.Function) (<-chan Event, error)
+	NewSinkChan(ctx context.Context, config *SinkQueueConfig, function *model.Function) (chan<- Event, error)
+}
 
 type EventQueue interface {
 	GetSendChan() (chan<- Event, error)

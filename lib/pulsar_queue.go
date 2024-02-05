@@ -7,10 +7,22 @@ import (
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/pkg/errors"
 	"log/slog"
-	"sync"
 )
 
-func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (func(ctx context.Context, config *QueueConfig, f *model.Function) (EventQueue, error), error) {
+type PulsarEventQueueFactory struct {
+	newSourceChan func(ctx context.Context, config *SourceQueueConfig, f *model.Function) (<-chan Event, error)
+	newSinkChan   func(ctx context.Context, config *SinkQueueConfig, f *model.Function) (chan<- Event, error)
+}
+
+func (f *PulsarEventQueueFactory) NewSourceChan(ctx context.Context, config *SourceQueueConfig, function *model.Function) (<-chan Event, error) {
+	return f.newSourceChan(ctx, config, function)
+}
+
+func (f *PulsarEventQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig, function *model.Function) (chan<- Event, error) {
+	return f.newSinkChan(ctx, config, function)
+}
+
+func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueueFactory, error) {
 	pc, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL: config.PulsarURL,
 	})
@@ -23,88 +35,61 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (func(ctx c
 			pc.Close()
 		}
 	}()
-	return func(ctx context.Context, config *QueueConfig, f *model.Function) (EventQueue, error) {
-		handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
-			if errors.Is(err, context.Canceled) {
-				slog.InfoContext(ctx, "function instance has been stopped")
-				return
-			}
-			slog.ErrorContext(ctx, message, args...)
+	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
+		if errors.Is(err, context.Canceled) {
+			slog.InfoContext(ctx, "function instance has been stopped")
+			return
 		}
-		initRecvChan := &sync.Once{}
-		initSendChan := &sync.Once{}
-		return &PulsarEventQueue{
-			getRecvChan: func() (c <-chan Event, e error) {
-				var recvChan chan Event
-				initRecvChan.Do(func() {
-					recvChan = make(chan Event)
-					consumer, err := pc.Subscribe(pulsar.ConsumerOptions{
-						Topics:           config.Topics,
-						SubscriptionName: fmt.Sprintf("function-stream-%s", f.Name),
-						Type:             pulsar.Failover,
-					})
-					if err != nil {
-						e = errors.Wrap(err, "Error creating consumer")
-						return
-					}
-					go func() {
-						defer consumer.Close()
-						for msg := range consumer.Chan() {
-							recvChan <- NewAckableEvent(msg.Payload(), func() {
-								err := consumer.Ack(msg)
-								if err != nil {
-									handleErr(ctx, err, "Error acknowledging message", "error", err)
-									return
-								}
-							})
+		slog.ErrorContext(ctx, message, args...)
+	}
+	return &PulsarEventQueueFactory{
+		newSourceChan: func(ctx context.Context, config *SourceQueueConfig, f *model.Function) (<-chan Event, error) {
+			c := make(chan Event)
+			consumer, err := pc.Subscribe(pulsar.ConsumerOptions{
+				Topics:           config.Topics,
+				SubscriptionName: fmt.Sprintf("function-stream-%s", f.Name),
+				Type:             pulsar.Failover,
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, "Error creating consumer")
+			}
+			go func() {
+				defer consumer.Close()
+				for msg := range consumer.Chan() {
+					c <- NewAckableEvent(msg.Payload(), func() {
+						err := consumer.Ack(msg)
+						if err != nil {
+							handleErr(ctx, err, "Error acknowledging message", "error", err)
+							return
 						}
-					}()
-				})
-				return recvChan, err
-			},
-			getSendChan: func() (c chan<- Event, e error) {
-				var sendChan chan Event
-				initSendChan.Do(func() {
-					sendChan = make(chan Event)
-					if len(config.Topics) > 1 {
-						e = errors.New("Pulsar sink queue only supports one output topic")
-						return
-					}
-					producer, err := pc.CreateProducer(pulsar.ProducerOptions{
-						Topic: config.Topics[0],
 					})
-					if err != nil {
-						e = errors.Wrap(err, "Error creating producer")
-					}
-					go func() {
-						for e := range sendChan {
-							producer.SendAsync(ctx, &pulsar.ProducerMessage{
-								Payload: e.GetPayload(),
-							}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
-								if err != nil {
-									handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)
-									return
-								}
-								e.Ack()
-							})
+				}
+			}()
+			return c, nil
+		},
+		newSinkChan: func(ctx context.Context, config *SinkQueueConfig, f *model.Function) (chan<- Event, error) {
+			c := make(chan Event)
+			producer, err := pc.CreateProducer(pulsar.ProducerOptions{
+				Topic: config.Topic,
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, "Error creating producer")
+			}
+			go func() {
+				defer producer.Close()
+				for e := range c {
+					producer.SendAsync(ctx, &pulsar.ProducerMessage{
+						Payload: e.GetPayload(),
+					}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
+						if err != nil {
+							handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)
+							return
 						}
-					}()
-				})
-				return sendChan, nil
-			},
-		}, nil
+						e.Ack()
+					})
+				}
+			}()
+			return c, nil
+		},
 	}, nil
-}
-
-type PulsarEventQueue struct {
-	getRecvChan func() (<-chan Event, error)
-	getSendChan func() (chan<- Event, error)
-}
-
-func (q *PulsarEventQueue) GetSendChan() (c chan<- Event, e error) {
-	return q.getSendChan()
-}
-
-func (q *PulsarEventQueue) GetRecvChan() (c <-chan Event, err error) {
-	return q.getRecvChan()
 }

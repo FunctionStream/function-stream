@@ -29,12 +29,12 @@ import (
 )
 
 type FunctionInstance struct {
-	ctx        context.Context
-	cancelFunc context.CancelFunc
-	definition *model.Function
-	newQueue   EventQueueFactory
-	readyCh    chan error
-	index      int32
+	ctx          context.Context
+	cancelFunc   context.CancelFunc
+	definition   *model.Function
+	queueFactory EventQueueFactory
+	readyCh      chan error
+	index        int32
 }
 
 func NewFunctionInstance(definition *model.Function, queueFactory EventQueueFactory, index int32) *FunctionInstance {
@@ -44,12 +44,12 @@ func NewFunctionInstance(definition *model.Function, queueFactory EventQueueFact
 		"function-index": index,
 	})
 	return &FunctionInstance{
-		ctx:        ctx,
-		cancelFunc: cancelFunc,
-		definition: definition,
-		newQueue:   queueFactory,
-		readyCh:    make(chan error),
-		index:      index,
+		ctx:          ctx,
+		cancelFunc:   cancelFunc,
+		definition:   definition,
+		queueFactory: queueFactory,
+		readyCh:      make(chan error),
+		index:        index,
 	}
 }
 
@@ -108,32 +108,19 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	sourceQ, err := instance.newQueue(instance.ctx, &QueueConfig{Topics: instance.definition.Inputs}, instance.definition)
+	sourceChan, err := instance.queueFactory.NewSourceChan(instance.ctx, &SourceQueueConfig{Topics: instance.definition.Inputs}, instance.definition)
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating source event queue")
 		return
 	}
-
-	recvChan, err := sourceQ.GetRecvChan()
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error getting source channel")
-		return
-	}
-
-	sinkQ, err := instance.newQueue(instance.ctx, &QueueConfig{Topics: []string{instance.definition.Output}}, instance.definition)
+	sinkChan, err := instance.queueFactory.NewSinkChan(instance.ctx, &SinkQueueConfig{Topic: instance.definition.Output}, instance.definition)
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
 		return
 	}
 
-	sendChan, err := sinkQ.GetSendChan()
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error getting sink channel")
-		return
-	}
-
 	instance.readyCh <- nil
-	for e := range recvChan {
+	for e := range sourceChan {
 		stdin.ResetBuffer(e.GetPayload())
 		_, err = process.Call(instance.ctx)
 		if err != nil {
@@ -141,7 +128,7 @@ func (instance *FunctionInstance) Run() {
 			return
 		}
 		output := stdout.GetAndReset()
-		sendChan <- NewAckableEvent(output, e.Ack)
+		sinkChan <- NewAckableEvent(output, e.Ack)
 	}
 }
 
