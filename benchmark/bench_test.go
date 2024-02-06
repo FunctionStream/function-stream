@@ -19,6 +19,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsaradmin"
 	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
 	"github.com/functionstream/functionstream/common"
+	"github.com/functionstream/functionstream/lib"
 	"github.com/functionstream/functionstream/perf"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/functionstream/functionstream/server"
@@ -77,7 +78,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 	createTopic(inputTopic)
 	createTopic(outputTopic)
 
-	pConfig := perf.Config{
+	pConfig := &perf.Config{
 		PulsarURL:   "pulsar://localhost:6650",
 		RequestRate: 200000.0,
 		Func: &restclient.Function{
@@ -120,7 +121,19 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	prepareEnv()
 
-	s := server.New()
+	memoryQueueFactory := lib.NewMemoryQueueFactory()
+
+	svrConf := &lib.Config{
+		QueueBuilder: func(ctx context.Context, config *lib.Config) (lib.EventQueueFactory, error) {
+			return memoryQueueFactory, nil
+		},
+	}
+
+	fm, err := lib.NewFunctionManager(svrConf)
+	if err != nil {
+		b.Fatal(err)
+	}
+	s := server.NewWithFM(fm)
 	go func() {
 		common.RunProcess(func() (io.Closer, error) {
 			go s.Run()
@@ -130,34 +143,19 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
-	cfg := &pulsaradmin.Config{}
-	admin, err := pulsaradmin.NewClient(cfg)
-	if err != nil {
-		panic(err)
-	}
-	replicas := int32(5)
-	createTopic := func(t string) {
-		tn, err := utils.GetTopicName(t)
-		if err != nil {
-			panic(err)
-		}
-		err = admin.Topics().Create(*tn, int(replicas))
-		if err != nil {
-			panic(err)
-		}
 
-	}
-	createTopic(inputTopic)
-	createTopic(outputTopic)
+	replicas := int32(15)
 
-	pConfig := perf.Config{
-		PulsarURL:   "pulsar://localhost:6650",
+	pConfig := &perf.Config{
 		RequestRate: 200000.0,
 		Func: &restclient.Function{
 			Archive:  "./bin/example_basic.wasm",
 			Inputs:   []string{inputTopic},
 			Output:   outputTopic,
 			Replicas: &replicas,
+		},
+		QueueBuilder: func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
+			return memoryQueueFactory, nil
 		},
 	}
 

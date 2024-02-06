@@ -104,5 +104,6 @@ dist
 .tern-port
 
 .idea
+.run
 bin/
 .DS_Store

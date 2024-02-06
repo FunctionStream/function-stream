@@ -31,9 +31,10 @@ import (
 )
 
 type Config struct {
-	PulsarURL   string
-	RequestRate float64
-	Func        *restclient.Function
+	PulsarURL    string
+	RequestRate  float64
+	Func         *restclient.Function
+	QueueBuilder lib.QueueBuilder
 }
 
 type Perf interface {
@@ -41,15 +42,24 @@ type Perf interface {
 }
 
 type perf struct {
-	config Config
-	input  chan<- lib.Event
-	output <-chan lib.Event
+	config       *Config
+	input        chan<- lib.Event
+	output       <-chan lib.Event
+	queueBuilder lib.QueueBuilder
 }
 
-func New(config Config) Perf {
-	return &perf{
+func New(config *Config) Perf {
+	p := &perf{
 		config: config,
 	}
+	if config.QueueBuilder == nil {
+		p.queueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
+			return lib.NewPulsarEventQueueFactory(ctx, c)
+		}
+	} else {
+		p.queueBuilder = config.QueueBuilder
+	}
+	return p
 }
 
 type Person struct {
@@ -80,7 +90,7 @@ func (p *perf) Run(ctx context.Context) {
 		PulsarURL: p.config.PulsarURL,
 	}
 
-	queueFactory, err := lib.NewPulsarEventQueueFactory(context.Background(), config)
+	queueFactory, err := p.queueBuilder(context.Background(), config)
 	if err != nil {
 		slog.Error(
 			"Failed to create Event Queue Factory",

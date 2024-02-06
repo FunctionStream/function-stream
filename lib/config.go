@@ -18,8 +18,10 @@ import (
 	"context"
 )
 
+type QueueBuilder func(ctx context.Context, config *Config) (EventQueueFactory, error)
+
 type Config struct {
 	ListenAddr   string
 	PulsarURL    string
-	QueueBuilder func(ctx context.Context, config *Config) (EventQueueFactory, error)
+	QueueBuilder QueueBuilder
 }

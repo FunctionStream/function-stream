@@ -42,6 +42,12 @@ func New() *Server {
 	}
 }
 
+func NewWithFM(fm *lib.FunctionManager) *Server {
+	return &Server{
+		manager: fm,
+	}
+}
+
 func (s *Server) Run() {
 	slog.Info("Hello, Function Stream!")
 	err := s.startRESTHandlers()
