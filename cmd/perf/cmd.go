@@ -30,7 +30,7 @@ var (
 		Run:   exec,
 	}
 
-	config = perf.Config{}
+	config = &perf.Config{}
 )
 
 func init() {

@@ -19,6 +19,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsaradmin"
 	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
 	"github.com/functionstream/functionstream/common"
+	"github.com/functionstream/functionstream/lib"
 	"github.com/functionstream/functionstream/perf"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/functionstream/functionstream/server"
@@ -77,14 +78,84 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 	createTopic(inputTopic)
 	createTopic(outputTopic)
 
-	pConfig := perf.Config{
+	pConfig := &perf.Config{
 		PulsarURL:   "pulsar://localhost:6650",
-		RequestRate: 100000.0,
+		RequestRate: 200000.0,
 		Func: &restclient.Function{
 			Archive:  "./bin/example_basic.wasm",
 			Inputs:   []string{inputTopic},
 			Output:   outputTopic,
 			Replicas: &replicas,
+		},
+	}
+
+	b.ReportAllocs()
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	defer cancel()
+
+	profile := "BenchmarkStressForBasicFunc.pprof"
+	file, err := os.Create(profile)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	err = pprof.StartCPUProfile(file)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	perf.New(pConfig).Run(ctx)
+
+	pprof.StopCPUProfile()
+
+	err = s.Close()
+	if err != nil {
+		b.Fatal(err)
+	}
+}
+
+func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
+	prepareEnv()
+
+	memoryQueueFactory := lib.NewMemoryQueueFactory()
+
+	svrConf := &lib.Config{
+		QueueBuilder: func(ctx context.Context, config *lib.Config) (lib.EventQueueFactory, error) {
+			return memoryQueueFactory, nil
+		},
+	}
+
+	fm, err := lib.NewFunctionManager(svrConf)
+	if err != nil {
+		b.Fatal(err)
+	}
+	s := server.NewWithFM(fm)
+	go func() {
+		common.RunProcess(func() (io.Closer, error) {
+			go s.Run()
+			return s, nil
+		})
+	}()
+
+	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
+	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
+
+	replicas := int32(15)
+
+	pConfig := &perf.Config{
+		RequestRate: 200000.0,
+		Func: &restclient.Function{
+			Archive:  "./bin/example_basic.wasm",
+			Inputs:   []string{inputTopic},
+			Output:   outputTopic,
+			Replicas: &replicas,
+		},
+		QueueBuilder: func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
+			return memoryQueueFactory, nil
 		},
 	}
 

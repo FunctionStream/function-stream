@@ -18,8 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/bmizerany/perks/quantile"
+	"github.com/functionstream/functionstream/lib"
 	"github.com/functionstream/functionstream/restclient"
 	"golang.org/x/time/rate"
 	"log/slog"
@@ -31,9 +31,10 @@ import (
 )
 
 type Config struct {
-	PulsarURL   string
-	RequestRate float64
-	Func        *restclient.Function
+	PulsarURL    string
+	RequestRate  float64
+	Func         *restclient.Function
+	QueueBuilder lib.QueueBuilder
 }
 
 type Perf interface {
@@ -41,15 +42,24 @@ type Perf interface {
 }
 
 type perf struct {
-	config   Config
-	producer pulsar.Producer
-	consumer pulsar.Consumer
+	config       *Config
+	input        chan<- lib.Event
+	output       <-chan lib.Event
+	queueBuilder lib.QueueBuilder
 }
 
-func New(config Config) Perf {
-	return &perf{
+func New(config *Config) Perf {
+	p := &perf{
 		config: config,
 	}
+	if config.QueueBuilder == nil {
+		p.queueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
+			return lib.NewPulsarEventQueueFactory(ctx, c)
+		}
+	} else {
+		p.queueBuilder = config.QueueBuilder
+	}
+	return p
 }
 
 type Person struct {
@@ -76,35 +86,37 @@ func (p *perf) Run(ctx context.Context) {
 		}
 	}
 
-	client, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL: p.config.PulsarURL,
-	})
+	config := &lib.Config{
+		PulsarURL: p.config.PulsarURL,
+	}
+
+	queueFactory, err := p.queueBuilder(context.Background(), config)
 	if err != nil {
 		slog.Error(
-			"Failed to create Pulsar client",
+			"Failed to create Event Queue Factory",
 			slog.Any("error", err),
 		)
 		os.Exit(1)
 	}
 
-	p.consumer, err = client.Subscribe(pulsar.ConsumerOptions{
-		Topic:            f.Output,
-		SubscriptionName: "perf",
-	})
-	if err != nil {
-		slog.Error(
-			"Failed to create Pulsar Consumer",
-			slog.Any("error", err),
-		)
-		os.Exit(1)
-	}
-
-	p.producer, err = client.CreateProducer(pulsar.ProducerOptions{
+	p.input, err = queueFactory.NewSinkChan(context.Background(), &lib.SinkQueueConfig{
 		Topic: f.Inputs[0],
 	})
 	if err != nil {
 		slog.Error(
-			"Failed to create Pulsar Producer",
+			"Failed to create Sink Perf Channel",
+			slog.Any("error", err),
+		)
+		os.Exit(1)
+	}
+
+	p.output, err = queueFactory.NewSourceChan(context.Background(), &lib.SourceQueueConfig{
+		Topics:  []string{f.Output},
+		SubName: "perf",
+	})
+	if err != nil {
+		slog.Error(
+			"Failed to create Source Perf Channel",
 			slog.Any("error", err),
 		)
 		os.Exit(1)
@@ -168,7 +180,6 @@ func (p *perf) Run(ctx context.Context) {
 func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failureCount *int64) {
 	limiter := rate.NewLimiter(rate.Limit(p.config.RequestRate), int(p.config.RequestRate))
 
-	msgCh := p.consumer.Chan()
 	count := 0
 	next := make(chan bool, int(p.config.RequestRate))
 	for {
@@ -189,20 +200,12 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 				os.Exit(1)
 			}
 			start := time.Now()
-			p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
-				Payload: jsonBytes,
-			}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
-				if err != nil {
-					slog.Warn(
-						"Failed to produce message",
-						slog.Any("error", err),
-					)
-				}
-			})
+			p.input <- lib.NewAckableEvent(jsonBytes, func() {})
 			next <- true
-			m := <-msgCh
+			e := <-p.output
 			latencyCh <- time.Since(start).Microseconds()
-			payload := m.Payload()
+			payload := e.GetPayload()
+			e.Ack()
 			var out Person
 			err = json.Unmarshal(payload, &out)
 			if err != nil {

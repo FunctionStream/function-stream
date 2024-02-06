@@ -12,27 +12,37 @@
  * limitations under the License.
  */
 
-package common
+package server
 
 import (
+	"context"
 	"log/slog"
 	"os"
+
+	"github.com/functionstream/functionstream/lib"
 )
 
-type Config struct {
-	ListenAddr string
-	PulsarURL  string
-}
+var loadedConfig *lib.Config
 
-var loadedConfig *Config
+const (
+	PulsarQueueType = "pulsar"
+)
 
-func GetConfig() *Config {
-	if loadedConfig == nil {
-		loadedConfig = &Config{
-			ListenAddr: getEnvWithDefault("PORT", ":7300"),
-			PulsarURL:  getEnvWithDefault("PULSAR_URL", "pulsar://localhost:6650"),
+func init() {
+	loadedConfig = &lib.Config{
+		ListenAddr: getEnvWithDefault("PORT", ":7300"),
+		PulsarURL:  getEnvWithDefault("PULSAR_URL", "pulsar://localhost:6650"),
+	}
+	queueType := getEnvWithDefault("QUEUE_TYPE", PulsarQueueType)
+	switch queueType {
+	case PulsarQueueType:
+		loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
+			return lib.NewPulsarEventQueueFactory(ctx, c)
 		}
 	}
+}
+
+func GetConfig() *lib.Config {
 	return loadedConfig
 }
 

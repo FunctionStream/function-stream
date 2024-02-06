@@ -17,7 +17,6 @@ package lib
 import (
 	"context"
 	"fmt"
-	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/pkg/errors"
@@ -31,27 +30,27 @@ import (
 )
 
 type FunctionInstance struct {
-	ctx        context.Context
-	cancelFunc context.CancelFunc
-	definition *model.Function
-	pc         pulsar.Client
-	readyCh    chan error
-	index      int32
+	ctx          context.Context
+	cancelFunc   context.CancelFunc
+	definition   *model.Function
+	queueFactory EventQueueFactory
+	readyCh      chan error
+	index        int32
 }
 
-func NewFunctionInstance(definition *model.Function, pc pulsar.Client, index int32) *FunctionInstance {
+func NewFunctionInstance(definition *model.Function, queueFactory EventQueueFactory, index int32) *FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx.Value(logrus.Fields{
 		"function-name":  definition.Name,
 		"function-index": index,
 	})
 	return &FunctionInstance{
-		ctx:        ctx,
-		cancelFunc: cancelFunc,
-		definition: definition,
-		pc:         pc,
-		readyCh:    make(chan error),
-		index:      index,
+		ctx:          ctx,
+		cancelFunc:   cancelFunc,
+		definition:   definition,
+		queueFactory: queueFactory,
+		readyCh:      make(chan error),
+		index:        index,
 	}
 }
 
@@ -86,30 +85,6 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	consumer, err := instance.pc.Subscribe(pulsar.ConsumerOptions{
-		Topics:           instance.definition.Inputs,
-		SubscriptionName: fmt.Sprintf("function-stream-%s", instance.definition.Name),
-		Type:             pulsar.Failover,
-	})
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error creating consumer")
-		return
-	}
-	defer func() {
-		consumer.Close()
-	}()
-
-	producer, err := instance.pc.CreateProducer(pulsar.ProducerOptions{
-		Topic: instance.definition.Output,
-	})
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error creating producer")
-		return
-	}
-	defer func() {
-		producer.Close()
-	}()
-
 	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
 		if errors.Is(err, context.Canceled) {
 			slog.InfoContext(instance.ctx, "function instance has been stopped")
@@ -134,40 +109,31 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
+	sourceChan, err := instance.queueFactory.NewSourceChan(instance.ctx, &SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)})
+	if err != nil {
+		instance.readyCh <- errors.Wrap(err, "Error creating source event queue")
+		return
+	}
+	sinkChan, err := instance.queueFactory.NewSinkChan(instance.ctx, &SinkQueueConfig{Topic: instance.definition.Output})
+	if err != nil {
+		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
+		return
+	}
+
 	instance.readyCh <- nil
-
-	for {
-		msg, err := consumer.Receive(instance.ctx)
-		if err != nil {
-			handleErr(instance.ctx, err, "Error receiving message")
-			return
-		}
-		stdin.ResetBuffer(msg.Payload())
-
+	for e := range sourceChan {
+		stdin.ResetBuffer(e.GetPayload())
 		_, err = process.Call(instance.ctx)
 		if err != nil {
 			handleErr(instance.ctx, err, "Error calling process function")
 			return
 		}
-
 		output := stdout.GetAndReset()
-		producer.SendAsync(instance.ctx, &pulsar.ProducerMessage{
-			Payload: output,
-		}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
-			if err != nil {
-				handleErr(instance.ctx, err, "Error sending message", "error", err, "messageId", id)
-				return
-			}
-			err = consumer.Ack(msg)
-			if err != nil {
-				handleErr(instance.ctx, err, "Error acknowledging message", "error", err, "messageId", id)
-				return
-			}
-		})
+		sinkChan <- NewAckableEvent(output, e.Ack)
 	}
 }
 
-func (instance *FunctionInstance) WaitForReady() chan error {
+func (instance *FunctionInstance) WaitForReady() <-chan error {
 	return instance.readyCh
 }
 
