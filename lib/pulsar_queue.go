@@ -28,10 +28,8 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 		return nil, err
 	}
 	go func() {
-		select {
-		case <-ctx.Done():
-			pc.Close()
-		}
+		<-ctx.Done()
+		pc.Close()
 	}()
 	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
 		if errors.Is(err, context.Canceled) {
