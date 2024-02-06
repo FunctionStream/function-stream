@@ -11,6 +11,7 @@
 # limitations under the License.
 
 .PHONY: build
+.PHONY: license
 build:
 	go build -v -o bin/function-stream ./cmd
 
@@ -37,3 +38,6 @@ gen_rest_client:
 		--global-property apiDocs,apis,models,supportingFiles
 	rm -r restclient/go.mod restclient/go.sum restclient/.travis.yml restclient/.openapi-generator-ignore \
 		restclient/git_push.sh restclient/.openapi-generator restclient/api restclient/test
+
+license:
+	./license-checker/license-checker.sh
