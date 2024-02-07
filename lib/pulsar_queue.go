@@ -65,6 +65,7 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 			}
 			go func() {
 				defer consumer.Close()
+				defer close(c)
 				for msg := range consumer.Chan() {
 					c <- NewAckableEvent(msg.Payload(), func() {
 						err := consumer.Ack(msg)
@@ -87,16 +88,26 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 			}
 			go func() {
 				defer producer.Close()
-				for e := range c {
-					producer.SendAsync(ctx, &pulsar.ProducerMessage{
-						Payload: e.GetPayload(),
-					}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
+				defer close(c)
+				for {
+					select {
+					case e := <-c:
+						producer.SendAsync(ctx, &pulsar.ProducerMessage{
+							Payload: e.GetPayload(),
+						}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
+							if err != nil {
+								handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)
+								return
+							}
+							e.Ack()
+						})
+					case <-ctx.Done():
+						err := producer.Flush()
 						if err != nil {
-							handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)
-							return
+							handleErr(ctx, err, "Error flushing producer", "error", err)
 						}
-						e.Ack()
-					})
+						return
+					}
 				}
 			}()
 			return c, nil

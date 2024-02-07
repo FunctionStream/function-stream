@@ -16,13 +16,13 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/lib"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -116,7 +116,42 @@ func (s *Server) startRESTHandlers() error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-	})
+	}).Methods("GET")
+
+	r.HandleFunc("/api/v1/produce/{queue_name}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		queueName := vars["queue_name"]
+		slog.Info("Producing event to queue", slog.Any("queue_name", queueName))
+		content, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, errors.Wrap(err, "Failed  to read body").Error(), http.StatusBadRequest)
+			return
+		}
+		err = s.manager.ProduceEvent(queueName, lib.NewAckableEvent(content, func() {}))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("PUT")
+
+	r.HandleFunc("/api/v1/consume/{queue_name}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		queueName := vars["queue_name"]
+		slog.Info("Consuming event from queue", slog.Any("queue_name", queueName))
+		event, err := s.manager.ConsumeEvent(queueName)
+		if err != nil {
+			slog.Error("Error when consuming event", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(string(event.GetPayload()))
+		if err != nil {
+			slog.Error("Error when encoding event", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("GET")
 
 	return http.ListenAndServe(GetConfig().ListenAddr, r)
 }

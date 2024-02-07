@@ -17,28 +17,51 @@ package lib
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 )
+
+type queue struct {
+	c      chan Event
+	refCnt int32
+}
 
 type MemoryQueueFactory struct {
 	mu     sync.Mutex
-	queues map[string]chan Event
+	queues map[string]*queue
 }
 
 func NewMemoryQueueFactory() EventQueueFactory {
 	return &MemoryQueueFactory{
-		queues: make(map[string]chan Event),
+		queues: make(map[string]*queue),
 	}
 }
 
 func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Event {
-	if queue, ok := f.queues[name]; ok {
-		return queue
+	if q, ok := f.queues[name]; ok {
+		atomic.AddInt32(&q.refCnt, 1)
+		return q.c
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	c := make(chan Event)
-	f.queues[name] = c
+	f.queues[name] = &queue{
+		c:      c,
+		refCnt: 1,
+	}
 	return c
+}
+
+func (f *MemoryQueueFactory) release(name string) {
+	q, ok := f.queues[name]
+	if !ok {
+		panic("release non-exist queue: " + name)
+	}
+	if atomic.AddInt32(&q.refCnt, -1) == 0 {
+		f.mu.Lock()
+		close(q.c)
+		delete(f.queues, name)
+		f.mu.Unlock()
+	}
 }
 
 func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
@@ -46,7 +69,12 @@ func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQu
 	for _, topic := range config.Topics {
 		t := topic
 		go func() {
+			<-ctx.Done()
+			f.release(t)
+		}()
+		go func() {
 			c := f.getOrCreateChan(t)
+			defer close(result)
 			for {
 				select {
 				case <-ctx.Done():
@@ -61,5 +89,10 @@ func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQu
 }
 
 func (f *MemoryQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
-	return f.getOrCreateChan(config.Topic), nil
+	c := f.getOrCreateChan(config.Topic)
+	go func() {
+		<-ctx.Done()
+		f.release(config.Topic)
+	}()
+	return c, nil
 }

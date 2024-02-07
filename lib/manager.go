@@ -19,6 +19,8 @@ import (
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"log/slog"
+	"math/rand"
+	"strconv"
 	"sync"
 )
 
@@ -86,4 +88,25 @@ func (fm *FunctionManager) ListFunctions() (result []string) {
 		i++
 	}
 	return
+}
+
+func (fm *FunctionManager) ProduceEvent(name string, event Event) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, err := fm.eventQueueFactory.NewSinkChan(ctx, &SinkQueueConfig{Topic: name})
+	if err != nil {
+		return err
+	}
+	c <- event
+	return nil
+}
+
+func (fm *FunctionManager) ConsumeEvent(name string) (Event, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, err := fm.eventQueueFactory.NewSourceChan(ctx, &SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())})
+	if err != nil {
+		return nil, err
+	}
+	return <-c, nil
 }

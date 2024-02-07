@@ -2,9 +2,11 @@ package client
 
 import (
 	c "github.com/functionstream/functionstream/cmd/client/common"
+	"github.com/functionstream/functionstream/cmd/client/consume"
 	"github.com/functionstream/functionstream/cmd/client/create"
 	del "github.com/functionstream/functionstream/cmd/client/delete"
 	"github.com/functionstream/functionstream/cmd/client/list"
+	"github.com/functionstream/functionstream/cmd/client/produce"
 	"github.com/spf13/cobra"
 )
 
@@ -22,4 +24,6 @@ func init() {
 	Cmd.AddCommand(create.Cmd)
 	Cmd.AddCommand(list.Cmd)
 	Cmd.AddCommand(del.Cmd)
+	Cmd.AddCommand(produce.Cmd)
+	Cmd.AddCommand(consume.Cmd)
 }
