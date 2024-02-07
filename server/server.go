@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/functionstream/functionstream/common"
@@ -34,6 +35,21 @@ type Server struct {
 
 func New() *Server {
 	manager, err := lib.NewFunctionManager(GetConfig())
+	if err != nil {
+		slog.Error("Error creating function manager", err)
+	}
+	return &Server{
+		manager: manager,
+	}
+}
+
+func NewStandalone() *Server {
+	config := &lib.Config{
+		QueueBuilder: func(ctx context.Context, config *lib.Config) (lib.EventQueueFactory, error) {
+			return lib.NewMemoryQueueFactory(), nil
+		},
+	}
+	manager, err := lib.NewFunctionManager(config)
 	if err != nil {
 		slog.Error("Error creating function manager", err)
 	}
