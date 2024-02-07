@@ -80,8 +80,10 @@ func (fm *FunctionManager) ListFunctions() (result []string) {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
 	result = make([]string, len(fm.functions))
+	i := 0
 	for k := range fm.functions {
-		result = append(result, k)
+		result[i] = k
+		i++
 	}
 	return
 }

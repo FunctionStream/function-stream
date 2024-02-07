@@ -16,33 +16,31 @@ package server
 
 import (
 	"context"
+	"github.com/functionstream/functionstream/common"
 	"log/slog"
 	"os"
+	"sync"
 
 	"github.com/functionstream/functionstream/lib"
 )
 
 var loadedConfig *lib.Config
-
-const (
-	PulsarQueueType = "pulsar"
-)
-
-func init() {
-	loadedConfig = &lib.Config{
-		ListenAddr: getEnvWithDefault("PORT", ":7300"),
-		PulsarURL:  getEnvWithDefault("PULSAR_URL", "pulsar://localhost:6650"),
-	}
-	queueType := getEnvWithDefault("QUEUE_TYPE", PulsarQueueType)
-	switch queueType {
-	case PulsarQueueType:
-		loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
-			return lib.NewPulsarEventQueueFactory(ctx, c)
-		}
-	}
-}
+var initConfig = sync.Once{}
 
 func GetConfig() *lib.Config {
+	initConfig.Do(func() {
+		loadedConfig = &lib.Config{
+			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
+			PulsarURL:  getEnvWithDefault("PULSAR_URL", common.DefaultPulsarURL),
+		}
+		queueType := getEnvWithDefault("QUEUE_TYPE", common.DefaultQueueType)
+		switch queueType {
+		case common.PulsarQueueType:
+			loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
+				return lib.NewPulsarEventQueueFactory(ctx, c)
+			}
+		}
+	})
 	return loadedConfig
 }
 

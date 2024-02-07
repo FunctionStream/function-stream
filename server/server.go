@@ -107,6 +107,17 @@ func (s *Server) startRESTHandlers() error {
 		}
 	}).Methods("DELETE")
 
+	r.HandleFunc("/api/v1/functions", func(w http.ResponseWriter, r *http.Request) {
+		functions := s.manager.ListFunctions()
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(functions)
+		if err != nil {
+			slog.Error("Error when listing functions", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
 	return http.ListenAndServe(GetConfig().ListenAddr, r)
 }
 
