@@ -90,7 +90,7 @@ func (p *perf) Run(ctx context.Context) {
 		PulsarURL: p.config.PulsarURL,
 	}
 
-	queueFactory, err := p.queueBuilder(context.Background(), config)
+	queueFactory, err := p.queueBuilder(ctx, config)
 	if err != nil {
 		slog.Error(
 			"Failed to create Event Queue Factory",
@@ -99,7 +99,7 @@ func (p *perf) Run(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	p.input, err = queueFactory.NewSinkChan(context.Background(), &lib.SinkQueueConfig{
+	p.input, err = queueFactory.NewSinkChan(ctx, &lib.SinkQueueConfig{
 		Topic: f.Inputs[0],
 	})
 	if err != nil {
@@ -109,8 +109,9 @@ func (p *perf) Run(ctx context.Context) {
 		)
 		os.Exit(1)
 	}
+	defer close(p.input)
 
-	p.output, err = queueFactory.NewSourceChan(context.Background(), &lib.SourceQueueConfig{
+	p.output, err = queueFactory.NewSourceChan(ctx, &lib.SourceQueueConfig{
 		Topics:  []string{f.Output},
 		SubName: "perf",
 	})
@@ -125,7 +126,7 @@ func (p *perf) Run(ctx context.Context) {
 	cfg := restclient.NewConfiguration()
 	cli := restclient.NewAPIClient(cfg)
 
-	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), name).Function(f).Execute()
+	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(ctx, name).Function(f).Execute()
 	if err != nil {
 		slog.Error(
 			"Failed to create Create Function",
@@ -140,6 +141,24 @@ func (p *perf) Run(ctx context.Context) {
 		)
 		os.Exit(1)
 	}
+
+	defer func() {
+		res, err := cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), name).Execute()
+		if err != nil {
+			slog.Error(
+				"Failed to delete Function",
+				slog.Any("error", err),
+			)
+			os.Exit(1)
+		}
+		if res.StatusCode != 200 {
+			slog.Error(
+				"Failed to delete Function",
+				slog.Any("statusCode", res.StatusCode),
+			)
+			os.Exit(1)
+		}
+	}()
 
 	latencyCh := make(chan int64)
 	var failureCount int64
@@ -177,6 +196,29 @@ func (p *perf) Run(ctx context.Context) {
 
 }
 
+func SendToChannel[T any](ctx context.Context, c chan<- T, e interface{}) bool {
+	select {
+	case c <- e.(T): // It will panic if `e` is not of type `T` or a type that can be converted to `T`.
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func zeroValue[T any]() T {
+	var v T
+	return v
+}
+
+func ReceiveFromChannel[T any](ctx context.Context, c <-chan T) (T, bool) {
+	select {
+	case e := <-c:
+		return e, true
+	case <-ctx.Done():
+		return zeroValue[T](), false
+	}
+}
+
 func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failureCount *int64) {
 	limiter := rate.NewLimiter(rate.Limit(p.config.RequestRate), int(p.config.RequestRate))
 
@@ -200,9 +242,14 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 				os.Exit(1)
 			}
 			start := time.Now()
-			p.input <- lib.NewAckableEvent(jsonBytes, func() {})
+			if !SendToChannel(ctx, p.input, lib.NewAckableEvent(jsonBytes, func() {})) {
+				return
+			}
 			next <- true
-			e := <-p.output
+			e, ok := ReceiveFromChannel(ctx, p.output)
+			if !ok {
+				return
+			}
 			latencyCh <- time.Since(start).Microseconds()
 			payload := e.GetPayload()
 			e.Ack()

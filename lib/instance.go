@@ -90,7 +90,7 @@ func (instance *FunctionInstance) Run() {
 			slog.InfoContext(instance.ctx, "function instance has been stopped")
 			return
 		}
-		slog.ErrorContext(ctx, message, args...)
+		slog.ErrorContext(ctx, message, append(args, slog.Any("error", err.Error())))
 	}
 
 	// Trigger the "_start" function, WASI's "main".
@@ -119,6 +119,7 @@ func (instance *FunctionInstance) Run() {
 		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
 		return
 	}
+	defer close(sinkChan)
 
 	instance.readyCh <- nil
 	for e := range sourceChan {

@@ -90,9 +90,5 @@ func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQu
 
 func (f *MemoryQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
 	c := f.getOrCreateChan(config.Topic)
-	go func() {
-		<-ctx.Done()
-		f.release(config.Topic)
-	}()
 	return c, nil
 }
