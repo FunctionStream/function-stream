@@ -20,6 +20,7 @@ import (
 	"github.com/functionstream/functionstream/cmd/client/common"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/spf13/cobra"
+	"io"
 	"os"
 )
 
@@ -28,9 +29,7 @@ var (
 )
 
 type flags struct {
-	name string
-	//configFile string
-	//config     string
+	name    string
 	archive string
 	inputs  []string
 	output  string
@@ -47,8 +46,6 @@ var Cmd = &cobra.Command{
 
 func init() {
 	Cmd.Flags().StringVarP(&config.name, "name", "n", "", "The name of the function")
-	//Cmd.Flags().StringVarP(&config.configFile, "configFile", "f", "", "The file path of the function config")
-	//Cmd.Flags().StringVarP(&config.config, "config", "c", "", "The config of the function")
 	Cmd.Flags().StringVarP(&config.archive, "archive", "a", "", "The archive path of the function")
 	Cmd.Flags().StringSliceVarP(&config.inputs, "inputs", "i", []string{}, "The inputs of the function")
 	Cmd.Flags().StringVarP(&config.output, "output", "o", "", "The output of the function")
@@ -72,7 +69,12 @@ func exec(_ *cobra.Command, _ []string) {
 
 	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), config.name).Function(f).Execute()
 	if err != nil {
-		fmt.Printf("Failed to create function: %v\n", err)
+		body, e := io.ReadAll(res.Body)
+		if e != nil {
+			fmt.Printf("Failed to create function: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Failed to create function: %v, %s\n", err, string(body))
 		os.Exit(1)
 	}
 	if res.StatusCode != 200 {

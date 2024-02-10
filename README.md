@@ -139,6 +139,14 @@ In the terminal where you consume the message from the output topic, you'll see 
 "{\"name\":\"rbt\",\"money\":3,\"expected\":0}"
 ```
 
+### Deleting the Function
+
+After testing, delete the function with this command:
+
+```shell
+bin/function-stream client delete -n example
+```
+
 ## Contributing
 
 We're happy to receive contributions from the community. If you find a bug or have a feature request, please open an

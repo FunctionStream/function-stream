@@ -126,7 +126,7 @@ func (p *perf) Run(ctx context.Context) {
 	cfg := restclient.NewConfiguration()
 	cli := restclient.NewAPIClient(cfg)
 
-	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(ctx, name).Function(f).Execute()
+	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), name).Function(f).Execute()
 	if err != nil {
 		slog.Error(
 			"Failed to create Create Function",

@@ -43,9 +43,8 @@ func NewFunctionManager(config *Config) (*FunctionManager, error) {
 
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	fm.functionsLock.Lock()
-	defer fm.functionsLock.Unlock()
+	defer fm.functionsLock.Unlock() // TODO: narrow the lock scope
 	if _, exist := fm.functions[f.Name]; exist {
-		fm.functionsLock.Unlock()
 		return common.ErrorFunctionExists
 	}
 	fm.functions[f.Name] = make([]*FunctionInstance, f.Replicas)
@@ -57,7 +56,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 			if err != nil {
 				slog.ErrorContext(instance.ctx, "Error starting function instance", err)
 			}
-			fm.functionsLock.Unlock()
+			instance.Stop()
 			return err
 		}
 	}

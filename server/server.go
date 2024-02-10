@@ -107,18 +107,20 @@ func (s *Server) startRESTHandlers() error {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		slog.Info("Started function", slog.Any("name", functionName))
 	}).Methods("POST")
 
 	r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		functionName := vars["function_name"]
-
 		slog.Info("Deleting function", slog.Any("name", functionName))
+
 		err := s.manager.DeleteFunction(functionName)
 		if errors.Is(err, common.ErrorFunctionNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		slog.Info("Deleted function", slog.Any("name", functionName))
 	}).Methods("DELETE")
 
 	r.HandleFunc("/api/v1/functions", func(w http.ResponseWriter, r *http.Request) {
