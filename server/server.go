@@ -15,7 +15,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/functionstream/functionstream/common"
@@ -31,30 +30,29 @@ import (
 
 type Server struct {
 	manager *lib.FunctionManager
+	config  *lib.Config
 }
 
 func New() *Server {
-	manager, err := lib.NewFunctionManager(GetConfig())
+	manager, err := lib.NewFunctionManager(LoadConfigFromEnv())
 	if err != nil {
 		slog.Error("Error creating function manager", err)
 	}
 	return &Server{
 		manager: manager,
+		config:  LoadConfigFromEnv(),
 	}
 }
 
 func NewStandalone() *Server {
-	config := &lib.Config{
-		QueueBuilder: func(ctx context.Context, config *lib.Config) (lib.EventQueueFactory, error) {
-			return lib.NewMemoryQueueFactory(), nil
-		},
-	}
+	config := LoadStandaloneConfigFromEnv()
 	manager, err := lib.NewFunctionManager(config)
 	if err != nil {
 		slog.Error("Error creating function manager", err)
 	}
 	return &Server{
 		manager: manager,
+		config:  config,
 	}
 }
 
@@ -169,7 +167,7 @@ func (s *Server) startRESTHandlers() error {
 		}
 	}).Methods("GET")
 
-	return http.ListenAndServe(GetConfig().ListenAddr, r)
+	return http.ListenAndServe(s.config.ListenAddr, r)
 }
 
 func (s *Server) Close() error {

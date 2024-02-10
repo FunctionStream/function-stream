@@ -27,7 +27,7 @@ import (
 var loadedConfig *lib.Config
 var initConfig = sync.Once{}
 
-func GetConfig() *lib.Config {
+func LoadConfigFromEnv() *lib.Config {
 	initConfig.Do(func() {
 		loadedConfig = &lib.Config{
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
@@ -39,6 +39,18 @@ func GetConfig() *lib.Config {
 			loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
 				return lib.NewPulsarEventQueueFactory(ctx, c)
 			}
+		}
+	})
+	return loadedConfig
+}
+
+func LoadStandaloneConfigFromEnv() *lib.Config {
+	initConfig.Do(func() {
+		loadedConfig = &lib.Config{
+			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
+		}
+		loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
+			return lib.NewMemoryQueueFactory(), nil
 		}
 	})
 	return loadedConfig

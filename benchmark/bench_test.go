@@ -50,12 +50,12 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	s := server.New()
 	go s.Run()
-	defer func(s *server.Server) {
+	defer func() {
 		err := s.Close()
 		if err != nil {
 			b.Fatal(err)
 		}
-	}(s)
+	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
