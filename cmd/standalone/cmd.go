@@ -32,7 +32,7 @@ var (
 
 func exec(*cobra.Command, []string) {
 	common.RunProcess(func() (io.Closer, error) {
-		s := server.NewStandalone()
+		s := server.New(server.LoadStandaloneConfigFromEnv())
 		go s.Run()
 		return s, nil
 	})

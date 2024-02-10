@@ -23,7 +23,6 @@ import (
 	"github.com/functionstream/functionstream/perf"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/functionstream/functionstream/server"
-	"io"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -48,7 +47,7 @@ func prepareEnv() {
 func BenchmarkStressForBasicFunc(b *testing.B) {
 	prepareEnv()
 
-	s := server.New()
+	s := server.New(server.LoadConfigFromEnv())
 	go s.Run()
 	defer func() {
 		err := s.Close()
@@ -92,7 +91,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	defer cancel()
 
 	profile := "BenchmarkStressForBasicFunc.pprof"
@@ -120,21 +119,19 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := lib.NewMemoryQueueFactory()
 
 	svrConf := &lib.Config{
+		ListenAddr: common.DefaultAddr,
 		QueueBuilder: func(ctx context.Context, config *lib.Config) (lib.EventQueueFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}
 
-	fm, err := lib.NewFunctionManager(svrConf)
-	if err != nil {
-		b.Fatal(err)
-	}
-	s := server.NewWithFM(fm)
-	go func() {
-		common.RunProcess(func() (io.Closer, error) {
-			go s.Run()
-			return s, nil
-		})
+	s := server.New(svrConf)
+	go s.Run()
+	defer func() {
+		err := s.Close()
+		if err != nil {
+			b.Fatal(err)
+		}
 	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
@@ -157,7 +154,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	defer cancel()
 
 	profile := "BenchmarkStressForBasicFunc.pprof"

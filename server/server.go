@@ -33,19 +33,7 @@ type Server struct {
 	config  *lib.Config
 }
 
-func New() *Server {
-	manager, err := lib.NewFunctionManager(LoadConfigFromEnv())
-	if err != nil {
-		slog.Error("Error creating function manager", err)
-	}
-	return &Server{
-		manager: manager,
-		config:  LoadConfigFromEnv(),
-	}
-}
-
-func NewStandalone() *Server {
-	config := LoadStandaloneConfigFromEnv()
+func New(config *lib.Config) *Server {
 	manager, err := lib.NewFunctionManager(config)
 	if err != nil {
 		slog.Error("Error creating function manager", err)
@@ -53,12 +41,6 @@ func NewStandalone() *Server {
 	return &Server{
 		manager: manager,
 		config:  config,
-	}
-}
-
-func NewWithFM(fm *lib.FunctionManager) *Server {
-	return &Server{
-		manager: fm,
 	}
 }
 
