@@ -90,7 +90,8 @@ func (instance *FunctionInstance) Run() {
 			slog.InfoContext(instance.ctx, "function instance has been stopped")
 			return
 		}
-		slog.ErrorContext(ctx, message, append(args, slog.Any("error", err.Error())))
+		extraArgs := append(args, slog.Any("error", err.Error()))
+		slog.ErrorContext(ctx, message, extraArgs...)
 	}
 
 	// Trigger the "_start" function, WASI's "main".

@@ -54,7 +54,8 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 			slog.InfoContext(ctx, "Pulsar queue cancelled", slog.Any("config", config))
 			return
 		}
-		slog.ErrorContext(ctx, message, append(args, slog.Any("config", config), slog.Any("error", err)))
+		extraArgs := append(args, slog.Any("config", config), slog.Any("error", err))
+		slog.ErrorContext(ctx, message, extraArgs...)
 	}
 	log := func(message string, config interface{}, args ...interface{}) {
 		slog.InfoContext(ctx, message, append(args, slog.Any("config", config))...)
