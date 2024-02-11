@@ -16,6 +16,7 @@ package lib
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 )
@@ -26,24 +27,31 @@ type queue struct {
 }
 
 type MemoryQueueFactory struct {
+	ctx    context.Context
 	mu     sync.Mutex
 	queues map[string]*queue
 }
 
-func NewMemoryQueueFactory() EventQueueFactory {
+func NewMemoryQueueFactory(ctx context.Context) EventQueueFactory {
 	return &MemoryQueueFactory{
+		ctx:    ctx,
 		queues: make(map[string]*queue),
 	}
 }
 
 func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Event {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	defer func() {
+		slog.InfoContext(f.ctx, "Get memory queue chan",
+			"current_use_count", atomic.LoadInt32(&f.queues[name].refCnt),
+			"name", name)
+	}()
 	if q, ok := f.queues[name]; ok {
 		atomic.AddInt32(&q.refCnt, 1)
 		return q.c
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	c := make(chan Event)
+	c := make(chan Event, 100)
 	f.queues[name] = &queue{
 		c:      c,
 		refCnt: 1,
@@ -62,6 +70,9 @@ func (f *MemoryQueueFactory) release(name string) {
 		delete(f.queues, name)
 		f.mu.Unlock()
 	}
+	slog.InfoContext(f.ctx, "Released memory queue",
+		"current_use_count", atomic.LoadInt32(&q.refCnt),
+		"name", name)
 }
 
 func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
@@ -90,5 +101,24 @@ func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQu
 
 func (f *MemoryQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
 	c := f.getOrCreateChan(config.Topic)
-	return c, nil
+	go func() {
+		<-ctx.Done()
+		f.release(config.Topic)
+	}()
+	wrapperC := make(chan Event)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-wrapperC:
+				if !ok {
+					return
+				}
+				event.Ack()
+				c <- event
+			}
+		}
+	}()
+	return wrapperC, nil
 }

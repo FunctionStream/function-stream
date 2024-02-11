@@ -36,6 +36,9 @@ type SinkQueueConfig struct {
 
 type EventQueueFactory interface {
 	NewSourceChan(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error)
+	// NewSinkChan returns a news channel
+	// The event.Ack() would be invoked after the event is sunk successfully
+	// The caller should close the channel when it is done
 	NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error)
 }
 

@@ -50,7 +50,7 @@ func LoadStandaloneConfigFromEnv() *lib.Config {
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
 		}
 		loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
-			return lib.NewMemoryQueueFactory(), nil
+			return lib.NewMemoryQueueFactory(ctx), nil
 		}
 	})
 	return loadedConfig
