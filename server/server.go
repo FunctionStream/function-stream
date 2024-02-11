@@ -31,6 +31,7 @@ import (
 type Server struct {
 	manager *lib.FunctionManager
 	config  *lib.Config
+	httpSvr *http.Server
 }
 
 func New(config *lib.Config) *Server {
@@ -48,7 +49,7 @@ func (s *Server) Run() {
 	slog.Info("Hello, Function Stream!")
 	err := s.startRESTHandlers()
 	if err != nil {
-		slog.Error("Error starting REST handlers", err)
+		slog.Error("Error starting REST handlers", "error", err)
 	}
 }
 
@@ -151,11 +152,22 @@ func (s *Server) startRESTHandlers() error {
 		}
 	}).Methods("GET")
 
-	return http.ListenAndServe(s.config.ListenAddr, r)
+	httpSvr := &http.Server{
+		Addr:    s.config.ListenAddr,
+		Handler: r,
+	}
+	s.httpSvr = httpSvr
+
+	return httpSvr.ListenAndServe()
 }
 
 func (s *Server) Close() error {
 	slog.Info("Shutting down function stream server")
+	if s.httpSvr != nil {
+		if err := s.httpSvr.Close(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

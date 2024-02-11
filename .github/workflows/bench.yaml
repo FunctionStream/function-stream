@@ -41,8 +41,8 @@ jobs:
       - name: Collect Docker Compose logs
         if: failure()
         run: docker-compose -f ./tests/docker-compose.yaml logs || true
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: BenchmarkStressForBasicFunc Profile
-          path: ./BenchmarkStressForBasicFunc.pprof
+          path: ./benchmark/*.pprof
