@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/bmizerany/perks/quantile"
+	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/lib"
 	"github.com/functionstream/functionstream/restclient"
 	"golang.org/x/time/rate"
@@ -196,30 +197,6 @@ func (p *perf) Run(ctx context.Context) {
 
 }
 
-func SendToChannel[T any](ctx context.Context, c chan<- T, e interface{}) bool {
-	select {
-	case c <- e.(T): // It will panic if `e` is not of type `T` or a type that can be converted to `T`.
-		return true
-	case <-ctx.Done():
-		close(c)
-		return false
-	}
-}
-
-func zeroValue[T any]() T {
-	var v T
-	return v
-}
-
-func ReceiveFromChannel[T any](ctx context.Context, c <-chan T) (T, bool) {
-	select {
-	case e := <-c:
-		return e, true
-	case <-ctx.Done():
-		return zeroValue[T](), false
-	}
-}
-
 func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failureCount *int64) {
 	limiter := rate.NewLimiter(rate.Limit(p.config.RequestRate), int(p.config.RequestRate))
 
@@ -240,11 +217,11 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 			os.Exit(1)
 		}
 		start := time.Now()
-		if !SendToChannel(ctx, p.input, lib.NewAckableEvent(jsonBytes, func() {})) {
+		if !common.SendToChannel(ctx, p.input, lib.NewAckableEvent(jsonBytes, func() {})) {
 			return
 		}
 		go func() {
-			e, ok := ReceiveFromChannel(ctx, p.output)
+			e, ok := common.ReceiveFromChannel(ctx, p.output)
 			if !ok {
 				return
 			}

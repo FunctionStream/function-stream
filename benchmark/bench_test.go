@@ -23,7 +23,6 @@ import (
 	"github.com/functionstream/functionstream/perf"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/functionstream/functionstream/server"
-	"log/slog"
 	"math/rand"
 	"os"
 	"runtime/pprof"
@@ -32,21 +31,7 @@ import (
 	"time"
 )
 
-func prepareEnv() {
-	workingDirectory := os.Getenv("FS_TEST_WORK_DIR")
-	if workingDirectory != "" {
-		err := os.Chdir(workingDirectory)
-		slog.Info("Changing working directory", "working-dir", workingDirectory)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-}
-
 func BenchmarkStressForBasicFunc(b *testing.B) {
-	prepareEnv()
-
 	s := server.New(server.LoadConfigFromEnv())
 	go s.Run()
 	defer func() {
@@ -82,7 +67,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 		PulsarURL:   "pulsar://localhost:6650",
 		RequestRate: 200000.0,
 		Func: &restclient.Function{
-			Archive:  "./bin/example_basic.wasm",
+			Archive:  "../bin/example_basic.wasm",
 			Inputs:   []string{inputTopic},
 			Output:   outputTopic,
 			Replicas: &replicas,
@@ -91,7 +76,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	defer cancel()
 
 	profile := "BenchmarkStressForBasicFunc.pprof"
@@ -114,8 +99,6 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 }
 
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
-	prepareEnv()
-
 	memoryQueueFactory := lib.NewMemoryQueueFactory(context.Background())
 
 	svrConf := &lib.Config{
@@ -142,7 +125,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	pConfig := &perf.Config{
 		RequestRate: 200000.0,
 		Func: &restclient.Function{
-			Archive:  "./bin/example_basic.wasm",
+			Archive:  "../bin/example_basic.wasm",
 			Inputs:   []string{inputTopic},
 			Output:   outputTopic,
 			Replicas: &replicas,
@@ -154,7 +137,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	defer cancel()
 
 	profile := "BenchmarkStressForBasicFunc.pprof"

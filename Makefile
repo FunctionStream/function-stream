@@ -26,7 +26,10 @@ test:
 	go test -race ./... -timeout 10m
 
 bench:
-	export FS_TEST_WORK_DIR="$(shell pwd)" && go test -bench=. ./benchmark -timeout 10m
+	go test -bench=. ./benchmark -timeout 10m
+
+bench_race:
+	go test -race -bench=. ./benchmark -timeout 10m
 
 gen_rest_client:
 	mkdir -p restclient
