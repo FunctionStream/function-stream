@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright 2024 Function Stream Org.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
