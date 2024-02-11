@@ -107,3 +107,5 @@ dist
 .run
 bin/
 .DS_Store
+
+benchmark/*.pprof

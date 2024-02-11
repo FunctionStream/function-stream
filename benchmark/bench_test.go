@@ -76,10 +76,10 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
 	defer cancel()
 
-	profile := "BenchmarkStressForBasicFunc.pprof"
+	profile := b.Name() + ".pprof"
 	file, err := os.Create(profile)
 	if err != nil {
 		b.Fatal(err)
@@ -137,10 +137,10 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
 	defer cancel()
 
-	profile := "BenchmarkStressForBasicFunc.pprof"
+	profile := b.Name() + ".pprof"
 	file, err := os.Create(profile)
 	if err != nil {
 		b.Fatal(err)
