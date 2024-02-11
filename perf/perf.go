@@ -109,7 +109,6 @@ func (p *perf) Run(ctx context.Context) {
 		)
 		os.Exit(1)
 	}
-	defer close(p.input)
 
 	p.output, err = queueFactory.NewSourceChan(ctx, &lib.SourceQueueConfig{
 		Topics:  []string{f.Output},
@@ -190,6 +189,7 @@ func (p *perf) Run(ctx context.Context) {
 			ops++
 			q.Insert(float64(l) / 1000.0) // Convert to millis
 		case <-ctx.Done():
+			slog.InfoContext(ctx, "Shutting down perf client")
 			return
 		}
 	}
@@ -201,6 +201,7 @@ func SendToChannel[T any](ctx context.Context, c chan<- T, e interface{}) bool {
 	case c <- e.(T): // It will panic if `e` is not of type `T` or a type that can be converted to `T`.
 		return true
 	case <-ctx.Done():
+		close(c)
 		return false
 	}
 }
@@ -223,29 +224,26 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 	limiter := rate.NewLimiter(rate.Limit(p.config.RequestRate), int(p.config.RequestRate))
 
 	count := 0
-	next := make(chan bool, int(p.config.RequestRate))
 	for {
 		if err := limiter.Wait(ctx); err != nil {
 			return
 		}
 		c := count
 		count++
-
+		person := Person{Name: "rbt", Money: c, Expected: c + 1}
+		jsonBytes, err := json.Marshal(person)
+		if err != nil {
+			slog.Error(
+				"Failed to marshal Person",
+				slog.Any("error", err),
+			)
+			os.Exit(1)
+		}
+		start := time.Now()
+		if !SendToChannel(ctx, p.input, lib.NewAckableEvent(jsonBytes, func() {})) {
+			return
+		}
 		go func() {
-			person := Person{Name: "rbt", Money: c, Expected: c + 1}
-			jsonBytes, err := json.Marshal(person)
-			if err != nil {
-				slog.Error(
-					"Failed to marshal Person",
-					slog.Any("error", err),
-				)
-				os.Exit(1)
-			}
-			start := time.Now()
-			if !SendToChannel(ctx, p.input, lib.NewAckableEvent(jsonBytes, func() {})) {
-				return
-			}
-			next <- true
 			e, ok := ReceiveFromChannel(ctx, p.output)
 			if !ok {
 				return
@@ -270,6 +268,5 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 				atomic.AddInt64(failureCount, 1)
 			}
 		}()
-		<-next
 	}
 }

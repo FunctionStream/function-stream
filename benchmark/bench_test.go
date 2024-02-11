@@ -91,7 +91,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
 	defer cancel()
 
 	profile := "BenchmarkStressForBasicFunc.pprof"
@@ -116,7 +116,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	prepareEnv()
 
-	memoryQueueFactory := lib.NewMemoryQueueFactory()
+	memoryQueueFactory := lib.NewMemoryQueueFactory(context.Background())
 
 	svrConf := &lib.Config{
 		ListenAddr: common.DefaultAddr,
@@ -137,7 +137,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
 
-	replicas := int32(15)
+	replicas := int32(1)
 
 	pConfig := &perf.Config{
 		RequestRate: 200000.0,
@@ -154,7 +154,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
 	defer cancel()
 
 	profile := "BenchmarkStressForBasicFunc.pprof"

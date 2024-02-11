@@ -60,15 +60,15 @@ func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Event {
 }
 
 func (f *MemoryQueueFactory) release(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	q, ok := f.queues[name]
 	if !ok {
 		panic("release non-exist queue: " + name)
 	}
 	if atomic.AddInt32(&q.refCnt, -1) == 0 {
-		f.mu.Lock()
 		close(q.c)
 		delete(f.queues, name)
-		f.mu.Unlock()
 	}
 	slog.InfoContext(f.ctx, "Released memory queue",
 		"current_use_count", atomic.LoadInt32(&q.refCnt),
@@ -101,12 +101,9 @@ func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQu
 
 func (f *MemoryQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
 	c := f.getOrCreateChan(config.Topic)
-	go func() {
-		<-ctx.Done()
-		f.release(config.Topic)
-	}()
 	wrapperC := make(chan Event)
 	go func() {
+		defer f.release(config.Topic)
 		for {
 			select {
 			case <-ctx.Done():
