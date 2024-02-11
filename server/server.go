@@ -16,13 +16,13 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/lib"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -30,21 +30,17 @@ import (
 
 type Server struct {
 	manager *lib.FunctionManager
+	config  *lib.Config
 }
 
-func New() *Server {
-	manager, err := lib.NewFunctionManager(GetConfig())
+func New(config *lib.Config) *Server {
+	manager, err := lib.NewFunctionManager(config)
 	if err != nil {
 		slog.Error("Error creating function manager", err)
 	}
 	return &Server{
 		manager: manager,
-	}
-}
-
-func NewWithFM(fm *lib.FunctionManager) *Server {
-	return &Server{
-		manager: fm,
+		config:  config,
 	}
 }
 
@@ -93,21 +89,69 @@ func (s *Server) startRESTHandlers() error {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		slog.Info("Started function", slog.Any("name", functionName))
 	}).Methods("POST")
 
 	r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		functionName := vars["function_name"]
-
 		slog.Info("Deleting function", slog.Any("name", functionName))
+
 		err := s.manager.DeleteFunction(functionName)
 		if errors.Is(err, common.ErrorFunctionNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		slog.Info("Deleted function", slog.Any("name", functionName))
 	}).Methods("DELETE")
 
-	return http.ListenAndServe(GetConfig().ListenAddr, r)
+	r.HandleFunc("/api/v1/functions", func(w http.ResponseWriter, r *http.Request) {
+		functions := s.manager.ListFunctions()
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(functions)
+		if err != nil {
+			slog.Error("Error when listing functions", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("GET")
+
+	r.HandleFunc("/api/v1/produce/{queue_name}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		queueName := vars["queue_name"]
+		slog.Info("Producing event to queue", slog.Any("queue_name", queueName))
+		content, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, errors.Wrap(err, "Failed  to read body").Error(), http.StatusBadRequest)
+			return
+		}
+		err = s.manager.ProduceEvent(queueName, lib.NewAckableEvent(content, func() {}))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("PUT")
+
+	r.HandleFunc("/api/v1/consume/{queue_name}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		queueName := vars["queue_name"]
+		slog.Info("Consuming event from queue", slog.Any("queue_name", queueName))
+		event, err := s.manager.ConsumeEvent(queueName)
+		if err != nil {
+			slog.Error("Error when consuming event", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(string(event.GetPayload()))
+		if err != nil {
+			slog.Error("Error when encoding event", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("GET")
+
+	return http.ListenAndServe(s.config.ListenAddr, r)
 }
 
 func (s *Server) Close() error {

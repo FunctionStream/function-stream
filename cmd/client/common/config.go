@@ -12,28 +12,10 @@
  * limitations under the License.
  */
 
-package server
+package common
 
-import (
-	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/server"
-	"github.com/spf13/cobra"
-	"io"
-)
-
-var (
-	Cmd = &cobra.Command{
-		Use:   "server",
-		Short: "Start a server",
-		Long:  `Start a server`,
-		Run:   exec,
-	}
-)
-
-func exec(*cobra.Command, []string) {
-	common.RunProcess(func() (io.Closer, error) {
-		s := server.New(server.LoadConfigFromEnv())
-		go s.Run()
-		return s, nil
-	})
+type ClientConfig struct {
+	ServiceAddr string
 }
+
+var Config ClientConfig

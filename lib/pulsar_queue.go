@@ -19,6 +19,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pkg/errors"
 	"log/slog"
+	"sync/atomic"
 )
 
 type PulsarEventQueueFactory struct {
@@ -41,16 +42,23 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 	if err != nil {
 		return nil, err
 	}
+	var closed atomic.Bool // TODO: Remove this after the bug of Producer.Flush is fixed
 	go func() {
 		<-ctx.Done()
+		slog.InfoContext(ctx, "Closing Pulsar event queue factory", slog.Any("config", config))
+		closed.Store(true)
 		pc.Close()
 	}()
 	handleErr := func(ctx context.Context, err error, message string, args ...interface{}) {
 		if errors.Is(err, context.Canceled) {
-			slog.InfoContext(ctx, "function instance has been stopped")
+			slog.InfoContext(ctx, "Pulsar queue cancelled", slog.Any("config", config))
 			return
 		}
-		slog.ErrorContext(ctx, message, args...)
+		extraArgs := append(args, slog.Any("config", config), slog.Any("error", err))
+		slog.ErrorContext(ctx, message, extraArgs...)
+	}
+	log := func(message string, config interface{}, args ...interface{}) {
+		slog.InfoContext(ctx, message, append(args, slog.Any("config", config))...)
 	}
 	return &PulsarEventQueueFactory{
 		newSourceChan: func(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
@@ -63,8 +71,11 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 			if err != nil {
 				return nil, errors.Wrap(err, "Error creating consumer")
 			}
+			log("Pulsar source queue created", config)
 			go func() {
+				defer log("Pulsar source queue closed", config)
 				defer consumer.Close()
+				defer close(c)
 				for msg := range consumer.Chan() {
 					c <- NewAckableEvent(msg.Payload(), func() {
 						err := consumer.Ack(msg)
@@ -85,18 +96,39 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 			if err != nil {
 				return nil, errors.Wrap(err, "Error creating producer")
 			}
+			log("Pulsar sink queue created", config)
 			go func() {
+				defer log("Pulsar sink queue closed", config)
 				defer producer.Close()
-				for e := range c {
-					producer.SendAsync(ctx, &pulsar.ProducerMessage{
-						Payload: e.GetPayload(),
-					}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
-						if err != nil {
-							handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)
+				flush := func() {
+					if closed.Load() {
+						return
+					}
+					err := producer.Flush()
+					if err != nil {
+						handleErr(ctx, err, "Error flushing producer", "error", err)
+					}
+				}
+				for {
+					select {
+					case e, ok := <-c:
+						if !ok {
+							flush()
 							return
 						}
-						e.Ack()
-					})
+						producer.SendAsync(ctx, &pulsar.ProducerMessage{
+							Payload: e.GetPayload(),
+						}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
+							if err != nil {
+								handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)
+								return
+							}
+							e.Ack()
+						})
+					case <-ctx.Done():
+						flush()
+						return
+					}
 				}
 			}()
 			return c, nil

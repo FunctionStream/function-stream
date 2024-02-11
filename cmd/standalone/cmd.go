@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package server
+package standalone
 
 import (
 	"github.com/functionstream/functionstream/common"
@@ -23,16 +23,16 @@ import (
 
 var (
 	Cmd = &cobra.Command{
-		Use:   "server",
-		Short: "Start a server",
-		Long:  `Start a server`,
+		Use:   "standalone",
+		Short: "Start a standalone server",
+		Long:  `Start a standalone server`,
 		Run:   exec,
 	}
 )
 
 func exec(*cobra.Command, []string) {
 	common.RunProcess(func() (io.Closer, error) {
-		s := server.New(server.LoadConfigFromEnv())
+		s := server.New(server.LoadStandaloneConfigFromEnv())
 		go s.Run()
 		return s, nil
 	})

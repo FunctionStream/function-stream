@@ -23,7 +23,6 @@ import (
 	"github.com/functionstream/functionstream/perf"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/functionstream/functionstream/server"
-	"io"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -48,12 +47,13 @@ func prepareEnv() {
 func BenchmarkStressForBasicFunc(b *testing.B) {
 	prepareEnv()
 
-	s := server.New()
-	go func() {
-		common.RunProcess(func() (io.Closer, error) {
-			go s.Run()
-			return s, nil
-		})
+	s := server.New(server.LoadConfigFromEnv())
+	go s.Run()
+	defer func() {
+		err := s.Close()
+		if err != nil {
+			b.Fatal(err)
+		}
 	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
@@ -91,7 +91,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
 	defer cancel()
 
 	profile := "BenchmarkStressForBasicFunc.pprof"
@@ -111,40 +111,33 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 	perf.New(pConfig).Run(ctx)
 
 	pprof.StopCPUProfile()
-
-	err = s.Close()
-	if err != nil {
-		b.Fatal(err)
-	}
 }
 
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	prepareEnv()
 
-	memoryQueueFactory := lib.NewMemoryQueueFactory()
+	memoryQueueFactory := lib.NewMemoryQueueFactory(context.Background())
 
 	svrConf := &lib.Config{
+		ListenAddr: common.DefaultAddr,
 		QueueBuilder: func(ctx context.Context, config *lib.Config) (lib.EventQueueFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}
 
-	fm, err := lib.NewFunctionManager(svrConf)
-	if err != nil {
-		b.Fatal(err)
-	}
-	s := server.NewWithFM(fm)
-	go func() {
-		common.RunProcess(func() (io.Closer, error) {
-			go s.Run()
-			return s, nil
-		})
+	s := server.New(svrConf)
+	go s.Run()
+	defer func() {
+		err := s.Close()
+		if err != nil {
+			b.Fatal(err)
+		}
 	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
 
-	replicas := int32(15)
+	replicas := int32(1)
 
 	pConfig := &perf.Config{
 		RequestRate: 200000.0,
@@ -161,7 +154,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
 	defer cancel()
 
 	profile := "BenchmarkStressForBasicFunc.pprof"

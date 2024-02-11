@@ -77,9 +77,11 @@ All URIs are relative to *http://localhost:7300*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*DefaultAPI* | [**ApiV1ConsumeQueueNameGet**](docs/DefaultAPI.md#apiv1consumequeuenameget) | **Get** /api/v1/consume/{queue_name} | Consumes an event from a queue
 *DefaultAPI* | [**ApiV1FunctionFunctionNameDelete**](docs/DefaultAPI.md#apiv1functionfunctionnamedelete) | **Delete** /api/v1/function/{function_name} | Deletes a function
 *DefaultAPI* | [**ApiV1FunctionFunctionNamePost**](docs/DefaultAPI.md#apiv1functionfunctionnamepost) | **Post** /api/v1/function/{function_name} | Starts a function
 *DefaultAPI* | [**ApiV1FunctionsGet**](docs/DefaultAPI.md#apiv1functionsget) | **Get** /api/v1/functions | Returns a list of functions
+*DefaultAPI* | [**ApiV1ProduceQueueNamePut**](docs/DefaultAPI.md#apiv1producequeuenameput) | **Put** /api/v1/produce/{queue_name} | Produces an event to a queue
 
 
 ## Documentation For Models

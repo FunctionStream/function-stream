@@ -23,7 +23,7 @@ paths:
       summary: Returns a list of functions
       responses:
         '200':
-          description: A JSON array of user names
+          description: A JSON array of function names
           content:
             application/json:
               schema:
@@ -66,6 +66,42 @@ paths:
           description: Function deleted successfully
         '404':
           description: Function not found
+  /api/v1/produce/{queue_name}:
+    put:
+      summary: Produces an event to a queue
+      parameters:
+        - in: path
+          name: queue_name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Event produced successfully
+        '400':
+          description: Bad request, failed to parse event or body is empty
+  /api/v1/consume/{queue_name}:
+    get:
+      summary: Consumes an event from a queue
+      parameters:
+        - in: path
+          name: queue_name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event consumed successfully
+          content:
+            application/json:
+              schema:
+                type: string
 components:
   schemas:
     Function:

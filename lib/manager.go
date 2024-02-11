@@ -19,6 +19,8 @@ import (
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"log/slog"
+	"math/rand"
+	"strconv"
 	"sync"
 )
 
@@ -41,9 +43,8 @@ func NewFunctionManager(config *Config) (*FunctionManager, error) {
 
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	fm.functionsLock.Lock()
-	defer fm.functionsLock.Unlock()
+	defer fm.functionsLock.Unlock() // TODO: narrow the lock scope
 	if _, exist := fm.functions[f.Name]; exist {
-		fm.functionsLock.Unlock()
 		return common.ErrorFunctionExists
 	}
 	fm.functions[f.Name] = make([]*FunctionInstance, f.Replicas)
@@ -55,7 +56,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 			if err != nil {
 				slog.ErrorContext(instance.ctx, "Error starting function instance", err)
 			}
-			fm.functionsLock.Unlock()
+			instance.Stop()
 			return err
 		}
 	}
@@ -80,8 +81,31 @@ func (fm *FunctionManager) ListFunctions() (result []string) {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
 	result = make([]string, len(fm.functions))
+	i := 0
 	for k := range fm.functions {
-		result = append(result, k)
+		result[i] = k
+		i++
 	}
 	return
+}
+
+func (fm *FunctionManager) ProduceEvent(name string, event Event) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, err := fm.eventQueueFactory.NewSinkChan(ctx, &SinkQueueConfig{Topic: name})
+	if err != nil {
+		return err
+	}
+	c <- event
+	return nil
+}
+
+func (fm *FunctionManager) ConsumeEvent(name string) (Event, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, err := fm.eventQueueFactory.NewSourceChan(ctx, &SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())})
+	if err != nil {
+		return nil, err
+	}
+	return <-c, nil
 }

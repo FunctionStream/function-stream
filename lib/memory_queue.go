@@ -16,29 +16,63 @@ package lib
 
 import (
 	"context"
+	"log/slog"
 	"sync"
+	"sync/atomic"
 )
 
-type MemoryQueueFactory struct {
-	mu     sync.Mutex
-	queues map[string]chan Event
+type queue struct {
+	c      chan Event
+	refCnt int32
 }
 
-func NewMemoryQueueFactory() EventQueueFactory {
+type MemoryQueueFactory struct {
+	ctx    context.Context
+	mu     sync.Mutex
+	queues map[string]*queue
+}
+
+func NewMemoryQueueFactory(ctx context.Context) EventQueueFactory {
 	return &MemoryQueueFactory{
-		queues: make(map[string]chan Event),
+		ctx:    ctx,
+		queues: make(map[string]*queue),
 	}
 }
 
 func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Event {
-	if queue, ok := f.queues[name]; ok {
-		return queue
-	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	c := make(chan Event)
-	f.queues[name] = c
+	defer func() {
+		slog.InfoContext(f.ctx, "Get memory queue chan",
+			"current_use_count", atomic.LoadInt32(&f.queues[name].refCnt),
+			"name", name)
+	}()
+	if q, ok := f.queues[name]; ok {
+		atomic.AddInt32(&q.refCnt, 1)
+		return q.c
+	}
+	c := make(chan Event, 100)
+	f.queues[name] = &queue{
+		c:      c,
+		refCnt: 1,
+	}
 	return c
+}
+
+func (f *MemoryQueueFactory) release(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	q, ok := f.queues[name]
+	if !ok {
+		panic("release non-exist queue: " + name)
+	}
+	if atomic.AddInt32(&q.refCnt, -1) == 0 {
+		close(q.c)
+		delete(f.queues, name)
+	}
+	slog.InfoContext(f.ctx, "Released memory queue",
+		"current_use_count", atomic.LoadInt32(&q.refCnt),
+		"name", name)
 }
 
 func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
@@ -46,7 +80,12 @@ func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQu
 	for _, topic := range config.Topics {
 		t := topic
 		go func() {
+			<-ctx.Done()
+			f.release(t)
+		}()
+		go func() {
 			c := f.getOrCreateChan(t)
+			defer close(result)
 			for {
 				select {
 				case <-ctx.Done():
@@ -61,5 +100,22 @@ func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQu
 }
 
 func (f *MemoryQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
-	return f.getOrCreateChan(config.Topic), nil
+	c := f.getOrCreateChan(config.Topic)
+	wrapperC := make(chan Event)
+	go func() {
+		defer f.release(config.Topic)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-wrapperC:
+				if !ok {
+					return
+				}
+				event.Ack()
+				c <- event
+			}
+		}
+	}()
+	return wrapperC, nil
 }

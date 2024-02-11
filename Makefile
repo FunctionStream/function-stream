@@ -10,7 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: build
 .PHONY: license
 build:
 	go build -v -o bin/function-stream ./cmd
@@ -24,7 +23,7 @@ lint:
 build_all: build build_example
 
 test:
-	go test ./... -timeout 10m
+	go test -race ./... -timeout 10m
 
 bench:
 	export FS_TEST_WORK_DIR="$(shell pwd)" && go test -bench=. ./benchmark -timeout 10m
