@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package lib
+package contube
 
 import (
 	"context"
@@ -24,20 +24,45 @@ import (
 	"sync/atomic"
 )
 
-type PulsarEventQueueFactory struct {
-	newSourceChan func(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error)
-	newSinkChan   func(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error)
+const (
+	PulsarURLKey = "pulsarURL"
+)
+
+type PulsarTubeFactorConfig struct {
+	PulsarURL string
 }
 
-func (f *PulsarEventQueueFactory) NewSourceChan(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
+func NewPulsarTubeFactorConfig(configMap ConfigMap) *PulsarTubeFactorConfig {
+	var result PulsarTubeFactorConfig
+	if pulsarURL, ok := configMap[PulsarURLKey].(string); ok {
+		result.PulsarURL = pulsarURL
+	}
+	return &result
+}
+
+func (c *PulsarTubeFactorConfig) ToConfigMap() ConfigMap {
+	return ConfigMap{
+		PulsarURLKey: c.PulsarURL,
+	}
+}
+
+type PulsarEventQueueFactory struct {
+	newSourceChan func(ctx context.Context, config *SourceQueueConfig) (<-chan Record, error)
+	newSinkChan   func(ctx context.Context, config *SinkQueueConfig) (chan<- Record, error)
+}
+
+func (f *PulsarEventQueueFactory) NewSourceTube(ctx context.Context, configMap ConfigMap) (<-chan Record, error) {
+	config := NewSourceQueueConfig(configMap)
 	return f.newSourceChan(ctx, config)
 }
 
-func (f *PulsarEventQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
+func (f *PulsarEventQueueFactory) NewSinkTube(ctx context.Context, configMap ConfigMap) (chan<- Record, error) {
+	config := NewSinkQueueConfig(configMap)
 	return f.newSinkChan(ctx, config)
 }
 
-func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueueFactory, error) {
+func NewPulsarEventQueueFactory(ctx context.Context, configMap ConfigMap) (TubeFactory, error) {
+	config := NewPulsarTubeFactorConfig(configMap)
 	pc, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL: config.PulsarURL,
 	})
@@ -63,8 +88,8 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 		slog.InfoContext(ctx, message, append(args, slog.Any("config", config))...)
 	}
 	return &PulsarEventQueueFactory{
-		newSourceChan: func(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
-			c := make(chan Event)
+		newSourceChan: func(ctx context.Context, config *SourceQueueConfig) (<-chan Record, error) {
+			c := make(chan Record)
 			consumer, err := pc.Subscribe(pulsar.ConsumerOptions{
 				Topics:           config.Topics,
 				SubscriptionName: config.SubName,
@@ -79,7 +104,7 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 				defer consumer.Close()
 				defer close(c)
 				for msg := range consumer.Chan() {
-					c <- NewAckableEvent(msg.Payload(), func() {
+					c <- NewRecordImpl(msg.Payload(), func() {
 						err := consumer.Ack(msg)
 						if err != nil {
 							handleErr(ctx, err, "Error acknowledging message", "error", err)
@@ -90,8 +115,8 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 			}()
 			return c, nil
 		},
-		newSinkChan: func(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
-			c := make(chan Event)
+		newSinkChan: func(ctx context.Context, config *SinkQueueConfig) (chan<- Record, error) {
+			c := make(chan Record)
 			producer, err := pc.CreateProducer(pulsar.ProducerOptions{
 				Topic: config.Topic,
 			})
@@ -125,7 +150,7 @@ func NewPulsarEventQueueFactory(ctx context.Context, config *Config) (EventQueue
 								handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)
 								return
 							}
-							e.Ack()
+							e.Commit()
 						})
 					case <-ctx.Done():
 						flush()

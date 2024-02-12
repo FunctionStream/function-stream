@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/lib/contube"
 	"github.com/functionstream/functionstream/tests"
 	"math/rand"
 	"strconv"
@@ -31,17 +32,15 @@ func TestStandaloneBasicFunction(t *testing.T) {
 
 	conf := &lib.Config{
 		ListenAddr: "localhost:7301",
-		QueueBuilder: func(ctx context.Context, config *lib.Config) (lib.EventQueueFactory, error) {
-			return lib.NewMemoryQueueFactory(ctx), nil
+		QueueBuilder: func(ctx context.Context, config *lib.Config) (contube.TubeFactory, error) {
+			return contube.NewMemoryQueueFactory(ctx), nil
 		},
 	}
 	s := New(conf)
-	go s.Run()
+	svrCtx, svrCancel := context.WithCancel(context.Background())
+	go s.Run(svrCtx)
 	defer func() {
-		err := s.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
+		svrCancel()
 	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
@@ -67,13 +66,13 @@ func TestStandaloneBasicFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.manager.ProduceEvent(inputTopic, lib.NewAckableEvent(jsonBytes, func() {
+	err = s.manager.ProduceEvent(inputTopic, contube.NewRecordImpl(jsonBytes, func() {
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	output := make(chan lib.Event)
+	output := make(chan contube.Record)
 	go func() {
 		event, err := s.manager.ConsumeEvent(outputTopic)
 		if err != nil {

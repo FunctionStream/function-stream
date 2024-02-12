@@ -17,23 +17,26 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/lib/contube"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 )
 
 type Server struct {
 	manager *lib.FunctionManager
 	config  *lib.Config
-	httpSvr *http.Server
+	httpSvr atomic.Pointer[http.Server]
 }
 
 func New(config *lib.Config) *Server {
@@ -47,8 +50,16 @@ func New(config *lib.Config) *Server {
 	}
 }
 
-func (s *Server) Run() {
+func (s *Server) Run(context context.Context) {
 	slog.Info("Hello, Function Stream!")
+	go func() {
+		<-context.Done()
+		err := s.Close()
+		if err != nil {
+			slog.Error("Error shutting down server", "error", err)
+			return
+		}
+	}()
 	err := s.startRESTHandlers()
 	if err != nil {
 		slog.Error("Error starting REST handlers", "error", err)
@@ -128,7 +139,7 @@ func (s *Server) startRESTHandlers() error {
 			http.Error(w, errors.Wrap(err, "Failed  to read body").Error(), http.StatusBadRequest)
 			return
 		}
-		err = s.manager.ProduceEvent(queueName, lib.NewAckableEvent(content, func() {}))
+		err = s.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -158,15 +169,15 @@ func (s *Server) startRESTHandlers() error {
 		Addr:    s.config.ListenAddr,
 		Handler: r,
 	}
-	s.httpSvr = httpSvr
+	s.httpSvr.Store(httpSvr)
 
 	return httpSvr.ListenAndServe()
 }
 
 func (s *Server) Close() error {
 	slog.Info("Shutting down function stream server")
-	if s.httpSvr != nil {
-		if err := s.httpSvr.Close(); err != nil {
+	if httpSvr := s.httpSvr.Load(); httpSvr != nil {
+		if err := httpSvr.Close(); err != nil {
 			return err
 		}
 	}

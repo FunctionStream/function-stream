@@ -23,6 +23,7 @@ import (
 	"github.com/bmizerany/perks/quantile"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/lib/contube"
 	"github.com/functionstream/functionstream/restclient"
 	"golang.org/x/time/rate"
 	"log/slog"
@@ -46,8 +47,8 @@ type Perf interface {
 
 type perf struct {
 	config       *Config
-	input        chan<- lib.Event
-	output       <-chan lib.Event
+	input        chan<- contube.Record
+	output       <-chan contube.Record
 	queueBuilder lib.QueueBuilder
 }
 
@@ -56,8 +57,10 @@ func New(config *Config) Perf {
 		config: config,
 	}
 	if config.QueueBuilder == nil {
-		p.queueBuilder = func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
-			return lib.NewPulsarEventQueueFactory(ctx, c)
+		p.queueBuilder = func(ctx context.Context, c *lib.Config) (contube.TubeFactory, error) {
+			return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactorConfig{
+				PulsarURL: config.PulsarURL,
+			}).ToConfigMap())
 		}
 	} else {
 		p.queueBuilder = config.QueueBuilder
@@ -96,15 +99,15 @@ func (p *perf) Run(ctx context.Context) {
 	queueFactory, err := p.queueBuilder(ctx, config)
 	if err != nil {
 		slog.Error(
-			"Failed to create Event Queue Factory",
+			"Failed to create Record Queue Factory",
 			slog.Any("error", err),
 		)
 		os.Exit(1)
 	}
 
-	p.input, err = queueFactory.NewSinkChan(ctx, &lib.SinkQueueConfig{
+	p.input, err = queueFactory.NewSinkTube(ctx, (&contube.SinkQueueConfig{
 		Topic: f.Inputs[0],
-	})
+	}).ToConfigMap())
 	if err != nil {
 		slog.Error(
 			"Failed to create Sink Perf Channel",
@@ -113,10 +116,10 @@ func (p *perf) Run(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	p.output, err = queueFactory.NewSourceChan(ctx, &lib.SourceQueueConfig{
+	p.output, err = queueFactory.NewSourceTube(ctx, (&contube.SourceQueueConfig{
 		Topics:  []string{f.Output},
 		SubName: "perf",
-	})
+	}).ToConfigMap())
 	if err != nil {
 		slog.Error(
 			"Failed to create Source Perf Channel",
@@ -219,7 +222,7 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 			os.Exit(1)
 		}
 		start := time.Now()
-		if !common.SendToChannel(ctx, p.input, lib.NewAckableEvent(jsonBytes, func() {})) {
+		if !common.SendToChannel(ctx, p.input, contube.NewRecordImpl(jsonBytes, func() {})) {
 			return
 		}
 		go func() {
@@ -229,7 +232,7 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 			}
 			latencyCh <- time.Since(start).Microseconds()
 			payload := e.GetPayload()
-			e.Ack()
+			e.Commit()
 			var out Person
 			err = json.Unmarshal(payload, &out)
 			if err != nil {
