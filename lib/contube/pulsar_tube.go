@@ -28,19 +28,19 @@ const (
 	PulsarURLKey = "pulsarURL"
 )
 
-type PulsarTubeFactorConfig struct {
+type PulsarTubeFactoryConfig struct {
 	PulsarURL string
 }
 
-func NewPulsarTubeFactorConfig(configMap ConfigMap) *PulsarTubeFactorConfig {
-	var result PulsarTubeFactorConfig
+func NewPulsarTubeFactoryConfig(configMap ConfigMap) *PulsarTubeFactoryConfig {
+	var result PulsarTubeFactoryConfig
 	if pulsarURL, ok := configMap[PulsarURLKey].(string); ok {
 		result.PulsarURL = pulsarURL
 	}
 	return &result
 }
 
-func (c *PulsarTubeFactorConfig) ToConfigMap() ConfigMap {
+func (c *PulsarTubeFactoryConfig) ToConfigMap() ConfigMap {
 	return ConfigMap{
 		PulsarURLKey: c.PulsarURL,
 	}
@@ -62,7 +62,7 @@ func (f *PulsarEventQueueFactory) NewSinkTube(ctx context.Context, configMap Con
 }
 
 func NewPulsarEventQueueFactory(ctx context.Context, configMap ConfigMap) (TubeFactory, error) {
-	config := NewPulsarTubeFactorConfig(configMap)
+	config := NewPulsarTubeFactoryConfig(configMap)
 	pc, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL: config.PulsarURL,
 	})

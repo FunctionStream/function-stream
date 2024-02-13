@@ -40,7 +40,7 @@ func LoadConfigFromEnv() *lib.Config {
 		switch queueType {
 		case common.PulsarQueueType:
 			loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (contube.TubeFactory, error) {
-				return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactorConfig{
+				return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactoryConfig{
 					PulsarURL: c.PulsarURL,
 				}).ToConfigMap())
 			}

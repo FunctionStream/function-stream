@@ -58,7 +58,7 @@ func New(config *Config) Perf {
 	}
 	if config.QueueBuilder == nil {
 		p.queueBuilder = func(ctx context.Context, c *lib.Config) (contube.TubeFactory, error) {
-			return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactorConfig{
+			return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactoryConfig{
 				PulsarURL: config.PulsarURL,
 			}).ToConfigMap())
 		}

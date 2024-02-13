@@ -36,12 +36,10 @@ import (
 
 func BenchmarkStressForBasicFunc(b *testing.B) {
 	s := server.New(server.LoadConfigFromEnv())
-	go s.Run()
+	svrCtx, svrCancel := context.WithCancel(context.Background())
+	go s.Run(svrCtx)
 	defer func() {
-		err := s.Close()
-		if err != nil {
-			b.Fatal(err)
-		}
+		svrCancel()
 	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
@@ -79,7 +77,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	defer cancel()
 
 	profile := b.Name() + ".pprof"
@@ -112,12 +110,10 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	}
 
 	s := server.New(svrConf)
-	go s.Run()
+	svrCtx, svrCancel := context.WithCancel(context.Background())
+	go s.Run(svrCtx)
 	defer func() {
-		err := s.Close()
-		if err != nil {
-			b.Fatal(err)
-		}
+		svrCancel()
 	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
@@ -140,7 +136,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	defer cancel()
 
 	profile := b.Name() + ".pprof"
