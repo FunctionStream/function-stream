@@ -41,6 +41,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 	defer func() {
 		svrCancel()
 	}()
+	<-s.WaitForReady(context.Background())
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
@@ -115,6 +116,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	defer func() {
 		svrCancel()
 	}()
+	<-s.WaitForReady(context.Background())
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())

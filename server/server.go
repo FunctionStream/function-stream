@@ -30,7 +30,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sync/atomic"
+	"time"
 )
 
 type Server struct {
@@ -61,13 +63,17 @@ func (s *Server) Run(context context.Context) {
 		}
 	}()
 	err := s.startRESTHandlers()
-	if err != nil {
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("Error starting REST handlers", "error", err)
 	}
 }
 
 func (s *Server) startRESTHandlers() error {
 	r := mux.NewRouter()
+	r.HandleFunc("/api/v1/status", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}).Methods("GET")
+
 	r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		functionName := vars["function_name"]
@@ -172,6 +178,47 @@ func (s *Server) startRESTHandlers() error {
 	s.httpSvr.Store(httpSvr)
 
 	return httpSvr.ListenAndServe()
+}
+
+func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
+	c := make(chan struct{})
+	detect := func() bool {
+		u := (&url.URL{
+			Scheme: "http",
+			Host:   s.config.ListenAddr,
+			Path:   "/api/v1/status",
+		}).String()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			slog.InfoContext(ctx, "Failed to create detect request", slog.Any("error", err))
+			return false
+		}
+		client := &http.Client{}
+		_, err = client.Do(req)
+		if err != nil {
+			slog.InfoContext(ctx, "Detect connection to server failed", slog.Any("error", err))
+		}
+		return true
+	}
+	go func() {
+		defer close(c)
+
+		if detect() {
+			return
+		}
+		// Try to connect to the server
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+				if detect() {
+					return
+				}
+			}
+		}
+	}()
+	return c
 }
 
 func (s *Server) Close() error {
