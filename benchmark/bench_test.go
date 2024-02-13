@@ -41,7 +41,6 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 	defer func() {
 		svrCancel()
 	}()
-	<-s.WaitForReady(context.Background())
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
@@ -95,6 +94,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	<-s.WaitForReady(context.Background())
 	perf.New(pConfig).Run(ctx)
 
 	pprof.StopCPUProfile()
@@ -116,7 +116,6 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	defer func() {
 		svrCancel()
 	}()
-	<-s.WaitForReady(context.Background())
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
@@ -155,6 +154,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	<-s.WaitForReady(context.Background())
 	perf.New(pConfig).Run(ctx)
 
 	pprof.StopCPUProfile()
