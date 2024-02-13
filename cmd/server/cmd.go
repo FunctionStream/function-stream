@@ -17,6 +17,7 @@
 package server
 
 import (
+	"context"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/server"
 	"github.com/spf13/cobra"
@@ -35,7 +36,7 @@ var (
 func exec(*cobra.Command, []string) {
 	common.RunProcess(func() (io.Closer, error) {
 		s := server.New(server.LoadConfigFromEnv())
-		go s.Run()
+		go s.Run(context.Background())
 		return s, nil
 	})
 }

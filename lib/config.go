@@ -18,9 +18,10 @@ package lib
 
 import (
 	"context"
+	"github.com/functionstream/functionstream/lib/contube"
 )
 
-type QueueBuilder func(ctx context.Context, config *Config) (EventQueueFactory, error)
+type QueueBuilder func(ctx context.Context, config *Config) (contube.TubeFactory, error)
 
 type Config struct {
 	ListenAddr   string

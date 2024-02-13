@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/functionstream/functionstream/lib/contube"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/tetratelabs/wazero"
@@ -35,12 +36,12 @@ type FunctionInstance struct {
 	ctx          context.Context
 	cancelFunc   context.CancelFunc
 	definition   *model.Function
-	queueFactory EventQueueFactory
+	queueFactory contube.TubeFactory
 	readyCh      chan error
 	index        int32
 }
 
-func NewFunctionInstance(definition *model.Function, queueFactory EventQueueFactory, index int32) *FunctionInstance {
+func NewFunctionInstance(definition *model.Function, queueFactory contube.TubeFactory, index int32) *FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx.Value(logrus.Fields{
 		"function-name":  definition.Name,
@@ -112,12 +113,12 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	sourceChan, err := instance.queueFactory.NewSourceChan(instance.ctx, &SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)})
+	sourceChan, err := instance.queueFactory.NewSourceTube(instance.ctx, (&contube.SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)}).ToConfigMap())
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating source event queue")
 		return
 	}
-	sinkChan, err := instance.queueFactory.NewSinkChan(instance.ctx, &SinkQueueConfig{Topic: instance.definition.Output})
+	sinkChan, err := instance.queueFactory.NewSinkTube(instance.ctx, (&contube.SinkQueueConfig{Topic: instance.definition.Output}).ToConfigMap())
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
 		return
@@ -133,7 +134,7 @@ func (instance *FunctionInstance) Run() {
 			return
 		}
 		output := stdout.GetAndReset()
-		sinkChan <- NewAckableEvent(output, e.Ack)
+		sinkChan <- contube.NewRecordImpl(output, e.Commit)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"context"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/functionstream/functionstream/lib/contube"
 	"log/slog"
 	"math/rand"
 	"strconv"
@@ -29,7 +30,7 @@ import (
 type FunctionManager struct {
 	functions         map[string][]*FunctionInstance
 	functionsLock     sync.Mutex
-	eventQueueFactory EventQueueFactory
+	eventQueueFactory contube.TubeFactory
 }
 
 func NewFunctionManager(config *Config) (*FunctionManager, error) {
@@ -91,10 +92,10 @@ func (fm *FunctionManager) ListFunctions() (result []string) {
 	return
 }
 
-func (fm *FunctionManager) ProduceEvent(name string, event Event) error {
+func (fm *FunctionManager) ProduceEvent(name string, event contube.Record) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.eventQueueFactory.NewSinkChan(ctx, &SinkQueueConfig{Topic: name})
+	c, err := fm.eventQueueFactory.NewSinkTube(ctx, (&contube.SinkQueueConfig{Topic: name}).ToConfigMap())
 	if err != nil {
 		return err
 	}
@@ -102,10 +103,10 @@ func (fm *FunctionManager) ProduceEvent(name string, event Event) error {
 	return nil
 }
 
-func (fm *FunctionManager) ConsumeEvent(name string) (Event, error) {
+func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.eventQueueFactory.NewSourceChan(ctx, &SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())})
+	c, err := fm.eventQueueFactory.NewSourceTube(ctx, (&contube.SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		return nil, err
 	}

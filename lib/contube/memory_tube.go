@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package lib
+package contube
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 )
 
 type queue struct {
-	c      chan Event
+	c      chan Record
 	refCnt int32
 }
 
@@ -34,14 +34,14 @@ type MemoryQueueFactory struct {
 	queues map[string]*queue
 }
 
-func NewMemoryQueueFactory(ctx context.Context) EventQueueFactory {
+func NewMemoryQueueFactory(ctx context.Context) TubeFactory {
 	return &MemoryQueueFactory{
 		ctx:    ctx,
 		queues: make(map[string]*queue),
 	}
 }
 
-func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Event {
+func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Record {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	defer func() {
@@ -53,7 +53,7 @@ func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Event {
 		atomic.AddInt32(&q.refCnt, 1)
 		return q.c
 	}
-	c := make(chan Event, 100)
+	c := make(chan Record, 100)
 	f.queues[name] = &queue{
 		c:      c,
 		refCnt: 1,
@@ -77,8 +77,9 @@ func (f *MemoryQueueFactory) release(name string) {
 		"name", name)
 }
 
-func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQueueConfig) (<-chan Event, error) {
-	result := make(chan Event)
+func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap ConfigMap) (<-chan Record, error) {
+	config := NewSourceQueueConfig(configMap)
+	result := make(chan Record)
 	for _, topic := range config.Topics {
 		t := topic
 		go func() {
@@ -101,9 +102,10 @@ func (f *MemoryQueueFactory) NewSourceChan(ctx context.Context, config *SourceQu
 	return result, nil
 }
 
-func (f *MemoryQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueConfig) (chan<- Event, error) {
+func (f *MemoryQueueFactory) NewSinkTube(ctx context.Context, configMap ConfigMap) (chan<- Record, error) {
+	config := NewSinkQueueConfig(configMap)
 	c := f.getOrCreateChan(config.Topic)
-	wrapperC := make(chan Event)
+	wrapperC := make(chan Record)
 	go func() {
 		defer f.release(config.Topic)
 		for {
@@ -114,7 +116,7 @@ func (f *MemoryQueueFactory) NewSinkChan(ctx context.Context, config *SinkQueueC
 				if !ok {
 					return
 				}
-				event.Ack()
+				event.Commit()
 				c <- event
 			}
 		}

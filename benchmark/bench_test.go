@@ -22,6 +22,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/lib/contube"
 	"github.com/functionstream/functionstream/perf"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/functionstream/functionstream/server"
@@ -35,12 +36,10 @@ import (
 
 func BenchmarkStressForBasicFunc(b *testing.B) {
 	s := server.New(server.LoadConfigFromEnv())
-	go s.Run()
+	svrCtx, svrCancel := context.WithCancel(context.Background())
+	go s.Run(svrCtx)
 	defer func() {
-		err := s.Close()
-		if err != nil {
-			b.Fatal(err)
-		}
+		svrCancel()
 	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
@@ -78,7 +77,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	defer cancel()
 
 	profile := b.Name() + ".pprof"
@@ -95,28 +94,27 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	<-s.WaitForReady(context.Background())
 	perf.New(pConfig).Run(ctx)
 
 	pprof.StopCPUProfile()
 }
 
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
-	memoryQueueFactory := lib.NewMemoryQueueFactory(context.Background())
+	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
 	svrConf := &lib.Config{
 		ListenAddr: common.DefaultAddr,
-		QueueBuilder: func(ctx context.Context, config *lib.Config) (lib.EventQueueFactory, error) {
+		QueueBuilder: func(ctx context.Context, config *lib.Config) (contube.TubeFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}
 
 	s := server.New(svrConf)
-	go s.Run()
+	svrCtx, svrCancel := context.WithCancel(context.Background())
+	go s.Run(svrCtx)
 	defer func() {
-		err := s.Close()
-		if err != nil {
-			b.Fatal(err)
-		}
+		svrCancel()
 	}()
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
@@ -132,14 +130,14 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 			Output:   outputTopic,
 			Replicas: &replicas,
 		},
-		QueueBuilder: func(ctx context.Context, c *lib.Config) (lib.EventQueueFactory, error) {
+		QueueBuilder: func(ctx context.Context, c *lib.Config) (contube.TubeFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}
 
 	b.ReportAllocs()
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(30*time.Second))
 	defer cancel()
 
 	profile := b.Name() + ".pprof"
@@ -156,6 +154,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	<-s.WaitForReady(context.Background())
 	perf.New(pConfig).Run(ctx)
 
 	pprof.StopCPUProfile()

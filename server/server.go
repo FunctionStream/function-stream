@@ -17,23 +17,28 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/lib/contube"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"sync/atomic"
+	"time"
 )
 
 type Server struct {
 	manager *lib.FunctionManager
 	config  *lib.Config
-	httpSvr *http.Server
+	httpSvr atomic.Pointer[http.Server]
 }
 
 func New(config *lib.Config) *Server {
@@ -47,16 +52,28 @@ func New(config *lib.Config) *Server {
 	}
 }
 
-func (s *Server) Run() {
+func (s *Server) Run(context context.Context) {
 	slog.Info("Hello, Function Stream!")
+	go func() {
+		<-context.Done()
+		err := s.Close()
+		if err != nil {
+			slog.Error("Error shutting down server", "error", err)
+			return
+		}
+	}()
 	err := s.startRESTHandlers()
-	if err != nil {
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("Error starting REST handlers", "error", err)
 	}
 }
 
 func (s *Server) startRESTHandlers() error {
 	r := mux.NewRouter()
+	r.HandleFunc("/api/v1/status", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}).Methods("GET")
+
 	r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		functionName := vars["function_name"]
@@ -128,7 +145,7 @@ func (s *Server) startRESTHandlers() error {
 			http.Error(w, errors.Wrap(err, "Failed  to read body").Error(), http.StatusBadRequest)
 			return
 		}
-		err = s.manager.ProduceEvent(queueName, lib.NewAckableEvent(content, func() {}))
+		err = s.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -158,15 +175,56 @@ func (s *Server) startRESTHandlers() error {
 		Addr:    s.config.ListenAddr,
 		Handler: r,
 	}
-	s.httpSvr = httpSvr
+	s.httpSvr.Store(httpSvr)
 
 	return httpSvr.ListenAndServe()
 }
 
+func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
+	c := make(chan struct{})
+	detect := func() bool {
+		u := (&url.URL{
+			Scheme: "http",
+			Host:   s.config.ListenAddr,
+			Path:   "/api/v1/status",
+		}).String()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			slog.InfoContext(ctx, "Failed to create detect request", slog.Any("error", err))
+			return false
+		}
+		client := &http.Client{}
+		_, err = client.Do(req)
+		if err != nil {
+			slog.InfoContext(ctx, "Detect connection to server failed", slog.Any("error", err))
+		}
+		return true
+	}
+	go func() {
+		defer close(c)
+
+		if detect() {
+			return
+		}
+		// Try to connect to the server
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+				if detect() {
+					return
+				}
+			}
+		}
+	}()
+	return c
+}
+
 func (s *Server) Close() error {
 	slog.Info("Shutting down function stream server")
-	if s.httpSvr != nil {
-		if err := s.httpSvr.Close(); err != nil {
+	if httpSvr := s.httpSvr.Load(); httpSvr != nil {
+		if err := httpSvr.Close(); err != nil {
 			return err
 		}
 	}
