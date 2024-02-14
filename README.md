@@ -67,7 +67,7 @@ and the processing guarantees of the messages.
 ## Directory Structure
 
 The Function Stream project is organized as follows:
-.
+```plaintext
 ├── LICENSE                 # The license for Function Stream
 ├── Makefile                # Contains build automation and commands
 ├── README.md               # README file for the project
@@ -86,6 +86,7 @@ The Function Stream project is organized as follows:
 ├── restclient              # REST client library
 ├── server                  # Server-side application source files
 └── tests                   # Contains test scripts and test data
+```
 
 ## Building Instructions
 
