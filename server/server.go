@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/lib"
-	"github.com/functionstream/functionstream/lib/contube"
+	"github.com/functionstream/functionstream/fs"
+	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -36,13 +36,13 @@ import (
 )
 
 type Server struct {
-	manager *lib.FunctionManager
-	config  *lib.Config
+	manager *fs.FunctionManager
+	config  *fs.Config
 	httpSvr atomic.Pointer[http.Server]
 }
 
-func New(config *lib.Config) *Server {
-	manager, err := lib.NewFunctionManager(config)
+func New(config *fs.Config) *Server {
+	manager, err := fs.NewFunctionManager(config)
 	if err != nil {
 		slog.Error("Error creating function manager", err)
 	}

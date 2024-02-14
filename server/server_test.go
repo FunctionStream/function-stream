@@ -20,8 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/lib"
-	"github.com/functionstream/functionstream/lib/contube"
+	"github.com/functionstream/functionstream/fs"
+	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/functionstream/functionstream/tests"
 	"math/rand"
 	"strconv"
@@ -30,9 +30,9 @@ import (
 
 func TestStandaloneBasicFunction(t *testing.T) {
 
-	conf := &lib.Config{
+	conf := &fs.Config{
 		ListenAddr: "localhost:7301",
-		QueueBuilder: func(ctx context.Context, config *lib.Config) (contube.TubeFactory, error) {
+		QueueBuilder: func(ctx context.Context, config *fs.Config) (contube.TubeFactory, error) {
 			return contube.NewMemoryQueueFactory(ctx), nil
 		},
 	}

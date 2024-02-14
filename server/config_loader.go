@@ -19,27 +19,27 @@ package server
 import (
 	"context"
 	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/lib/contube"
+	"github.com/functionstream/functionstream/fs/contube"
 	"log/slog"
 	"os"
 	"sync"
 
-	"github.com/functionstream/functionstream/lib"
+	"github.com/functionstream/functionstream/fs"
 )
 
-var loadedConfig *lib.Config
+var loadedConfig *fs.Config
 var initConfig = sync.Once{}
 
-func LoadConfigFromEnv() *lib.Config {
+func LoadConfigFromEnv() *fs.Config {
 	initConfig.Do(func() {
-		loadedConfig = &lib.Config{
+		loadedConfig = &fs.Config{
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
 			PulsarURL:  getEnvWithDefault("PULSAR_URL", common.DefaultPulsarURL),
 		}
 		queueType := getEnvWithDefault("QUEUE_TYPE", common.DefaultQueueType)
 		switch queueType {
 		case common.PulsarQueueType:
-			loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (contube.TubeFactory, error) {
+			loadedConfig.QueueBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
 				return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactoryConfig{
 					PulsarURL: c.PulsarURL,
 				}).ToConfigMap())
@@ -49,12 +49,12 @@ func LoadConfigFromEnv() *lib.Config {
 	return loadedConfig
 }
 
-func LoadStandaloneConfigFromEnv() *lib.Config {
+func LoadStandaloneConfigFromEnv() *fs.Config {
 	initConfig.Do(func() {
-		loadedConfig = &lib.Config{
+		loadedConfig = &fs.Config{
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
 		}
-		loadedConfig.QueueBuilder = func(ctx context.Context, c *lib.Config) (contube.TubeFactory, error) {
+		loadedConfig.QueueBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
 			return contube.NewMemoryQueueFactory(ctx), nil
 		}
 	})

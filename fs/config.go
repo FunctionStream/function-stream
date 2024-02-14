@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package lib
+package fs
 
 import (
 	"context"
-	"github.com/functionstream/functionstream/lib/contube"
+	"github.com/functionstream/functionstream/fs/contube"
 )
 
 type QueueBuilder func(ctx context.Context, config *Config) (contube.TubeFactory, error)

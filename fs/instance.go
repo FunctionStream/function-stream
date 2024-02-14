@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package lib
+package fs
 
 import (
 	"context"
 	"fmt"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/lib/contube"
+	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/tetratelabs/wazero"
