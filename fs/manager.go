@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package lib
+package fs
 
 import (
 	"context"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/lib/contube"
+	"github.com/functionstream/functionstream/fs/contube"
 	"log/slog"
 	"math/rand"
 	"strconv"

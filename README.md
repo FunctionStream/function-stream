@@ -45,7 +45,7 @@ integration with Apache Pulsar, allowing users to take full advantage of its rob
    executing code across different hardware architectures seamlessly. It provides compatibility and portability,
    allowing developers to run their code on various platforms without concerns about underlying hardware dependencies.
 
-### Architecture and Components
+## Architecture and Components
 
 Function Stream is composed of three main components: the WebAssembly runtime engine, the Pulsar client, and the
 Function Stream service. The following figure shows the overview of the Function Stream architecture.
@@ -63,6 +63,29 @@ client library, to interact with the Pulsar brokers. The Pulsar client handles t
 and the processing guarantees of the messages.
 
 **The Function Stream service** is responsible for managing the lifecycle and coordination of the WebAssembly instances.
+
+## Directory Structure
+
+The Function Stream project is organized as follows:
+.
+├── LICENSE                 # The license for Function Stream
+├── Makefile                # Contains build automation and commands
+├── README.md               # README file for the project
+├── benchmark               # Contains benchmarking tools or results
+├── bin                     # Contains compiled binary files
+├── cmd                     # Contains the command line executable source files
+├── common                  # Contains common utilities and libraries used across the project
+├── docs                    # Documentation for the project
+├── examples                # Example configurations, scripts, and other reference materials
+├── go.mod                  # Defines the module's module path and its dependency requirements
+├── go.sum                  # Contains the expected cryptographic checksums of the content of specific module versions
+├── fs                      # Core library files for Function Stream
+├── license-checker         # Tools related to checking license compliance
+├── openapi.yaml            # API definition file
+├── perf                    # Performance testing scripts
+├── restclient              # REST client library
+├── server                  # Server-side application source files
+└── tests                   # Contains test scripts and test data
 
 ## Building Instructions
 

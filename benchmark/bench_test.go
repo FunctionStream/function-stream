@@ -21,8 +21,8 @@ import (
 	"github.com/apache/pulsar-client-go/pulsaradmin"
 	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
 	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/lib"
-	"github.com/functionstream/functionstream/lib/contube"
+	"github.com/functionstream/functionstream/fs"
+	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/functionstream/functionstream/perf"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/functionstream/functionstream/server"
@@ -103,9 +103,9 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
-	svrConf := &lib.Config{
+	svrConf := &fs.Config{
 		ListenAddr: common.DefaultAddr,
-		QueueBuilder: func(ctx context.Context, config *lib.Config) (contube.TubeFactory, error) {
+		QueueBuilder: func(ctx context.Context, config *fs.Config) (contube.TubeFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}
@@ -130,7 +130,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 			Output:   outputTopic,
 			Replicas: &replicas,
 		},
-		QueueBuilder: func(ctx context.Context, c *lib.Config) (contube.TubeFactory, error) {
+		QueueBuilder: func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}
