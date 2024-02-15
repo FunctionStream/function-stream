@@ -28,19 +28,19 @@ import (
 )
 
 type FunctionManager struct {
-	functions         map[string][]*FunctionInstance
-	functionsLock     sync.Mutex
-	eventQueueFactory contube.TubeFactory
+	functions     map[string][]*FunctionInstance
+	functionsLock sync.Mutex
+	tubeFactory   contube.TubeFactory
 }
 
 func NewFunctionManager(config *Config) (*FunctionManager, error) {
-	eventQueueFactory, err := config.QueueBuilder(context.Background(), config)
+	tubeFactory, err := config.TubeBuilder(context.Background(), config)
 	if err != nil {
 		return nil, err
 	}
 	return &FunctionManager{
-		functions:         make(map[string][]*FunctionInstance),
-		eventQueueFactory: eventQueueFactory,
+		functions:   make(map[string][]*FunctionInstance),
+		tubeFactory: tubeFactory,
 	}, nil
 }
 
@@ -52,7 +52,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	}
 	fm.functions[f.Name] = make([]*FunctionInstance, f.Replicas)
 	for i := int32(0); i < f.Replicas; i++ {
-		instance := NewFunctionInstance(f, fm.eventQueueFactory, i)
+		instance := NewFunctionInstance(f, fm.tubeFactory, i)
 		fm.functions[f.Name][i] = instance
 		go instance.Run()
 		if err := <-instance.WaitForReady(); err != nil {
@@ -95,7 +95,7 @@ func (fm *FunctionManager) ListFunctions() (result []string) {
 func (fm *FunctionManager) ProduceEvent(name string, event contube.Record) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.eventQueueFactory.NewSinkTube(ctx, (&contube.SinkQueueConfig{Topic: name}).ToConfigMap())
+	c, err := fm.tubeFactory.NewSinkTube(ctx, (&contube.SinkQueueConfig{Topic: name}).ToConfigMap())
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func (fm *FunctionManager) ProduceEvent(name string, event contube.Record) error
 func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.eventQueueFactory.NewSourceTube(ctx, (&contube.SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
+	c, err := fm.tubeFactory.NewSourceTube(ctx, (&contube.SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		return nil, err
 	}

@@ -21,10 +21,11 @@ import (
 	"github.com/functionstream/functionstream/fs/contube"
 )
 
-type QueueBuilder func(ctx context.Context, config *Config) (contube.TubeFactory, error)
+type TubeBuilder func(ctx context.Context, config *Config) (contube.TubeFactory, error)
 
+// Config is a struct that holds the configuration for a function stream.
 type Config struct {
-	ListenAddr   string
-	PulsarURL    string
-	QueueBuilder QueueBuilder
+	ListenAddr  string      // ListenAddr is the address that the function stream REST service will listen on.
+	PulsarURL   string      // PulsarURL is the URL of the Pulsar service. It's used for the pulsar_tube
+	TubeBuilder TubeBuilder // TubeBuilder is a function that will be used to build the tube.
 }

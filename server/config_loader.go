@@ -36,10 +36,10 @@ func LoadConfigFromEnv() *fs.Config {
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
 			PulsarURL:  getEnvWithDefault("PULSAR_URL", common.DefaultPulsarURL),
 		}
-		queueType := getEnvWithDefault("QUEUE_TYPE", common.DefaultQueueType)
-		switch queueType {
-		case common.PulsarQueueType:
-			loadedConfig.QueueBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
+		tubeType := getEnvWithDefault("TUBE_TYPE", common.DefaultTubeType)
+		switch tubeType {
+		case common.PulsarTubeType:
+			loadedConfig.TubeBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
 				return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactoryConfig{
 					PulsarURL: c.PulsarURL,
 				}).ToConfigMap())
@@ -54,7 +54,7 @@ func LoadStandaloneConfigFromEnv() *fs.Config {
 		loadedConfig = &fs.Config{
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
 		}
-		loadedConfig.QueueBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
+		loadedConfig.TubeBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
 			return contube.NewMemoryQueueFactory(ctx), nil
 		}
 	})
