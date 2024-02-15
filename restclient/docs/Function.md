@@ -2,14 +2,14 @@
 
 ## Properties
 
-Name | Type | Description | Notes
------------- | ------------- | ------------- | -------------
-**Name** | Pointer to **string** |  | [optional] 
-**Archive** | **string** |  | 
-**Inputs** | **[]string** |  | 
-**Output** | **string** |  | 
-**Replicas** | Pointer to **int32** |  | [optional] 
-**Config** | Pointer to **map[string]string** |  | [optional] 
+ Name         | Type                             | Description | Notes      
+--------------|----------------------------------|-------------|------------
+ **Name**     | Pointer to **string**            |             | [optional] 
+ **Archive**  | **string**                       |             |
+ **Inputs**   | **[]string**                     |             |
+ **Output**   | **string**                       |             |
+ **Replicas** | Pointer to **int32**             |             | [optional] 
+ **Config**   | Pointer to **map[string]string** |             | [optional] 
 
 ## Methods
 
@@ -74,7 +74,6 @@ and a boolean to check if the value has been set.
 
 SetArchive sets Archive field to given value.
 
-
 ### GetInputs
 
 `func (o *Function) GetInputs() []string`
@@ -94,7 +93,6 @@ and a boolean to check if the value has been set.
 
 SetInputs sets Inputs field to given value.
 
-
 ### GetOutput
 
 `func (o *Function) GetOutput() string`
@@ -113,7 +111,6 @@ and a boolean to check if the value has been set.
 `func (o *Function) SetOutput(v string)`
 
 SetOutput sets Output field to given value.
-
 
 ### GetReplicas
 
@@ -164,7 +161,6 @@ SetConfig sets Config field to given value.
 `func (o *Function) HasConfig() bool`
 
 HasConfig returns a boolean if a field has been set.
-
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

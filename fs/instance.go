@@ -33,12 +33,12 @@ import (
 )
 
 type FunctionInstance struct {
-	ctx          context.Context
-	cancelFunc   context.CancelFunc
-	definition   *model.Function
-	queueFactory contube.TubeFactory
-	readyCh      chan error
-	index        int32
+	ctx         context.Context
+	cancelFunc  context.CancelFunc
+	definition  *model.Function
+	tubeFactory contube.TubeFactory
+	readyCh     chan error
+	index       int32
 }
 
 func NewFunctionInstance(definition *model.Function, queueFactory contube.TubeFactory, index int32) *FunctionInstance {
@@ -48,12 +48,12 @@ func NewFunctionInstance(definition *model.Function, queueFactory contube.TubeFa
 		"function-index": index,
 	})
 	return &FunctionInstance{
-		ctx:          ctx,
-		cancelFunc:   cancelFunc,
-		definition:   definition,
-		queueFactory: queueFactory,
-		readyCh:      make(chan error),
-		index:        index,
+		ctx:         ctx,
+		cancelFunc:  cancelFunc,
+		definition:  definition,
+		tubeFactory: queueFactory,
+		readyCh:     make(chan error),
+		index:       index,
 	}
 }
 
@@ -113,12 +113,12 @@ func (instance *FunctionInstance) Run() {
 		return
 	}
 
-	sourceChan, err := instance.queueFactory.NewSourceTube(instance.ctx, (&contube.SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)}).ToConfigMap())
+	sourceChan, err := instance.tubeFactory.NewSourceTube(instance.ctx, (&contube.SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)}).ToConfigMap())
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating source event queue")
 		return
 	}
-	sinkChan, err := instance.queueFactory.NewSinkTube(instance.ctx, (&contube.SinkQueueConfig{Topic: instance.definition.Output}).ToConfigMap())
+	sinkChan, err := instance.tubeFactory.NewSinkTube(instance.ctx, (&contube.SinkQueueConfig{Topic: instance.definition.Output}).ToConfigMap())
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
 		return

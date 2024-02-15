@@ -105,7 +105,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	svrConf := &fs.Config{
 		ListenAddr: common.DefaultAddr,
-		QueueBuilder: func(ctx context.Context, config *fs.Config) (contube.TubeFactory, error) {
+		TubeBuilder: func(ctx context.Context, config *fs.Config) (contube.TubeFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}

@@ -38,7 +38,7 @@ type Config struct {
 	PulsarURL    string
 	RequestRate  float64
 	Func         *restclient.Function
-	QueueBuilder fs.QueueBuilder
+	QueueBuilder fs.TubeBuilder
 }
 
 type Perf interface {
@@ -46,10 +46,10 @@ type Perf interface {
 }
 
 type perf struct {
-	config       *Config
-	input        chan<- contube.Record
-	output       <-chan contube.Record
-	queueBuilder fs.QueueBuilder
+	config      *Config
+	input       chan<- contube.Record
+	output      <-chan contube.Record
+	tubeBuilder fs.TubeBuilder
 }
 
 func New(config *Config) Perf {
@@ -57,13 +57,13 @@ func New(config *Config) Perf {
 		config: config,
 	}
 	if config.QueueBuilder == nil {
-		p.queueBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
+		p.tubeBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
 			return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactoryConfig{
 				PulsarURL: config.PulsarURL,
 			}).ToConfigMap())
 		}
 	} else {
-		p.queueBuilder = config.QueueBuilder
+		p.tubeBuilder = config.QueueBuilder
 	}
 	return p
 }
@@ -96,7 +96,7 @@ func (p *perf) Run(ctx context.Context) {
 		PulsarURL: p.config.PulsarURL,
 	}
 
-	queueFactory, err := p.queueBuilder(ctx, config)
+	queueFactory, err := p.tubeBuilder(ctx, config)
 	if err != nil {
 		slog.Error(
 			"Failed to create Record Queue Factory",

@@ -32,7 +32,7 @@ func TestStandaloneBasicFunction(t *testing.T) {
 
 	conf := &fs.Config{
 		ListenAddr: "localhost:7301",
-		QueueBuilder: func(ctx context.Context, config *fs.Config) (contube.TubeFactory, error) {
+		TubeBuilder: func(ctx context.Context, config *fs.Config) (contube.TubeFactory, error) {
 			return contube.NewMemoryQueueFactory(ctx), nil
 		},
 	}
