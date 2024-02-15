@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"github.com/functionstream/functionstream/common/model"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"io"
 	"log/slog"
 	"net"
@@ -40,12 +41,13 @@ type FuncInstance struct {
 	status      *pb.FunctionStatus
 	readyCh     chan error
 	readyNotify sync.Once
+	input       chan string
+	output      chan string
 }
 
-// FSServiceImpl is the struct that implements the FSServiceServer interface.
-type FSServiceImpl struct {
+// FSSReconcileServer is the struct that implements the FSServiceServer interface.
+type FSSReconcileServer struct {
 	pb.UnimplementedFSReconcileServer
-	// Add any other fields you need here.
 	readyCh     chan struct{}
 	connected   sync.Once
 	reconcile   chan *pb.FunctionStatus
@@ -53,19 +55,19 @@ type FSServiceImpl struct {
 	functionsMu sync.Mutex
 }
 
-func NewFSReconcile() *FSServiceImpl {
-	return &FSServiceImpl{
+func NewFSReconcile() *FSSReconcileServer {
+	return &FSSReconcileServer{
 		readyCh:   make(chan struct{}),
 		reconcile: make(chan *pb.FunctionStatus, 100),
 		functions: make(map[string]*FuncInstance),
 	}
 }
 
-func (s *FSServiceImpl) WaitForReady() <-chan struct{} {
+func (s *FSSReconcileServer) WaitForReady() <-chan struct{} {
 	return s.readyCh
 }
 
-func (s *FSServiceImpl) Reconcile(stream pb.FSReconcile_ReconcileServer) error {
+func (s *FSSReconcileServer) Reconcile(stream pb.FSReconcile_ReconcileServer) error {
 	s.connected.Do(func() {
 		close(s.readyCh)
 	})
@@ -103,10 +105,12 @@ func (s *FSServiceImpl) Reconcile(stream pb.FSReconcile_ReconcileServer) error {
 	}
 }
 
-func (s *FSServiceImpl) NewFunction(f *model.Function) (*FuncInstance, error) {
+func (s *FSSReconcileServer) NewFunction(f *model.Function) (*FuncInstance, error) {
 	instance := &FuncInstance{
 		Name:    f.Name,
 		readyCh: make(chan error),
+		input:   make(chan string),
+		output:  make(chan string),
 		status: &pb.FunctionStatus{
 			Name:   f.Name,
 			Status: pb.FunctionStatus_CREATING,
@@ -124,28 +128,21 @@ func (s *FSServiceImpl) NewFunction(f *model.Function) (*FuncInstance, error) {
 	return instance, nil
 }
 
-func (s *FSServiceImpl) RemoveFunction(name string) {
+func (s *FSSReconcileServer) getFunc(name string) (*FuncInstance, error) {
+	s.functionsMu.Lock()
+	defer s.functionsMu.Unlock()
+	instance, ok := s.functions[name]
+	if !ok {
+		return nil, fmt.Errorf("function not found")
+	}
+	return instance, nil
+}
+
+func (s *FSSReconcileServer) RemoveFunction(name string) {
 	s.functionsMu.Lock()
 	defer s.functionsMu.Unlock()
 	delete(s.functions, name)
 }
-
-//
-//func (s *FSServiceImpl) RegisterNotifier(n string, f NotifierFunc) {
-//	s.notifier_mu.Lock()
-//	defer s.notifier_mu.Unlock()
-//	if _, ok := s.notifiers[n]; ok {
-//		slog.Error("Notifier already exists", slog.Any("name", n))
-//		panic("invalid state")
-//	}
-//	s.notifiers[n] = f
-//}
-//
-//func (s *FSServiceImpl) RemoveNotifier(n string) {
-//	s.notifier_mu.Lock()
-//	defer s.notifier_mu.Unlock()
-//	delete(s.notifiers, n)
-//}
 
 func (f *FuncInstance) Update(new *pb.FunctionStatus) {
 	if f.status.Status != new.Status && f.status.Status == pb.FunctionStatus_CREATING {
@@ -167,32 +164,65 @@ func (f *FuncInstance) WaitForReady() <-chan error {
 	return f.readyCh
 }
 
-//func (s *FSServiceImpl) Process(stream pb.FSService_ProcessServer) error {
-//	err := stream.Send(&pb.Event{Payload: "hello"})
-//	if err != nil {
-//		return err
-//	}
-//
-//	event, err := stream.Recv()
-//	if err != nil {
-//		return err
-//	}
-//	slog.InfoContext(stream.Context(), "Receive event", slog.Any("payload", event.Payload))
-//	return nil
-//}
+func (f *FuncInstance) Call(payload string) string {
+	f.input <- payload
+	return <-f.output
+}
 
-// SetState implements the SetState method of the FSServiceServer interface.
-//func (s *FSServiceImpl) SetState(ctx context.Context, req *pb.SetStateRequest) (*pb.Response, error) {
-//	return okResponse, nil
-//}
+type FunctionServerImpl struct {
+	pb.UnimplementedFunctionServer
+	reconcileSvr *FSSReconcileServer
+}
 
-func StartGRPCServer(f *FSServiceImpl) error {
+func NewFunctionServerImpl(s *FSSReconcileServer) *FunctionServerImpl {
+	return &FunctionServerImpl{
+		reconcileSvr: s,
+	}
+}
+
+func (f *FunctionServerImpl) Process(stream pb.Function_ProcessServer) error {
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		return fmt.Errorf("failed to get metadata")
+	}
+	instance, err := f.reconcileSvr.getFunc(md["name"][0])
+	if err != nil {
+		return err
+	}
+	go func() {
+		for {
+			select {
+			case payload := <-instance.input:
+				err := stream.Send(&pb.Event{Payload: payload})
+				if err != nil {
+					slog.Error("failed to send event", slog.Any("error", err))
+					return
+				}
+			case <-stream.Context().Done():
+				return
+			}
+		}
+	}()
+	for {
+		event, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		instance.output <- event.Payload
+	}
+}
+
+func StartGRPCServer(f *FSSReconcileServer) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", 7400))
 	if err != nil {
 		return err
 	}
 	s := grpc.NewServer()
 	pb.RegisterFSReconcileServer(s, f)
+	pb.RegisterFunctionServer(s, NewFunctionServerImpl(f))
 	if err := s.Serve(lis); err != nil {
 		return err
 	}

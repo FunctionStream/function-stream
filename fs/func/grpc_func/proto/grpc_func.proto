@@ -48,7 +48,6 @@ service FSReconcile {
   rpc Reconcile(stream FunctionStatus) returns (stream FunctionStatus) {}
 }
 
-// The FS service definition.
 service Function {
   rpc Process(stream Event) returns (stream Event) {}
   rpc SetState(SetStateRequest) returns (Response) {}

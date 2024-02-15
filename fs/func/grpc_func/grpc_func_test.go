@@ -6,6 +6,8 @@ import (
 	pb "github.com/functionstream/functionstream/fs/func/grpc_func/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"io"
 	"testing"
 	"time"
 )
@@ -32,11 +34,9 @@ func TestGRPCFunc(t *testing.T) {
 			return
 		}
 	}(conn)
-
-	// Create a client
+	ctx := context.Background()
 	client := pb.NewFSReconcileClient(conn)
 
-	ctx := context.Background()
 	stream, err := client.Reconcile(ctx)
 	if err != nil {
 		t.Fatalf("failed to get process stream: %v", err)
@@ -49,6 +49,8 @@ func TestGRPCFunc(t *testing.T) {
 		}
 	}()
 
+	funcCli := pb.NewFunctionClient(conn)
+
 	select {
 	case <-fsService.WaitForReady():
 		t.Logf("ready")
@@ -59,18 +61,43 @@ func TestGRPCFunc(t *testing.T) {
 
 	go func() {
 		for {
-			event, err := stream.Recv()
+			s, err := stream.Recv()
 			if err != nil {
 				t.Errorf("failed to receive: %v", err)
 				return
 			}
-			t.Logf("client received status: %v", event)
-			event.Status = pb.FunctionStatus_RUNNING
-			err = stream.Send(event)
+			t.Logf("client received status: %v", s)
+			s.Status = pb.FunctionStatus_RUNNING
+			err = stream.Send(s)
 			if err != nil {
 				t.Errorf("failed to send: %v", err)
 				return
 			}
+			go func() {
+				ctx := metadata.AppendToOutgoingContext(context.Background(), "name", "test")
+				processStream, err := funcCli.Process(ctx)
+				if err != nil {
+					t.Errorf("failed to get process stream: %v", err)
+					return
+				}
+				for {
+					event, err := processStream.Recv()
+					if err == io.EOF {
+						return
+					}
+					if err != nil {
+						t.Errorf("failed to receive event: %v", err)
+						return
+					}
+					t.Logf("client received event: %v", event)
+					event.Payload += "!"
+					err = processStream.Send(event)
+					if err != nil {
+						t.Errorf("failed to send event: %v", err)
+						return
+					}
+				}
+			}()
 		}
 	}()
 
@@ -86,5 +113,10 @@ func TestGRPCFunc(t *testing.T) {
 		t.Logf("function ready")
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout waiting for function ready")
+	}
+
+	result := function.Call("hello")
+	if result != "hello!" {
+		t.Errorf("unexpected result: %v", result)
 	}
 }
