@@ -1,0 +1,55 @@
+syntax = "proto3";
+option go_package = "fs/func/grpc_func/proto";
+package fs_func;
+
+// The request message for the Process method.
+message Event {
+  string payload = 1;
+}
+
+message Response {
+  enum Status {
+    OK = 0;
+    ERROR = 1;
+  }
+  Status status = 1;
+  optional string message = 2;
+}
+
+// The request message for the Output method.
+message OutputRequest {
+  string event = 1;
+}
+
+// The request message for the SetState method.
+message SetStateRequest {
+  string key = 1;
+  string value = 2;
+}
+
+message CreateFunctionRequest {
+  string name = 1;
+}
+
+message FunctionStatus {
+  string name = 1;
+  enum Status {
+    CREATING = 0;
+    RUNNING = 1;
+    DELETING = 2;
+    DELETED = 3;
+    FAILED = 4;
+  }
+  Status status = 2;
+  optional string details = 3;
+}
+
+service FSReconcile {
+  rpc Reconcile(stream FunctionStatus) returns (stream FunctionStatus) {}
+}
+
+// The FS service definition.
+service Function {
+  rpc Process(stream Event) returns (stream Event) {}
+  rpc SetState(SetStateRequest) returns (Response) {}
+}
