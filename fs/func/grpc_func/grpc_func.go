@@ -19,6 +19,8 @@ package grpc_func
 import (
 	"fmt"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"io"
@@ -37,17 +39,19 @@ func init() {
 
 // TODO: Replace with FunctionInstane after the function instance abstraction is finishedf
 type FuncInstance struct {
-	Name        string
-	status      *pb.FunctionStatus
-	readyCh     chan error
-	readyNotify sync.Once
-	input       chan string
-	output      chan string
+	Name       string
+	ctx        context.Context
+	cancelFunc context.CancelFunc
+	status     *pb.FunctionStatus
+	readyCh    chan error
+	input      chan string
+	output     chan string
 }
 
 // FSSReconcileServer is the struct that implements the FSServiceServer interface.
 type FSSReconcileServer struct {
 	pb.UnimplementedFSReconcileServer
+	ctx         context.Context
 	readyCh     chan struct{}
 	connected   sync.Once
 	reconcile   chan *pb.FunctionStatus
@@ -55,8 +59,9 @@ type FSSReconcileServer struct {
 	functionsMu sync.Mutex
 }
 
-func NewFSReconcile() *FSSReconcileServer {
+func NewFSReconcile(ctx context.Context) *FSSReconcileServer {
 	return &FSSReconcileServer{
+		ctx:       ctx,
 		readyCh:   make(chan struct{}),
 		reconcile: make(chan *pb.FunctionStatus, 100),
 		functions: make(map[string]*FuncInstance),
@@ -71,41 +76,52 @@ func (s *FSSReconcileServer) Reconcile(stream pb.FSReconcile_ReconcileServer) er
 	s.connected.Do(func() {
 		close(s.readyCh)
 	})
+	errCh := make(chan error)
 	go func() {
 		for {
-			select {
-			case status := <-s.reconcile:
-				err := stream.Send(status)
-				if err != nil {
-					slog.ErrorContext(stream.Context(), "failed to send status update", slog.Any("status", status))
-					// Continue to send the next status update.
-				}
-			case <-stream.Context().Done():
+			newStatus, err := stream.Recv()
+			if err == io.EOF {
 				return
 			}
+			if err != nil {
+				errCh <- err
+				return
+			}
+			s.functionsMu.Lock()
+			instance, ok := s.functions[newStatus.Name]
+			if !ok {
+				s.functionsMu.Unlock()
+				slog.Error("receive non-exist function status update", slog.Any("name", newStatus.Name))
+				continue
+			}
+			s.functionsMu.Unlock()
+			instance.Update(newStatus)
 		}
 	}()
 	for {
-		newStatus, err := stream.Recv()
-		if err == io.EOF {
+		select {
+		case status := <-s.reconcile:
+			err := stream.Send(status)
+			if err != nil {
+				slog.ErrorContext(stream.Context(), "failed to send status update", slog.Any("status", status))
+				// Continue to send the next status update.
+			}
+		case <-stream.Context().Done():
 			return nil
+		case <-s.ctx.Done():
+			return nil
+		case e := <-errCh:
+			return e
 		}
-		if err != nil {
-			return err
-		}
-		s.functionsMu.Lock()
-		instance, ok := s.functions[newStatus.Name]
-		if !ok {
-			s.functionsMu.Unlock()
-			slog.Error("receive non-exist function status update", slog.Any("name", newStatus.Name))
-			continue
-		}
-		s.functionsMu.Unlock()
-		instance.Update(newStatus)
 	}
+
 }
 
 func (s *FSSReconcileServer) NewFunction(f *model.Function) (*FuncInstance, error) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	ctx.Value(logrus.Fields{
+		"function-name": f.Name,
+	})
 	instance := &FuncInstance{
 		Name:    f.Name,
 		readyCh: make(chan error),
@@ -115,6 +131,8 @@ func (s *FSSReconcileServer) NewFunction(f *model.Function) (*FuncInstance, erro
 			Name:   f.Name,
 			Status: pb.FunctionStatus_CREATING,
 		},
+		ctx:        ctx,
+		cancelFunc: cancelFunc,
 	}
 	{
 		s.functionsMu.Lock()
@@ -125,6 +143,7 @@ func (s *FSSReconcileServer) NewFunction(f *model.Function) (*FuncInstance, erro
 		s.functions[f.Name] = instance
 	}
 	s.reconcile <- instance.status
+	slog.InfoContext(instance.ctx, "Creating function", slog.Any("name", f.Name))
 	return instance, nil
 }
 
@@ -141,23 +160,27 @@ func (s *FSSReconcileServer) getFunc(name string) (*FuncInstance, error) {
 func (s *FSSReconcileServer) RemoveFunction(name string) {
 	s.functionsMu.Lock()
 	defer s.functionsMu.Unlock()
+	instance, ok := s.functions[name]
+	if !ok {
+		return
+	}
+	slog.InfoContext(instance.ctx, "Removing function", slog.Any("name", name))
+	instance.cancelFunc()
 	delete(s.functions, name)
 }
 
+func isFinalStatus(status pb.FunctionStatus_Status) bool {
+	return status == pb.FunctionStatus_FAILED || status == pb.FunctionStatus_DELETED
+}
+
 func (f *FuncInstance) Update(new *pb.FunctionStatus) {
-	if f.status.Status != new.Status && f.status.Status == pb.FunctionStatus_CREATING {
-		f.readyNotify.Do(func() {
-			switch new.Status {
-			case pb.FunctionStatus_RUNNING:
-				f.readyCh <- nil
-			case pb.FunctionStatus_FAILED:
-				f.readyCh <- fmt.Errorf("function failed to start")
-			default:
-				f.readyCh <- fmt.Errorf("function in unknown state")
-			}
-			close(f.readyCh)
-		})
+	if f.status.Status == pb.FunctionStatus_CREATING && isFinalStatus(new.Status) {
+		f.readyCh <- fmt.Errorf("function failed to start")
 	}
+	if f.status.Status != new.Status {
+		slog.InfoContext(f.ctx, "Function status update", slog.Any("new_status", new.Status), slog.Any("old_status", f.status.Status))
+	}
+	f.status = new
 }
 
 func (f *FuncInstance) WaitForReady() <-chan error {
@@ -189,29 +212,38 @@ func (f *FunctionServerImpl) Process(stream pb.Function_ProcessServer) error {
 	if err != nil {
 		return err
 	}
+	slog.InfoContext(stream.Context(), "Start processing events", slog.Any("name", md["name"]))
+	instance.readyCh <- err
+	errCh := make(chan error)
 	go func() {
 		for {
-			select {
-			case payload := <-instance.input:
-				err := stream.Send(&pb.Event{Payload: payload})
-				if err != nil {
-					slog.Error("failed to send event", slog.Any("error", err))
-					return
-				}
-			case <-stream.Context().Done():
+			event, err := stream.Recv()
+			if err == io.EOF {
 				return
 			}
+			if err != nil {
+				errCh <- err
+				return
+			}
+			instance.output <- event.Payload
 		}
 	}()
+
 	for {
-		event, err := stream.Recv()
-		if err == io.EOF {
+		select {
+		case payload := <-instance.input:
+			err := stream.Send(&pb.Event{Payload: payload})
+			if err != nil {
+				slog.Error("failed to send event", slog.Any("error", err))
+				return err
+			}
+		case <-stream.Context().Done():
 			return nil
+		case <-instance.ctx.Done():
+			return nil
+		case e := <-errCh:
+			return e
 		}
-		if err != nil {
-			return err
-		}
-		instance.output <- event.Payload
 	}
 }
 

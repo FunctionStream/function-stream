@@ -13,7 +13,8 @@ import (
 )
 
 func TestGRPCFunc(t *testing.T) {
-	fsService := NewFSReconcile()
+	ctx, closeFSReconcile := context.WithCancel(context.Background())
+	fsService := NewFSReconcile(ctx)
 	go func() {
 		err := StartGRPCServer(fsService)
 		if err != nil {
@@ -34,10 +35,9 @@ func TestGRPCFunc(t *testing.T) {
 			return
 		}
 	}(conn)
-	ctx := context.Background()
 	client := pb.NewFSReconcileClient(conn)
 
-	stream, err := client.Reconcile(ctx)
+	stream, err := client.Reconcile(context.Background())
 	if err != nil {
 		t.Fatalf("failed to get process stream: %v", err)
 	}
@@ -62,6 +62,9 @@ func TestGRPCFunc(t *testing.T) {
 	go func() {
 		for {
 			s, err := stream.Recv()
+			if err == io.EOF {
+				return
+			}
 			if err != nil {
 				t.Errorf("failed to receive: %v", err)
 				return
@@ -106,7 +109,6 @@ func TestGRPCFunc(t *testing.T) {
 	})
 	if err != nil {
 		t.Error(err)
-		return
 	}
 	select {
 	case <-function.WaitForReady():
@@ -119,4 +121,14 @@ func TestGRPCFunc(t *testing.T) {
 	if result != "hello!" {
 		t.Errorf("unexpected result: %v", result)
 	}
+
+	fsService.RemoveFunction("test")
+
+	if _, ok := fsService.functions["test"]; ok {
+		t.Errorf("function not removed")
+	}
+
+	closeFSReconcile()
+
+	time.Sleep(3 * time.Second) // Wait for some time to make sure the cleanup of function doesn't raise any errors
 }
