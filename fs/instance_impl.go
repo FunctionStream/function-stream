@@ -36,7 +36,13 @@ type FunctionInstanceImpl struct {
 	index       int32
 }
 
-func NewFunctionInstance(definition *model.Function, queueFactory contube.TubeFactory, index int32) *FunctionInstanceImpl {
+type DefaultInstanceFactory struct{}
+
+func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
+	return &DefaultInstanceFactory{}
+}
+
+func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, queueFactory contube.TubeFactory, index int32) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx.Value(logrus.Fields{
 		"function-name":  definition.Name,

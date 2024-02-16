@@ -22,7 +22,7 @@ import (
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/fs/api"
 	"github.com/functionstream/functionstream/fs/contube"
-	"github.com/functionstream/functionstream/fs/runtime"
+	"github.com/functionstream/functionstream/fs/runtime/wazero"
 	"log/slog"
 	"math/rand"
 	"strconv"
@@ -30,21 +30,69 @@ import (
 )
 
 type FunctionManager struct {
-	functions      map[string][]api.FunctionInstance
-	functionsLock  sync.Mutex
-	tubeFactory    contube.TubeFactory
-	runtimeFactory api.FunctionRuntimeFactory
+	options       *managerOptions
+	functions     map[string][]api.FunctionInstance //TODO: Use sync.map
+	functionsLock sync.Mutex
 }
 
-func NewFunctionManager(config *Config) (*FunctionManager, error) {
-	tubeFactory, err := config.TubeBuilder(context.Background(), config)
-	if err != nil {
-		return nil, err
+type managerOptions struct {
+	tubeFactoryMap    map[string]contube.TubeFactory
+	runtimeFactoryMap map[string]api.FunctionRuntimeFactory
+	instanceFactory   api.FunctionInstanceFactory
+}
+
+type ManagerOption interface {
+	apply(option *managerOptions) (*managerOptions, error)
+}
+
+type managerOptionFunc func(*managerOptions) (*managerOptions, error)
+
+func (f managerOptionFunc) apply(c *managerOptions) (*managerOptions, error) {
+	return f(c)
+}
+
+func WithTubeFactory(name string, factory contube.TubeFactory) ManagerOption {
+	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.tubeFactoryMap[name] = factory
+		return c, nil
+	})
+}
+
+func WithDefaultTubeFactory(factory contube.TubeFactory) ManagerOption {
+	return WithTubeFactory("default", factory)
+}
+
+func WithRuntimeFactory(name string, factory api.FunctionRuntimeFactory) ManagerOption {
+	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.runtimeFactoryMap[name] = factory
+		return c, nil
+	})
+}
+
+func WithInstanceFactory(factory api.FunctionInstanceFactory) ManagerOption {
+	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.instanceFactory = factory
+		return c, nil
+	})
+}
+
+func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
+	options := &managerOptions{
+		tubeFactoryMap:    make(map[string]contube.TubeFactory),
+		runtimeFactoryMap: make(map[string]api.FunctionRuntimeFactory),
+	}
+	options.runtimeFactoryMap["default"] = wazero.NewWazeroFunctionRuntimeFactory()
+	options.tubeFactoryMap["default"] = contube.NewMemoryQueueFactory(context.Background())
+	options.instanceFactory = NewDefaultInstanceFactory()
+	for _, o := range opts {
+		_, err := o.apply(options)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &FunctionManager{
-		functions:      make(map[string][]api.FunctionInstance),
-		tubeFactory:    tubeFactory,
-		runtimeFactory: runtime.NewWazeroFunctionRuntimeFactory(),
+		options:   options,
+		functions: make(map[string][]api.FunctionInstance),
 	}, nil
 }
 
@@ -56,12 +104,12 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	}
 	fm.functions[f.Name] = make([]api.FunctionInstance, f.Replicas)
 	for i := int32(0); i < f.Replicas; i++ {
-		instance := NewFunctionInstance(f, fm.tubeFactory, i)
+		instance := fm.options.instanceFactory.NewFunctionInstance(f, fm.options.tubeFactoryMap["default"], i)
 		fm.functions[f.Name][i] = instance
-		go instance.Run(fm.runtimeFactory)
+		go instance.Run(fm.options.runtimeFactoryMap["default"])
 		if err := <-instance.WaitForReady(); err != nil {
 			if err != nil {
-				slog.ErrorContext(instance.ctx, "Error starting function instance", err)
+				slog.ErrorContext(instance.Context(), "Error starting function instance", err)
 			}
 			instance.Stop()
 			return err
@@ -99,7 +147,7 @@ func (fm *FunctionManager) ListFunctions() (result []string) {
 func (fm *FunctionManager) ProduceEvent(name string, event contube.Record) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.tubeFactory.NewSinkTube(ctx, (&contube.SinkQueueConfig{Topic: name}).ToConfigMap())
+	c, err := fm.options.tubeFactoryMap["default"].NewSinkTube(ctx, (&contube.SinkQueueConfig{Topic: name}).ToConfigMap())
 	if err != nil {
 		return err
 	}
@@ -110,7 +158,7 @@ func (fm *FunctionManager) ProduceEvent(name string, event contube.Record) error
 func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.tubeFactory.NewSourceTube(ctx, (&contube.SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
+	c, err := fm.options.tubeFactoryMap["default"].NewSourceTube(ctx, (&contube.SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		return nil, err
 	}

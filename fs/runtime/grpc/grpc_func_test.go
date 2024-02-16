@@ -1,10 +1,10 @@
-package grpc_func
+package grpc
 
 import (
 	"context"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/fs/contube"
-	pb "github.com/functionstream/functionstream/fs/func/grpc_func/proto"
+	"github.com/functionstream/functionstream/fs/runtime/grpc/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -36,7 +36,7 @@ func TestGRPCFunc(t *testing.T) {
 			return
 		}
 	}(conn)
-	client := pb.NewFSReconcileClient(conn)
+	client := proto.NewFSReconcileClient(conn)
 
 	stream, err := client.Reconcile(context.Background())
 	if err != nil {
@@ -50,7 +50,7 @@ func TestGRPCFunc(t *testing.T) {
 		}
 	}()
 
-	funcCli := pb.NewFunctionClient(conn)
+	funcCli := proto.NewFunctionClient(conn)
 
 	select {
 	case <-fsService.WaitForReady():
@@ -71,7 +71,7 @@ func TestGRPCFunc(t *testing.T) {
 				return
 			}
 			t.Logf("client received status: %v", s)
-			s.Status = pb.FunctionStatus_RUNNING
+			s.Status = proto.FunctionStatus_RUNNING
 			err = stream.Send(s)
 			if err != nil {
 				t.Errorf("failed to send: %v", err)
@@ -106,7 +106,7 @@ func TestGRPCFunc(t *testing.T) {
 	}()
 
 	funcCtx, funcCancel := context.WithCancel(context.Background())
-	function, err := fsService.NewRuntime(funcCtx, &model.Function{
+	function, err := fsService.NewFunctionRuntime(funcCtx, &model.Function{
 		Name: "test",
 	})
 	if err != nil {

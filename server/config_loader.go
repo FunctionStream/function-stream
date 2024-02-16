@@ -17,9 +17,7 @@
 package server
 
 import (
-	"context"
 	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/fs/contube"
 	"log/slog"
 	"os"
 	"sync"
@@ -35,15 +33,7 @@ func LoadConfigFromEnv() *fs.Config {
 		loadedConfig = &fs.Config{
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
 			PulsarURL:  getEnvWithDefault("PULSAR_URL", common.DefaultPulsarURL),
-		}
-		tubeType := getEnvWithDefault("TUBE_TYPE", common.DefaultTubeType)
-		switch tubeType {
-		case common.PulsarTubeType:
-			loadedConfig.TubeBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
-				return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactoryConfig{
-					PulsarURL: c.PulsarURL,
-				}).ToConfigMap())
-			}
+			TubeType:   getEnvWithDefault("TUBE_TYPE", common.DefaultTubeType),
 		}
 	})
 	return loadedConfig
@@ -53,9 +43,7 @@ func LoadStandaloneConfigFromEnv() *fs.Config {
 	initConfig.Do(func() {
 		loadedConfig = &fs.Config{
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
-		}
-		loadedConfig.TubeBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
-			return contube.NewMemoryQueueFactory(ctx), nil
+			TubeType:   getEnvWithDefault("TUBE_TYPE", common.MemoryTubeType),
 		}
 	})
 	return loadedConfig

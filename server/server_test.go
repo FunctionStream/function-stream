@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/fs"
 	"github.com/functionstream/functionstream/fs/contube"
@@ -32,11 +33,12 @@ func TestStandaloneBasicFunction(t *testing.T) {
 
 	conf := &fs.Config{
 		ListenAddr: "localhost:7301",
-		TubeBuilder: func(ctx context.Context, config *fs.Config) (contube.TubeFactory, error) {
-			return contube.NewMemoryQueueFactory(ctx), nil
-		},
+		TubeType:   common.MemoryTubeType,
 	}
-	s := New(conf)
+	s, err := NewServer(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
 	svrCtx, svrCancel := context.WithCancel(context.Background())
 	go s.Run(svrCtx)
 	defer func() {
@@ -53,7 +55,7 @@ func TestStandaloneBasicFunction(t *testing.T) {
 		Name:     "test-func",
 		Replicas: 1,
 	}
-	err := s.manager.StartFunction(funcConf)
+	err = s.options.manager.StartFunction(funcConf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +68,7 @@ func TestStandaloneBasicFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.manager.ProduceEvent(inputTopic, contube.NewRecordImpl(jsonBytes, func() {
+	err = s.options.manager.ProduceEvent(inputTopic, contube.NewRecordImpl(jsonBytes, func() {
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +76,7 @@ func TestStandaloneBasicFunction(t *testing.T) {
 
 	output := make(chan contube.Record)
 	go func() {
-		event, err := s.manager.ConsumeEvent(outputTopic)
+		event, err := s.options.manager.ConsumeEvent(outputTopic)
 		if err != nil {
 			t.Error(err)
 			return

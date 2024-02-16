@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-package grpc_func
+package grpc
 
 import (
 	"fmt"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/functionstream/functionstream/fs/api"
 	"github.com/functionstream/functionstream/fs/contube"
+	"github.com/functionstream/functionstream/fs/runtime/grpc/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -27,21 +29,19 @@ import (
 	"log/slog"
 	"net"
 	"sync"
-
-	pb "github.com/functionstream/functionstream/fs/func/grpc_func/proto"
 )
 
-var okResponse *pb.Response
+var okResponse *proto.Response
 
 func init() {
-	okResponse = &pb.Response{Status: pb.Response_OK}
+	okResponse = &proto.Response{Status: proto.Response_OK}
 }
 
 // TODO: Replace with FunctionInstane after the function instance abstraction is finishedf
 type GRPCFuncRuntime struct {
 	Name     string
 	ctx      context.Context
-	status   *pb.FunctionStatus
+	status   *proto.FunctionStatus
 	readyCh  chan error
 	input    chan string
 	output   chan string
@@ -50,11 +50,11 @@ type GRPCFuncRuntime struct {
 
 // FSSReconcileServer is the struct that implements the FSServiceServer interface.
 type FSSReconcileServer struct {
-	pb.UnimplementedFSReconcileServer
+	proto.UnimplementedFSReconcileServer
 	ctx         context.Context
 	readyCh     chan struct{}
 	connected   sync.Once
-	reconcile   chan *pb.FunctionStatus
+	reconcile   chan *proto.FunctionStatus
 	functions   map[string]*GRPCFuncRuntime
 	functionsMu sync.Mutex
 }
@@ -63,7 +63,7 @@ func NewFSReconcile(ctx context.Context) *FSSReconcileServer {
 	return &FSSReconcileServer{
 		ctx:       ctx,
 		readyCh:   make(chan struct{}),
-		reconcile: make(chan *pb.FunctionStatus, 100),
+		reconcile: make(chan *proto.FunctionStatus, 100),
 		functions: make(map[string]*GRPCFuncRuntime),
 	}
 }
@@ -72,7 +72,7 @@ func (s *FSSReconcileServer) WaitForReady() <-chan struct{} {
 	return s.readyCh
 }
 
-func (s *FSSReconcileServer) Reconcile(stream pb.FSReconcile_ReconcileServer) error {
+func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer) error {
 	s.connected.Do(func() {
 		close(s.readyCh)
 	})
@@ -117,15 +117,15 @@ func (s *FSSReconcileServer) Reconcile(stream pb.FSReconcile_ReconcileServer) er
 
 }
 
-func (s *FSSReconcileServer) NewRuntime(ctx context.Context, f *model.Function) (*GRPCFuncRuntime, error) {
+func (s *FSSReconcileServer) NewFunctionRuntime(ctx context.Context, f *model.Function) (api.FunctionRuntime, error) {
 	instance := &GRPCFuncRuntime{
 		Name:    f.Name,
 		readyCh: make(chan error),
 		input:   make(chan string),
 		output:  make(chan string),
-		status: &pb.FunctionStatus{
+		status: &proto.FunctionStatus{
 			Name:   f.Name,
-			Status: pb.FunctionStatus_CREATING,
+			Status: proto.FunctionStatus_CREATING,
 		},
 		ctx: ctx,
 		stopFunc: func() {
@@ -166,12 +166,12 @@ func (s *FSSReconcileServer) removeFunction(name string) {
 	delete(s.functions, name)
 }
 
-func isFinalStatus(status pb.FunctionStatus_Status) bool {
-	return status == pb.FunctionStatus_FAILED || status == pb.FunctionStatus_DELETED
+func isFinalStatus(status proto.FunctionStatus_Status) bool {
+	return status == proto.FunctionStatus_FAILED || status == proto.FunctionStatus_DELETED
 }
 
-func (f *GRPCFuncRuntime) Update(new *pb.FunctionStatus) {
-	if f.status.Status == pb.FunctionStatus_CREATING && isFinalStatus(new.Status) {
+func (f *GRPCFuncRuntime) Update(new *proto.FunctionStatus) {
+	if f.status.Status == proto.FunctionStatus_CREATING && isFinalStatus(new.Status) {
 		f.readyCh <- fmt.Errorf("function failed to start")
 	}
 	if f.status.Status != new.Status {
@@ -197,7 +197,7 @@ func (f *GRPCFuncRuntime) Call(event contube.Record) (contube.Record, error) {
 }
 
 type FunctionServerImpl struct {
-	pb.UnimplementedFunctionServer
+	proto.UnimplementedFunctionServer
 	reconcileSvr *FSSReconcileServer
 }
 
@@ -207,7 +207,7 @@ func NewFunctionServerImpl(s *FSSReconcileServer) *FunctionServerImpl {
 	}
 }
 
-func (f *FunctionServerImpl) Process(stream pb.Function_ProcessServer) error {
+func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error {
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {
 		return fmt.Errorf("failed to get metadata")
@@ -236,7 +236,7 @@ func (f *FunctionServerImpl) Process(stream pb.Function_ProcessServer) error {
 	for {
 		select {
 		case payload := <-instance.input:
-			err := stream.Send(&pb.Event{Payload: payload})
+			err := stream.Send(&proto.Event{Payload: payload})
 			if err != nil {
 				slog.Error("failed to send event", slog.Any("error", err))
 				return err
@@ -257,8 +257,8 @@ func StartGRPCServer(f *FSSReconcileServer) error {
 		return err
 	}
 	s := grpc.NewServer()
-	pb.RegisterFSReconcileServer(s, f)
-	pb.RegisterFunctionServer(s, NewFunctionServerImpl(f))
+	proto.RegisterFSReconcileServer(s, f)
+	proto.RegisterFunctionServer(s, NewFunctionServerImpl(f))
 	if err := s.Serve(lis); err != nil {
 		return err
 	}

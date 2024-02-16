@@ -129,7 +129,7 @@ var FSReconcile_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "fs/func/grpc_func/proto/grpc_func.proto",
+	Metadata: "fs/runtime/grpc/proto/grpc_func.proto",
 }
 
 // FunctionClient is the client API for Function service.
@@ -284,5 +284,5 @@ var Function_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "fs/func/grpc_func/proto/grpc_func.proto",
+	Metadata: "fs/runtime/grpc/proto/grpc_func.proto",
 }

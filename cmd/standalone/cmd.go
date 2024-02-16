@@ -35,7 +35,10 @@ var (
 
 func exec(*cobra.Command, []string) {
 	common.RunProcess(func() (io.Closer, error) {
-		s := server.New(server.LoadStandaloneConfigFromEnv())
+		s, err := server.NewServer(server.LoadStandaloneConfigFromEnv())
+		if err != nil {
+			return nil, err
+		}
 		go s.Run(context.Background())
 		return s, nil
 	})

@@ -1,4 +1,4 @@
-package runtime
+package wazero
 
 import (
 	"github.com/functionstream/functionstream/common"
