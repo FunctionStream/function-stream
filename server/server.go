@@ -36,20 +36,76 @@ import (
 )
 
 type Server struct {
-	manager *fs.FunctionManager
-	config  *fs.Config
+	options *serverOptions
+	config  *common.Config
 	httpSvr atomic.Pointer[http.Server]
 }
 
-func New(config *fs.Config) *Server {
-	manager, err := fs.NewFunctionManager(config)
+type serverOptions struct {
+	manager *fs.FunctionManager
+}
+
+type ServerOption interface {
+	apply(option *serverOptions) (*serverOptions, error)
+}
+
+type serverOptionFunc func(*serverOptions) (*serverOptions, error)
+
+func (f serverOptionFunc) apply(c *serverOptions) (*serverOptions, error) {
+	return f(c)
+}
+
+func WithFunctionManager(manager *fs.FunctionManager) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		o.manager = manager
+		return o, nil
+	})
+}
+
+func newDefaultFunctionManager(config *common.Config) (*fs.FunctionManager, error) {
+	var tubeFactory contube.TubeFactory
+	var err error
+	switch config.TubeType {
+	case common.PulsarTubeType:
+		tubeFactory, err = contube.NewPulsarEventQueueFactory(context.Background(), (&contube.PulsarTubeFactoryConfig{
+			PulsarURL: config.PulsarURL,
+		}).ToConfigMap())
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create default pulsar tube factory")
+		}
+	case common.MemoryTubeType:
+		tubeFactory = contube.NewMemoryQueueFactory(context.Background())
+	}
+
+	manager, err := fs.NewFunctionManager(
+		fs.WithDefaultTubeFactory(tubeFactory),
+	)
 	if err != nil {
-		slog.Error("Error creating function manager", err)
+		return nil, errors.Wrap(err, "failed to create default function manager")
 	}
+	return manager, nil
+}
+
+func NewServer(config *common.Config, opts ...ServerOption) (*Server, error) {
+	options := &serverOptions{}
+	for _, o := range opts {
+		_, err := o.apply(options)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if options.manager == nil {
+		manager, err := newDefaultFunctionManager(config)
+		if err != nil {
+			return nil, err
+		}
+		options.manager = manager
+	}
+
 	return &Server{
-		manager: manager,
+		options: options,
 		config:  config,
-	}
+	}, nil
 }
 
 func (s *Server) Run(context context.Context) {
@@ -104,7 +160,7 @@ func (s *Server) startRESTHandlers() error {
 		}
 
 		slog.Info("Starting function", slog.Any("name", functionName))
-		err = s.manager.StartFunction(f)
+		err = s.options.manager.StartFunction(f)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -117,7 +173,7 @@ func (s *Server) startRESTHandlers() error {
 		functionName := vars["function_name"]
 		slog.Info("Deleting function", slog.Any("name", functionName))
 
-		err := s.manager.DeleteFunction(functionName)
+		err := s.options.manager.DeleteFunction(functionName)
 		if errors.Is(err, common.ErrorFunctionNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -126,7 +182,7 @@ func (s *Server) startRESTHandlers() error {
 	}).Methods("DELETE")
 
 	r.HandleFunc("/api/v1/functions", func(w http.ResponseWriter, r *http.Request) {
-		functions := s.manager.ListFunctions()
+		functions := s.options.manager.ListFunctions()
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(functions)
 		if err != nil {
@@ -145,7 +201,7 @@ func (s *Server) startRESTHandlers() error {
 			http.Error(w, errors.Wrap(err, "Failed  to read body").Error(), http.StatusBadRequest)
 			return
 		}
-		err = s.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
+		err = s.options.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -156,7 +212,7 @@ func (s *Server) startRESTHandlers() error {
 		vars := mux.Vars(r)
 		queueName := vars["queue_name"]
 		slog.Info("Consuming event from queue", slog.Any("queue_name", queueName))
-		event, err := s.manager.ConsumeEvent(queueName)
+		event, err := s.options.manager.ConsumeEvent(queueName)
 		if err != nil {
 			slog.Error("Error when consuming event", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)

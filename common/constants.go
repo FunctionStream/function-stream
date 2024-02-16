@@ -18,6 +18,7 @@ package common
 
 const (
 	PulsarTubeType = "pulsar"
+	MemoryTubeType = "memory"
 
 	DefaultAddr      = "localhost:7300"
 	DefaultPulsarURL = "pulsar://localhost:6650"

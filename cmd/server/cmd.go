@@ -35,7 +35,10 @@ var (
 
 func exec(*cobra.Command, []string) {
 	common.RunProcess(func() (io.Closer, error) {
-		s := server.New(server.LoadConfigFromEnv())
+		s, err := server.NewServer(server.LoadConfigFromEnv())
+		if err != nil {
+			return nil, err
+		}
 		go s.Run(context.Background())
 		return s, nil
 	})

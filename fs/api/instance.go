@@ -14,32 +14,22 @@
  * limitations under the License.
  */
 
-package standalone
+package api
 
 import (
-	"context"
-	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/server"
-	"github.com/spf13/cobra"
-	"io"
+	"github.com/functionstream/functionstream/common/model"
+	"github.com/functionstream/functionstream/fs/contube"
+	"golang.org/x/net/context"
 )
 
-var (
-	Cmd = &cobra.Command{
-		Use:   "standalone",
-		Short: "Start a standalone server",
-		Long:  `Start a standalone server`,
-		Run:   exec,
-	}
-)
+type FunctionInstance interface {
+	Context() context.Context
+	Definition() *model.Function
+	Stop()
+	Run(factory FunctionRuntimeFactory)
+	WaitForReady() <-chan error
+}
 
-func exec(*cobra.Command, []string) {
-	common.RunProcess(func() (io.Closer, error) {
-		s, err := server.NewServer(server.LoadStandaloneConfigFromEnv())
-		if err != nil {
-			return nil, err
-		}
-		go s.Run(context.Background())
-		return s, nil
-	})
+type FunctionInstanceFactory interface {
+	NewFunctionInstance(f *model.Function, queueFactory contube.TubeFactory, i int32) FunctionInstance
 }

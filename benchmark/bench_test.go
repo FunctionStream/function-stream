@@ -35,7 +35,10 @@ import (
 )
 
 func BenchmarkStressForBasicFunc(b *testing.B) {
-	s := server.New(server.LoadConfigFromEnv())
+	s, err := server.NewServer(server.LoadConfigFromEnv())
+	if err != nil {
+		b.Fatal(err)
+	}
 	svrCtx, svrCancel := context.WithCancel(context.Background())
 	go s.Run(svrCtx)
 	defer func() {
@@ -103,14 +106,18 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
-	svrConf := &fs.Config{
+	svrConf := &common.Config{
 		ListenAddr: common.DefaultAddr,
-		TubeBuilder: func(ctx context.Context, config *fs.Config) (contube.TubeFactory, error) {
-			return memoryQueueFactory, nil
-		},
 	}
 
-	s := server.New(svrConf)
+	fm, err := fs.NewFunctionManager(fs.WithDefaultTubeFactory(memoryQueueFactory))
+	if err != nil {
+		b.Fatal(err)
+	}
+	s, err := server.NewServer(svrConf, server.WithFunctionManager(fm))
+	if err != nil {
+		b.Fatal(err)
+	}
 	svrCtx, svrCancel := context.WithCancel(context.Background())
 	go s.Run(svrCtx)
 	defer func() {
@@ -130,7 +137,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 			Output:   outputTopic,
 			Replicas: &replicas,
 		},
-		QueueBuilder: func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
+		QueueBuilder: func(ctx context.Context, c *common.Config) (contube.TubeFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}

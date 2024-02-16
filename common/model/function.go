@@ -17,9 +17,13 @@
 package model
 
 type Function struct {
-	Name     string
-	Archive  string
-	Inputs   []string
+	Name    string
+	Archive string
+	Source  map[string]any
+	Sink    map[string]any
+	// Deprecate
+	Inputs []string
+	// Deprecate
 	Output   string
 	Config   map[string]string
 	Replicas int32
