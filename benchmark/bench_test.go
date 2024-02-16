@@ -106,7 +106,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
-	svrConf := &fs.Config{
+	svrConf := &common.Config{
 		ListenAddr: common.DefaultAddr,
 	}
 
@@ -137,7 +137,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 			Output:   outputTopic,
 			Replicas: &replicas,
 		},
-		QueueBuilder: func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
+		QueueBuilder: func(ctx context.Context, c *common.Config) (contube.TubeFactory, error) {
 			return memoryQueueFactory, nil
 		},
 	}

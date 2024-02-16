@@ -21,16 +21,14 @@ import (
 	"log/slog"
 	"os"
 	"sync"
-
-	"github.com/functionstream/functionstream/fs"
 )
 
-var loadedConfig *fs.Config
+var loadedConfig *common.Config
 var initConfig = sync.Once{}
 
-func LoadConfigFromEnv() *fs.Config {
+func LoadConfigFromEnv() *common.Config {
 	initConfig.Do(func() {
-		loadedConfig = &fs.Config{
+		loadedConfig = &common.Config{
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
 			PulsarURL:  getEnvWithDefault("PULSAR_URL", common.DefaultPulsarURL),
 			TubeType:   getEnvWithDefault("TUBE_TYPE", common.DefaultTubeType),
@@ -39,9 +37,9 @@ func LoadConfigFromEnv() *fs.Config {
 	return loadedConfig
 }
 
-func LoadStandaloneConfigFromEnv() *fs.Config {
+func LoadStandaloneConfigFromEnv() *common.Config {
 	initConfig.Do(func() {
-		loadedConfig = &fs.Config{
+		loadedConfig = &common.Config{
 			ListenAddr: getEnvWithDefault("LISTEN_ADDR", common.DefaultAddr),
 			TubeType:   getEnvWithDefault("TUBE_TYPE", common.MemoryTubeType),
 		}

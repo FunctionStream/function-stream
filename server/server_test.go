@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/fs"
 	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/functionstream/functionstream/tests"
 	"math/rand"
@@ -31,7 +30,7 @@ import (
 
 func TestStandaloneBasicFunction(t *testing.T) {
 
-	conf := &fs.Config{
+	conf := &common.Config{
 		ListenAddr: "localhost:7301",
 		TubeType:   common.MemoryTubeType,
 	}

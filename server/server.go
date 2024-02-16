@@ -37,7 +37,7 @@ import (
 
 type Server struct {
 	options *serverOptions
-	config  *fs.Config
+	config  *common.Config
 	httpSvr atomic.Pointer[http.Server]
 }
 
@@ -62,7 +62,7 @@ func WithFunctionManager(manager *fs.FunctionManager) ServerOption {
 	})
 }
 
-func newDefaultFunctionManager(config *fs.Config) (*fs.FunctionManager, error) {
+func newDefaultFunctionManager(config *common.Config) (*fs.FunctionManager, error) {
 	var tubeFactory contube.TubeFactory
 	var err error
 	switch config.TubeType {
@@ -86,7 +86,7 @@ func newDefaultFunctionManager(config *fs.Config) (*fs.FunctionManager, error) {
 	return manager, nil
 }
 
-func NewServer(config *fs.Config, opts ...ServerOption) (*Server, error) {
+func NewServer(config *common.Config, opts ...ServerOption) (*Server, error) {
 	options := &serverOptions{}
 	for _, o := range opts {
 		_, err := o.apply(options)

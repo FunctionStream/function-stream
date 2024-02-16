@@ -14,14 +14,7 @@
  * limitations under the License.
  */
 
-package fs
-
-import (
-	"context"
-	"github.com/functionstream/functionstream/fs/contube"
-)
-
-type TubeBuilder func(ctx context.Context, config *Config) (contube.TubeFactory, error)
+package common
 
 // Config is a struct that holds the configuration for a function stream.
 type Config struct {

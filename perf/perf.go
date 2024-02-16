@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"github.com/bmizerany/perks/quantile"
 	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/fs"
 	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/functionstream/functionstream/restclient"
 	"golang.org/x/time/rate"
@@ -34,11 +33,13 @@ import (
 	"time"
 )
 
+type TubeBuilder func(ctx context.Context, config *common.Config) (contube.TubeFactory, error)
+
 type Config struct {
 	PulsarURL    string
 	RequestRate  float64
 	Func         *restclient.Function
-	QueueBuilder fs.TubeBuilder
+	QueueBuilder TubeBuilder
 }
 
 type Perf interface {
@@ -49,7 +50,7 @@ type perf struct {
 	config      *Config
 	input       chan<- contube.Record
 	output      <-chan contube.Record
-	tubeBuilder fs.TubeBuilder
+	tubeBuilder TubeBuilder
 }
 
 func New(config *Config) Perf {
@@ -57,7 +58,7 @@ func New(config *Config) Perf {
 		config: config,
 	}
 	if config.QueueBuilder == nil {
-		p.tubeBuilder = func(ctx context.Context, c *fs.Config) (contube.TubeFactory, error) {
+		p.tubeBuilder = func(ctx context.Context, c *common.Config) (contube.TubeFactory, error) {
 			return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactoryConfig{
 				PulsarURL: config.PulsarURL,
 			}).ToConfigMap())
@@ -92,7 +93,7 @@ func (p *perf) Run(ctx context.Context) {
 		}
 	}
 
-	config := &fs.Config{
+	config := &common.Config{
 		PulsarURL: p.config.PulsarURL,
 	}
 
