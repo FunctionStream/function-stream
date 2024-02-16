@@ -16,15 +16,27 @@
 
 package model
 
+import "github.com/functionstream/functionstream/fs/contube"
+
+type TubeConfig struct {
+	Config contube.ConfigMap `json:"config,omitempty" yaml:"config,omitempty"`
+	Type   *string           `json:"type,omitempty" yaml:"type,omitempty"` // Default to `default`
+}
+
+type ConfigMap map[string]interface{}
+
+type RuntimeConfig struct {
+	Config ConfigMap `json:"config,omitempty" yaml:"config,omitempty"`
+	Type   *string   `json:"type,omitempty" yaml:"type,omitempty"`
+}
+
 type Function struct {
-	Name    string
-	Archive string
-	Source  map[string]any
-	Sink    map[string]any
-	// Deprecate
-	Inputs []string
-	// Deprecate
-	Output   string
-	Config   map[string]string
-	Replicas int32
+	Name     string            `json:"name" yaml:"name"`
+	Runtime  *RuntimeConfig    `json:"runtime" yaml:"runtime"`
+	Source   *TubeConfig       `json:"source,omitempty" yaml:"source,omitempty"`
+	Sink     *TubeConfig       `json:"sink,omitempty" yaml:"sink,omitempty"`
+	Inputs   []string          `json:"inputs" yaml:"inputs"`
+	Output   string            `json:"output" yaml:"output"`
+	Config   map[string]string `json:"config,omitempty" yaml:"config,omitempty"`
+	Replicas int32             `json:"replicas" yaml:"replicas"`
 }

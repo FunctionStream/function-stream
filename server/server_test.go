@@ -48,7 +48,11 @@ func TestStandaloneBasicFunction(t *testing.T) {
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
 
 	funcConf := &model.Function{
-		Archive:  "../bin/example_basic.wasm",
+		Runtime: &model.RuntimeConfig{
+			Config: map[string]interface{}{
+				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
+			},
+		},
 		Inputs:   []string{inputTopic},
 		Output:   outputTopic,
 		Name:     "test-func",

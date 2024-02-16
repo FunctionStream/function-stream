@@ -19,6 +19,8 @@ package common
 import "errors"
 
 var (
-	ErrorFunctionNotFound = errors.New("function not found")
-	ErrorFunctionExists   = errors.New("function already exists")
+	ErrorFunctionNotFound       = errors.New("function not found")
+	ErrorFunctionExists         = errors.New("function already exists")
+	ErrorTubeFactoryNotFound    = errors.New("tube factory not found")
+	ErrorRuntimeFactoryNotFound = errors.New("runtime factory not found")
 )

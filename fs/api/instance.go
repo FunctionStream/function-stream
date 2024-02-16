@@ -31,5 +31,5 @@ type FunctionInstance interface {
 }
 
 type FunctionInstanceFactory interface {
-	NewFunctionInstance(f *model.Function, queueFactory contube.TubeFactory, i int32) FunctionInstance
+	NewFunctionInstance(f *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, i int32) FunctionInstance
 }

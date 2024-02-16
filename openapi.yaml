@@ -118,32 +118,58 @@ paths:
                 type: string
 components:
   schemas:
+    ConfigMap:
+      type: object
+      additionalProperties: true
+    RuntimeConfig:
+      type: object
+      properties:
+        config:
+          $ref: '#/components/schemas/ConfigMap'
+        type:
+          type: string
+          nullable: true
+    TubeConfig:
+      type: object
+      properties:
+        config:
+          $ref: '#/components/schemas/ConfigMap'
+        type:
+          type: string
+          nullable: true
     Function:
       type: object
       properties:
         name:
           type: string
-        archive:
-          type: string
+        runtime:
+          allOf:
+            - $ref: '#/components/schemas/RuntimeConfig'
+            - nullable: true
+        source:
+          allOf:
+            - $ref: '#/components/schemas/TubeConfig'
+            - nullable: true
+        sink:
+          allOf:
+            - $ref: '#/components/schemas/TubeConfig'
+            - nullable: true
         inputs:
           type: array
           items:
             type: string
         output:
           type: string
-        replicas:
-          type: integer
         config:
           type: object
           additionalProperties:
             type: string
+        replicas:
+          type: integer
+          format: int32
       required:
-        - archive
+        - source
+        - sink
         - inputs
         - output
-      example:
-        name: "test-func"
-        archive: "/path/to/func.wasm"
-        inputs: [ "input1", "input2" ]
-        output: "output"
-        config: { "key": "value" }
+        - replicas

@@ -18,6 +18,7 @@ package grpc
 
 import (
 	"context"
+	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/fs"
 	"github.com/functionstream/functionstream/fs/api"
@@ -55,15 +56,15 @@ func (m *mockInstance) WaitForReady() <-chan error {
 func TestGRPCFunc(t *testing.T) {
 	ctx, closeFSReconcile := context.WithCancel(context.Background())
 	fsService := NewFSReconcile(ctx)
-	port := 17400
-	s, err := StartGRPCServer(fsService, port) // The test may running in parallel with other tests, so we need to specify the port
+	addr := "localhost:17400"
+	s, err := StartGRPCServer(fsService, addr) // The test may running in parallel with other tests, so we need to specify the port
 	if err != nil {
 		t.Fatal(err)
 		return
 	}
 	defer s.Stop()
 
-	go StartMockGRPCFunc(t, port)
+	go StartMockGRPCFunc(t, addr)
 
 	select {
 	case <-fsService.WaitForReady():
@@ -119,14 +120,14 @@ func TestGRPCFunc(t *testing.T) {
 func TestFMWithGRPCRuntime(t *testing.T) {
 	ctx, closeFSReconcile := context.WithCancel(context.Background())
 	fsService := NewFSReconcile(ctx)
-	port := 17401
-	s, err := StartGRPCServer(fsService, port)
+	addr := "localhost:17401"
+	s, err := StartGRPCServer(fsService, addr)
 	if err != nil {
 		t.Fatal(err)
 		return
 	}
 	defer s.Stop()
-	go StartMockGRPCFunc(t, port)
+	go StartMockGRPCFunc(t, addr)
 	select {
 	case <-fsService.WaitForReady():
 		t.Logf("ready")
@@ -136,14 +137,20 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 	}
 
 	fm, err := fs.NewFunctionManager(
-		fs.WithDefaultRuntimeFactory(fsService),
+		fs.WithRuntimeFactory("grpc", fsService),
 		fs.WithDefaultTubeFactory(contube.NewMemoryQueueFactory(ctx)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	f := &model.Function{
-		Name:     "test",
+		Name: "test",
+		Runtime: &model.RuntimeConfig{
+			Type: common.OptionalStr("grpc"),
+			Config: map[string]interface{}{
+				"addr": addr,
+			},
+		},
 		Inputs:   []string{"input"},
 		Output:   "output",
 		Replicas: 1,

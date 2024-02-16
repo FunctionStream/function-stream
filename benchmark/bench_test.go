@@ -71,10 +71,14 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 		PulsarURL:   "pulsar://localhost:6650",
 		RequestRate: 200000.0,
 		Func: &restclient.Function{
-			Archive:  "../bin/example_basic.wasm",
+			Runtime: &restclient.FunctionRuntime{
+				Config: map[string]interface{}{
+					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
+				},
+			},
 			Inputs:   []string{inputTopic},
 			Output:   outputTopic,
-			Replicas: &replicas,
+			Replicas: replicas,
 		},
 	}
 
@@ -132,10 +136,14 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	pConfig := &perf.Config{
 		RequestRate: 200000.0,
 		Func: &restclient.Function{
-			Archive:  "../bin/example_basic.wasm",
+			Runtime: &restclient.FunctionRuntime{
+				Config: map[string]interface{}{
+					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
+				},
+			},
 			Inputs:   []string{inputTopic},
 			Output:   outputTopic,
-			Replicas: &replicas,
+			Replicas: replicas,
 		},
 		QueueBuilder: func(ctx context.Context, c *common.Config) (contube.TubeFactory, error) {
 			return memoryQueueFactory, nil

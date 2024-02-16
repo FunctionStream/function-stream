@@ -28,12 +28,13 @@ import (
 )
 
 type FunctionInstanceImpl struct {
-	ctx         context.Context
-	cancelFunc  context.CancelFunc
-	definition  *model.Function
-	tubeFactory contube.TubeFactory
-	readyCh     chan error
-	index       int32
+	ctx           context.Context
+	cancelFunc    context.CancelFunc
+	definition    *model.Function
+	sourceFactory contube.SourceTubeFactory
+	sinkFactory   contube.SinkTubeFactory
+	readyCh       chan error
+	index         int32
 }
 
 type DefaultInstanceFactory struct{}
@@ -42,19 +43,20 @@ func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
 	return &DefaultInstanceFactory{}
 }
 
-func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, queueFactory contube.TubeFactory, index int32) api.FunctionInstance {
+func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, index int32) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx.Value(logrus.Fields{
 		"function-name":  definition.Name,
 		"function-index": index,
 	})
 	return &FunctionInstanceImpl{
-		ctx:         ctx,
-		cancelFunc:  cancelFunc,
-		definition:  definition,
-		tubeFactory: queueFactory,
-		readyCh:     make(chan error),
-		index:       index,
+		ctx:           ctx,
+		cancelFunc:    cancelFunc,
+		definition:    definition,
+		sourceFactory: sourceFactory,
+		sinkFactory:   sinkFactory,
+		readyCh:       make(chan error),
+		index:         index,
 	}
 }
 
@@ -73,13 +75,20 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 		instance.readyCh <- errors.Wrap(err, "Error creating runtime")
 		return
 	}
-
-	sourceChan, err := instance.tubeFactory.NewSourceTube(instance.ctx, (&contube.SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)}).ToConfigMap())
+	getTubeConfig := func(config contube.ConfigMap, tubeConfig *model.TubeConfig) contube.ConfigMap {
+		if tubeConfig != nil && tubeConfig.Config != nil {
+			return contube.Merge(config, tubeConfig.Config)
+		}
+		return config
+	}
+	sourceConfig := (&contube.SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)}).ToConfigMap()
+	sourceChan, err := instance.sourceFactory.NewSourceTube(instance.ctx, getTubeConfig(sourceConfig, instance.definition.Source))
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating source event queue")
 		return
 	}
-	sinkChan, err := instance.tubeFactory.NewSinkTube(instance.ctx, (&contube.SinkQueueConfig{Topic: instance.definition.Output}).ToConfigMap())
+	sinkConfig := (&contube.SinkQueueConfig{Topic: instance.definition.Output}).ToConfigMap()
+	sinkChan, err := instance.sinkFactory.NewSinkTube(instance.ctx, getTubeConfig(sinkConfig, instance.definition.Sink))
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
 		return

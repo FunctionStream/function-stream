@@ -245,8 +245,8 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 	}
 }
 
-func StartGRPCServer(f *FSSReconcileServer, port int) (*grpc.Server, error) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func StartGRPCServer(f *FSSReconcileServer, addr string) (*grpc.Server, error) {
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}

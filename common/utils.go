@@ -16,13 +16,6 @@
 
 package common
 
-const (
-	PulsarTubeType = "pulsar"
-	MemoryTubeType = "memory"
-
-	DefaultAddr      = "localhost:7300"
-	DefaultPulsarURL = "pulsar://localhost:6650"
-	DefaultTubeType  = PulsarTubeType
-
-	RuntimeArchiveConfigKey = "archive"
-)
+func OptionalStr(s string) *string {
+	return &s
+}
