@@ -87,9 +87,13 @@ func (p *perf) Run(ctx context.Context) {
 		f = *p.config.Func
 	} else {
 		f = restclient.Function{
-			Archive: "./bin/example_basic.wasm",
-			Inputs:  []string{"test-input-" + strconv.Itoa(rand.Int())},
-			Output:  "test-output-" + strconv.Itoa(rand.Int()),
+			Runtime: &restclient.FunctionRuntime{
+				Config: map[string]interface{}{
+					common.RuntimeArchiveConfigKey: "./bin/example_basic.wasm",
+				},
+			},
+			Inputs: []string{"test-input-" + strconv.Itoa(rand.Int())},
+			Output: "test-output-" + strconv.Itoa(rand.Int()),
 		}
 	}
 

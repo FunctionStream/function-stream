@@ -23,6 +23,7 @@ import (
 	"github.com/functionstream/functionstream/fs/api"
 	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/functionstream/functionstream/fs/runtime/wazero"
+	"github.com/pkg/errors"
 	"log/slog"
 	"math/rand"
 	"strconv"
@@ -139,6 +140,9 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		return common.ErrorFunctionExists
 	}
 	fm.functions[f.Name] = make([]api.FunctionInstance, f.Replicas)
+	if f.Replicas <= 0 {
+		return errors.New("replicas should be greater than 0")
+	}
 	for i := int32(0); i < f.Replicas; i++ {
 		sourceFactory, err := fm.getTubeFactory(f.Source)
 		if err != nil {

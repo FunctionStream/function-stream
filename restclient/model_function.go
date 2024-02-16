@@ -22,11 +22,13 @@ var _ MappedNullable = &Function{}
 // Function struct for Function
 type Function struct {
 	Name     *string            `json:"name,omitempty"`
-	Archive  string             `json:"archive"`
+	Runtime  *FunctionRuntime   `json:"runtime,omitempty"`
+	Source   FunctionSource     `json:"source"`
+	Sink     FunctionSource     `json:"sink"`
 	Inputs   []string           `json:"inputs"`
 	Output   string             `json:"output"`
-	Replicas *int32             `json:"replicas,omitempty"`
 	Config   *map[string]string `json:"config,omitempty"`
+	Replicas int32              `json:"replicas"`
 }
 
 type _Function Function
@@ -35,11 +37,13 @@ type _Function Function
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewFunction(archive string, inputs []string, output string) *Function {
+func NewFunction(source FunctionSource, sink FunctionSource, inputs []string, output string, replicas int32) *Function {
 	this := Function{}
-	this.Archive = archive
+	this.Source = source
+	this.Sink = sink
 	this.Inputs = inputs
 	this.Output = output
+	this.Replicas = replicas
 	return &this
 }
 
@@ -83,28 +87,84 @@ func (o *Function) SetName(v string) {
 	o.Name = &v
 }
 
-// GetArchive returns the Archive field value
-func (o *Function) GetArchive() string {
+// GetRuntime returns the Runtime field value if set, zero value otherwise.
+func (o *Function) GetRuntime() FunctionRuntime {
+	if o == nil || IsNil(o.Runtime) {
+		var ret FunctionRuntime
+		return ret
+	}
+	return *o.Runtime
+}
+
+// GetRuntimeOk returns a tuple with the Runtime field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *Function) GetRuntimeOk() (*FunctionRuntime, bool) {
+	if o == nil || IsNil(o.Runtime) {
+		return nil, false
+	}
+	return o.Runtime, true
+}
+
+// HasRuntime returns a boolean if a field has been set.
+func (o *Function) HasRuntime() bool {
+	if o != nil && !IsNil(o.Runtime) {
+		return true
+	}
+
+	return false
+}
+
+// SetRuntime gets a reference to the given FunctionRuntime and assigns it to the Runtime field.
+func (o *Function) SetRuntime(v FunctionRuntime) {
+	o.Runtime = &v
+}
+
+// GetSource returns the Source field value
+func (o *Function) GetSource() FunctionSource {
 	if o == nil {
-		var ret string
+		var ret FunctionSource
 		return ret
 	}
 
-	return o.Archive
+	return o.Source
 }
 
-// GetArchiveOk returns a tuple with the Archive field value
+// GetSourceOk returns a tuple with the Source field value
 // and a boolean to check if the value has been set.
-func (o *Function) GetArchiveOk() (*string, bool) {
+func (o *Function) GetSourceOk() (*FunctionSource, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.Archive, true
+	return &o.Source, true
 }
 
-// SetArchive sets field value
-func (o *Function) SetArchive(v string) {
-	o.Archive = v
+// SetSource sets field value
+func (o *Function) SetSource(v FunctionSource) {
+	o.Source = v
+}
+
+// GetSink returns the Sink field value
+func (o *Function) GetSink() FunctionSource {
+	if o == nil {
+		var ret FunctionSource
+		return ret
+	}
+
+	return o.Sink
+}
+
+// GetSinkOk returns a tuple with the Sink field value
+// and a boolean to check if the value has been set.
+func (o *Function) GetSinkOk() (*FunctionSource, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Sink, true
+}
+
+// SetSink sets field value
+func (o *Function) SetSink(v FunctionSource) {
+	o.Sink = v
 }
 
 // GetInputs returns the Inputs field value
@@ -155,38 +215,6 @@ func (o *Function) SetOutput(v string) {
 	o.Output = v
 }
 
-// GetReplicas returns the Replicas field value if set, zero value otherwise.
-func (o *Function) GetReplicas() int32 {
-	if o == nil || IsNil(o.Replicas) {
-		var ret int32
-		return ret
-	}
-	return *o.Replicas
-}
-
-// GetReplicasOk returns a tuple with the Replicas field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *Function) GetReplicasOk() (*int32, bool) {
-	if o == nil || IsNil(o.Replicas) {
-		return nil, false
-	}
-	return o.Replicas, true
-}
-
-// HasReplicas returns a boolean if a field has been set.
-func (o *Function) HasReplicas() bool {
-	if o != nil && !IsNil(o.Replicas) {
-		return true
-	}
-
-	return false
-}
-
-// SetReplicas gets a reference to the given int32 and assigns it to the Replicas field.
-func (o *Function) SetReplicas(v int32) {
-	o.Replicas = &v
-}
-
 // GetConfig returns the Config field value if set, zero value otherwise.
 func (o *Function) GetConfig() map[string]string {
 	if o == nil || IsNil(o.Config) {
@@ -219,6 +247,30 @@ func (o *Function) SetConfig(v map[string]string) {
 	o.Config = &v
 }
 
+// GetReplicas returns the Replicas field value
+func (o *Function) GetReplicas() int32 {
+	if o == nil {
+		var ret int32
+		return ret
+	}
+
+	return o.Replicas
+}
+
+// GetReplicasOk returns a tuple with the Replicas field value
+// and a boolean to check if the value has been set.
+func (o *Function) GetReplicasOk() (*int32, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Replicas, true
+}
+
+// SetReplicas sets field value
+func (o *Function) SetReplicas(v int32) {
+	o.Replicas = v
+}
+
 func (o Function) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -232,15 +284,17 @@ func (o Function) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Name) {
 		toSerialize["name"] = o.Name
 	}
-	toSerialize["archive"] = o.Archive
+	if !IsNil(o.Runtime) {
+		toSerialize["runtime"] = o.Runtime
+	}
+	toSerialize["source"] = o.Source
+	toSerialize["sink"] = o.Sink
 	toSerialize["inputs"] = o.Inputs
 	toSerialize["output"] = o.Output
-	if !IsNil(o.Replicas) {
-		toSerialize["replicas"] = o.Replicas
-	}
 	if !IsNil(o.Config) {
 		toSerialize["config"] = o.Config
 	}
+	toSerialize["replicas"] = o.Replicas
 	return toSerialize, nil
 }
 
@@ -249,9 +303,11 @@ func (o *Function) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"archive",
+		"source",
+		"sink",
 		"inputs",
 		"output",
+		"replicas",
 	}
 
 	allProperties := make(map[string]interface{})

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/functionstream/functionstream/cmd/client/common"
+	fs_cmmon "github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/restclient"
 	"github.com/spf13/cobra"
 	"io"
@@ -63,10 +64,12 @@ func exec(_ *cobra.Command, _ []string) {
 	}}
 	cli := restclient.NewAPIClient(cfg)
 	f := restclient.Function{
-		Name:    &config.name,
-		Archive: config.archive,
-		Inputs:  config.inputs,
-		Output:  config.output,
+		Name: &config.name,
+		Runtime: &restclient.FunctionRuntime{Config: map[string]interface{}{
+			fs_cmmon.RuntimeArchiveConfigKey: config.archive,
+		}},
+		Inputs: config.inputs,
+		Output: config.output,
 	}
 
 	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), config.name).Function(f).Execute()

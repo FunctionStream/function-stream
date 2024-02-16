@@ -153,7 +153,7 @@ func (s *Server) startRESTHandlers() error {
 		}
 		function.Name = &functionName
 
-		f, err := constructFunction(&function)
+		f, err := ConstructFunction(&function)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -287,24 +287,21 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func constructFunction(function *restclient.Function) (*model.Function, error) {
+func ConstructFunction(function *restclient.Function) (*model.Function, error) {
 	if function.Name == nil {
 		return nil, errors.New("function name is required")
 	}
 	f := &model.Function{
-		Name: *function.Name,
-		Runtime: &model.RuntimeConfig{
-			Config: map[string]interface{}{
-				common.RuntimeArchiveConfigKey: function.Archive,
-			},
-		},
-		Inputs: function.Inputs,
-		Output: function.Output,
+		Name:     *function.Name,
+		Inputs:   function.Inputs,
+		Output:   function.Output,
+		Replicas: function.Replicas,
 	}
-	if function.Replicas != nil {
-		f.Replicas = *function.Replicas
-	} else {
-		f.Replicas = 1
+	if function.Runtime != nil {
+		f.Runtime = &model.RuntimeConfig{
+			Type:   function.Runtime.Type.Get(),
+			Config: function.Runtime.Config,
+		}
 	}
 	if function.Config != nil {
 		f.Config = *function.Config

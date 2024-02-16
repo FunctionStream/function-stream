@@ -2,20 +2,22 @@
 
 ## Properties
 
- Name         | Type                             | Description | Notes      
---------------|----------------------------------|-------------|------------
- **Name**     | Pointer to **string**            |             | [optional] 
- **Archive**  | **string**                       |             |
- **Inputs**   | **[]string**                     |             |
- **Output**   | **string**                       |             |
- **Replicas** | Pointer to **int32**             |             | [optional] 
- **Config**   | Pointer to **map[string]string** |             | [optional] 
+Name | Type | Description | Notes
+------------ | ------------- | ------------- | -------------
+**Name** | Pointer to **string** |  | [optional] 
+**Runtime** | Pointer to [**FunctionRuntime**](FunctionRuntime.md) |  | [optional] 
+**Source** | [**FunctionSource**](FunctionSource.md) |  | 
+**Sink** | [**FunctionSource**](FunctionSource.md) |  | 
+**Inputs** | **[]string** |  | 
+**Output** | **string** |  | 
+**Config** | Pointer to **map[string]string** |  | [optional] 
+**Replicas** | **int32** |  | 
 
 ## Methods
 
 ### NewFunction
 
-`func NewFunction(archive string, inputs []string, output string, ) *Function`
+`func NewFunction(source FunctionSource, sink FunctionSource, inputs []string, output string, replicas int32, ) *Function`
 
 NewFunction instantiates a new Function object
 This constructor will assign default values to properties that have it defined,
@@ -55,24 +57,70 @@ SetName sets Name field to given value.
 
 HasName returns a boolean if a field has been set.
 
-### GetArchive
+### GetRuntime
 
-`func (o *Function) GetArchive() string`
+`func (o *Function) GetRuntime() FunctionRuntime`
 
-GetArchive returns the Archive field if non-nil, zero value otherwise.
+GetRuntime returns the Runtime field if non-nil, zero value otherwise.
 
-### GetArchiveOk
+### GetRuntimeOk
 
-`func (o *Function) GetArchiveOk() (*string, bool)`
+`func (o *Function) GetRuntimeOk() (*FunctionRuntime, bool)`
 
-GetArchiveOk returns a tuple with the Archive field if it's non-nil, zero value otherwise
+GetRuntimeOk returns a tuple with the Runtime field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetArchive
+### SetRuntime
 
-`func (o *Function) SetArchive(v string)`
+`func (o *Function) SetRuntime(v FunctionRuntime)`
 
-SetArchive sets Archive field to given value.
+SetRuntime sets Runtime field to given value.
+
+### HasRuntime
+
+`func (o *Function) HasRuntime() bool`
+
+HasRuntime returns a boolean if a field has been set.
+
+### GetSource
+
+`func (o *Function) GetSource() FunctionSource`
+
+GetSource returns the Source field if non-nil, zero value otherwise.
+
+### GetSourceOk
+
+`func (o *Function) GetSourceOk() (*FunctionSource, bool)`
+
+GetSourceOk returns a tuple with the Source field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSource
+
+`func (o *Function) SetSource(v FunctionSource)`
+
+SetSource sets Source field to given value.
+
+
+### GetSink
+
+`func (o *Function) GetSink() FunctionSource`
+
+GetSink returns the Sink field if non-nil, zero value otherwise.
+
+### GetSinkOk
+
+`func (o *Function) GetSinkOk() (*FunctionSource, bool)`
+
+GetSinkOk returns a tuple with the Sink field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSink
+
+`func (o *Function) SetSink(v FunctionSource)`
+
+SetSink sets Sink field to given value.
+
 
 ### GetInputs
 
@@ -93,6 +141,7 @@ and a boolean to check if the value has been set.
 
 SetInputs sets Inputs field to given value.
 
+
 ### GetOutput
 
 `func (o *Function) GetOutput() string`
@@ -112,30 +161,6 @@ and a boolean to check if the value has been set.
 
 SetOutput sets Output field to given value.
 
-### GetReplicas
-
-`func (o *Function) GetReplicas() int32`
-
-GetReplicas returns the Replicas field if non-nil, zero value otherwise.
-
-### GetReplicasOk
-
-`func (o *Function) GetReplicasOk() (*int32, bool)`
-
-GetReplicasOk returns a tuple with the Replicas field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetReplicas
-
-`func (o *Function) SetReplicas(v int32)`
-
-SetReplicas sets Replicas field to given value.
-
-### HasReplicas
-
-`func (o *Function) HasReplicas() bool`
-
-HasReplicas returns a boolean if a field has been set.
 
 ### GetConfig
 
@@ -161,6 +186,27 @@ SetConfig sets Config field to given value.
 `func (o *Function) HasConfig() bool`
 
 HasConfig returns a boolean if a field has been set.
+
+### GetReplicas
+
+`func (o *Function) GetReplicas() int32`
+
+GetReplicas returns the Replicas field if non-nil, zero value otherwise.
+
+### GetReplicasOk
+
+`func (o *Function) GetReplicasOk() (*int32, bool)`
+
+GetReplicasOk returns a tuple with the Replicas field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetReplicas
+
+`func (o *Function) SetReplicas(v int32)`
+
+SetReplicas sets Replicas field to given value.
+
+
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

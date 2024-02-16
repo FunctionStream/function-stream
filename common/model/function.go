@@ -33,10 +33,10 @@ type RuntimeConfig struct {
 type Function struct {
 	Name     string            `json:"name" yaml:"name"`
 	Runtime  *RuntimeConfig    `json:"runtime" yaml:"runtime"`
-	Source   *TubeConfig       `json:"source" yaml:"source"`
-	Sink     *TubeConfig       `json:"sink" yaml:"sink"`
+	Source   *TubeConfig       `json:"source,omitempty" yaml:"source,omitempty"`
+	Sink     *TubeConfig       `json:"sink,omitempty" yaml:"sink,omitempty"`
 	Inputs   []string          `json:"inputs" yaml:"inputs"`
 	Output   string            `json:"output" yaml:"output"`
-	Config   map[string]string `json:"config" yaml:"config"`
+	Config   map[string]string `json:"config,omitempty" yaml:"config,omitempty"`
 	Replicas int32             `json:"replicas" yaml:"replicas"`
 }
