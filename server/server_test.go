@@ -73,17 +73,11 @@ func TestStandaloneBasicFunction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	output := make(chan contube.Record)
-	go func() {
-		event, err := s.options.manager.ConsumeEvent(outputTopic)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		output <- event
-	}()
-
-	event := <-output
+	event, err := s.options.manager.ConsumeEvent(outputTopic)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	var out tests.Person
 	err = json.Unmarshal(event.GetPayload(), &out)
 	if err != nil {

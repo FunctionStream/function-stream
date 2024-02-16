@@ -69,6 +69,10 @@ func WithRuntimeFactory(name string, factory api.FunctionRuntimeFactory) Manager
 	})
 }
 
+func WithDefaultRuntimeFactory(factory api.FunctionRuntimeFactory) ManagerOption {
+	return WithRuntimeFactory("default", factory)
+}
+
 func WithInstanceFactory(factory api.FunctionInstanceFactory) ManagerOption {
 	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
 		c.instanceFactory = factory

@@ -3,15 +3,38 @@ package grpc
 import (
 	"context"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/functionstream/functionstream/fs"
+	"github.com/functionstream/functionstream/fs/api"
 	"github.com/functionstream/functionstream/fs/contube"
-	"github.com/functionstream/functionstream/fs/runtime/grpc/proto"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
-	"io"
 	"testing"
 	"time"
 )
+
+type mockInstance struct {
+	ctx        context.Context
+	definition *model.Function
+}
+
+func (m *mockInstance) Context() context.Context {
+	return m.ctx
+}
+
+func (m *mockInstance) Definition() *model.Function {
+	return m.definition
+}
+
+func (m *mockInstance) Stop() {
+
+}
+
+func (m *mockInstance) Run(_ api.FunctionRuntimeFactory) {
+
+}
+func (m *mockInstance) WaitForReady() <-chan error {
+	c := make(chan error)
+	close(c)
+	return c
+}
 
 func TestGRPCFunc(t *testing.T) {
 	ctx, closeFSReconcile := context.WithCancel(context.Background())
@@ -23,34 +46,8 @@ func TestGRPCFunc(t *testing.T) {
 			return
 		}
 	}()
-	addr := "localhost:7400"
-	// Set up a connection to the server.
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("did not connect: %v", err)
-	}
-	defer func(conn *grpc.ClientConn) {
-		err := conn.Close()
-		if err != nil {
-			t.Fatalf("did not close: %v", err)
-			return
-		}
-	}(conn)
-	client := proto.NewFSReconcileClient(conn)
 
-	stream, err := client.Reconcile(context.Background())
-	if err != nil {
-		t.Fatalf("failed to get process stream: %v", err)
-	}
-	defer func() {
-		err := stream.CloseSend()
-		if err != nil {
-			t.Fatalf("failed to close: %v", err)
-			return
-		}
-	}()
-
-	funcCli := proto.NewFunctionClient(conn)
+	go StartMockGRPCFunc(t)
 
 	select {
 	case <-fsService.WaitForReady():
@@ -60,54 +57,12 @@ func TestGRPCFunc(t *testing.T) {
 		return
 	}
 
-	go func() {
-		for {
-			s, err := stream.Recv()
-			if err == io.EOF {
-				return
-			}
-			if err != nil {
-				t.Errorf("failed to receive: %v", err)
-				return
-			}
-			t.Logf("client received status: %v", s)
-			s.Status = proto.FunctionStatus_RUNNING
-			err = stream.Send(s)
-			if err != nil {
-				t.Errorf("failed to send: %v", err)
-				return
-			}
-			go func() {
-				ctx := metadata.AppendToOutgoingContext(context.Background(), "name", "test")
-				processStream, err := funcCli.Process(ctx)
-				if err != nil {
-					t.Errorf("failed to get process stream: %v", err)
-					return
-				}
-				for {
-					event, err := processStream.Recv()
-					if err == io.EOF {
-						return
-					}
-					if err != nil {
-						t.Errorf("failed to receive event: %v", err)
-						return
-					}
-					t.Logf("client received event: %v", event)
-					event.Payload += "!"
-					err = processStream.Send(event)
-					if err != nil {
-						t.Errorf("failed to send event: %v", err)
-						return
-					}
-				}
-			}()
-		}
-	}()
-
 	funcCtx, funcCancel := context.WithCancel(context.Background())
-	function, err := fsService.NewFunctionRuntime(funcCtx, &model.Function{
-		Name: "test",
+	function, err := fsService.NewFunctionRuntime(&mockInstance{
+		ctx: funcCtx,
+		definition: &model.Function{
+			Name: "test",
+		},
 	})
 	if err != nil {
 		t.Error(err)
@@ -141,4 +96,63 @@ func TestGRPCFunc(t *testing.T) {
 	closeFSReconcile()
 
 	time.Sleep(3 * time.Second) // Wait for some time to make sure the cleanup of function doesn't raise any errors
+}
+
+func TestFMWithGRPCRuntime(t *testing.T) {
+	ctx, closeFSReconcile := context.WithCancel(context.Background())
+	fsService := NewFSReconcile(ctx)
+	go func() {
+		err := StartGRPCServer(fsService)
+		if err != nil {
+			t.Errorf("did not start: %v", err)
+			return
+		}
+	}()
+	go StartMockGRPCFunc(t)
+	select {
+	case <-fsService.WaitForReady():
+		t.Logf("ready")
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for fs service ready")
+		return
+	}
+
+	fm, err := fs.NewFunctionManager(
+		fs.WithDefaultRuntimeFactory(fsService),
+		fs.WithDefaultTubeFactory(contube.NewMemoryQueueFactory(ctx)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f := &model.Function{
+		Name:     "test",
+		Inputs:   []string{"input"},
+		Output:   "output",
+		Replicas: 1,
+	}
+
+	err = fm.StartFunction(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	event := contube.NewRecordImpl([]byte("hello"), func() {})
+	err = fm.ProduceEvent(f.Inputs[0], event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := fm.ConsumeEvent(f.Output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(output.GetPayload()) != "hello!" {
+		t.Fatalf("unexpected result: %v", output)
+	}
+
+	err = fm.DeleteFunction(f.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	closeFSReconcile()
 }

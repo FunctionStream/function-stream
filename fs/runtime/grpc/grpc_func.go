@@ -18,7 +18,6 @@ package grpc
 
 import (
 	"fmt"
-	"github.com/functionstream/functionstream/common/model"
 	"github.com/functionstream/functionstream/fs/api"
 	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/functionstream/functionstream/fs/runtime/grpc/proto"
@@ -30,12 +29,6 @@ import (
 	"net"
 	"sync"
 )
-
-var okResponse *proto.Response
-
-func init() {
-	okResponse = &proto.Response{Status: proto.Response_OK}
-}
 
 // TODO: Replace with FunctionInstane after the function instance abstraction is finishedf
 type GRPCFuncRuntime struct {
@@ -117,32 +110,33 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 
 }
 
-func (s *FSSReconcileServer) NewFunctionRuntime(ctx context.Context, f *model.Function) (api.FunctionRuntime, error) {
-	instance := &GRPCFuncRuntime{
-		Name:    f.Name,
+func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
+	name := instance.Definition().Name
+	runtime := &GRPCFuncRuntime{
+		Name:    name,
 		readyCh: make(chan error),
 		input:   make(chan string),
 		output:  make(chan string),
 		status: &proto.FunctionStatus{
-			Name:   f.Name,
+			Name:   name,
 			Status: proto.FunctionStatus_CREATING,
 		},
-		ctx: ctx,
+		ctx: instance.Context(),
 		stopFunc: func() {
-			s.removeFunction(f.Name)
+			s.removeFunction(name)
 		},
 	}
 	{
 		s.functionsMu.Lock()
 		defer s.functionsMu.Unlock()
-		if _, ok := s.functions[f.Name]; ok {
+		if _, ok := s.functions[name]; ok {
 			return nil, fmt.Errorf("function already exists")
 		}
-		s.functions[f.Name] = instance
+		s.functions[name] = runtime
 	}
-	s.reconcile <- instance.status
-	slog.InfoContext(instance.ctx, "Creating function", slog.Any("name", f.Name))
-	return instance, nil
+	s.reconcile <- runtime.status
+	slog.InfoContext(runtime.ctx, "Creating function", slog.Any("name", name))
+	return runtime, nil
 }
 
 func (s *FSSReconcileServer) getFunc(name string) (*GRPCFuncRuntime, error) {

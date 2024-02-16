@@ -36,7 +36,7 @@ if [ ! -f "$LICENSE_CHECKER" ]; then
   export BINDIR=bin && curl -s https://raw.githubusercontent.com/lluissm/license-header-checker/master/install.sh | bash
 fi
 
-$LICENSE_CHECKER -a -r -i bin,restclient,common/run.go,common/signal.go,fs/func/grpc_func/proto ./license-checker/license-header.txt . go
+$LICENSE_CHECKER -a -r -i bin,restclient,common/run.go,common/signal.go,fs/runtime/grpc/proto/proto ./license-checker/license-header.txt . go
 $LICENSE_CHECKER -a -r -i bin,restclient ./license-checker/license-header-sh.txt . sh yaml yml
 $LICENSE_CHECKER -a -r -i bin,restclient ./license-checker/license-header-md.txt . md
 
