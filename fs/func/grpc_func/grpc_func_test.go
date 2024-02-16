@@ -3,6 +3,7 @@ package grpc_func
 import (
 	"context"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/functionstream/functionstream/fs/contube"
 	pb "github.com/functionstream/functionstream/fs/func/grpc_func/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -104,7 +105,8 @@ func TestGRPCFunc(t *testing.T) {
 		}
 	}()
 
-	function, err := fsService.NewFunction(&model.Function{
+	funcCtx, funcCancel := context.WithCancel(context.Background())
+	function, err := fsService.NewRuntime(funcCtx, &model.Function{
 		Name: "test",
 	})
 	if err != nil {
@@ -117,16 +119,24 @@ func TestGRPCFunc(t *testing.T) {
 		t.Fatal("timeout waiting for function ready")
 	}
 
-	result := function.Call("hello")
-	if result != "hello!" {
-		t.Errorf("unexpected result: %v", result)
+	result, err := function.Call(contube.NewRecordImpl([]byte("hello"), func() {
+		t.Logf("commit")
+	}))
+	if err != nil {
+		t.Fatalf("failed to call function: %v", err)
+	}
+	if string(result.GetPayload()) != "hello!" {
+		t.Fatalf("unexpected result: %v", result)
 	}
 
-	fsService.RemoveFunction("test")
+	funcCancel()
+	function.Stop()
 
+	fsService.functionsMu.Lock()
 	if _, ok := fsService.functions["test"]; ok {
-		t.Errorf("function not removed")
+		t.Fatalf("function not removed")
 	}
+	fsService.functionsMu.Unlock()
 
 	closeFSReconcile()
 

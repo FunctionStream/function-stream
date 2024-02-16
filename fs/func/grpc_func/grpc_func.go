@@ -19,7 +19,7 @@ package grpc_func
 import (
 	"fmt"
 	"github.com/functionstream/functionstream/common/model"
-	"github.com/sirupsen/logrus"
+	"github.com/functionstream/functionstream/fs/contube"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -38,14 +38,14 @@ func init() {
 }
 
 // TODO: Replace with FunctionInstane after the function instance abstraction is finishedf
-type FuncInstance struct {
-	Name       string
-	ctx        context.Context
-	cancelFunc context.CancelFunc
-	status     *pb.FunctionStatus
-	readyCh    chan error
-	input      chan string
-	output     chan string
+type GRPCFuncRuntime struct {
+	Name     string
+	ctx      context.Context
+	status   *pb.FunctionStatus
+	readyCh  chan error
+	input    chan string
+	output   chan string
+	stopFunc func()
 }
 
 // FSSReconcileServer is the struct that implements the FSServiceServer interface.
@@ -55,7 +55,7 @@ type FSSReconcileServer struct {
 	readyCh     chan struct{}
 	connected   sync.Once
 	reconcile   chan *pb.FunctionStatus
-	functions   map[string]*FuncInstance
+	functions   map[string]*GRPCFuncRuntime
 	functionsMu sync.Mutex
 }
 
@@ -64,7 +64,7 @@ func NewFSReconcile(ctx context.Context) *FSSReconcileServer {
 		ctx:       ctx,
 		readyCh:   make(chan struct{}),
 		reconcile: make(chan *pb.FunctionStatus, 100),
-		functions: make(map[string]*FuncInstance),
+		functions: make(map[string]*GRPCFuncRuntime),
 	}
 }
 
@@ -117,12 +117,8 @@ func (s *FSSReconcileServer) Reconcile(stream pb.FSReconcile_ReconcileServer) er
 
 }
 
-func (s *FSSReconcileServer) NewFunction(f *model.Function) (*FuncInstance, error) {
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	ctx.Value(logrus.Fields{
-		"function-name": f.Name,
-	})
-	instance := &FuncInstance{
+func (s *FSSReconcileServer) NewRuntime(ctx context.Context, f *model.Function) (*GRPCFuncRuntime, error) {
+	instance := &GRPCFuncRuntime{
 		Name:    f.Name,
 		readyCh: make(chan error),
 		input:   make(chan string),
@@ -131,8 +127,10 @@ func (s *FSSReconcileServer) NewFunction(f *model.Function) (*FuncInstance, erro
 			Name:   f.Name,
 			Status: pb.FunctionStatus_CREATING,
 		},
-		ctx:        ctx,
-		cancelFunc: cancelFunc,
+		ctx: ctx,
+		stopFunc: func() {
+			s.removeFunction(f.Name)
+		},
 	}
 	{
 		s.functionsMu.Lock()
@@ -147,7 +145,7 @@ func (s *FSSReconcileServer) NewFunction(f *model.Function) (*FuncInstance, erro
 	return instance, nil
 }
 
-func (s *FSSReconcileServer) getFunc(name string) (*FuncInstance, error) {
+func (s *FSSReconcileServer) getFunc(name string) (*GRPCFuncRuntime, error) {
 	s.functionsMu.Lock()
 	defer s.functionsMu.Unlock()
 	instance, ok := s.functions[name]
@@ -157,7 +155,7 @@ func (s *FSSReconcileServer) getFunc(name string) (*FuncInstance, error) {
 	return instance, nil
 }
 
-func (s *FSSReconcileServer) RemoveFunction(name string) {
+func (s *FSSReconcileServer) removeFunction(name string) {
 	s.functionsMu.Lock()
 	defer s.functionsMu.Unlock()
 	instance, ok := s.functions[name]
@@ -165,7 +163,6 @@ func (s *FSSReconcileServer) RemoveFunction(name string) {
 		return
 	}
 	slog.InfoContext(instance.ctx, "Removing function", slog.Any("name", name))
-	instance.cancelFunc()
 	delete(s.functions, name)
 }
 
@@ -173,7 +170,7 @@ func isFinalStatus(status pb.FunctionStatus_Status) bool {
 	return status == pb.FunctionStatus_FAILED || status == pb.FunctionStatus_DELETED
 }
 
-func (f *FuncInstance) Update(new *pb.FunctionStatus) {
+func (f *GRPCFuncRuntime) Update(new *pb.FunctionStatus) {
 	if f.status.Status == pb.FunctionStatus_CREATING && isFinalStatus(new.Status) {
 		f.readyCh <- fmt.Errorf("function failed to start")
 	}
@@ -183,13 +180,20 @@ func (f *FuncInstance) Update(new *pb.FunctionStatus) {
 	f.status = new
 }
 
-func (f *FuncInstance) WaitForReady() <-chan error {
+func (f *GRPCFuncRuntime) WaitForReady() <-chan error {
 	return f.readyCh
 }
 
-func (f *FuncInstance) Call(payload string) string {
-	f.input <- payload
-	return <-f.output
+// Stop stops the function runtime and remove it
+// It is different from the ctx.Cancel. It will make sure the runtime has been deleted after this method returns.
+func (f *GRPCFuncRuntime) Stop() {
+	f.stopFunc()
+}
+
+func (f *GRPCFuncRuntime) Call(event contube.Record) (contube.Record, error) {
+	f.input <- string(event.GetPayload())
+	out := <-f.output
+	return contube.NewRecordImpl([]byte(out), event.Commit), nil
 }
 
 type FunctionServerImpl struct {

@@ -28,9 +28,10 @@ import (
 )
 
 type FunctionManager struct {
-	functions     map[string][]*FunctionInstance
-	functionsLock sync.Mutex
-	tubeFactory   contube.TubeFactory
+	functions      map[string][]*FunctionInstanceImpl
+	functionsLock  sync.Mutex
+	tubeFactory    contube.TubeFactory
+	runtimeFactory FunctionRuntimeFactory
 }
 
 func NewFunctionManager(config *Config) (*FunctionManager, error) {
@@ -39,8 +40,9 @@ func NewFunctionManager(config *Config) (*FunctionManager, error) {
 		return nil, err
 	}
 	return &FunctionManager{
-		functions:   make(map[string][]*FunctionInstance),
-		tubeFactory: tubeFactory,
+		functions:      make(map[string][]*FunctionInstanceImpl),
+		tubeFactory:    tubeFactory,
+		runtimeFactory: NewWazeroFunctionRuntimeFactory(),
 	}, nil
 }
 
@@ -50,11 +52,11 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	if _, exist := fm.functions[f.Name]; exist {
 		return common.ErrorFunctionExists
 	}
-	fm.functions[f.Name] = make([]*FunctionInstance, f.Replicas)
+	fm.functions[f.Name] = make([]*FunctionInstanceImpl, f.Replicas)
 	for i := int32(0); i < f.Replicas; i++ {
 		instance := NewFunctionInstance(f, fm.tubeFactory, i)
 		fm.functions[f.Name][i] = instance
-		go instance.Run()
+		go instance.Run(fm.runtimeFactory)
 		if err := <-instance.WaitForReady(); err != nil {
 			if err != nil {
 				slog.ErrorContext(instance.ctx, "Error starting function instance", err)
