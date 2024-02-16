@@ -21,9 +21,12 @@ import (
 	"github.com/functionstream/functionstream/fs/runtime/grpc/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"io"
+	"log/slog"
 	"testing"
 )
 
@@ -66,6 +69,11 @@ func StartMockGRPCFunc(t *testing.T, port int) {
 				return
 			}
 			if err != nil {
+				s, ok := status.FromError(err)
+				if ok && s.Code() == codes.Unavailable {
+					slog.Info("server disconnected")
+					return
+				}
 				t.Errorf("failed to receive: %v", err)
 				return
 			}
@@ -77,7 +85,7 @@ func StartMockGRPCFunc(t *testing.T, port int) {
 				return
 			}
 			go func() {
-				ctx := metadata.AppendToOutgoingContext(context.Background(), "name", "test")
+				ctx := metadata.AppendToOutgoingContext(context.Background(), "name", s.Name)
 				processStream, err := funcCli.Process(ctx)
 				if err != nil {
 					t.Errorf("failed to get process stream: %v", err)
