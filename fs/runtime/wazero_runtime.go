@@ -1,40 +1,32 @@
-package fs
+package runtime
 
 import (
 	"github.com/functionstream/functionstream/common"
+	"github.com/functionstream/functionstream/fs/api"
 	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/pkg/errors"
 	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/api"
+	wazero_api "github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 	"golang.org/x/net/context"
 	"log/slog"
 	"os"
+	"strconv"
 )
-
-type FunctionRuntime interface {
-	WaitForReady() <-chan error
-	Call(e contube.Record) (contube.Record, error)
-	Stop()
-}
-
-type FunctionRuntimeFactory interface {
-	NewFunctionRuntime(instance *FunctionInstanceImpl) (FunctionRuntime, error)
-}
 
 type WazeroFunctionRuntimeFactory struct {
 }
 
-func NewWazeroFunctionRuntimeFactory() *WazeroFunctionRuntimeFactory {
+func NewWazeroFunctionRuntimeFactory() api.FunctionRuntimeFactory {
 	return &WazeroFunctionRuntimeFactory{}
 }
 
-func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance *FunctionInstanceImpl) (FunctionRuntime, error) {
-	r := wazero.NewRuntime(instance.ctx)
-	_, err := r.NewHostModuleBuilder("env").NewFunctionBuilder().WithFunc(func(ctx context.Context, m api.Module, a, b, c, d uint32) {
+func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
+	r := wazero.NewRuntime(instance.Context())
+	_, err := r.NewHostModuleBuilder("env").NewFunctionBuilder().WithFunc(func(ctx context.Context, m wazero_api.Module, a, b, c, d uint32) {
 		panic("abort")
-	}).Export("abort").Instantiate(instance.ctx)
+	}).Export("abort").Instantiate(instance.Context())
 	if err != nil {
 		return nil, errors.Wrap(err, "Error instantiating function module")
 	}
@@ -44,17 +36,17 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance *FunctionInst
 	config := wazero.NewModuleConfig().
 		WithStdout(stdout).WithStdin(stdin).WithStderr(os.Stderr)
 
-	wasi_snapshot_preview1.MustInstantiate(instance.ctx, r)
+	wasi_snapshot_preview1.MustInstantiate(instance.Context(), r)
 
-	wasmBytes, err := os.ReadFile(instance.definition.Archive)
+	wasmBytes, err := os.ReadFile(instance.Definition().Archive)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error reading wasm file")
 	}
 	// Trigger the "_start" function, WASI's "main".
-	mod, err := r.InstantiateWithConfig(instance.ctx, wasmBytes, config)
+	mod, err := r.InstantiateWithConfig(instance.Context(), wasmBytes, config)
 	if err != nil {
 		if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
-			handleErr(instance.ctx, err, "Function exit with code", "code", exitErr.ExitCode())
+			return nil, errors.Wrap(err, "Error instantiating function, function exit with code"+strconv.Itoa(int(exitErr.ExitCode())))
 		} else if !ok {
 			return nil, errors.Wrap(err, "Error instantiating function")
 		}
@@ -64,10 +56,9 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance *FunctionInst
 		return nil, errors.New("No process function found")
 	}
 	return &WazeroFunctionRuntime{
-		instance: instance,
 		callFunc: func(e contube.Record) (contube.Record, error) {
 			stdin.ResetBuffer(e.GetPayload())
-			_, err := process.Call(instance.ctx)
+			_, err := process.Call(instance.Context())
 			if err != nil {
 				return nil, errors.Wrap(err, "Error calling wasm function")
 			}
@@ -75,16 +66,15 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance *FunctionInst
 			return contube.NewRecordImpl(output, e.Commit), nil
 		},
 		stopFunc: func() {
-			err := r.Close(instance.ctx)
+			err := r.Close(instance.Context())
 			if err != nil {
-				slog.ErrorContext(instance.ctx, "Error closing r", err)
+				slog.ErrorContext(instance.Context(), "Error closing r", err)
 			}
 		},
 	}, nil
 }
 
 type WazeroFunctionRuntime struct {
-	instance *FunctionInstanceImpl
 	callFunc func(e contube.Record) (contube.Record, error)
 	stopFunc func()
 }

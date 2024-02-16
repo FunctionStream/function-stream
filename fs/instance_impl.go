@@ -20,14 +20,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/functionstream/functionstream/fs/api"
 	"github.com/functionstream/functionstream/fs/contube"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"log/slog"
 )
-
-type FunctionInstance interface {
-}
 
 type FunctionInstanceImpl struct {
 	ctx         context.Context
@@ -63,7 +61,7 @@ func handleErr(ctx context.Context, err error, message string, args ...interface
 	slog.ErrorContext(ctx, message, extraArgs...)
 }
 
-func (instance *FunctionInstanceImpl) Run(runtimeFactory FunctionRuntimeFactory) {
+func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFactory) {
 	runtime, err := runtimeFactory.NewFunctionRuntime(instance)
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating runtime")
@@ -109,4 +107,12 @@ func (instance *FunctionInstanceImpl) WaitForReady() <-chan error {
 
 func (instance *FunctionInstanceImpl) Stop() {
 	instance.cancelFunc()
+}
+
+func (instance *FunctionInstanceImpl) Context() context.Context {
+	return instance.ctx
+}
+
+func (instance *FunctionInstanceImpl) Definition() *model.Function {
+	return instance.definition
 }

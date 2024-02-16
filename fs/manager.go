@@ -20,7 +20,9 @@ import (
 	"context"
 	"github.com/functionstream/functionstream/common"
 	"github.com/functionstream/functionstream/common/model"
+	"github.com/functionstream/functionstream/fs/api"
 	"github.com/functionstream/functionstream/fs/contube"
+	"github.com/functionstream/functionstream/fs/runtime"
 	"log/slog"
 	"math/rand"
 	"strconv"
@@ -28,10 +30,10 @@ import (
 )
 
 type FunctionManager struct {
-	functions      map[string][]*FunctionInstanceImpl
+	functions      map[string][]api.FunctionInstance
 	functionsLock  sync.Mutex
 	tubeFactory    contube.TubeFactory
-	runtimeFactory FunctionRuntimeFactory
+	runtimeFactory api.FunctionRuntimeFactory
 }
 
 func NewFunctionManager(config *Config) (*FunctionManager, error) {
@@ -40,9 +42,9 @@ func NewFunctionManager(config *Config) (*FunctionManager, error) {
 		return nil, err
 	}
 	return &FunctionManager{
-		functions:      make(map[string][]*FunctionInstanceImpl),
+		functions:      make(map[string][]api.FunctionInstance),
 		tubeFactory:    tubeFactory,
-		runtimeFactory: NewWazeroFunctionRuntimeFactory(),
+		runtimeFactory: runtime.NewWazeroFunctionRuntimeFactory(),
 	}, nil
 }
 
@@ -52,7 +54,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	if _, exist := fm.functions[f.Name]; exist {
 		return common.ErrorFunctionExists
 	}
-	fm.functions[f.Name] = make([]*FunctionInstanceImpl, f.Replicas)
+	fm.functions[f.Name] = make([]api.FunctionInstance, f.Replicas)
 	for i := int32(0); i < f.Replicas; i++ {
 		instance := NewFunctionInstance(f, fm.tubeFactory, i)
 		fm.functions[f.Name][i] = instance
