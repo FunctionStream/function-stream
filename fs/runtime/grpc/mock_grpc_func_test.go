@@ -17,7 +17,6 @@
 package grpc
 
 import (
-	"fmt"
 	"github.com/functionstream/functionstream/fs/runtime/grpc/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -30,8 +29,7 @@ import (
 	"testing"
 )
 
-func StartMockGRPCFunc(t *testing.T, port int) {
-	addr := fmt.Sprintf("localhost:%d", port)
+func StartMockGRPCFunc(t *testing.T, addr string) {
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -97,6 +95,11 @@ func StartMockGRPCFunc(t *testing.T, port int) {
 						return
 					}
 					if err != nil {
+						s, ok := status.FromError(err)
+						if ok && s.Code() == codes.Unavailable {
+							slog.Info("server disconnected")
+							return
+						}
 						t.Errorf("failed to receive event: %v", err)
 						return
 					}

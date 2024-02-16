@@ -292,10 +292,14 @@ func constructFunction(function *restclient.Function) (*model.Function, error) {
 		return nil, errors.New("function name is required")
 	}
 	f := &model.Function{
-		Name:    *function.Name,
-		Archive: function.Archive,
-		Inputs:  function.Inputs,
-		Output:  function.Output,
+		Name: *function.Name,
+		Runtime: &model.RuntimeConfig{
+			Config: map[string]interface{}{
+				common.RuntimeArchiveConfigKey: function.Archive,
+			},
+		},
+		Inputs: function.Inputs,
+		Output: function.Output,
 	}
 	if function.Replicas != nil {
 		f.Replicas = *function.Replicas

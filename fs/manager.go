@@ -100,6 +100,38 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 	}, nil
 }
 
+func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) {
+	get := func(t string) (contube.TubeFactory, error) {
+		factory, exist := fm.options.tubeFactoryMap[t]
+		if !exist {
+			slog.ErrorContext(context.Background(), "tube factory not found", "type", t)
+			return nil, common.ErrorTubeFactoryNotFound
+		}
+		return factory, nil
+
+	}
+	if tubeConfig == nil || tubeConfig.Type == nil {
+		return get("default")
+	}
+	return get(*tubeConfig.Type)
+}
+
+func (fm *FunctionManager) getRuntimeFactory(runtimeConfig *model.RuntimeConfig) (api.FunctionRuntimeFactory, error) {
+	get := func(t string) (api.FunctionRuntimeFactory, error) {
+		factory, exist := fm.options.runtimeFactoryMap[t]
+		if !exist {
+			slog.ErrorContext(context.Background(), "runtime factory not found", "type", t)
+			return nil, common.ErrorRuntimeFactoryNotFound
+		}
+		return factory, nil
+
+	}
+	if runtimeConfig == nil || runtimeConfig.Type == nil {
+		return get("default")
+	}
+	return get(*runtimeConfig.Type)
+}
+
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock() // TODO: narrow the lock scope
@@ -108,12 +140,25 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	}
 	fm.functions[f.Name] = make([]api.FunctionInstance, f.Replicas)
 	for i := int32(0); i < f.Replicas; i++ {
-		instance := fm.options.instanceFactory.NewFunctionInstance(f, fm.options.tubeFactoryMap["default"], i)
+		sourceFactory, err := fm.getTubeFactory(f.Source)
+		if err != nil {
+			return err
+		}
+		sinkFactory, err := fm.getTubeFactory(f.Sink)
+		if err != nil {
+			return err
+		}
+
+		instance := fm.options.instanceFactory.NewFunctionInstance(f, sourceFactory, sinkFactory, i)
 		fm.functions[f.Name][i] = instance
-		go instance.Run(fm.options.runtimeFactoryMap["default"])
+		runtimeFactory, err := fm.getRuntimeFactory(f.Runtime)
+		if err != nil {
+			return err
+		}
+		go instance.Run(runtimeFactory)
 		if err := <-instance.WaitForReady(); err != nil {
 			if err != nil {
-				slog.ErrorContext(instance.Context(), "Error starting function instance", err)
+				slog.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", err.Error()))
 			}
 			instance.Stop()
 			return err

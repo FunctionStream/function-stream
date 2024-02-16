@@ -54,7 +54,18 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 
 	wasi_snapshot_preview1.MustInstantiate(instance.Context(), r)
 
-	wasmBytes, err := os.ReadFile(instance.Definition().Archive)
+	if instance.Definition().Runtime == nil || instance.Definition().Runtime.Config == nil {
+		return nil, errors.New("No runtime config found")
+	}
+	path, exist := instance.Definition().Runtime.Config["archive"]
+	if !exist {
+		return nil, errors.New("No wasm archive found")
+	}
+	pathStr := path.(string)
+	if pathStr == "" {
+		return nil, errors.New("Empty wasm archive found")
+	}
+	wasmBytes, err := os.ReadFile(pathStr)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error reading wasm file")
 	}

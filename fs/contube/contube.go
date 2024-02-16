@@ -74,14 +74,33 @@ func (c *SinkQueueConfig) ToConfigMap() ConfigMap {
 
 type ConfigMap map[string]interface{}
 
-type TubeFactory interface {
+// Merge merges multiple ConfigMap into one
+func Merge(configs ...ConfigMap) ConfigMap {
+	result := ConfigMap{}
+	for _, config := range configs {
+		for k, v := range config {
+			result[k] = v
+		}
+	}
+	return result
+}
+
+type SourceTubeFactory interface {
 	// NewSourceTube returns a new channel that can be used to receive events
 	// The channel would be closed when the context is done
 	NewSourceTube(ctx context.Context, config ConfigMap) (<-chan Record, error)
+}
+
+type SinkTubeFactory interface {
 	// NewSinkTube returns a new channel that can be used to sink events
 	// The event.Commit() would be invoked after the event is sunk successfully
 	// The caller should close the channel when it is done
 	NewSinkTube(ctx context.Context, config ConfigMap) (chan<- Record, error)
+}
+
+type TubeFactory interface {
+	SourceTubeFactory
+	SinkTubeFactory
 }
 
 type RecordImpl struct {
