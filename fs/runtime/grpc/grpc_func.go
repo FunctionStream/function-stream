@@ -245,16 +245,18 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 	}
 }
 
-func StartGRPCServer(f *FSSReconcileServer) error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", 7400))
+func StartGRPCServer(f *FSSReconcileServer, port int) (*grpc.Server, error) {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	s := grpc.NewServer()
 	proto.RegisterFSReconcileServer(s, f)
 	proto.RegisterFunctionServer(s, NewFunctionServerImpl(f))
-	if err := s.Serve(lis); err != nil {
-		return err
-	}
-	return nil
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			slog.Error("failed to serve", slog.Any("error", err))
+		}
+	}()
+	return s, nil
 }

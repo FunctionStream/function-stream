@@ -55,13 +55,12 @@ func (m *mockInstance) WaitForReady() <-chan error {
 func TestGRPCFunc(t *testing.T) {
 	ctx, closeFSReconcile := context.WithCancel(context.Background())
 	fsService := NewFSReconcile(ctx)
-	go func() {
-		err := StartGRPCServer(fsService)
-		if err != nil {
-			t.Errorf("did not start: %v", err)
-			return
-		}
-	}()
+	s, err := StartGRPCServer(fsService, 17400) // The test may running in parallel with other tests, so we need to specify the port
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	defer s.Stop()
 
 	go StartMockGRPCFunc(t)
 
@@ -95,9 +94,11 @@ func TestGRPCFunc(t *testing.T) {
 	}))
 	if err != nil {
 		t.Fatalf("failed to call function: %v", err)
+		return
 	}
 	if string(result.GetPayload()) != "hello!" {
 		t.Fatalf("unexpected result: %v", result)
+		return
 	}
 
 	funcCancel()
@@ -117,13 +118,12 @@ func TestGRPCFunc(t *testing.T) {
 func TestFMWithGRPCRuntime(t *testing.T) {
 	ctx, closeFSReconcile := context.WithCancel(context.Background())
 	fsService := NewFSReconcile(ctx)
-	go func() {
-		err := StartGRPCServer(fsService)
-		if err != nil {
-			t.Errorf("did not start: %v", err)
-			return
-		}
-	}()
+	s, err := StartGRPCServer(fsService, 17401)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	defer s.Stop()
 	go StartMockGRPCFunc(t)
 	select {
 	case <-fsService.WaitForReady():
