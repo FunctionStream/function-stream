@@ -18,9 +18,9 @@ package grpc
 
 import (
 	"fmt"
-	"github.com/functionstream/functionstream/fs/api"
-	"github.com/functionstream/functionstream/fs/contube"
-	"github.com/functionstream/functionstream/fs/runtime/grpc/proto"
+	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fs/runtime/grpc/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

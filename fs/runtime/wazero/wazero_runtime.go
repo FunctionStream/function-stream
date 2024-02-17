@@ -17,9 +17,9 @@
 package wazero
 
 import (
-	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/fs/api"
-	"github.com/functionstream/functionstream/fs/contube"
+	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
 	"github.com/tetratelabs/wazero"
 	wazero_api "github.com/tetratelabs/wazero/api"

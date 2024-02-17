@@ -19,9 +19,9 @@ package fs
 import (
 	"context"
 	"fmt"
-	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/fs/api"
-	"github.com/functionstream/functionstream/fs/contube"
+	"github.com/functionstream/function-stream/common/model"
+	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"log/slog"

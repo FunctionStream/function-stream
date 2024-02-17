@@ -18,11 +18,11 @@ package grpc
 
 import (
 	"context"
-	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/fs"
-	"github.com/functionstream/functionstream/fs/api"
-	"github.com/functionstream/functionstream/fs/contube"
+	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/common/model"
+	"github.com/functionstream/function-stream/fs"
+	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/contube"
 	"testing"
 	"time"
 )

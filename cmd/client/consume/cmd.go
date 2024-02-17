@@ -19,8 +19,8 @@ package consume
 import (
 	"context"
 	"fmt"
-	"github.com/functionstream/functionstream/cmd/client/common"
-	"github.com/functionstream/functionstream/restclient"
+	"github.com/functionstream/function-stream/cmd/client/common"
+	"github.com/functionstream/function-stream/restclient"
 	"github.com/spf13/cobra"
 	"os"
 )
