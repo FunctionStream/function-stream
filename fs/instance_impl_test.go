@@ -35,11 +35,11 @@ func TestNewFunctionInstance(t *testing.T) {
 
 	Instance := instance.(*FunctionInstanceImpl)
 
-	if ctxValue, ok := Instance.ctx.Value(ctxKey("function-name")).(string); !ok || ctxValue != definition.Name {
+	if ctxValue, ok := Instance.ctx.Value(CtxKey("function-name")).(string); !ok || ctxValue != definition.Name {
 		t.Errorf("Expected 'function-name' in ctx to be '%s'", definition.Name)
 	}
 
-	if ctxValue, ok := Instance.ctx.Value(ctxKey("function-index")).(int32); !ok || ctxValue != index {
+	if ctxValue, ok := Instance.ctx.Value(CtxKey("function-index")).(int32); !ok || ctxValue != index {
 		t.Errorf("Expected 'function-index' in ctx to be '%d'", index)
 	}
 
