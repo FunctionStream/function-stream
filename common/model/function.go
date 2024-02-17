@@ -16,7 +16,7 @@
 
 package model
 
-import "github.com/functionstream/functionstream/fs/contube"
+import "github.com/functionstream/function-stream/fs/contube"
 
 type TubeConfig struct {
 	Config contube.ConfigMap `json:"config,omitempty" yaml:"config,omitempty"`

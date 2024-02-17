@@ -17,8 +17,8 @@
 package api
 
 import (
-	"github.com/functionstream/functionstream/common/model"
-	"github.com/functionstream/functionstream/fs/contube"
+	"github.com/functionstream/function-stream/common/model"
+	"github.com/functionstream/function-stream/fs/contube"
 	"golang.org/x/net/context"
 )
 

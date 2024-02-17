@@ -17,7 +17,7 @@
 package server
 
 import (
-	"github.com/functionstream/functionstream/common"
+	"github.com/functionstream/function-stream/common"
 	"log/slog"
 	"os"
 	"sync"

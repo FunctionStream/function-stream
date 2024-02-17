@@ -17,7 +17,7 @@
 package api
 
 import (
-	"github.com/functionstream/functionstream/fs/contube"
+	"github.com/functionstream/function-stream/fs/contube"
 )
 
 type FunctionRuntime interface {

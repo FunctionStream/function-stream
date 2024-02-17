@@ -1,4 +1,4 @@
-module github.com/functionstream/functionstream
+module github.com/functionstream/function-stream
 
 go 1.21
 

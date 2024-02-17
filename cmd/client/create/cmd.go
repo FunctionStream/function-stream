@@ -19,9 +19,9 @@ package create
 import (
 	"context"
 	"fmt"
-	"github.com/functionstream/functionstream/cmd/client/common"
-	fs_cmmon "github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/restclient"
+	"github.com/functionstream/function-stream/cmd/client/common"
+	fs_cmmon "github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/restclient"
 	"github.com/spf13/cobra"
 	"io"
 	"os"

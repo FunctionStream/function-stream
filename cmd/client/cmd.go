@@ -17,12 +17,12 @@
 package client
 
 import (
-	c "github.com/functionstream/functionstream/cmd/client/common"
-	"github.com/functionstream/functionstream/cmd/client/consume"
-	"github.com/functionstream/functionstream/cmd/client/create"
-	del "github.com/functionstream/functionstream/cmd/client/delete"
-	"github.com/functionstream/functionstream/cmd/client/list"
-	"github.com/functionstream/functionstream/cmd/client/produce"
+	c "github.com/functionstream/function-stream/cmd/client/common"
+	"github.com/functionstream/function-stream/cmd/client/consume"
+	"github.com/functionstream/function-stream/cmd/client/create"
+	del "github.com/functionstream/function-stream/cmd/client/delete"
+	"github.com/functionstream/function-stream/cmd/client/list"
+	"github.com/functionstream/function-stream/cmd/client/produce"
 	"github.com/spf13/cobra"
 )
 

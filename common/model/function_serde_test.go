@@ -19,7 +19,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/functionstream/functionstream/common"
+	"github.com/functionstream/function-stream/common"
 	"gopkg.in/yaml.v3"
 	"reflect"
 	"testing"

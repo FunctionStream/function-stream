@@ -18,8 +18,8 @@ package standalone
 
 import (
 	"context"
-	"github.com/functionstream/functionstream/common"
-	"github.com/functionstream/functionstream/server"
+	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/server"
 	"github.com/spf13/cobra"
 	"io"
 )

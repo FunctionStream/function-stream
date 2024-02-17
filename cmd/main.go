@@ -18,10 +18,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/functionstream/functionstream/cmd/client"
-	"github.com/functionstream/functionstream/cmd/perf"
-	"github.com/functionstream/functionstream/cmd/server"
-	"github.com/functionstream/functionstream/cmd/standalone"
+	"github.com/functionstream/function-stream/cmd/client"
+	"github.com/functionstream/function-stream/cmd/perf"
+	"github.com/functionstream/function-stream/cmd/server"
+	"github.com/functionstream/function-stream/cmd/standalone"
 	"github.com/spf13/cobra"
 	"os"
 )
