@@ -23,7 +23,6 @@ import (
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"log/slog"
 )
 
@@ -37,6 +36,8 @@ type FunctionInstanceImpl struct {
 	index         int32
 }
 
+type CtxKey string
+
 type DefaultInstanceFactory struct{}
 
 func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
@@ -45,10 +46,8 @@ func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
 
 func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, index int32) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	ctx.Value(logrus.Fields{
-		"function-name":  definition.Name,
-		"function-index": index,
-	})
+	ctx = context.WithValue(ctx, CtxKey("function-name"), definition.Name)
+	ctx = context.WithValue(ctx, CtxKey("function-index"), index)
 	return &FunctionInstanceImpl{
 		ctx:           ctx,
 		cancelFunc:    cancelFunc,
