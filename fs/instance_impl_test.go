@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func TestNewFunctionInstance(t *testing.T) {
+func TestFunctionInstanceContextSetting(t *testing.T) {
 	defaultInstanceFactory := DefaultInstanceFactory{}
 	definition := &model.Function{
 		Name: "test-function",
@@ -33,13 +33,11 @@ func TestNewFunctionInstance(t *testing.T) {
 		t.Error("FunctionInstance should not be nil")
 	}
 
-	Instance := instance.(*FunctionInstanceImpl)
-
-	if ctxValue, ok := Instance.ctx.Value(CtxKey("function-name")).(string); !ok || ctxValue != definition.Name {
+	if ctxValue, ok := instance.Context().Value(CtxKey("function-name")).(string); !ok || ctxValue != definition.Name {
 		t.Errorf("Expected 'function-name' in ctx to be '%s'", definition.Name)
 	}
 
-	if ctxValue, ok := Instance.ctx.Value(CtxKey("function-index")).(int32); !ok || ctxValue != index {
+	if ctxValue, ok := instance.Context().Value(CtxKey("function-index")).(int32); !ok || ctxValue != index {
 		t.Errorf("Expected 'function-index' in ctx to be '%d'", index)
 	}
 
