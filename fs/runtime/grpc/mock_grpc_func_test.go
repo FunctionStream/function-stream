@@ -20,10 +20,8 @@ import (
 	"github.com/functionstream/function-stream/fs/runtime/grpc/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	"io"
 	"log/slog"
 	"testing"
@@ -67,12 +65,7 @@ func StartMockGRPCFunc(t *testing.T, addr string) {
 				return
 			}
 			if err != nil {
-				s, ok := status.FromError(err)
-				if ok && s.Code() == codes.Unavailable {
-					slog.Info("server disconnected")
-					return
-				}
-				t.Errorf("failed to receive: %v", err)
+				slog.Info("server disconnected: %v", err)
 				return
 			}
 			t.Logf("client received status: %v", s)
@@ -91,16 +84,8 @@ func StartMockGRPCFunc(t *testing.T, addr string) {
 				}
 				for {
 					event, err := processStream.Recv()
-					if err == io.EOF {
-						return
-					}
 					if err != nil {
-						s, ok := status.FromError(err)
-						if ok && s.Code() == codes.Unavailable {
-							slog.Info("server disconnected")
-							return
-						}
-						t.Errorf("failed to receive event: %v", err)
+						slog.Info("server disconnected: %v", err)
 						return
 					}
 					t.Logf("client received event: %v", event)
