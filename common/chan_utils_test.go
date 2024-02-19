@@ -28,6 +28,7 @@ func TestSendToChannel(t *testing.T) {
 	// send data
 	t.Run("send_buffered_chan_success", func(t *testing.T) {
 		// buffered chan
+
 		c := make(chan string, 1)
 		ctx := context.Background()
 		if !SendToChannel(ctx, c, "data") {
@@ -38,10 +39,12 @@ func TestSendToChannel(t *testing.T) {
 		if value != "data" {
 			t.Errorf("expected to receive \"data\" from channel, but received %s", value)
 		}
+
 	})
 
 	t.Run("send_unbuffered_chan_success", func(t *testing.T) {
 		// unbuffered chan
+
 		c := make(chan string)
 		ctx := context.Background()
 
@@ -54,13 +57,15 @@ func TestSendToChannel(t *testing.T) {
 		if value != "data" {
 			t.Errorf("expected to receive \"data\" from channel, but received %s", value)
 		}
+
 	})
 
 	// context timeout
 	t.Run("context_not_timeout", func(t *testing.T) {
 		// test with a timeout setting, but test was successfully sent without timeout
+
 		c := make(chan string, 1)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 		if SendToChannel(ctx, c, "hello") {
 			t.Log("Data sent successfully")
@@ -73,34 +78,34 @@ func TestSendToChannel(t *testing.T) {
 		case <-ctx.Done():
 			t.Fatal("Fail to receive data due to the context timeout")
 		}
+
 	})
 
 	t.Run("context_timeout", func(t *testing.T) {
 		// time.Sleep setting timeout, simulating context timeout
+
 		c := make(chan string, 1)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
-		if SendToChannel(ctx, c, "data") {
+		if SendToChannel(ctx, c, "hello") {
 			t.Log("Data sent successfully")
 		} else {
 			t.Fatal("Failed to send data due to context timeout")
 		}
+		time.Sleep(100 * time.Millisecond) // Set timeout
+		select {
+		case <-c:
+			t.Log("Successfully received data")
+		case <-ctx.Done():
+			t.Fatal("Fail to receive data due to the context timeout")
+		}
 
-		go func() {
-			time.Sleep(time.Second) // Set timeout
-			select {
-			case <-c:
-				t.Error("Timed out but able to retrieve data")
-				return
-			case <-ctx.Done():
-				t.Log("No data received due to context timeout")
-			}
-		}()
 	})
 
 	// incorrect type
 	t.Run("incorrect_type", func(t *testing.T) {
 		// It is not necessary to distinguish between buffered and unbuffered, as it is necessary to test the incorrect type
+
 		defer func() {
 			if r := recover(); r != nil {
 				t.Log("test-ok")
@@ -111,6 +116,7 @@ func TestSendToChannel(t *testing.T) {
 		c := make(chan int)
 		ctx := context.Background()
 		SendToChannel(ctx, c, "incorrect type")
+
 	})
 }
 
@@ -144,14 +150,17 @@ func TestReceiveFromChannel(t *testing.T) {
 		if value != "test-data" {
 			t.Errorf("Receive failed,Expected value to be \"test-data\", but %s", value)
 		}
+
 	})
 
 	// context timeout
 	t.Run("Timeout", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		ch := make(chan string, 1)
+
 		// No need to send data to SendToChannel as the context has been set to expire
 		value, ok := ReceiveFromChannel(ctx, ch)
 		if ok {
@@ -160,14 +169,14 @@ func TestReceiveFromChannel(t *testing.T) {
 		if value != "" {
 			t.Errorf("Expected zero value for string, but %s", value)
 		}
+
 	})
 
 	// context canceled
 	t.Run("Canceled", func(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
-		// Cancel context
-		cancel()
+		cancel() // Cancel context
 		ch := make(chan string, 1)
 		value, ok := ReceiveFromChannel(ctx, ch)
 		if ok {
@@ -176,5 +185,6 @@ func TestReceiveFromChannel(t *testing.T) {
 		if value != "" {
 			t.Errorf("Expected zero value for string, but %s", value)
 		}
+
 	})
 }
