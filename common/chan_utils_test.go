@@ -178,7 +178,7 @@ func TestReceiveFromChannel(t *testing.T) {
 			t.Fatal("Due to timeout setting, it is expected that no value will be received from the channel")
 		}
 		if value != "" {
-			t.Errorf("Expected zero value for int, but %s", value)
+			t.Errorf("Expected zero value for string, but %s", value)
 		}
 	})
 
@@ -194,7 +194,7 @@ func TestReceiveFromChannel(t *testing.T) {
 			t.Fatal("Expected no value to be received from channel due to context cancellation")
 		}
 		if value != "" {
-			t.Errorf("Expected zero value for int, but %s", value)
+			t.Errorf("Expected zero value for string, but %s", value)
 		}
 	})
 }
