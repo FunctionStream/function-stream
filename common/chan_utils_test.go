@@ -121,35 +121,18 @@ func TestSendToChannel(t *testing.T) {
 }
 
 func TestZeroValue(t *testing.T) {
-	tests := []struct {
-		Type string
-		want interface{}
-	}{
-		{Type: "int", want: 0},
-		{Type: "string", want: ""},
-		{Type: "bool", want: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.Type, func(t *testing.T) {
-			zero := zeroValue[interface{}]()
-			switch v := zero.(type) {
-			case int:
-				if v != 0 {
-					t.Errorf("zeroValue = %v, want 0", v)
-				}
-			case string:
-				if v != "" {
-					t.Errorf("zeroValue = %v, want \"\"", v)
-				}
-			case bool:
-				if v != false {
-					t.Errorf("zeroValue = %v, want false", v)
-				}
-			default:
-				t.Log("ok")
+	testZeroValue := func(name string, got, want interface{}) {
+		t.Run(name, func(t *testing.T) {
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("zeroValue() = %v, want %v", got, want)
 			}
 		})
 	}
+
+	testZeroValue("int", zeroValue[int](), 0)
+	testZeroValue("float64", zeroValue[float64](), float64(0))
+	testZeroValue("string", zeroValue[string](), "")
+	testZeroValue("bool", zeroValue[bool](), false)
 }
 
 func TestReceiveFromChannel(t *testing.T) {
