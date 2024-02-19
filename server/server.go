@@ -162,6 +162,7 @@ func (s *Server) startRESTHandlers() error {
 		slog.Info("Starting function", slog.Any("name", functionName))
 		err = s.options.manager.StartFunction(f)
 		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to start function", slog.Any("name", functionName), slog.Any("error", err.Error()))
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -175,6 +176,7 @@ func (s *Server) startRESTHandlers() error {
 
 		err := s.options.manager.DeleteFunction(functionName)
 		if errors.Is(err, common.ErrorFunctionNotFound) {
+			slog.ErrorContext(r.Context(), "failed to delete functions: function not found", slog.Any("name", functionName))
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -203,6 +205,7 @@ func (s *Server) startRESTHandlers() error {
 		}
 		err = s.options.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
 		if err != nil {
+			slog.ErrorContext(r.Context(), "Error when producing event", slog.Any("error", err))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

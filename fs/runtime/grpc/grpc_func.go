@@ -28,9 +28,9 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 )
 
-// TODO: Replace with FunctionInstane after the function instance abstraction is finishedf
 type GRPCFuncRuntime struct {
 	Name     string
 	ctx      context.Context
@@ -41,6 +41,13 @@ type GRPCFuncRuntime struct {
 	stopFunc func()
 }
 
+type Status int32
+
+const (
+	NotReady Status = iota
+	Ready
+)
+
 // FSSReconcileServer is the struct that implements the FSServiceServer interface.
 type FSSReconcileServer struct {
 	proto.UnimplementedFSReconcileServer
@@ -50,6 +57,7 @@ type FSSReconcileServer struct {
 	reconcile   chan *proto.FunctionStatus
 	functions   map[string]*GRPCFuncRuntime
 	functionsMu sync.Mutex
+	status      int32
 }
 
 func NewFSReconcile(ctx context.Context) *FSSReconcileServer {
@@ -69,6 +77,14 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 	s.connected.Do(func() {
 		close(s.readyCh)
 	})
+	if Status(atomic.LoadInt32(&s.status)) == Ready {
+		return fmt.Errorf("there is already a reconcile stream")
+	}
+	slog.InfoContext(s.ctx, "grpc reconcile stream opened")
+	defer func() {
+		atomic.StoreInt32(&s.status, int32(NotReady))
+		slog.InfoContext(s.ctx, "grpc reconcile stream closed")
+	}()
 	errCh := make(chan error)
 	go func() {
 		for {
@@ -135,7 +151,7 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 		s.functions[name] = runtime
 	}
 	s.reconcile <- runtime.status
-	slog.InfoContext(runtime.ctx, "Creating function", slog.Any("name", name))
+	slog.InfoContext(runtime.ctx, "Creating function runtime", slog.Any("name", name))
 	return runtime, nil
 }
 
@@ -212,6 +228,9 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 	}
 	slog.InfoContext(stream.Context(), "Start processing events", slog.Any("name", md["name"]))
 	instance.readyCh <- err
+	defer func() {
+		instance.Stop()
+	}()
 	errCh := make(chan error)
 	go func() {
 		for {

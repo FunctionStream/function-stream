@@ -135,11 +135,12 @@ func (fm *FunctionManager) getRuntimeFactory(runtimeConfig *model.RuntimeConfig)
 
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	fm.functionsLock.Lock()
-	defer fm.functionsLock.Unlock() // TODO: narrow the lock scope
 	if _, exist := fm.functions[f.Name]; exist {
+		fm.functionsLock.Unlock()
 		return common.ErrorFunctionExists
 	}
 	fm.functions[f.Name] = make([]api.FunctionInstance, f.Replicas)
+	fm.functionsLock.Unlock()
 	if f.Replicas <= 0 {
 		return errors.New("replicas should be greater than 0")
 	}
@@ -154,18 +155,24 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		}
 
 		instance := fm.options.instanceFactory.NewFunctionInstance(f, sourceFactory, sinkFactory, i)
+		fm.functionsLock.Lock()
 		fm.functions[f.Name][i] = instance
+		fm.functionsLock.Unlock()
 		runtimeFactory, err := fm.getRuntimeFactory(f.Runtime)
 		if err != nil {
 			return err
 		}
 		go instance.Run(runtimeFactory)
-		if err := <-instance.WaitForReady(); err != nil {
+		select {
+		case <-instance.WaitForReady():
 			if err != nil {
 				slog.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", err.Error()))
+				instance.Stop()
+				return err
 			}
-			instance.Stop()
-			return err
+		case <-instance.Context().Done():
+			slog.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", "context cancelled"))
+			return errors.New("context cancelled")
 		}
 	}
 	return nil
@@ -173,12 +180,12 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 
 func (fm *FunctionManager) DeleteFunction(name string) error {
 	fm.functionsLock.Lock()
+	defer fm.functionsLock.Unlock()
 	instances, exist := fm.functions[name]
 	if !exist {
 		return common.ErrorFunctionNotFound
 	}
 	delete(fm.functions, name)
-	fm.functionsLock.Unlock()
 	for _, instance := range instances {
 		instance.Stop()
 	}
