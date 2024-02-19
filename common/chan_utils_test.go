@@ -18,17 +18,16 @@ package common
 
 import (
 	"context"
-	"fmt"
-	"sync"
+	"reflect"
 	"testing"
 	"time"
 )
 
 func TestSendToChannel(t *testing.T) {
 
-	//send data
-	//The first t.Run is a buffered chan, and the second t.Run is an unbuffered chan
-	t.Run("send success,Buffered chan", func(t *testing.T) {
+	// send data
+	t.Run("send_buffered_chan_success", func(t *testing.T) {
+		// buffered chan
 		c := make(chan string, 1)
 		ctx := context.Background()
 		if !SendToChannel(ctx, c, "data") {
@@ -41,48 +40,43 @@ func TestSendToChannel(t *testing.T) {
 		}
 	})
 
-	t.Run("send success,Unbuffered chan", func(t *testing.T) {
+	t.Run("send_unbuffered_chan_success", func(t *testing.T) {
+		// unbuffered chan
 		c := make(chan string)
 		ctx := context.Background()
-		var wg sync.WaitGroup
-		wg.Add(2)
+
 		go func() {
-			defer wg.Done()
 			SendToChannel(ctx, c, "data")
 		}()
-		go func() {
-			defer wg.Done()
-			value := <-c
-			// Verify if the received data is correct
-			if value != "data" {
-				t.Errorf("expected to receive \"data\" from channel, but received %s", value)
-			}
-		}()
-		wg.Wait()
+
+		value := <-c
+		// Verify if the received data is correct
+		if value != "data" {
+			t.Errorf("expected to receive \"data\" from channel, but received %s", value)
+		}
 	})
 
-	//context timeout
-	//The first t.Run is a test with a timeout setting, but it was successfully sent without timeout
-	//The second t.Run passes through time.Sleep setting timeout, simulating context timeout
-	t.Run("context not timeout", func(t *testing.T) {
+	// context timeout
+	t.Run("context_not_timeout", func(t *testing.T) {
+		// test with a timeout setting, but test was successfully sent without timeout
 		c := make(chan string, 1)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 		if SendToChannel(ctx, c, "hello") {
 			t.Log("Data sent successfully")
 		} else {
-			fmt.Println(SendToChannel(ctx, c, "hello"))
 			t.Fatal("Failed to send data due to context timeout")
 		}
 		select {
 		case <-c:
 			t.Log("Successfully received data")
 		case <-ctx.Done():
-			t.Fatal("Channel closed after context timeout")
+			t.Fatal("Fail to receive data due to the context timeout")
 		}
 	})
 
-	t.Run("context timeout", func(t *testing.T) {
+	t.Run("context_timeout", func(t *testing.T) {
+		// time.Sleep setting timeout, simulating context timeout
 		c := make(chan string, 1)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
@@ -104,9 +98,9 @@ func TestSendToChannel(t *testing.T) {
 		}()
 	})
 
-	//incorrect type
-	//It is not necessary to distinguish between buffered and unbuffered, as it is necessary to test the incorrect type
-	t.Run("incorrect type", func(t *testing.T) {
+	// incorrect type
+	t.Run("incorrect_type", func(t *testing.T) {
+		// It is not necessary to distinguish between buffered and unbuffered, as it is necessary to test the incorrect type
 		defer func() {
 			if r := recover(); r != nil {
 				t.Log("test-ok")
@@ -121,41 +115,27 @@ func TestSendToChannel(t *testing.T) {
 }
 
 func TestZeroValue(t *testing.T) {
-	tests := []struct {
-		Type string
-		want interface{}
-	}{
-		{Type: "int", want: 0},
-		{Type: "string", want: ""},
-		{Type: "bool", want: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.Type, func(t *testing.T) {
-			zero := zeroValue[interface{}]()
-			switch v := zero.(type) {
-			case int:
-				if v != 0 {
-					t.Errorf("zeroValue = %v, want 0", v)
-				}
-			case string:
-				if v != "" {
-					t.Errorf("zeroValue = %v, want \"\"", v)
-				}
-			case bool:
-				if v != false {
-					t.Errorf("zeroValue = %v, want false", v)
-				}
-			default:
-				t.Log("ok")
+
+	testZeroValue := func(name string, got, want interface{}) {
+		t.Run(name, func(t *testing.T) {
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("zeroValue() = %v, want %v", got, want)
 			}
 		})
 	}
+
+	testZeroValue("int", zeroValue[int](), 0)
+	testZeroValue("float64", zeroValue[float64](), float64(0))
+	testZeroValue("string", zeroValue[string](), "")
+	testZeroValue("bool", zeroValue[bool](), false)
+
 }
 
 func TestReceiveFromChannel(t *testing.T) {
 
-	//Since SendToChannel has already been tested, only buffered chan will be considered here
-	//Successfully received chan data
+	// Since SendToChannel has already been tested, only buffered chan will be considered here
+	// Successfully received chan data
+
 	t.Run("Success", func(t *testing.T) {
 		ctx := context.Background()
 		ch := make(chan string, 1)
@@ -166,13 +146,13 @@ func TestReceiveFromChannel(t *testing.T) {
 		}
 	})
 
-	//context timeout
+	// context timeout
 	t.Run("Timeout", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 		time.Sleep(10 * time.Millisecond)
 		ch := make(chan string, 1)
-		//No need to send data to SendToChannel as the context has been set to expire
+		// No need to send data to SendToChannel as the context has been set to expire
 		value, ok := ReceiveFromChannel(ctx, ch)
 		if ok {
 			t.Fatal("Due to timeout setting, it is expected that no value will be received from the channel")
@@ -182,11 +162,11 @@ func TestReceiveFromChannel(t *testing.T) {
 		}
 	})
 
-	//context canceled
+	// context canceled
 	t.Run("Canceled", func(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
-		//Cancel context
+		// Cancel context
 		cancel()
 		ch := make(chan string, 1)
 		value, ok := ReceiveFromChannel(ctx, ch)
