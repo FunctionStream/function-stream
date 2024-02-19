@@ -168,8 +168,6 @@ components:
           type: integer
           format: int32
       required:
-        - source
-        - sink
         - inputs
         - output
         - replicas

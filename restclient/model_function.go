@@ -23,8 +23,8 @@ var _ MappedNullable = &Function{}
 type Function struct {
 	Name     *string            `json:"name,omitempty"`
 	Runtime  *FunctionRuntime   `json:"runtime,omitempty"`
-	Source   FunctionSource     `json:"source"`
-	Sink     FunctionSource     `json:"sink"`
+	Source   *FunctionSource    `json:"source,omitempty"`
+	Sink     *FunctionSource    `json:"sink,omitempty"`
 	Inputs   []string           `json:"inputs"`
 	Output   string             `json:"output"`
 	Config   *map[string]string `json:"config,omitempty"`
@@ -37,10 +37,8 @@ type _Function Function
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewFunction(source FunctionSource, sink FunctionSource, inputs []string, output string, replicas int32) *Function {
+func NewFunction(inputs []string, output string, replicas int32) *Function {
 	this := Function{}
-	this.Source = source
-	this.Sink = sink
 	this.Inputs = inputs
 	this.Output = output
 	this.Replicas = replicas
@@ -119,52 +117,68 @@ func (o *Function) SetRuntime(v FunctionRuntime) {
 	o.Runtime = &v
 }
 
-// GetSource returns the Source field value
+// GetSource returns the Source field value if set, zero value otherwise.
 func (o *Function) GetSource() FunctionSource {
-	if o == nil {
+	if o == nil || IsNil(o.Source) {
 		var ret FunctionSource
 		return ret
 	}
-
-	return o.Source
+	return *o.Source
 }
 
-// GetSourceOk returns a tuple with the Source field value
+// GetSourceOk returns a tuple with the Source field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *Function) GetSourceOk() (*FunctionSource, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.Source) {
 		return nil, false
 	}
-	return &o.Source, true
+	return o.Source, true
 }
 
-// SetSource sets field value
+// HasSource returns a boolean if a field has been set.
+func (o *Function) HasSource() bool {
+	if o != nil && !IsNil(o.Source) {
+		return true
+	}
+
+	return false
+}
+
+// SetSource gets a reference to the given FunctionSource and assigns it to the Source field.
 func (o *Function) SetSource(v FunctionSource) {
-	o.Source = v
+	o.Source = &v
 }
 
-// GetSink returns the Sink field value
+// GetSink returns the Sink field value if set, zero value otherwise.
 func (o *Function) GetSink() FunctionSource {
-	if o == nil {
+	if o == nil || IsNil(o.Sink) {
 		var ret FunctionSource
 		return ret
 	}
-
-	return o.Sink
+	return *o.Sink
 }
 
-// GetSinkOk returns a tuple with the Sink field value
+// GetSinkOk returns a tuple with the Sink field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *Function) GetSinkOk() (*FunctionSource, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.Sink) {
 		return nil, false
 	}
-	return &o.Sink, true
+	return o.Sink, true
 }
 
-// SetSink sets field value
+// HasSink returns a boolean if a field has been set.
+func (o *Function) HasSink() bool {
+	if o != nil && !IsNil(o.Sink) {
+		return true
+	}
+
+	return false
+}
+
+// SetSink gets a reference to the given FunctionSource and assigns it to the Sink field.
 func (o *Function) SetSink(v FunctionSource) {
-	o.Sink = v
+	o.Sink = &v
 }
 
 // GetInputs returns the Inputs field value
@@ -287,8 +301,12 @@ func (o Function) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Runtime) {
 		toSerialize["runtime"] = o.Runtime
 	}
-	toSerialize["source"] = o.Source
-	toSerialize["sink"] = o.Sink
+	if !IsNil(o.Source) {
+		toSerialize["source"] = o.Source
+	}
+	if !IsNil(o.Sink) {
+		toSerialize["sink"] = o.Sink
+	}
 	toSerialize["inputs"] = o.Inputs
 	toSerialize["output"] = o.Output
 	if !IsNil(o.Config) {
@@ -303,8 +321,6 @@ func (o *Function) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"source",
-		"sink",
 		"inputs",
 		"output",
 		"replicas",
