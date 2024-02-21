@@ -22,12 +22,11 @@ import (
 
 func SendToChannel[T any](ctx context.Context, c chan<- T, e interface{}) bool {
 	select {
+	case c <- e.(T): // It will panic if `e` is not of type `T` or a type that can be converted to `T`.
+		return true
 	case <-ctx.Done():
 		close(c)
 		return false
-	default:
-		c <- e.(T)
-		return true
 	}
 }
 
@@ -38,10 +37,9 @@ func zeroValue[T any]() T {
 
 func ReceiveFromChannel[T any](ctx context.Context, c <-chan T) (T, bool) {
 	select {
+	case e := <-c:
+		return e, true
 	case <-ctx.Done():
 		return zeroValue[T](), false
-	default:
-		e := <-c
-		return e, true
 	}
 }

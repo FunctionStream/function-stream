@@ -78,7 +78,7 @@ func TestSendToChannel(t *testing.T) {
 	t.Run("context_timeout", func(t *testing.T) {
 		// time.Sleep setting timeout, simulating context timeout
 
-		c := make(chan string, 1)
+		c := make(chan string)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 		time.Sleep(1 * time.Second) // Set timeout
