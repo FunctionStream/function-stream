@@ -68,8 +68,9 @@ func exec(_ *cobra.Command, _ []string) {
 		Runtime: &restclient.FunctionRuntime{Config: map[string]interface{}{
 			fs_cmmon.RuntimeArchiveConfigKey: config.archive,
 		}},
-		Inputs: config.inputs,
-		Output: config.output,
+		Inputs:   config.inputs,
+		Output:   config.output,
+		Replicas: config.replica,
 	}
 
 	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), config.name).Function(f).Execute()
