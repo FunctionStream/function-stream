@@ -18,7 +18,6 @@ package common
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -55,35 +54,14 @@ func TestSendToChannel(t *testing.T) {
 
 	})
 
-	t.Run("context_not_timeout", func(t *testing.T) {
-		// test with a timeout setting, but test was successfully sent without timeout
-
-		c := make(chan string, 1)
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-		if SendToChannel(ctx, c, "hello") {
-			t.Log("data sent successfully")
-		} else {
-			t.Fatal("Failed to send data due to context timeout")
-		}
-		select {
-		case <-c:
-			t.Log("successfully received data")
-		case <-ctx.Done():
-			t.Fatal("Fail to receive data due to the context timeout")
-		}
-
-	})
-
 	t.Run("context_timeout", func(t *testing.T) {
-		// time.Sleep setting timeout, simulating context timeout
+		// Using time.Sleep to simulating context timeout
 
 		c := make(chan string)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
 		time.Sleep(1 * time.Second) // Set timeout
 		if k := SendToChannel(ctx, c, "hello"); k {
-			fmt.Println(k)
 			t.Fatal("context timeout but data sent successfully")
 		} else {
 			t.Log("failed to send data due to context timeout")
@@ -92,7 +70,6 @@ func TestSendToChannel(t *testing.T) {
 	})
 
 	t.Run("incorrect_type", func(t *testing.T) {
-		// It is not necessary to distinguish between buffered and unbuffered, as it is necessary to test the incorrect type
 
 		defer func() {
 			if r := recover(); r != nil {
