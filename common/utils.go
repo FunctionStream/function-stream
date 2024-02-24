@@ -16,6 +16,37 @@
 
 package common
 
+import "log/slog"
+
 func OptionalStr(s string) *string {
 	return &s
+}
+
+type expensive struct {
+	slog.LogValuer
+	f func() slog.Value
+}
+
+func (e *expensive) LogValue() slog.Value {
+	return e.f()
+}
+
+func Expensive(f func() slog.Value) slog.LogValuer {
+	e := &expensive{}
+	e.f = f
+	return e
+}
+
+type logCounter struct {
+	slog.LogValuer
+	count int
+}
+
+func (l *logCounter) LogValue() slog.Value {
+	l.count++
+	return slog.IntValue(l.count)
+}
+
+func LogCounter() slog.LogValuer {
+	return &logCounter{}
 }

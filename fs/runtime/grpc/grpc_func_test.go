@@ -28,6 +28,7 @@ import (
 )
 
 type mockInstance struct {
+	api.FunctionInstance
 	ctx        context.Context
 	definition *model.Function
 }

@@ -18,6 +18,7 @@ package grpc
 
 import (
 	"fmt"
+	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/fs/runtime/grpc/proto"
@@ -39,6 +40,7 @@ type GRPCFuncRuntime struct {
 	input    chan string
 	output   chan string
 	stopFunc func()
+	log      *slog.Logger
 }
 
 type Status int32
@@ -58,6 +60,7 @@ type FSSReconcileServer struct {
 	functions   map[string]*GRPCFuncRuntime
 	functionsMu sync.Mutex
 	status      int32
+	log         *slog.Logger
 }
 
 func NewFSReconcile(ctx context.Context) *FSSReconcileServer {
@@ -66,6 +69,7 @@ func NewFSReconcile(ctx context.Context) *FSSReconcileServer {
 		readyCh:   make(chan struct{}),
 		reconcile: make(chan *proto.FunctionStatus, 100),
 		functions: make(map[string]*GRPCFuncRuntime),
+		log:       slog.With(slog.String("component", "grpc-reconcile-server")),
 	}
 }
 
@@ -80,15 +84,16 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 	if Status(atomic.LoadInt32(&s.status)) == Ready {
 		return fmt.Errorf("there is already a reconcile stream")
 	}
-	slog.InfoContext(s.ctx, "grpc reconcile stream opened")
+	s.log.InfoContext(s.ctx, "reconcile client connected")
 	defer func() {
 		atomic.StoreInt32(&s.status, int32(NotReady))
-		slog.InfoContext(s.ctx, "grpc reconcile stream closed")
+		s.log.InfoContext(s.ctx, "grpc reconcile stream closed")
 	}()
 	errCh := make(chan error)
 	go func() {
 		for {
 			newStatus, err := stream.Recv()
+			s.log.DebugContext(s.ctx, "received status update", slog.Any("status", newStatus))
 			if err == io.EOF {
 				return
 			}
@@ -100,7 +105,7 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 			instance, ok := s.functions[newStatus.Name]
 			if !ok {
 				s.functionsMu.Unlock()
-				slog.Error("receive non-exist function status update", slog.Any("name", newStatus.Name))
+				s.log.ErrorContext(s.ctx, "receive non-exist function status update", slog.Any("name", newStatus.Name))
 				continue
 			}
 			s.functionsMu.Unlock()
@@ -110,9 +115,10 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 	for {
 		select {
 		case status := <-s.reconcile:
+			s.log.DebugContext(s.ctx, "sending status update", slog.Any("status", status))
 			err := stream.Send(status)
 			if err != nil {
-				slog.ErrorContext(stream.Context(), "failed to send status update", slog.Any("status", status))
+				s.log.ErrorContext(stream.Context(), "failed to send status update", slog.Any("status", status))
 				// Continue to send the next status update.
 			}
 		case <-stream.Context().Done():
@@ -128,6 +134,9 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 
 func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
 	name := instance.Definition().Name
+	log := instance.Logger().With(
+		slog.String("component", "grpc-runtime"),
+	)
 	runtime := &GRPCFuncRuntime{
 		Name:    name,
 		readyCh: make(chan error),
@@ -141,6 +150,7 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 		stopFunc: func() {
 			s.removeFunction(name)
 		},
+		log: log,
 	}
 	{
 		s.functionsMu.Lock()
@@ -151,7 +161,7 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 		s.functions[name] = runtime
 	}
 	s.reconcile <- runtime.status
-	slog.InfoContext(runtime.ctx, "Creating function runtime", slog.Any("name", name))
+	log.InfoContext(runtime.ctx, "Creating GRPC function runtime")
 	return runtime, nil
 }
 
@@ -172,7 +182,7 @@ func (s *FSSReconcileServer) removeFunction(name string) {
 	if !ok {
 		return
 	}
-	slog.InfoContext(instance.ctx, "Removing function", slog.Any("name", name))
+	s.log.InfoContext(instance.ctx, "Removing function", slog.Any("name", name))
 	delete(s.functions, name)
 }
 
@@ -185,7 +195,7 @@ func (f *GRPCFuncRuntime) Update(new *proto.FunctionStatus) {
 		f.readyCh <- fmt.Errorf("function failed to start")
 	}
 	if f.status.Status != new.Status {
-		slog.InfoContext(f.ctx, "Function status update", slog.Any("new_status", new.Status), slog.Any("old_status", f.status.Status))
+		f.log.InfoContext(f.ctx, "Function status update", slog.Any("new_status", new.Status), slog.Any("old_status", f.status.Status))
 	}
 	f.status = new
 }
@@ -197,6 +207,7 @@ func (f *GRPCFuncRuntime) WaitForReady() <-chan error {
 // Stop stops the function runtime and remove it
 // It is different from the ctx.Cancel. It will make sure the runtime has been deleted after this method returns.
 func (f *GRPCFuncRuntime) Stop() {
+	f.log.InfoContext(f.ctx, "Stopping function runtime")
 	f.stopFunc()
 }
 
@@ -226,15 +237,19 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 	if err != nil {
 		return err
 	}
-	slog.InfoContext(stream.Context(), "Start processing events", slog.Any("name", md["name"]))
+	log := instance.log
+	log.InfoContext(stream.Context(), "Start processing events using GRPC")
 	instance.readyCh <- err
 	defer func() {
 		instance.Stop()
 	}()
 	errCh := make(chan error)
 	go func() {
+		defer log.InfoContext(stream.Context(), "Stop processing events using GRPC")
+		logCounter := common.LogCounter()
 		for {
 			event, err := stream.Recv()
+			log.DebugContext(stream.Context(), "received event", slog.Any("count", logCounter))
 			if err == io.EOF {
 				return
 			}
@@ -246,12 +261,14 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 		}
 	}()
 
+	logCounter := common.LogCounter()
 	for {
 		select {
 		case payload := <-instance.input:
+			log.DebugContext(stream.Context(), "sending event", slog.Any("count", logCounter))
 			err := stream.Send(&proto.Event{Payload: payload})
 			if err != nil {
-				slog.Error("failed to send event", slog.Any("error", err))
+				log.Error("failed to send event", slog.Any("error", err))
 				return err
 			}
 		case <-stream.Context().Done():

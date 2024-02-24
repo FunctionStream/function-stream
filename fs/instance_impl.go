@@ -19,6 +19,7 @@ package fs
 import (
 	"context"
 	"fmt"
+	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
@@ -27,6 +28,7 @@ import (
 )
 
 type FunctionInstanceImpl struct {
+	api.FunctionInstance
 	ctx           context.Context
 	cancelFunc    context.CancelFunc
 	definition    *model.Function
@@ -34,6 +36,8 @@ type FunctionInstanceImpl struct {
 	sinkFactory   contube.SinkTubeFactory
 	readyCh       chan error
 	index         int32
+	parentLog     *slog.Logger
+	log           *slog.Logger
 }
 
 type CtxKey string
@@ -44,10 +48,10 @@ func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
 	return &DefaultInstanceFactory{}
 }
 
-func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, index int32) api.FunctionInstance {
+func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, index int32, logger *slog.Logger) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, CtxKey("function-name"), definition.Name)
-	ctx = context.WithValue(ctx, CtxKey("function-index"), index)
+	ctx = context.WithValue(ctx, CtxKey("instance-index"), index)
 	return &FunctionInstanceImpl{
 		ctx:           ctx,
 		cancelFunc:    cancelFunc,
@@ -56,16 +60,9 @@ func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function,
 		sinkFactory:   sinkFactory,
 		readyCh:       make(chan error),
 		index:         index,
+		parentLog:     logger,
+		log:           logger.With(slog.String("component", "function-instance")),
 	}
-}
-
-func handleErr(ctx context.Context, err error, message string, args ...interface{}) {
-	if errors.Is(err, context.Canceled) {
-		slog.InfoContext(ctx, "function instance has been stopped")
-		return
-	}
-	extraArgs := append(args, slog.Error)
-	slog.ErrorContext(ctx, message, extraArgs...)
 }
 
 func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFactory) {
@@ -100,10 +97,16 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 	}
 
 	close(instance.readyCh)
+	defer instance.log.InfoContext(instance.ctx, "function instance has been stopped")
+	logCounter := common.LogCounter()
 	for e := range sourceChan {
+		instance.log.DebugContext(instance.ctx, "calling process function", slog.Any("count", logCounter))
 		output, err := runtime.Call(e)
 		if err != nil {
-			handleErr(instance.ctx, err, "Error calling process function")
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			instance.log.ErrorContext(instance.ctx, "Error calling process function", slog.Any("error", err))
 			return
 		}
 		select {
@@ -120,6 +123,7 @@ func (instance *FunctionInstanceImpl) WaitForReady() <-chan error {
 }
 
 func (instance *FunctionInstanceImpl) Stop() {
+	instance.log.InfoContext(instance.ctx, "stopping function instance")
 	instance.cancelFunc()
 }
 
@@ -129,4 +133,12 @@ func (instance *FunctionInstanceImpl) Context() context.Context {
 
 func (instance *FunctionInstanceImpl) Definition() *model.Function {
 	return instance.definition
+}
+
+func (instance *FunctionInstanceImpl) Index() int32 {
+	return instance.index
+}
+
+func (instance *FunctionInstanceImpl) Logger() *slog.Logger {
+	return instance.parentLog
 }
