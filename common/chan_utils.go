@@ -16,7 +16,9 @@
 
 package common
 
-import "context"
+import (
+	"context"
+)
 
 func SendToChannel[T any](ctx context.Context, c chan<- T, e interface{}) bool {
 	select {
