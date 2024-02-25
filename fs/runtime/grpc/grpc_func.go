@@ -33,14 +33,16 @@ import (
 )
 
 type GRPCFuncRuntime struct {
-	Name     string
-	ctx      context.Context
-	status   *proto.FunctionStatus
-	readyCh  chan error
-	input    chan string
-	output   chan string
-	stopFunc func()
-	log      *slog.Logger
+	api.FunctionRuntime
+	Name      string
+	ctx       context.Context
+	status    *proto.FunctionStatus
+	readyOnce sync.Once
+	readyCh   chan error
+	input     chan string
+	output    chan string
+	stopFunc  func()
+	log       *slog.Logger
 }
 
 type Status int32
@@ -89,6 +91,13 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 		atomic.StoreInt32(&s.status, int32(NotReady))
 		s.log.InfoContext(s.ctx, "grpc reconcile stream closed")
 	}()
+	for _, v := range s.functions {
+		err := stream.Send(v.status)
+		if err != nil {
+			s.log.ErrorContext(stream.Context(), "failed to send status update", slog.Any("status", v.status))
+			// Continue to send the next status update.
+		}
+	}
 	errCh := make(chan error)
 	go func() {
 		for {
@@ -137,6 +146,10 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 	log := instance.Logger().With(
 		slog.String("component", "grpc-runtime"),
 	)
+	go func() {
+		<-instance.Context().Done()
+		s.removeFunction(name)
+	}()
 	runtime := &GRPCFuncRuntime{
 		Name:    name,
 		readyCh: make(chan error),
@@ -147,7 +160,7 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 			Status: proto.FunctionStatus_CREATING,
 		},
 		ctx: instance.Context(),
-		stopFunc: func() {
+		stopFunc: func() { // TODO: remove it, we should use instance.ctx to control the lifecycle
 			s.removeFunction(name)
 		},
 		log: log,
@@ -233,16 +246,15 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 	if !ok {
 		return fmt.Errorf("failed to get metadata")
 	}
-	instance, err := f.reconcileSvr.getFunc(md["name"][0])
+	runtime, err := f.reconcileSvr.getFunc(md["name"][0])
 	if err != nil {
 		return err
 	}
-	log := instance.log
+	log := runtime.log
 	log.InfoContext(stream.Context(), "Start processing events using GRPC")
-	instance.readyCh <- err
-	defer func() {
-		instance.Stop()
-	}()
+	runtime.readyOnce.Do(func() {
+		runtime.readyCh <- err
+	})
 	errCh := make(chan error)
 	go func() {
 		defer log.InfoContext(stream.Context(), "Stop processing events using GRPC")
@@ -255,16 +267,17 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 			}
 			if err != nil {
 				errCh <- err
+				log.ErrorContext(stream.Context(), "error processing event", slog.Any("error", err))
 				return
 			}
-			instance.output <- event.Payload
+			runtime.output <- event.Payload
 		}
 	}()
 
 	logCounter := common.LogCounter()
 	for {
 		select {
-		case payload := <-instance.input:
+		case payload := <-runtime.input:
 			log.DebugContext(stream.Context(), "sending event", slog.Any("count", logCounter))
 			err := stream.Send(&proto.Event{Payload: payload})
 			if err != nil {
@@ -273,10 +286,9 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 			}
 		case <-stream.Context().Done():
 			return nil
-		case <-instance.ctx.Done():
+		case <-runtime.ctx.Done():
 			return nil
 		case e := <-errCh:
-			log.ErrorContext(stream.Context(), "error processing event", slog.Any("error", e))
 			return e
 		}
 	}
