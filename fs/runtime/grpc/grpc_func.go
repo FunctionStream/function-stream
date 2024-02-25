@@ -90,15 +90,18 @@ func (s *FSSReconcileServer) Reconcile(req *proto.ConnectRequest, stream proto.F
 		atomic.StoreInt32(&s.status, int32(NotReady))
 		s.log.InfoContext(s.ctx, "grpc reconcile stream closed")
 	}()
-	{
-		s.functionsMu.Lock()
-		defer s.functionsMu.Unlock()
-		for _, v := range s.functions {
-			err := stream.Send(v.status)
-			if err != nil {
-				s.log.ErrorContext(stream.Context(), "failed to send status update", slog.Any("status", v.status))
-				// Continue to send the next status update.
-			}
+	// Sync all exiting function status to the newly connected reconcile client
+	s.functionsMu.Lock()
+	statusList := make([]*proto.FunctionStatus, 0, len(s.functions))
+	for _, v := range s.functions {
+		statusList = append(statusList, v.status)
+	}
+	s.functionsMu.Unlock()
+	for _, v := range statusList {
+		err := stream.Send(v)
+		if err != nil {
+			s.log.ErrorContext(stream.Context(), "failed to send status update", slog.Any("status", v))
+			// Continue to send the next status update.
 		}
 	}
 	for {
