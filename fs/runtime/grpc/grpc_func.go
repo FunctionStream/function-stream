@@ -276,6 +276,7 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 		case <-instance.ctx.Done():
 			return nil
 		case e := <-errCh:
+			log.ErrorContext(stream.Context(), "error processing event", slog.Any("error", e))
 			return e
 		}
 	}

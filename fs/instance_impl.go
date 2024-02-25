@@ -42,6 +42,11 @@ type FunctionInstanceImpl struct {
 
 type CtxKey string
 
+const (
+	CtxKeyFunctionName  CtxKey = "function-name"
+	CtxKeyInstanceIndex CtxKey = "instance-index"
+)
+
 type DefaultInstanceFactory struct{}
 
 func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
@@ -50,8 +55,8 @@ func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
 
 func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, index int32, logger *slog.Logger) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	ctx = context.WithValue(ctx, CtxKey("function-name"), definition.Name)
-	ctx = context.WithValue(ctx, CtxKey("instance-index"), index)
+	ctx = context.WithValue(ctx, CtxKeyFunctionName, definition.Name)
+	ctx = context.WithValue(ctx, CtxKeyInstanceIndex, index)
 	return &FunctionInstanceImpl{
 		ctx:           ctx,
 		cancelFunc:    cancelFunc,
