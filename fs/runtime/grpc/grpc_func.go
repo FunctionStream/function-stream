@@ -25,7 +25,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"io"
 	"log/slog"
 	"net"
 	"sync"
@@ -79,7 +78,7 @@ func (s *FSSReconcileServer) WaitForReady() <-chan struct{} {
 	return s.readyCh
 }
 
-func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer) error {
+func (s *FSSReconcileServer) Reconcile(req *proto.ConnectRequest, stream proto.FSReconcile_ReconcileServer) error {
 	s.connected.Do(func() {
 		close(s.readyCh)
 	})
@@ -98,29 +97,6 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 			// Continue to send the next status update.
 		}
 	}
-	errCh := make(chan error)
-	go func() {
-		for {
-			newStatus, err := stream.Recv()
-			s.log.DebugContext(s.ctx, "received status update", slog.Any("status", newStatus))
-			if err == io.EOF {
-				return
-			}
-			if err != nil {
-				errCh <- err
-				return
-			}
-			s.functionsMu.Lock()
-			instance, ok := s.functions[newStatus.Name]
-			if !ok {
-				s.functionsMu.Unlock()
-				s.log.ErrorContext(s.ctx, "receive non-exist function status update", slog.Any("name", newStatus.Name))
-				continue
-			}
-			s.functionsMu.Unlock()
-			instance.Update(newStatus)
-		}
-	}()
 	for {
 		select {
 		case status := <-s.reconcile:
@@ -134,11 +110,28 @@ func (s *FSSReconcileServer) Reconcile(stream proto.FSReconcile_ReconcileServer)
 			return nil
 		case <-s.ctx.Done():
 			return nil
-		case e := <-errCh:
-			return e
 		}
 	}
 
+}
+
+func (s *FSSReconcileServer) UpdateStatus(ctx context.Context, newStatus *proto.FunctionStatus) (*proto.Response, error) {
+	s.log.DebugContext(s.ctx, "received status update", slog.Any("status", newStatus))
+	s.functionsMu.Lock()
+	instance, ok := s.functions[newStatus.Name]
+	if !ok {
+		s.functionsMu.Unlock()
+		s.log.ErrorContext(s.ctx, "receive non-exist function status update", slog.Any("name", newStatus.Name))
+		return &proto.Response{
+			Status:  proto.Response_ERROR,
+			Message: common.OptionalStr("function not found"),
+		}, nil
+	}
+	s.functionsMu.Unlock()
+	instance.Update(newStatus)
+	return &proto.Response{
+		Status: proto.Response_OK,
+	}, nil
 }
 
 func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
@@ -241,12 +234,8 @@ func NewFunctionServerImpl(s *FSSReconcileServer) *FunctionServerImpl {
 	}
 }
 
-func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error {
-	md, ok := metadata.FromIncomingContext(stream.Context())
-	if !ok {
-		return fmt.Errorf("failed to get metadata")
-	}
-	runtime, err := f.reconcileSvr.getFunc(md["name"][0])
+func (f *FunctionServerImpl) Process(req *proto.FunctionProcessRequest, stream proto.Function_ProcessServer) error {
+	runtime, err := f.reconcileSvr.getFunc(req.Name)
 	if err != nil {
 		return err
 	}
@@ -256,23 +245,6 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 		runtime.readyCh <- err
 	})
 	errCh := make(chan error)
-	go func() {
-		defer log.InfoContext(stream.Context(), "Stop processing events using GRPC")
-		logCounter := common.LogCounter()
-		for {
-			event, err := stream.Recv()
-			log.DebugContext(stream.Context(), "received event", slog.Any("count", logCounter))
-			if err == io.EOF {
-				return
-			}
-			if err != nil {
-				errCh <- err
-				log.ErrorContext(stream.Context(), "error processing event", slog.Any("error", err))
-				return
-			}
-			runtime.output <- event.Payload
-		}
-	}()
 
 	logCounter := common.LogCounter()
 	for {
@@ -292,6 +264,25 @@ func (f *FunctionServerImpl) Process(stream proto.Function_ProcessServer) error 
 			return e
 		}
 	}
+}
+
+func (f *FunctionServerImpl) Output(ctx context.Context, e *proto.Event) (*proto.Response, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("failed to get metadata")
+	}
+	if _, ok := md["name"]; !ok || len(md["name"]) == 0 {
+		return nil, fmt.Errorf("the metadata doesn't contain the function name")
+	}
+	runtime, err := f.reconcileSvr.getFunc(md["name"][0])
+	if err != nil {
+		return nil, err
+	}
+	runtime.log.DebugContext(ctx, "received event")
+	runtime.output <- e.Payload
+	return &proto.Response{
+		Status: proto.Response_OK,
+	}, nil
 }
 
 func StartGRPCServer(f *FSSReconcileServer, addr string) (*grpc.Server, error) {

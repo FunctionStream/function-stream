@@ -38,6 +38,10 @@ message SetStateRequest {
   string value = 2;
 }
 
+message ConnectRequest {
+
+}
+
 message FunctionStatus {
   string name = 1;
   enum Status {
@@ -52,10 +56,15 @@ message FunctionStatus {
 }
 
 service FSReconcile {
-  rpc Reconcile(stream FunctionStatus) returns (stream FunctionStatus) {}
+  rpc Reconcile(ConnectRequest) returns (stream FunctionStatus) {}
+  rpc UpdateStatus(FunctionStatus) returns (Response) {}
+}
+
+message FunctionProcessRequest {
+  string name = 1;
 }
 
 service Function {
-  rpc Process(stream Event) returns (stream Event) {}
-  rpc SetState(SetStateRequest) returns (Response) {}
+  rpc Process(FunctionProcessRequest) returns (stream Event) {}
+  rpc Output(Event) returns (Response) {}
 }
