@@ -20,16 +20,19 @@ import (
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/contube"
 	"golang.org/x/net/context"
+	"log/slog"
 )
 
 type FunctionInstance interface {
 	Context() context.Context
 	Definition() *model.Function
+	Index() int32
 	Stop()
 	Run(factory FunctionRuntimeFactory)
 	WaitForReady() <-chan error
+	Logger() *slog.Logger
 }
 
 type FunctionInstanceFactory interface {
-	NewFunctionInstance(f *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, i int32) FunctionInstance
+	NewFunctionInstance(f *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, i int32, logger *slog.Logger) FunctionInstance
 }

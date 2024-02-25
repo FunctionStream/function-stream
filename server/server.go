@@ -39,6 +39,7 @@ type Server struct {
 	options *serverOptions
 	config  *common.Config
 	httpSvr atomic.Pointer[http.Server]
+	log     *slog.Logger
 }
 
 type serverOptions struct {
@@ -105,22 +106,23 @@ func NewServer(config *common.Config, opts ...ServerOption) (*Server, error) {
 	return &Server{
 		options: options,
 		config:  config,
+		log:     slog.With(),
 	}, nil
 }
 
 func (s *Server) Run(context context.Context) {
-	slog.Info("Hello, Function Stream!")
+	s.log.Info("Hello, Function Stream!")
 	go func() {
 		<-context.Done()
 		err := s.Close()
 		if err != nil {
-			slog.Error("Error shutting down server", "error", err)
+			s.log.Error("Error shutting down server", "error", err)
 			return
 		}
 	}()
 	err := s.startRESTHandlers()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		slog.Error("Error starting REST handlers", "error", err)
+		s.log.Error("Error starting REST handlers", "error", err)
 	}
 }
 
@@ -133,14 +135,18 @@ func (s *Server) startRESTHandlers() error {
 	r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		functionName := vars["function_name"]
+		log := s.log.With(slog.String("name", functionName), slog.String("phase", "starting"))
+		log.Debug("Starting function")
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			log.Error("Failed to read body", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		if len(body) == 0 {
+			log.Debug("The body is empty")
 			http.Error(w, "The body is empty. You should provide the function definition", http.StatusBadRequest)
 			return
 		}
@@ -148,6 +154,7 @@ func (s *Server) startRESTHandlers() error {
 		var function restclient.Function
 		err = json.Unmarshal(body, &function)
 		if err != nil {
+			log.Error("Failed to parse function definition", "error", err)
 			http.Error(w, fmt.Errorf("failed to parse function definition: %w", err).Error(), http.StatusBadRequest)
 			return
 		}
@@ -155,35 +162,37 @@ func (s *Server) startRESTHandlers() error {
 
 		f, err := ConstructFunction(&function)
 		if err != nil {
+			log.Error("Failed to construct function", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		slog.Info("Starting function", slog.Any("name", functionName))
 		err = s.options.manager.StartFunction(f)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "failed to start function", slog.Any("name", functionName), slog.Any("error", err.Error()))
+			log.Error("Failed to start function", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		slog.Info("Started function", slog.Any("name", functionName))
+		log.Info("Started function")
 	}).Methods("POST")
 
 	r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		functionName := vars["function_name"]
-		slog.Info("Deleting function", slog.Any("name", functionName))
+		log := s.log.With(slog.String("name", functionName), slog.String("phase", "deleting"))
 
 		err := s.options.manager.DeleteFunction(functionName)
 		if errors.Is(err, common.ErrorFunctionNotFound) {
-			slog.ErrorContext(r.Context(), "failed to delete functions: function not found", slog.Any("name", functionName))
+			log.Error("Function not found", "error", err)
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		slog.Info("Deleted function", slog.Any("name", functionName))
+		log.Info("Deleted function")
 	}).Methods("DELETE")
 
 	r.HandleFunc("/api/v1/functions", func(w http.ResponseWriter, r *http.Request) {
+		log := s.log.With()
+		log.Info("Listing functions")
 		functions := s.options.manager.ListFunctions()
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(functions)
@@ -197,37 +206,42 @@ func (s *Server) startRESTHandlers() error {
 	r.HandleFunc("/api/v1/produce/{queue_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		queueName := vars["queue_name"]
-		slog.Info("Producing event to queue", slog.Any("queue_name", queueName))
+		log := s.log.With(slog.String("queue_name", queueName))
+		log.Info("Producing event to queue")
 		content, err := io.ReadAll(r.Body)
 		if err != nil {
-			http.Error(w, errors.Wrap(err, "Failed  to read body").Error(), http.StatusBadRequest)
+			log.Error("Failed to read body", "error", err)
+			http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
 			return
 		}
 		err = s.options.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
 		if err != nil {
-			slog.ErrorContext(r.Context(), "Error when producing event", slog.Any("error", err))
+			log.Error("Failed to produce event", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		log.Info("Produced event to queue")
 	}).Methods("PUT")
 
 	r.HandleFunc("/api/v1/consume/{queue_name}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		queueName := vars["queue_name"]
-		slog.Info("Consuming event from queue", slog.Any("queue_name", queueName))
+		log := s.log.With(slog.String("queue_name", queueName))
+		log.Info("Consuming event from queue")
 		event, err := s.options.manager.ConsumeEvent(queueName)
 		if err != nil {
-			slog.Error("Error when consuming event", "error", err)
+			log.Error("Failed to consume event", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(string(event.GetPayload()))
 		if err != nil {
-			slog.Error("Error when encoding event", "error", err)
+			log.Error("Error when encoding event", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		log.Info("Consumed event from queue")
 	}).Methods("GET")
 
 	httpSvr := &http.Server{
@@ -249,13 +263,13 @@ func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
 		}).String()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
-			slog.InfoContext(ctx, "Failed to create detect request", slog.Any("error", err))
+			s.log.InfoContext(ctx, "Failed to create detect request", slog.Any("error", err))
 			return false
 		}
 		client := &http.Client{}
 		_, err = client.Do(req)
 		if err != nil {
-			slog.InfoContext(ctx, "Detect connection to server failed", slog.Any("error", err))
+			s.log.InfoContext(ctx, "Detect connection to server failed", slog.Any("error", err))
 		}
 		return true
 	}
@@ -272,6 +286,7 @@ func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
 				return
 			case <-time.After(1 * time.Second):
 				if detect() {
+					s.log.Info("Server is ready", slog.String("address", s.config.ListenAddr))
 					return
 				}
 			}
@@ -281,12 +296,13 @@ func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
 }
 
 func (s *Server) Close() error {
-	slog.Info("Shutting down function stream server")
+	s.log.Info("Shutting down function stream server")
 	if httpSvr := s.httpSvr.Load(); httpSvr != nil {
 		if err := httpSvr.Close(); err != nil {
 			return err
 		}
 	}
+	s.log.Info("Function stream server is shut down")
 	return nil
 }
 
