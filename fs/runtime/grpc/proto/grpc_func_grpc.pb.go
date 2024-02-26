@@ -18,7 +18,8 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FSReconcileClient interface {
-	Reconcile(ctx context.Context, opts ...grpc.CallOption) (FSReconcile_ReconcileClient, error)
+	Reconcile(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (FSReconcile_ReconcileClient, error)
+	UpdateStatus(ctx context.Context, in *FunctionStatus, opts ...grpc.CallOption) (*Response, error)
 }
 
 type fSReconcileClient struct {
@@ -29,27 +30,28 @@ func NewFSReconcileClient(cc grpc.ClientConnInterface) FSReconcileClient {
 	return &fSReconcileClient{cc}
 }
 
-func (c *fSReconcileClient) Reconcile(ctx context.Context, opts ...grpc.CallOption) (FSReconcile_ReconcileClient, error) {
+func (c *fSReconcileClient) Reconcile(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (FSReconcile_ReconcileClient, error) {
 	stream, err := c.cc.NewStream(ctx, &FSReconcile_ServiceDesc.Streams[0], "/fs_func.FSReconcile/Reconcile", opts...)
 	if err != nil {
 		return nil, err
 	}
 	x := &fSReconcileReconcileClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
 	return x, nil
 }
 
 type FSReconcile_ReconcileClient interface {
-	Send(*FunctionStatus) error
 	Recv() (*FunctionStatus, error)
 	grpc.ClientStream
 }
 
 type fSReconcileReconcileClient struct {
 	grpc.ClientStream
-}
-
-func (x *fSReconcileReconcileClient) Send(m *FunctionStatus) error {
-	return x.ClientStream.SendMsg(m)
 }
 
 func (x *fSReconcileReconcileClient) Recv() (*FunctionStatus, error) {
@@ -60,11 +62,21 @@ func (x *fSReconcileReconcileClient) Recv() (*FunctionStatus, error) {
 	return m, nil
 }
 
+func (c *fSReconcileClient) UpdateStatus(ctx context.Context, in *FunctionStatus, opts ...grpc.CallOption) (*Response, error) {
+	out := new(Response)
+	err := c.cc.Invoke(ctx, "/fs_func.FSReconcile/UpdateStatus", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FSReconcileServer is the server API for FSReconcile service.
 // All implementations must embed UnimplementedFSReconcileServer
 // for forward compatibility
 type FSReconcileServer interface {
-	Reconcile(FSReconcile_ReconcileServer) error
+	Reconcile(*ConnectRequest, FSReconcile_ReconcileServer) error
+	UpdateStatus(context.Context, *FunctionStatus) (*Response, error)
 	mustEmbedUnimplementedFSReconcileServer()
 }
 
@@ -72,8 +84,11 @@ type FSReconcileServer interface {
 type UnimplementedFSReconcileServer struct {
 }
 
-func (UnimplementedFSReconcileServer) Reconcile(FSReconcile_ReconcileServer) error {
+func (UnimplementedFSReconcileServer) Reconcile(*ConnectRequest, FSReconcile_ReconcileServer) error {
 	return status.Errorf(codes.Unimplemented, "method Reconcile not implemented")
+}
+func (UnimplementedFSReconcileServer) UpdateStatus(context.Context, *FunctionStatus) (*Response, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateStatus not implemented")
 }
 func (UnimplementedFSReconcileServer) mustEmbedUnimplementedFSReconcileServer() {}
 
@@ -89,12 +104,15 @@ func RegisterFSReconcileServer(s grpc.ServiceRegistrar, srv FSReconcileServer) {
 }
 
 func _FSReconcile_Reconcile_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(FSReconcileServer).Reconcile(&fSReconcileReconcileServer{stream})
+	m := new(ConnectRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(FSReconcileServer).Reconcile(m, &fSReconcileReconcileServer{stream})
 }
 
 type FSReconcile_ReconcileServer interface {
 	Send(*FunctionStatus) error
-	Recv() (*FunctionStatus, error)
 	grpc.ServerStream
 }
 
@@ -106,12 +124,22 @@ func (x *fSReconcileReconcileServer) Send(m *FunctionStatus) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *fSReconcileReconcileServer) Recv() (*FunctionStatus, error) {
-	m := new(FunctionStatus)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
+func _FSReconcile_UpdateStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FunctionStatus)
+	if err := dec(in); err != nil {
 		return nil, err
 	}
-	return m, nil
+	if interceptor == nil {
+		return srv.(FSReconcileServer).UpdateStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fs_func.FSReconcile/UpdateStatus",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FSReconcileServer).UpdateStatus(ctx, req.(*FunctionStatus))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 // FSReconcile_ServiceDesc is the grpc.ServiceDesc for FSReconcile service.
@@ -120,13 +148,17 @@ func (x *fSReconcileReconcileServer) Recv() (*FunctionStatus, error) {
 var FSReconcile_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "fs_func.FSReconcile",
 	HandlerType: (*FSReconcileServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "UpdateStatus",
+			Handler:    _FSReconcile_UpdateStatus_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Reconcile",
 			Handler:       _FSReconcile_Reconcile_Handler,
 			ServerStreams: true,
-			ClientStreams: true,
 		},
 	},
 	Metadata: "fs/runtime/grpc/proto/grpc_func.proto",
@@ -136,8 +168,8 @@ var FSReconcile_ServiceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FunctionClient interface {
-	Process(ctx context.Context, opts ...grpc.CallOption) (Function_ProcessClient, error)
-	SetState(ctx context.Context, in *SetStateRequest, opts ...grpc.CallOption) (*Response, error)
+	Process(ctx context.Context, in *FunctionProcessRequest, opts ...grpc.CallOption) (Function_ProcessClient, error)
+	Output(ctx context.Context, in *Event, opts ...grpc.CallOption) (*Response, error)
 }
 
 type functionClient struct {
@@ -148,27 +180,28 @@ func NewFunctionClient(cc grpc.ClientConnInterface) FunctionClient {
 	return &functionClient{cc}
 }
 
-func (c *functionClient) Process(ctx context.Context, opts ...grpc.CallOption) (Function_ProcessClient, error) {
+func (c *functionClient) Process(ctx context.Context, in *FunctionProcessRequest, opts ...grpc.CallOption) (Function_ProcessClient, error) {
 	stream, err := c.cc.NewStream(ctx, &Function_ServiceDesc.Streams[0], "/fs_func.Function/Process", opts...)
 	if err != nil {
 		return nil, err
 	}
 	x := &functionProcessClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
 	return x, nil
 }
 
 type Function_ProcessClient interface {
-	Send(*Event) error
 	Recv() (*Event, error)
 	grpc.ClientStream
 }
 
 type functionProcessClient struct {
 	grpc.ClientStream
-}
-
-func (x *functionProcessClient) Send(m *Event) error {
-	return x.ClientStream.SendMsg(m)
 }
 
 func (x *functionProcessClient) Recv() (*Event, error) {
@@ -179,9 +212,9 @@ func (x *functionProcessClient) Recv() (*Event, error) {
 	return m, nil
 }
 
-func (c *functionClient) SetState(ctx context.Context, in *SetStateRequest, opts ...grpc.CallOption) (*Response, error) {
+func (c *functionClient) Output(ctx context.Context, in *Event, opts ...grpc.CallOption) (*Response, error) {
 	out := new(Response)
-	err := c.cc.Invoke(ctx, "/fs_func.Function/SetState", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/fs_func.Function/Output", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -192,8 +225,8 @@ func (c *functionClient) SetState(ctx context.Context, in *SetStateRequest, opts
 // All implementations must embed UnimplementedFunctionServer
 // for forward compatibility
 type FunctionServer interface {
-	Process(Function_ProcessServer) error
-	SetState(context.Context, *SetStateRequest) (*Response, error)
+	Process(*FunctionProcessRequest, Function_ProcessServer) error
+	Output(context.Context, *Event) (*Response, error)
 	mustEmbedUnimplementedFunctionServer()
 }
 
@@ -201,11 +234,11 @@ type FunctionServer interface {
 type UnimplementedFunctionServer struct {
 }
 
-func (UnimplementedFunctionServer) Process(Function_ProcessServer) error {
+func (UnimplementedFunctionServer) Process(*FunctionProcessRequest, Function_ProcessServer) error {
 	return status.Errorf(codes.Unimplemented, "method Process not implemented")
 }
-func (UnimplementedFunctionServer) SetState(context.Context, *SetStateRequest) (*Response, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetState not implemented")
+func (UnimplementedFunctionServer) Output(context.Context, *Event) (*Response, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Output not implemented")
 }
 func (UnimplementedFunctionServer) mustEmbedUnimplementedFunctionServer() {}
 
@@ -221,12 +254,15 @@ func RegisterFunctionServer(s grpc.ServiceRegistrar, srv FunctionServer) {
 }
 
 func _Function_Process_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(FunctionServer).Process(&functionProcessServer{stream})
+	m := new(FunctionProcessRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(FunctionServer).Process(m, &functionProcessServer{stream})
 }
 
 type Function_ProcessServer interface {
 	Send(*Event) error
-	Recv() (*Event, error)
 	grpc.ServerStream
 }
 
@@ -238,28 +274,20 @@ func (x *functionProcessServer) Send(m *Event) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *functionProcessServer) Recv() (*Event, error) {
-	m := new(Event)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func _Function_SetState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetStateRequest)
+func _Function_Output_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Event)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(FunctionServer).SetState(ctx, in)
+		return srv.(FunctionServer).Output(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/fs_func.Function/SetState",
+		FullMethod: "/fs_func.Function/Output",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionServer).SetState(ctx, req.(*SetStateRequest))
+		return srv.(FunctionServer).Output(ctx, req.(*Event))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -272,8 +300,8 @@ var Function_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*FunctionServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "SetState",
-			Handler:    _Function_SetState_Handler,
+			MethodName: "Output",
+			Handler:    _Function_Output_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -281,7 +309,6 @@ var Function_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Process",
 			Handler:       _Function_Process_Handler,
 			ServerStreams: true,
-			ClientStreams: true,
 		},
 	},
 	Metadata: "fs/runtime/grpc/proto/grpc_func.proto",
