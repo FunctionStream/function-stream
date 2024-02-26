@@ -18,6 +18,11 @@ package contube
 
 import (
 	"context"
+	"github.com/pkg/errors"
+)
+
+var (
+	ErrSinkTubeNotImplemented = errors.New("sink tube not implemented")
 )
 
 type Record interface {

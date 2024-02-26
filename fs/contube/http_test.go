@@ -50,3 +50,9 @@ func TestHttpTubeHandleRecord(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Error(t, ErrEndpointNotFound)
 }
+
+func TestHttpTubeSinkTubeNotImplement(t *testing.T) {
+	f := NewHttpTubeFactory(context.Background()).(*HttpTubeFactory)
+	_, err := f.NewSinkTube(context.Background(), make(ConfigMap))
+	assert.ErrorIs(t, err, ErrSinkTubeNotImplemented)
+}

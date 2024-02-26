@@ -129,8 +129,8 @@ func (f *HttpTubeFactory) NewSourceTube(ctx context.Context, config ConfigMap) (
 	return result, nil
 }
 
-func (f *HttpTubeFactory) NewSinkTube(ctx context.Context, config ConfigMap) (chan<- Record, error) {
-	return nil, errors.New("http tube factory does not support sink tube")
+func (f *HttpTubeFactory) NewSinkTube(_ context.Context, _ ConfigMap) (chan<- Record, error) {
+	return nil, ErrSinkTubeNotImplemented
 }
 
 func (f *HttpTubeFactory) GetHandleFunc(getEndpoint func(r *http.Request) (string, error), logger *slog.Logger) func(http.ResponseWriter, *http.Request) {
