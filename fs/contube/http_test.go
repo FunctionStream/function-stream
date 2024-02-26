@@ -47,8 +47,7 @@ func TestHttpTubeHandleRecord(t *testing.T) {
 
 	assert.Nil(t, <-source)
 	err = f.Handle(ctx, endpoint, []byte("test"))
-	assert.Nil(t, err)
-	assert.Error(t, ErrEndpointNotFound)
+	assert.Error(t, err, ErrEndpointNotFound)
 }
 
 func TestHttpTubeSinkTubeNotImplement(t *testing.T) {
