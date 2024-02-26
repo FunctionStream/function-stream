@@ -34,6 +34,7 @@ type FunctionManager struct {
 	options       *managerOptions
 	functions     map[string][]api.FunctionInstance //TODO: Use sync.map
 	functionsLock sync.Mutex
+	log           *slog.Logger
 }
 
 type managerOptions struct {
@@ -95,9 +96,20 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 			return nil, err
 		}
 	}
+	log := slog.With()
+	loadedRuntimeFact := make([]string, 0, len(options.runtimeFactoryMap))
+	for k := range options.runtimeFactoryMap {
+		loadedRuntimeFact = append(loadedRuntimeFact, k)
+	}
+	loadedTubeFact := make([]string, 0, len(options.tubeFactoryMap))
+	for k := range options.tubeFactoryMap {
+		loadedTubeFact = append(loadedTubeFact, k)
+	}
+	log.Info("Function manager created", slog.Any("runtime-factories", loadedRuntimeFact), slog.Any("tube-factories", loadedTubeFact))
 	return &FunctionManager{
 		options:   options,
 		functions: make(map[string][]api.FunctionInstance),
+		log:       log,
 	}, nil
 }
 
@@ -105,7 +117,7 @@ func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube
 	get := func(t string) (contube.TubeFactory, error) {
 		factory, exist := fm.options.tubeFactoryMap[t]
 		if !exist {
-			slog.ErrorContext(context.Background(), "tube factory not found", "type", t)
+			fm.log.ErrorContext(context.Background(), "tube factory not found", "type", t)
 			return nil, common.ErrorTubeFactoryNotFound
 		}
 		return factory, nil
@@ -117,29 +129,30 @@ func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube
 	return get(*tubeConfig.Type)
 }
 
-func (fm *FunctionManager) getRuntimeFactory(runtimeConfig *model.RuntimeConfig) (api.FunctionRuntimeFactory, error) {
-	get := func(t string) (api.FunctionRuntimeFactory, error) {
-		factory, exist := fm.options.runtimeFactoryMap[t]
-		if !exist {
-			slog.ErrorContext(context.Background(), "runtime factory not found", "type", t)
-			return nil, common.ErrorRuntimeFactoryNotFound
-		}
-		return factory, nil
-
-	}
+func (fm *FunctionManager) getRuntimeType(runtimeConfig *model.RuntimeConfig) string {
 	if runtimeConfig == nil || runtimeConfig.Type == nil {
-		return get("default")
+		return "default"
 	}
-	return get(*runtimeConfig.Type)
+	return *runtimeConfig.Type
+}
+
+func (fm *FunctionManager) getRuntimeFactory(t string) (api.FunctionRuntimeFactory, error) {
+	factory, exist := fm.options.runtimeFactoryMap[t]
+	if !exist {
+		fm.log.ErrorContext(context.Background(), "runtime factory not found", "type", t)
+		return nil, common.ErrorRuntimeFactoryNotFound
+	}
+	return factory, nil
 }
 
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	fm.functionsLock.Lock()
-	defer fm.functionsLock.Unlock() // TODO: narrow the lock scope
 	if _, exist := fm.functions[f.Name]; exist {
+		fm.functionsLock.Unlock()
 		return common.ErrorFunctionExists
 	}
 	fm.functions[f.Name] = make([]api.FunctionInstance, f.Replicas)
+	fm.functionsLock.Unlock()
 	if f.Replicas <= 0 {
 		return errors.New("replicas should be greater than 0")
 	}
@@ -152,20 +165,31 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		if err != nil {
 			return err
 		}
+		runtimeType := fm.getRuntimeType(f.Runtime)
 
-		instance := fm.options.instanceFactory.NewFunctionInstance(f, sourceFactory, sinkFactory, i)
+		instance := fm.options.instanceFactory.NewFunctionInstance(f, sourceFactory, sinkFactory, i, slog.With(
+			slog.String("name", f.Name),
+			slog.Int("index", int(i)),
+			slog.String("runtime", runtimeType),
+		))
+		fm.functionsLock.Lock()
 		fm.functions[f.Name][i] = instance
-		runtimeFactory, err := fm.getRuntimeFactory(f.Runtime)
+		fm.functionsLock.Unlock()
+		runtimeFactory, err := fm.getRuntimeFactory(runtimeType)
 		if err != nil {
 			return err
 		}
 		go instance.Run(runtimeFactory)
-		if err := <-instance.WaitForReady(); err != nil {
+		select {
+		case <-instance.WaitForReady():
 			if err != nil {
-				slog.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", err.Error()))
+				fm.log.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", err.Error()))
+				instance.Stop()
+				return err
 			}
-			instance.Stop()
-			return err
+		case <-instance.Context().Done():
+			fm.log.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", "context cancelled"))
+			return errors.New("context cancelled")
 		}
 	}
 	return nil
@@ -173,12 +197,12 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 
 func (fm *FunctionManager) DeleteFunction(name string) error {
 	fm.functionsLock.Lock()
+	defer fm.functionsLock.Unlock()
 	instances, exist := fm.functions[name]
 	if !exist {
 		return common.ErrorFunctionNotFound
 	}
 	delete(fm.functions, name)
-	fm.functionsLock.Unlock()
 	for _, instance := range instances {
 		instance.Stop()
 	}

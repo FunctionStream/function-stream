@@ -39,6 +39,7 @@ func NewWazeroFunctionRuntimeFactory() api.FunctionRuntimeFactory {
 }
 
 func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
+	log := instance.Logger()
 	r := wazero.NewRuntime(instance.Context())
 	_, err := r.NewHostModuleBuilder("env").NewFunctionBuilder().WithFunc(func(ctx context.Context, m wazero_api.Module, a, b, c, d uint32) {
 		panic("abort")
@@ -98,12 +99,14 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 				slog.ErrorContext(instance.Context(), "Error closing r", err)
 			}
 		},
+		log: log,
 	}, nil
 }
 
 type WazeroFunctionRuntime struct {
 	callFunc func(e contube.Record) (contube.Record, error)
 	stopFunc func()
+	log      *slog.Logger
 }
 
 func (r *WazeroFunctionRuntime) WaitForReady() <-chan error {

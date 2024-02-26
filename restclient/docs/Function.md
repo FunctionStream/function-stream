@@ -6,8 +6,8 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Name** | Pointer to **string** |  | [optional] 
 **Runtime** | Pointer to [**FunctionRuntime**](FunctionRuntime.md) |  | [optional] 
-**Source** | [**FunctionSource**](FunctionSource.md) |  | 
-**Sink** | [**FunctionSource**](FunctionSource.md) |  | 
+**Source** | Pointer to [**FunctionSource**](FunctionSource.md) |  | [optional] 
+**Sink** | Pointer to [**FunctionSource**](FunctionSource.md) |  | [optional] 
 **Inputs** | **[]string** |  | 
 **Output** | **string** |  | 
 **Config** | Pointer to **map[string]string** |  | [optional] 
@@ -17,7 +17,7 @@ Name | Type | Description | Notes
 
 ### NewFunction
 
-`func NewFunction(source FunctionSource, sink FunctionSource, inputs []string, output string, replicas int32, ) *Function`
+`func NewFunction(inputs []string, output string, replicas int32, ) *Function`
 
 NewFunction instantiates a new Function object
 This constructor will assign default values to properties that have it defined,
@@ -101,6 +101,11 @@ and a boolean to check if the value has been set.
 
 SetSource sets Source field to given value.
 
+### HasSource
+
+`func (o *Function) HasSource() bool`
+
+HasSource returns a boolean if a field has been set.
 
 ### GetSink
 
@@ -121,6 +126,11 @@ and a boolean to check if the value has been set.
 
 SetSink sets Sink field to given value.
 
+### HasSink
+
+`func (o *Function) HasSink() bool`
+
+HasSink returns a boolean if a field has been set.
 
 ### GetInputs
 

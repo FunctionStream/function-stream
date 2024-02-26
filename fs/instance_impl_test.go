@@ -18,6 +18,7 @@ package fs
 
 import (
 	"github.com/functionstream/function-stream/common/model"
+	"log/slog"
 	"testing"
 )
 
@@ -27,18 +28,18 @@ func TestFunctionInstanceContextSetting(t *testing.T) {
 		Name: "test-function",
 	}
 	index := int32(1)
-	instance := defaultInstanceFactory.NewFunctionInstance(definition, nil, nil, index)
+	instance := defaultInstanceFactory.NewFunctionInstance(definition, nil, nil, index, slog.Default())
 
 	if instance == nil {
 		t.Error("FunctionInstance should not be nil")
 	}
 
-	if ctxValue, ok := instance.Context().Value(CtxKey("function-name")).(string); !ok || ctxValue != definition.Name {
-		t.Errorf("Expected 'function-name' in ctx to be '%s'", definition.Name)
+	if ctxValue, ok := instance.Context().Value(CtxKeyFunctionName).(string); !ok || ctxValue != definition.Name {
+		t.Errorf("Expected '%s' in ctx to be '%s'", CtxKeyFunctionName, definition.Name)
 	}
 
-	if ctxValue, ok := instance.Context().Value(CtxKey("function-index")).(int32); !ok || ctxValue != index {
-		t.Errorf("Expected 'function-index' in ctx to be '%d'", index)
+	if ctxValue, ok := instance.Context().Value(CtxKey(CtxKeyInstanceIndex)).(int32); !ok || ctxValue != index {
+		t.Errorf("Expected '%s' in ctx to be '%d'", CtxKeyInstanceIndex, index)
 	}
 
 }

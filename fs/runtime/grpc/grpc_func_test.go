@@ -23,11 +23,13 @@ import (
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
+	"log/slog"
 	"testing"
 	"time"
 )
 
 type mockInstance struct {
+	api.FunctionInstance
 	ctx        context.Context
 	definition *model.Function
 }
@@ -51,6 +53,10 @@ func (m *mockInstance) WaitForReady() <-chan error {
 	c := make(chan error)
 	close(c)
 	return c
+}
+
+func (m *mockInstance) Logger() *slog.Logger {
+	return slog.Default()
 }
 
 func TestGRPCFunc(t *testing.T) {
