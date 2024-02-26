@@ -78,7 +78,7 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 	}
 	getTubeConfig := func(config contube.ConfigMap, tubeConfig *model.TubeConfig) contube.ConfigMap {
 		if tubeConfig != nil && tubeConfig.Config != nil {
-			return contube.Merge(config, tubeConfig.Config)
+			return contube.MergeConfig(config, tubeConfig.Config)
 		}
 		return config
 	}

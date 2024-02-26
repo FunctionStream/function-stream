@@ -74,8 +74,8 @@ func (c *SinkQueueConfig) ToConfigMap() ConfigMap {
 
 type ConfigMap map[string]interface{}
 
-// Merge merges multiple ConfigMap into one
-func Merge(configs ...ConfigMap) ConfigMap {
+// MergeConfig merges multiple ConfigMap into one
+func MergeConfig(configs ...ConfigMap) ConfigMap {
 	result := ConfigMap{}
 	for _, config := range configs {
 		for k, v := range config {
