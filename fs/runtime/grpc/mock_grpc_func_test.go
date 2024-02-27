@@ -36,7 +36,7 @@ func StartMockGRPCFunc(t *testing.T, addr string) {
 	}
 	client := proto.NewFSReconcileClient(conn)
 
-	stream, err := client.Reconcile(context.Background())
+	stream, err := client.Reconcile(context.Background(), &proto.ConnectRequest{})
 	if err != nil {
 		t.Errorf("failed to get process stream: %v", err)
 		return
@@ -70,14 +70,19 @@ func StartMockGRPCFunc(t *testing.T, addr string) {
 			}
 			t.Logf("client received status: %v", s)
 			s.Status = proto.FunctionStatus_RUNNING
-			err = stream.Send(s)
+			res, err := client.UpdateStatus(context.Background(), s)
 			if err != nil {
 				t.Errorf("failed to send: %v", err)
 				return
 			}
+			if res.GetStatus() != proto.Response_OK {
+				t.Errorf("failed to update status: %s", res.GetMessage())
+			}
 			go func() {
 				ctx := metadata.AppendToOutgoingContext(context.Background(), "name", s.Name)
-				processStream, err := funcCli.Process(ctx)
+				processStream, err := funcCli.Process(ctx, &proto.FunctionProcessRequest{
+					Name: s.Name,
+				})
 				if err != nil {
 					t.Errorf("failed to get process stream: %v", err)
 					return
@@ -90,9 +95,13 @@ func StartMockGRPCFunc(t *testing.T, addr string) {
 					}
 					t.Logf("client received event: %v", event)
 					event.Payload += "!"
-					err = processStream.Send(event)
+					res, err := funcCli.Output(ctx, event)
 					if err != nil {
 						t.Errorf("failed to send event: %v", err)
+						return
+					}
+					if res.GetStatus() != proto.Response_OK {
+						t.Errorf("failed to send event: %s", res.GetMessage())
 						return
 					}
 				}
