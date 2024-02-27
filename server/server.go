@@ -29,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"sync/atomic"
@@ -43,7 +44,9 @@ type Server struct {
 }
 
 type serverOptions struct {
-	manager *fs.FunctionManager
+	httpListener net.Listener
+	manager      *fs.FunctionManager
+	httpTube     *contube.HttpTubeFactory
 }
 
 type ServerOption interface {
@@ -63,7 +66,16 @@ func WithFunctionManager(manager *fs.FunctionManager) ServerOption {
 	})
 }
 
-func newDefaultFunctionManager(config *common.Config) (*fs.FunctionManager, error) {
+// WithHttpListener sets the listener for the HTTP server.
+// If not set, the server will listen on the Config.ListenAddr.
+func WithHttpListener(listener net.Listener) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		o.httpListener = listener
+		return o, nil
+	})
+}
+
+func (s *serverOptions) newDefaultFunctionManager(config *common.Config) (*fs.FunctionManager, error) {
 	var tubeFactory contube.TubeFactory
 	var err error
 	switch config.TubeType {
@@ -77,9 +89,10 @@ func newDefaultFunctionManager(config *common.Config) (*fs.FunctionManager, erro
 	case common.MemoryTubeType:
 		tubeFactory = contube.NewMemoryQueueFactory(context.Background())
 	}
-
+	s.httpTube = contube.NewHttpTubeFactory(context.Background()).(*contube.HttpTubeFactory)
 	manager, err := fs.NewFunctionManager(
 		fs.WithDefaultTubeFactory(tubeFactory),
+		fs.WithTubeFactory("http", s.httpTube),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create default function manager")
@@ -96,7 +109,7 @@ func NewServer(config *common.Config, opts ...ServerOption) (*Server, error) {
 		}
 	}
 	if options.manager == nil {
-		manager, err := newDefaultFunctionManager(config)
+		manager, err := options.newDefaultFunctionManager(config)
 		if err != nil {
 			return nil, err
 		}
@@ -244,13 +257,25 @@ func (s *Server) startRESTHandlers() error {
 		log.Info("Consumed event from queue")
 	}).Methods("GET")
 
+	r.HandleFunc("/api/v1/http-tube/{endpoint}", s.options.httpTube.GetHandleFunc(func(r *http.Request) (string, error) {
+		e, ok := mux.Vars(r)["endpoint"]
+		if !ok {
+			return "", errors.New("endpoint not found")
+		}
+		return e, nil
+	}, s.log)).Methods("POST")
+
 	httpSvr := &http.Server{
 		Addr:    s.config.ListenAddr,
 		Handler: r,
 	}
 	s.httpSvr.Store(httpSvr)
 
-	return httpSvr.ListenAndServe()
+	if s.options.httpListener != nil {
+		return httpSvr.Serve(s.options.httpListener)
+	} else {
+		return httpSvr.ListenAndServe()
+	}
 }
 
 func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
