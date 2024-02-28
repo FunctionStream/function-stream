@@ -14,26 +14,29 @@
  * limitations under the License.
  */
 
-package api
+package statestore
 
 import (
-	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs/contube"
-	"golang.org/x/net/context"
+	"github.com/functionstream/function-stream/fs/api"
+	"github.com/stretchr/testify/assert"
 	"log/slog"
+	"os"
+	"testing"
 )
 
-type FunctionInstance interface {
-	Context() context.Context
-	FuncCtx() FunctionContext
-	Definition() *model.Function
-	Index() int32
-	Stop()
-	Run(factory FunctionRuntimeFactory)
-	WaitForReady() <-chan error
-	Logger() *slog.Logger
-}
+func TestPebbleStateStore(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	assert.Nil(t, err)
+	store, err := NewPebbleStateStore(&PebbleStateStoreConfig{DirName: dir}, slog.Default())
+	assert.Nil(t, err)
 
-type FunctionInstanceFactory interface {
-	NewFunctionInstance(f *model.Function, funcCtx FunctionContext, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, i int32, logger *slog.Logger) FunctionInstance
+	_, err = store.GetState("key")
+	assert.ErrorIs(t, err, api.ErrNotFound)
+
+	err = store.PutState("key", []byte("value"))
+	assert.Nil(t, err)
+
+	value, err := store.GetState("key")
+	assert.Nil(t, err)
+	assert.Equal(t, "value", string(value))
 }

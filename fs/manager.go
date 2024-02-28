@@ -41,6 +41,7 @@ type managerOptions struct {
 	tubeFactoryMap    map[string]contube.TubeFactory
 	runtimeFactoryMap map[string]api.FunctionRuntimeFactory
 	instanceFactory   api.FunctionInstanceFactory
+	stateStore        api.StateStore
 }
 
 type ManagerOption interface {
@@ -78,6 +79,13 @@ func WithDefaultRuntimeFactory(factory api.FunctionRuntimeFactory) ManagerOption
 func WithInstanceFactory(factory api.FunctionInstanceFactory) ManagerOption {
 	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
 		c.instanceFactory = factory
+		return c, nil
+	})
+}
+
+func WithStateStore(store api.StateStore) ManagerOption {
+	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.stateStore = store
 		return c, nil
 	})
 }
@@ -145,6 +153,10 @@ func (fm *FunctionManager) getRuntimeFactory(t string) (api.FunctionRuntimeFacto
 	return factory, nil
 }
 
+func (fm *FunctionManager) createFuncCtx(f *model.Function) api.FunctionContext {
+	return NewFuncCtxImpl(fm.options.stateStore)
+}
+
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	fm.functionsLock.Lock()
 	if _, exist := fm.functions[f.Name]; exist {
@@ -156,6 +168,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	if f.Replicas <= 0 {
 		return errors.New("replicas should be greater than 0")
 	}
+	funcCtx := fm.createFuncCtx(f)
 	for i := int32(0); i < f.Replicas; i++ {
 		sourceFactory, err := fm.getTubeFactory(f.Source)
 		if err != nil {
@@ -167,7 +180,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		}
 		runtimeType := fm.getRuntimeType(f.Runtime)
 
-		instance := fm.options.instanceFactory.NewFunctionInstance(f, sourceFactory, sinkFactory, i, slog.With(
+		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, sourceFactory, sinkFactory, i, slog.With(
 			slog.String("name", f.Name),
 			slog.Int("index", int(i)),
 			slog.String("runtime", runtimeType),
@@ -240,4 +253,21 @@ func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
 		return nil, err
 	}
 	return <-c, nil
+}
+
+func (fm *FunctionManager) Close() error {
+	fm.functionsLock.Lock()
+	defer fm.functionsLock.Unlock()
+	for _, instances := range fm.functions {
+		for _, instance := range instances {
+			instance.Stop()
+		}
+	}
+	if fm.options.stateStore != nil {
+		err := fm.options.stateStore.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -327,6 +327,12 @@ func (s *Server) Close() error {
 			return err
 		}
 	}
+	if s.options.manager != nil {
+		err := s.options.manager.Close()
+		if err != nil {
+			return err
+		}
+	}
 	s.log.Info("Function stream server is shut down")
 	return nil
 }

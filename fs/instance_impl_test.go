@@ -28,7 +28,7 @@ func TestFunctionInstanceContextSetting(t *testing.T) {
 		Name: "test-function",
 	}
 	index := int32(1)
-	instance := defaultInstanceFactory.NewFunctionInstance(definition, nil, nil, index, slog.Default())
+	instance := defaultInstanceFactory.NewFunctionInstance(definition, nil, nil, nil, index, slog.Default())
 
 	if instance == nil {
 		t.Error("FunctionInstance should not be nil")
