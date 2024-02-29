@@ -255,6 +255,12 @@ func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
 	return <-c, nil
 }
 
+// GetStateStore returns the state store used by the function manager
+// Return nil if no state store is configured
+func (fm *FunctionManager) GetStateStore() api.StateStore {
+	return fm.options.stateStore
+}
+
 func (fm *FunctionManager) Close() error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()

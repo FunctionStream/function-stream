@@ -25,7 +25,7 @@ import (
 
 type FunctionInstance interface {
 	Context() context.Context
-	FuncCtx() FunctionContext
+	FunctionContext() FunctionContext
 	Definition() *model.Function
 	Index() int32
 	Stop()

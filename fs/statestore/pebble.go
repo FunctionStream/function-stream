@@ -20,14 +20,12 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"log/slog"
 )
 
 type PebbleStateStore struct {
 	api.StateStore
 	log *slog.Logger
-	ctx context.Context
 	db  *pebble.DB
 }
 

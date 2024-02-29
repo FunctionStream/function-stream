@@ -24,7 +24,7 @@ import (
 
 func TestHttpTubeHandleRecord(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	f := NewHttpTubeFactory(ctx).(*HttpTubeFactory)
+	f := NewHttpTubeFactory(ctx)
 
 	endpoint := "test"
 	err := f.Handle(ctx, "test", []byte("test"))
@@ -51,7 +51,7 @@ func TestHttpTubeHandleRecord(t *testing.T) {
 }
 
 func TestHttpTubeSinkTubeNotImplement(t *testing.T) {
-	f := NewHttpTubeFactory(context.Background()).(*HttpTubeFactory)
+	f := NewHttpTubeFactory(context.Background())
 	_, err := f.NewSinkTube(context.Background(), make(ConfigMap))
 	assert.ErrorIs(t, err, ErrSinkTubeNotImplemented)
 }

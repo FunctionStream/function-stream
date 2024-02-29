@@ -28,7 +28,6 @@ import (
 )
 
 type FunctionInstanceImpl struct {
-	api.FunctionInstance
 	ctx           context.Context
 	funcCtx       api.FunctionContext
 	cancelFunc    context.CancelFunc

@@ -23,12 +23,18 @@ import (
 	"fmt"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
+	"github.com/functionstream/function-stream/fs"
+	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/functionstream/function-stream/tests"
 	"github.com/stretchr/testify/assert"
+	"io"
+	"log/slog"
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"testing"
 )
@@ -42,12 +48,33 @@ func getListener(t *testing.T) net.Listener {
 	return ln
 }
 
-func startStandaloneSvr(t *testing.T, ctx context.Context) (*Server, string) {
+func startStandaloneSvr(t *testing.T, ctx context.Context, svrOpts []ServerOption, fmOpts []fs.ManagerOption) (*Server, string) {
 	conf := &common.Config{
 		TubeType: common.MemoryTubeType,
 	}
+	tubeFactory := contube.NewMemoryQueueFactory(context.Background())
+	httpTubeFact := contube.NewHttpTubeFactory(context.Background())
+	dir, err := os.MkdirTemp("", "")
+	assert.Nil(t, err)
+	store, err := statestore.NewPebbleStateStore(&statestore.PebbleStateStoreConfig{DirName: dir}, slog.Default())
+	assert.Nil(t, err)
+	defaultFmOpts := []fs.ManagerOption{
+		fs.WithDefaultTubeFactory(tubeFactory),
+		fs.WithTubeFactory("http", httpTubeFact),
+		fs.WithStateStore(store),
+	}
 	ln := getListener(t)
-	s, err := NewServer(conf, WithHttpListener(ln))
+
+	fm, err := fs.NewFunctionManager(append(defaultFmOpts, fmOpts...)...)
+	assert.Nil(t, err)
+	defaultSvrOpts := []ServerOption{
+		WithHttpListener(ln),
+		WithHttpTubeFactory(httpTubeFact),
+		WithFunctionManager(fm),
+	}
+	s, err := NewServer(conf,
+		append(defaultSvrOpts, svrOpts...)...,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +90,7 @@ func startStandaloneSvr(t *testing.T, ctx context.Context) (*Server, string) {
 func TestStandaloneBasicFunction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s, _ := startStandaloneSvr(t, ctx)
+	s, _ := startStandaloneSvr(t, ctx, nil, nil)
 
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
@@ -118,7 +145,7 @@ func TestStandaloneBasicFunction(t *testing.T) {
 func TestHttpTube(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s, httpAddr := startStandaloneSvr(t, ctx)
+	s, httpAddr := startStandaloneSvr(t, ctx, nil, nil)
 
 	endpoint := "test-endpoint"
 	funcConf := &model.Function{
@@ -169,4 +196,77 @@ func TestHttpTube(t *testing.T) {
 		t.Errorf("expected 1, got %d", out.Money)
 		return
 	}
+}
+
+type MockRuntimeFactory struct {
+}
+
+func (f *MockRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
+	return &MockRuntime{
+		funcCtx: instance.FunctionContext(),
+	}, nil
+}
+
+type MockRuntime struct {
+	funcCtx api.FunctionContext
+}
+
+func (r *MockRuntime) WaitForReady() <-chan error {
+	c := make(chan error)
+	close(c)
+	return c
+}
+
+func (r *MockRuntime) Call(e contube.Record) (contube.Record, error) {
+	v, err := r.funcCtx.GetState("key")
+	if err != nil {
+		return nil, err
+	}
+	str := string(v)
+	err = r.funcCtx.PutState("key", []byte(str+"!"))
+	if err != nil {
+		return nil, err
+	}
+	return contube.NewRecordImpl(nil, func() {
+
+	}), nil
+}
+
+func (r *MockRuntime) Stop() {
+}
+
+func TestStatefulFunction(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, httpAddr := startStandaloneSvr(t, ctx, nil, []fs.ManagerOption{fs.WithDefaultRuntimeFactory(&MockRuntimeFactory{})})
+
+	funcConf := &model.Function{
+		Name:     "test-func",
+		Inputs:   []string{"input"},
+		Output:   "output",
+		Replicas: 1,
+	}
+	err := s.options.manager.StartFunction(funcConf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = http.Post(httpAddr+"/api/v1/state/key", "text/plain; charset=utf-8", bytes.NewBuffer([]byte("hello")))
+	assert.Nil(t, err)
+
+	err = s.options.manager.ProduceEvent(funcConf.Inputs[0], contube.NewRecordImpl(nil, func() {
+	}))
+	assert.Nil(t, err)
+
+	_, err = s.options.manager.ConsumeEvent(funcConf.Output)
+	assert.Nil(t, err)
+
+	resp, err := http.Get(httpAddr + "/api/v1/state/key")
+	assert.Nil(t, err)
+	defer func() {
+		assert.Nil(t, resp.Body.Close())
+	}()
+	body, err := io.ReadAll(resp.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, "hello!", string(body))
 }

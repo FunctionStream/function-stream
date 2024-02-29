@@ -46,7 +46,7 @@ type Server struct {
 type serverOptions struct {
 	httpListener net.Listener
 	manager      *fs.FunctionManager
-	httpTube     *contube.HttpTubeFactory
+	httpTubeFact *contube.HttpTubeFactory
 }
 
 type ServerOption interface {
@@ -59,6 +59,7 @@ func (f serverOptionFunc) apply(c *serverOptions) (*serverOptions, error) {
 	return f(c)
 }
 
+// WithFunctionManager sets the function manager for the server.
 func WithFunctionManager(manager *fs.FunctionManager) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		o.manager = manager
@@ -71,6 +72,15 @@ func WithFunctionManager(manager *fs.FunctionManager) ServerOption {
 func WithHttpListener(listener net.Listener) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		o.httpListener = listener
+		return o, nil
+	})
+}
+
+// WithHttpTubeFactory sets the factory for the HTTP tube.
+// If not set, the server will use the default HTTP tube factory.
+func WithHttpTubeFactory(factory *contube.HttpTubeFactory) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		o.httpTubeFact = factory
 		return o, nil
 	})
 }
@@ -89,10 +99,8 @@ func (s *serverOptions) newDefaultFunctionManager(config *common.Config) (*fs.Fu
 	case common.MemoryTubeType:
 		tubeFactory = contube.NewMemoryQueueFactory(context.Background())
 	}
-	s.httpTube = contube.NewHttpTubeFactory(context.Background()).(*contube.HttpTubeFactory)
 	manager, err := fs.NewFunctionManager(
 		fs.WithDefaultTubeFactory(tubeFactory),
-		fs.WithTubeFactory("http", s.httpTube),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create default function manager")
@@ -121,6 +129,17 @@ func NewServer(config *common.Config, opts ...ServerOption) (*Server, error) {
 		config:  config,
 		log:     slog.With(),
 	}, nil
+}
+
+func NewDefaultServer() (*Server, error) {
+	httpTubeFact := contube.NewHttpTubeFactory(context.Background())
+	fm, err := fs.NewFunctionManager(fs.WithTubeFactory("http", httpTubeFact))
+	if err != nil {
+		return nil, err
+	}
+	return NewServer(LoadConfigFromEnv(),
+		WithHttpTubeFactory(httpTubeFact),
+		WithFunctionManager(fm))
 }
 
 func (s *Server) Run(context context.Context) {
@@ -257,13 +276,74 @@ func (s *Server) startRESTHandlers() error {
 		log.Info("Consumed event from queue")
 	}).Methods("GET")
 
-	r.HandleFunc("/api/v1/http-tube/{endpoint}", s.options.httpTube.GetHandleFunc(func(r *http.Request) (string, error) {
-		e, ok := mux.Vars(r)["endpoint"]
+	if s.options.httpTubeFact != nil {
+		r.HandleFunc("/api/v1/http-tube/{endpoint}", s.options.httpTubeFact.GetHandleFunc(func(r *http.Request) (string, error) {
+			e, ok := mux.Vars(r)["endpoint"]
+			if !ok {
+				return "", errors.New("endpoint not found")
+			}
+			return e, nil
+		}, s.log)).Methods("POST")
+	}
+
+	r.HandleFunc("/api/v1/state/{key}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		key, ok := vars["key"]
 		if !ok {
-			return "", errors.New("endpoint not found")
+			http.Error(w, "Key not found", http.StatusBadRequest)
+			return
 		}
-		return e, nil
-	}, s.log)).Methods("POST")
+		log := s.log.With(slog.String("key", key))
+		log.Info("Getting state")
+		state := s.options.manager.GetStateStore()
+		if state == nil {
+			log.Error("No state store configured")
+			http.Error(w, "No state store configured", http.StatusBadRequest)
+			return
+		}
+		content, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Failed to read body", "error", err)
+			http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
+			return
+		}
+		err = state.PutState(key, content)
+		if err != nil {
+			log.Error("Failed to put state", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("POST")
+
+	r.HandleFunc("/api/v1/state/{key}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		key, ok := vars["key"]
+		if !ok {
+			http.Error(w, "Key not found", http.StatusBadRequest)
+			return
+		}
+		log := s.log.With(slog.String("key", key))
+		log.Info("Getting state")
+		state := s.options.manager.GetStateStore()
+		if state == nil {
+			log.Error("No state store configured")
+			http.Error(w, "No state store configured", http.StatusBadRequest)
+			return
+		}
+		content, err := state.GetState(key)
+		if err != nil {
+			log.Error("Failed to get state", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream") // Set the content type to application/octet-stream for binary data
+		_, err = w.Write(content)
+		if err != nil {
+			log.Error("Failed to write to response", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("GET")
 
 	httpSvr := &http.Server{
 		Addr:    s.config.ListenAddr,
