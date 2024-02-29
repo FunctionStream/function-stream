@@ -23,6 +23,7 @@ import (
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/fs/runtime/wazero"
+	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/pkg/errors"
 	"log/slog"
 	"math/rand"
@@ -102,6 +103,13 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 		_, err := o.apply(options)
 		if err != nil {
 			return nil, err
+		}
+	}
+	if options.stateStore == nil {
+		var err error
+		options.stateStore, err = statestore.NewTmpPebbleStateStore()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create default state store")
 		}
 	}
 	log := slog.With()
@@ -269,11 +277,9 @@ func (fm *FunctionManager) Close() error {
 			instance.Stop()
 		}
 	}
-	if fm.options.stateStore != nil {
-		err := fm.options.stateStore.Close()
-		if err != nil {
-			return err
-		}
+	err := fm.options.stateStore.Close()
+	if err != nil {
+		return err
 	}
 	return nil
 }

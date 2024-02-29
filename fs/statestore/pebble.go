@@ -21,6 +21,7 @@ import (
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/pkg/errors"
 	"log/slog"
+	"os"
 )
 
 type PebbleStateStore struct {
@@ -31,6 +32,18 @@ type PebbleStateStore struct {
 
 type PebbleStateStoreConfig struct {
 	DirName string
+}
+
+func NewTmpPebbleStateStore() (*PebbleStateStore, error) {
+	dir, err := os.MkdirTemp("", "")
+	if err != nil {
+		return nil, err
+	}
+	store, err := NewPebbleStateStore(&PebbleStateStoreConfig{DirName: dir}, slog.Default())
+	if err != nil {
+		return nil, err
+	}
+	return store, nil
 }
 
 func NewPebbleStateStore(config *PebbleStateStoreConfig, logger *slog.Logger) (*PebbleStateStore, error) {

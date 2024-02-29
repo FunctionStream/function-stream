@@ -26,6 +26,7 @@ import (
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/functionstream/function-stream/tests"
 	"github.com/stretchr/testify/assert"
 	"io"
@@ -51,7 +52,8 @@ func startStandaloneSvr(t *testing.T, ctx context.Context, svrOpts []ServerOptio
 	}
 	tubeFactory := contube.NewMemoryQueueFactory(context.Background())
 	httpTubeFact := contube.NewHttpTubeFactory(context.Background())
-	store := tests.NewTestPebbleStateStore(t)
+	store, err := statestore.NewTmpPebbleStateStore()
+	assert.Nil(t, err)
 	defaultFmOpts := []fs.ManagerOption{
 		fs.WithDefaultTubeFactory(tubeFactory),
 		fs.WithTubeFactory("http", httpTubeFact),

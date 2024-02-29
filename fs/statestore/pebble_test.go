@@ -18,15 +18,16 @@ package statestore_test
 
 import (
 	"github.com/functionstream/function-stream/fs/api"
-	"github.com/functionstream/function-stream/tests"
+	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestPebbleStateStore(t *testing.T) {
-	store := tests.NewTestPebbleStateStore(t)
+	store, err := statestore.NewTmpPebbleStateStore()
+	assert.Nil(t, err)
 
-	_, err := store.GetState("key")
+	_, err = store.GetState("key")
 	assert.ErrorIs(t, err, api.ErrNotFound)
 
 	err = store.PutState("key", []byte("value"))
