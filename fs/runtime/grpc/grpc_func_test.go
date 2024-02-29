@@ -23,6 +23,8 @@ import (
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/tests"
+	"github.com/stretchr/testify/assert"
 	"log/slog"
 	"testing"
 	"time"
@@ -142,9 +144,13 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 		return
 	}
 
+	store := tests.NewTestPebbleStateStore(t)
+
 	fm, err := fs.NewFunctionManager(
 		fs.WithRuntimeFactory("grpc", fsService),
-		fs.WithDefaultTubeFactory(contube.NewMemoryQueueFactory(ctx)))
+		fs.WithDefaultTubeFactory(contube.NewMemoryQueueFactory(ctx)),
+		fs.WithStateStore(store),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,6 +173,9 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	err = fm.GetStateStore().PutState("counter", []byte("0"))
+	assert.Nil(t, err)
+
 	event := contube.NewRecordImpl([]byte("hello"), func() {})
 	err = fm.ProduceEvent(f.Inputs[0], event)
 	if err != nil {
@@ -179,6 +188,10 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 	if string(output.GetPayload()) != "hello!" {
 		t.Fatalf("unexpected result: %v", output)
 	}
+
+	counter, err := fm.GetStateStore().GetState("counter")
+	assert.Nil(t, err)
+	assert.Equal(t, "1", string(counter))
 
 	err = fm.DeleteFunction(f.Name)
 	if err != nil {

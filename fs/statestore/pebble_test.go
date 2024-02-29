@@ -14,23 +14,19 @@
  * limitations under the License.
  */
 
-package statestore
+package statestore_test
 
 import (
 	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/tests"
 	"github.com/stretchr/testify/assert"
-	"log/slog"
-	"os"
 	"testing"
 )
 
 func TestPebbleStateStore(t *testing.T) {
-	dir, err := os.MkdirTemp("", "")
-	assert.Nil(t, err)
-	store, err := NewPebbleStateStore(&PebbleStateStoreConfig{DirName: dir}, slog.Default())
-	assert.Nil(t, err)
+	store := tests.NewTestPebbleStateStore(t)
 
-	_, err = store.GetState("key")
+	_, err := store.GetState("key")
 	assert.ErrorIs(t, err, api.ErrNotFound)
 
 	err = store.PutState("key", []byte("value"))

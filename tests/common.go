@@ -16,7 +16,23 @@
 
 package tests
 
+import (
+	"github.com/functionstream/function-stream/fs/statestore"
+	"github.com/stretchr/testify/assert"
+	"log/slog"
+	"os"
+	"testing"
+)
+
 type Person struct {
 	Name  string `json:"name"`
 	Money int    `json:"money"`
+}
+
+func NewTestPebbleStateStore(t *testing.T) *statestore.PebbleStateStore {
+	dir, err := os.MkdirTemp("", "")
+	assert.Nil(t, err)
+	store, err := statestore.NewPebbleStateStore(&statestore.PebbleStateStoreConfig{DirName: dir}, slog.Default())
+	assert.Nil(t, err)
+	return store
 }
