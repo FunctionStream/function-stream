@@ -39,11 +39,11 @@ type FunctionManager struct {
 }
 
 type managerOptions struct {
-	tubeFactoryMap       map[string]contube.TubeFactory
-	runtimeFactoryMap    map[string]api.FunctionRuntimeFactory
-	instanceFactory      api.FunctionInstanceFactory
-	stateStore           api.StateStore
-	useDefaultStateStore bool
+	tubeFactoryMap           map[string]contube.TubeFactory
+	runtimeFactoryMap        map[string]api.FunctionRuntimeFactory
+	instanceFactory          api.FunctionInstanceFactory
+	stateStore               api.StateStore
+	dontUseDefaultStateStore bool
 }
 
 type ManagerOption interface {
@@ -87,7 +87,7 @@ func WithInstanceFactory(factory api.FunctionInstanceFactory) ManagerOption {
 
 func WithStateStore(store api.StateStore) ManagerOption {
 	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
-		c.useDefaultStateStore = false
+		c.dontUseDefaultStateStore = true
 		c.stateStore = store
 		return c, nil
 	})
@@ -107,7 +107,7 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 			return nil, err
 		}
 	}
-	if options.useDefaultStateStore {
+	if !options.dontUseDefaultStateStore {
 		var err error
 		options.stateStore, err = statestore.NewTmpPebbleStateStore()
 		if err != nil {
