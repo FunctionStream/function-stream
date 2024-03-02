@@ -39,10 +39,11 @@ type FunctionManager struct {
 }
 
 type managerOptions struct {
-	tubeFactoryMap    map[string]contube.TubeFactory
-	runtimeFactoryMap map[string]api.FunctionRuntimeFactory
-	instanceFactory   api.FunctionInstanceFactory
-	stateStore        api.StateStore
+	tubeFactoryMap       map[string]contube.TubeFactory
+	runtimeFactoryMap    map[string]api.FunctionRuntimeFactory
+	instanceFactory      api.FunctionInstanceFactory
+	stateStore           api.StateStore
+	useDefaultStateStore bool
 }
 
 type ManagerOption interface {
@@ -86,6 +87,7 @@ func WithInstanceFactory(factory api.FunctionInstanceFactory) ManagerOption {
 
 func WithStateStore(store api.StateStore) ManagerOption {
 	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.useDefaultStateStore = false
 		c.stateStore = store
 		return c, nil
 	})
@@ -105,7 +107,7 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 			return nil, err
 		}
 	}
-	if options.stateStore == nil {
+	if options.useDefaultStateStore {
 		var err error
 		options.stateStore, err = statestore.NewTmpPebbleStateStore()
 		if err != nil {
@@ -202,7 +204,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		}
 		go instance.Run(runtimeFactory)
 		select {
-		case <-instance.WaitForReady():
+		case err := <-instance.WaitForReady():
 			if err != nil {
 				fm.log.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", err.Error()))
 				instance.Stop()

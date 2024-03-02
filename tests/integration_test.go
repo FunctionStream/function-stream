@@ -22,6 +22,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/restclient"
+	"github.com/functionstream/function-stream/server"
 	"io"
 	"log/slog"
 	"math/rand"
@@ -29,7 +30,20 @@ import (
 	"testing"
 )
 
+func startServer() {
+	common.RunProcess(func() (io.Closer, error) {
+		s, err := server.NewDefaultServer()
+		if err != nil {
+			return nil, err
+		}
+		go s.Run(context.Background())
+		return s, nil
+	})
+}
+
 func TestBasicFunction(t *testing.T) {
+	go func() { startServer() }()
+
 	cfg := restclient.NewConfiguration()
 	cli := restclient.NewAPIClient(cfg)
 
@@ -44,7 +58,7 @@ func TestBasicFunction(t *testing.T) {
 	f := restclient.Function{
 		Runtime: &restclient.FunctionRuntime{
 			Config: map[string]interface{}{
-				common.RuntimeArchiveConfigKey: "./bin/example_basic.wasm",
+				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
 		Inputs:   []string{"test-input-" + strconv.Itoa(rand.Int())},
