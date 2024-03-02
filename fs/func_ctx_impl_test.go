@@ -14,32 +14,16 @@
  * limitations under the License.
  */
 
-package server
+package fs
 
 import (
-	"context"
-	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/server"
-	"github.com/spf13/cobra"
-	"io"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-var (
-	Cmd = &cobra.Command{
-		Use:   "server",
-		Short: "Start a server",
-		Long:  `Start a server`,
-		Run:   exec,
-	}
-)
-
-func exec(*cobra.Command, []string) {
-	common.RunProcess(func() (io.Closer, error) {
-		s, err := server.NewServer()
-		if err != nil {
-			return nil, err
-		}
-		go s.Run(context.Background())
-		return s, nil
-	})
+func TestFuncCtx_NilStore(t *testing.T) {
+	f := NewFuncCtxImpl(nil)
+	assert.ErrorIs(t, f.PutState("key", []byte("value")), ErrStateStoreNotLoaded)
+	_, err := f.GetState("key")
+	assert.ErrorIs(t, err, ErrStateStoreNotLoaded)
 }

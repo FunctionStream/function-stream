@@ -17,13 +17,17 @@
 package grpc
 
 import (
+	"errors"
+	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/runtime/grpc/proto"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"io"
 	"log/slog"
+	"strconv"
 	"testing"
 )
 
@@ -95,6 +99,24 @@ func StartMockGRPCFunc(t *testing.T, addr string) {
 					}
 					t.Logf("client received event: %v", event)
 					event.Payload += "!"
+
+					counter, err := funcCli.GetState(ctx, &proto.GetStateRequest{
+						Key: "counter",
+					})
+					if err == nil {
+						count, err := strconv.Atoi(string(counter.Value))
+						assert.Nil(t, err)
+						count += 1
+						res, err = funcCli.PutState(ctx, &proto.PutStateRequest{
+							Key:   "counter",
+							Value: []byte(strconv.Itoa(count)),
+						})
+						assert.Nil(t, err)
+						assert.Equal(t, proto.Response_OK, res.Status)
+					} else if !errors.Is(err, api.ErrNotFound) {
+						t.Errorf("failed to get state: %v", err)
+					}
+
 					res, err := funcCli.Output(ctx, event)
 					if err != nil {
 						t.Errorf("failed to send event: %v", err)

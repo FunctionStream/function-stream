@@ -32,10 +32,18 @@ message Response {
   optional string message = 2;
 }
 
-// The request message for the SetState method.
-message SetStateRequest {
+message PutStateRequest {
   string key = 1;
-  string value = 2;
+  bytes value = 2;
+}
+
+message GetStateRequest {
+  string key = 1;
+}
+
+message GetStateResponse {
+  Response response = 1;
+  bytes value = 2;
 }
 
 message ConnectRequest {
@@ -67,4 +75,6 @@ message FunctionProcessRequest {
 service Function {
   rpc Process(FunctionProcessRequest) returns (stream Event) {}
   rpc Output(Event) returns (Response) {}
+  rpc PutState(PutStateRequest) returns (Response) {}
+  rpc GetState(GetStateRequest) returns (GetStateResponse) {}
 }

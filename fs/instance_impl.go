@@ -28,8 +28,8 @@ import (
 )
 
 type FunctionInstanceImpl struct {
-	api.FunctionInstance
 	ctx           context.Context
+	funcCtx       api.FunctionContext
 	cancelFunc    context.CancelFunc
 	definition    *model.Function
 	sourceFactory contube.SourceTubeFactory
@@ -47,18 +47,21 @@ const (
 	CtxKeyInstanceIndex CtxKey = "instance-index"
 )
 
-type DefaultInstanceFactory struct{}
+type DefaultInstanceFactory struct {
+	api.FunctionInstanceFactory
+}
 
 func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
 	return &DefaultInstanceFactory{}
 }
 
-func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, index int32, logger *slog.Logger) api.FunctionInstance {
+func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, funcCtx api.FunctionContext, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, index int32, logger *slog.Logger) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, CtxKeyFunctionName, definition.Name)
 	ctx = context.WithValue(ctx, CtxKeyInstanceIndex, index)
 	return &FunctionInstanceImpl{
 		ctx:           ctx,
+		funcCtx:       funcCtx,
 		cancelFunc:    cancelFunc,
 		definition:    definition,
 		sourceFactory: sourceFactory,
@@ -134,6 +137,10 @@ func (instance *FunctionInstanceImpl) Stop() {
 
 func (instance *FunctionInstanceImpl) Context() context.Context {
 	return instance.ctx
+}
+
+func (instance *FunctionInstanceImpl) FunctionContext() api.FunctionContext {
+	return instance.funcCtx
 }
 
 func (instance *FunctionInstanceImpl) Definition() *model.Function {
