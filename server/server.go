@@ -85,29 +85,6 @@ func WithHttpTubeFactory(factory *contube.HttpTubeFactory) ServerOption {
 	})
 }
 
-func (s *serverOptions) newDefaultFunctionManager(config *common.Config) (*fs.FunctionManager, error) {
-	var tubeFactory contube.TubeFactory
-	var err error
-	switch config.TubeType {
-	case common.PulsarTubeType:
-		tubeFactory, err = contube.NewPulsarEventQueueFactory(context.Background(), (&contube.PulsarTubeFactoryConfig{
-			PulsarURL: config.PulsarURL,
-		}).ToConfigMap())
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create default pulsar tube factory")
-		}
-	case common.MemoryTubeType:
-		tubeFactory = contube.NewMemoryQueueFactory(context.Background())
-	}
-	manager, err := fs.NewFunctionManager(
-		fs.WithDefaultTubeFactory(tubeFactory),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create default function manager")
-	}
-	return manager, nil
-}
-
 func NewServer(opts ...ServerOption) (*Server, error) {
 	options := &serverOptions{}
 	httpTubeFact := contube.NewHttpTubeFactory(context.Background())
