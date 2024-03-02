@@ -41,8 +41,11 @@ func startServer() {
 	})
 }
 
+func init() {
+	go startServer()
+}
+
 func TestBasicFunction(t *testing.T) {
-	go func() { startServer() }()
 
 	cfg := restclient.NewConfiguration()
 	cli := restclient.NewAPIClient(cfg)
