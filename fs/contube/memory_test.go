@@ -33,53 +33,34 @@ func TestMemoryNewSourceTube(t *testing.T) {
 		mu:     sync.Mutex{},
 		queues: make(map[string]*queue),
 	}
-	// Create queues, corresponding to multiple topics
-	queues1 := queue{
-		c:      make(chan Record, 1),
-		refCnt: 0,
-	}
-	record1 := &RecordImpl{
-		payload:    []byte{1},
-		commitFunc: nil,
-	}
-	queues1.c <- record1
-	queues2 := queue{
-		c:      make(chan Record, 1),
-		refCnt: 0,
-	}
-	record2 := &RecordImpl{
-		payload:    []byte{2},
-		commitFunc: nil,
-	}
-	queues2.c <- record2
-	queues3 := queue{
-		c:      make(chan Record, 1),
-		refCnt: 0,
-	}
-	record3 := &RecordImpl{
-		payload:    []byte{3},
-		commitFunc: nil,
-	}
-	queues3.c <- record3
 
-	memoryQueueFactory.queues["topic1"] = &queues1
-	memoryQueueFactory.queues["topic2"] = &queues2
-	memoryQueueFactory.queues["topic3"] = &queues3
+	// Create queues, corresponding to multiple topics
+	topics := []string{"topic1", "topic2", "topic3"}
+	for i, v := range topics {
+		memoryQueueFactory.queues[v] = &queue{
+			c:      make(chan Record, 1),
+			refCnt: 0,
+		}
+		memoryQueueFactory.queues[v].c <- &RecordImpl{
+			payload:    []byte{byte(i)},
+			commitFunc: nil,
+		}
+	}
 
 	ch, err := memoryQueueFactory.NewSourceTube(ctx, (&SourceQueueConfig{Topics: []string{"topic1", "topic2", "topic3"}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	var events []Record
+
 	go func() {
 		defer wg.Done()
 		for record := range ch {
 			log.Printf("Received record: %+v", record)
-			if record == record1 || record == record2 || record == record3 {
-				events = append(events, record)
-			}
+			events = append(events, record)
 		}
 	}()
 
@@ -87,9 +68,7 @@ func TestMemoryNewSourceTube(t *testing.T) {
 	cancel()
 	wg.Wait()
 
-	// Create three Records data, determine whether the length of the received data is equal to 3
-	// There is no need to determine whether the data in the "event" corresponds to the sent data, because the data has already been judged when it is written into the "event".
-	if len(events) == 3 {
+	if len(events) == len(topics) {
 		t.Log("Successful")
 	} else {
 		t.Fatal("failed")
