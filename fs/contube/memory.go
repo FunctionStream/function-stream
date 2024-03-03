@@ -80,6 +80,7 @@ func (f *MemoryQueueFactory) release(name string) {
 func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap ConfigMap) (<-chan Record, error) {
 	config := NewSourceQueueConfig(configMap)
 	result := make(chan Record)
+
 	var wg sync.WaitGroup
 	for _, topic := range config.Topics {
 		wg.Add(2)
