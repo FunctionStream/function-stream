@@ -35,7 +35,7 @@ import (
 )
 
 func BenchmarkStressForBasicFunc(b *testing.B) {
-	s, err := server.NewServer(server.LoadConfigFromEnv())
+	s, err := server.NewDefaultServer()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -110,15 +110,7 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
-	svrConf := &common.Config{
-		ListenAddr: common.DefaultAddr,
-	}
-
-	fm, err := fs.NewFunctionManager(fs.WithDefaultTubeFactory(memoryQueueFactory))
-	if err != nil {
-		b.Fatal(err)
-	}
-	s, err := server.NewServer(svrConf, server.WithFunctionManager(fm))
+	s, err := server.NewServer(server.WithFunctionManager(fs.WithDefaultTubeFactory(memoryQueueFactory)))
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -57,7 +57,6 @@ jobs:
       - run: make build_all
       - name: Wait for Pulsar service
         run: until curl http://localhost:8080/metrics > /dev/null 2>&1 ; do sleep 1; done
-      - run: nohup bin/function-stream server > nohup.out &
       - run: make test
       - name: Collect Docker Compose logs
         if: failure()

@@ -104,6 +104,7 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 }
 
 type WazeroFunctionRuntime struct {
+	api.FunctionRuntime
 	callFunc func(e contube.Record) (contube.Record, error)
 	stopFunc func()
 	log      *slog.Logger

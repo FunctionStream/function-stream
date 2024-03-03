@@ -56,7 +56,7 @@ type HttpTubeFactory struct {
 	endpoints map[string]*endpointHandler
 }
 
-func NewHttpTubeFactory(ctx context.Context) TubeFactory {
+func NewHttpTubeFactory(ctx context.Context) *HttpTubeFactory {
 	return &HttpTubeFactory{
 		ctx:       ctx,
 		endpoints: make(map[string]*endpointHandler),

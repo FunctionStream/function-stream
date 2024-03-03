@@ -23,6 +23,7 @@ import (
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/fs/runtime/wazero"
+	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/pkg/errors"
 	"log/slog"
 	"math/rand"
@@ -38,9 +39,11 @@ type FunctionManager struct {
 }
 
 type managerOptions struct {
-	tubeFactoryMap    map[string]contube.TubeFactory
-	runtimeFactoryMap map[string]api.FunctionRuntimeFactory
-	instanceFactory   api.FunctionInstanceFactory
+	tubeFactoryMap           map[string]contube.TubeFactory
+	runtimeFactoryMap        map[string]api.FunctionRuntimeFactory
+	instanceFactory          api.FunctionInstanceFactory
+	stateStore               api.StateStore
+	dontUseDefaultStateStore bool
 }
 
 type ManagerOption interface {
@@ -82,6 +85,14 @@ func WithInstanceFactory(factory api.FunctionInstanceFactory) ManagerOption {
 	})
 }
 
+func WithStateStore(store api.StateStore) ManagerOption {
+	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.dontUseDefaultStateStore = true
+		c.stateStore = store
+		return c, nil
+	})
+}
+
 func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 	options := &managerOptions{
 		tubeFactoryMap:    make(map[string]contube.TubeFactory),
@@ -94,6 +105,13 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 		_, err := o.apply(options)
 		if err != nil {
 			return nil, err
+		}
+	}
+	if !options.dontUseDefaultStateStore {
+		var err error
+		options.stateStore, err = statestore.NewTmpPebbleStateStore()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create default state store")
 		}
 	}
 	log := slog.With()
@@ -145,6 +163,10 @@ func (fm *FunctionManager) getRuntimeFactory(t string) (api.FunctionRuntimeFacto
 	return factory, nil
 }
 
+func (fm *FunctionManager) createFuncCtx(f *model.Function) api.FunctionContext {
+	return NewFuncCtxImpl(fm.options.stateStore)
+}
+
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	fm.functionsLock.Lock()
 	if _, exist := fm.functions[f.Name]; exist {
@@ -156,6 +178,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	if f.Replicas <= 0 {
 		return errors.New("replicas should be greater than 0")
 	}
+	funcCtx := fm.createFuncCtx(f)
 	for i := int32(0); i < f.Replicas; i++ {
 		sourceFactory, err := fm.getTubeFactory(f.Source)
 		if err != nil {
@@ -167,7 +190,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		}
 		runtimeType := fm.getRuntimeType(f.Runtime)
 
-		instance := fm.options.instanceFactory.NewFunctionInstance(f, sourceFactory, sinkFactory, i, slog.With(
+		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, sourceFactory, sinkFactory, i, slog.With(
 			slog.String("name", f.Name),
 			slog.Int("index", int(i)),
 			slog.String("runtime", runtimeType),
@@ -181,7 +204,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		}
 		go instance.Run(runtimeFactory)
 		select {
-		case <-instance.WaitForReady():
+		case err := <-instance.WaitForReady():
 			if err != nil {
 				fm.log.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", err.Error()))
 				instance.Stop()
@@ -240,4 +263,25 @@ func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
 		return nil, err
 	}
 	return <-c, nil
+}
+
+// GetStateStore returns the state store used by the function manager
+// Return nil if no state store is configured
+func (fm *FunctionManager) GetStateStore() api.StateStore {
+	return fm.options.stateStore
+}
+
+func (fm *FunctionManager) Close() error {
+	fm.functionsLock.Lock()
+	defer fm.functionsLock.Unlock()
+	for _, instances := range fm.functions {
+		for _, instance := range instances {
+			instance.Stop()
+		}
+	}
+	err := fm.options.stateStore.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }

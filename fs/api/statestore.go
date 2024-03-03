@@ -14,32 +14,14 @@
  * limitations under the License.
  */
 
-package server
+package api
 
-import (
-	"context"
-	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/server"
-	"github.com/spf13/cobra"
-	"io"
-)
+import "github.com/pkg/errors"
 
-var (
-	Cmd = &cobra.Command{
-		Use:   "server",
-		Short: "Start a server",
-		Long:  `Start a server`,
-		Run:   exec,
-	}
-)
+var ErrNotFound = errors.New("key not found")
 
-func exec(*cobra.Command, []string) {
-	common.RunProcess(func() (io.Closer, error) {
-		s, err := server.NewServer()
-		if err != nil {
-			return nil, err
-		}
-		go s.Run(context.Background())
-		return s, nil
-	})
+type StateStore interface {
+	PutState(key string, value []byte) error
+	GetState(key string) ([]byte, error)
+	Close() error
 }
