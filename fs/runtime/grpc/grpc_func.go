@@ -34,6 +34,7 @@ import (
 type GRPCFuncRuntime struct {
 	api.FunctionRuntime
 	Name      string
+	instance  api.FunctionInstance
 	ctx       context.Context
 	status    *proto.FunctionStatus
 	readyOnce sync.Once
@@ -78,7 +79,7 @@ func (s *FSSReconcileServer) WaitForReady() <-chan struct{} {
 	return s.readyCh
 }
 
-func (s *FSSReconcileServer) Reconcile(req *proto.ConnectRequest, stream proto.FSReconcile_ReconcileServer) error {
+func (s *FSSReconcileServer) Reconcile(_ *proto.ConnectRequest, stream proto.FSReconcile_ReconcileServer) error {
 	s.connected.Do(func() {
 		close(s.readyCh)
 	})
@@ -122,7 +123,7 @@ func (s *FSSReconcileServer) Reconcile(req *proto.ConnectRequest, stream proto.F
 
 }
 
-func (s *FSSReconcileServer) UpdateStatus(ctx context.Context, newStatus *proto.FunctionStatus) (*proto.Response, error) {
+func (s *FSSReconcileServer) UpdateStatus(_ context.Context, newStatus *proto.FunctionStatus) (*proto.Response, error) {
 	s.log.DebugContext(s.ctx, "received status update", slog.Any("status", newStatus))
 	s.functionsMu.Lock()
 	instance, ok := s.functions[newStatus.Name]
@@ -151,10 +152,11 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 		s.removeFunction(name)
 	}()
 	runtime := &GRPCFuncRuntime{
-		Name:    name,
-		readyCh: make(chan error),
-		input:   make(chan string),
-		output:  make(chan string),
+		Name:     name,
+		instance: instance,
+		readyCh:  make(chan error),
+		input:    make(chan string),
+		output:   make(chan string),
 		status: &proto.FunctionStatus{
 			Name:   name,
 			Status: proto.FunctionStatus_CREATING,
@@ -273,7 +275,7 @@ func (f *FunctionServerImpl) Process(req *proto.FunctionProcessRequest, stream p
 	}
 }
 
-func (f *FunctionServerImpl) Output(ctx context.Context, e *proto.Event) (*proto.Response, error) {
+func (f *FunctionServerImpl) getFunctionRuntime(ctx context.Context) (*GRPCFuncRuntime, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, fmt.Errorf("failed to get metadata")
@@ -281,7 +283,11 @@ func (f *FunctionServerImpl) Output(ctx context.Context, e *proto.Event) (*proto
 	if _, ok := md["name"]; !ok || len(md["name"]) == 0 {
 		return nil, fmt.Errorf("the metadata doesn't contain the function name")
 	}
-	runtime, err := f.reconcileSvr.getFunc(md["name"][0])
+	return f.reconcileSvr.getFunc(md["name"][0])
+}
+
+func (f *FunctionServerImpl) Output(ctx context.Context, e *proto.Event) (*proto.Response, error) {
+	runtime, err := f.getFunctionRuntime(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -289,6 +295,36 @@ func (f *FunctionServerImpl) Output(ctx context.Context, e *proto.Event) (*proto
 	runtime.output <- e.Payload
 	return &proto.Response{
 		Status: proto.Response_OK,
+	}, nil
+}
+
+func (f *FunctionServerImpl) PutState(ctx context.Context, req *proto.PutStateRequest) (*proto.Response, error) {
+	runtime, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	runtime.log.DebugContext(ctx, "put state")
+	err = runtime.instance.FunctionContext().PutState(req.Key, req.Value)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.Response{
+		Status: proto.Response_OK,
+	}, nil
+}
+
+func (f *FunctionServerImpl) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
+	runtime, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	runtime.log.DebugContext(ctx, "get state")
+	v, err := runtime.instance.FunctionContext().GetState(req.Key)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.GetStateResponse{
+		Value: v,
 	}, nil
 }
 

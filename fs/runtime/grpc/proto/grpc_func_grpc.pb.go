@@ -170,6 +170,8 @@ var FSReconcile_ServiceDesc = grpc.ServiceDesc{
 type FunctionClient interface {
 	Process(ctx context.Context, in *FunctionProcessRequest, opts ...grpc.CallOption) (Function_ProcessClient, error)
 	Output(ctx context.Context, in *Event, opts ...grpc.CallOption) (*Response, error)
+	PutState(ctx context.Context, in *PutStateRequest, opts ...grpc.CallOption) (*Response, error)
+	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 }
 
 type functionClient struct {
@@ -221,12 +223,32 @@ func (c *functionClient) Output(ctx context.Context, in *Event, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *functionClient) PutState(ctx context.Context, in *PutStateRequest, opts ...grpc.CallOption) (*Response, error) {
+	out := new(Response)
+	err := c.cc.Invoke(ctx, "/fs_func.Function/PutState", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *functionClient) GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error) {
+	out := new(GetStateResponse)
+	err := c.cc.Invoke(ctx, "/fs_func.Function/GetState", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FunctionServer is the server API for Function service.
 // All implementations must embed UnimplementedFunctionServer
 // for forward compatibility
 type FunctionServer interface {
 	Process(*FunctionProcessRequest, Function_ProcessServer) error
 	Output(context.Context, *Event) (*Response, error)
+	PutState(context.Context, *PutStateRequest) (*Response, error)
+	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	mustEmbedUnimplementedFunctionServer()
 }
 
@@ -239,6 +261,12 @@ func (UnimplementedFunctionServer) Process(*FunctionProcessRequest, Function_Pro
 }
 func (UnimplementedFunctionServer) Output(context.Context, *Event) (*Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Output not implemented")
+}
+func (UnimplementedFunctionServer) PutState(context.Context, *PutStateRequest) (*Response, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PutState not implemented")
+}
+func (UnimplementedFunctionServer) GetState(context.Context, *GetStateRequest) (*GetStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
 }
 func (UnimplementedFunctionServer) mustEmbedUnimplementedFunctionServer() {}
 
@@ -292,6 +320,42 @@ func _Function_Output_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Function_PutState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PutStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionServer).PutState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fs_func.Function/PutState",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionServer).PutState(ctx, req.(*PutStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Function_GetState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionServer).GetState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fs_func.Function/GetState",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionServer).GetState(ctx, req.(*GetStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Function_ServiceDesc is the grpc.ServiceDesc for Function service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -302,6 +366,14 @@ var Function_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Output",
 			Handler:    _Function_Output_Handler,
+		},
+		{
+			MethodName: "PutState",
+			Handler:    _Function_PutState_Handler,
+		},
+		{
+			MethodName: "GetState",
+			Handler:    _Function_GetState_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -38,15 +38,15 @@ import (
 
 type Server struct {
 	options *serverOptions
-	config  *common.Config
 	httpSvr atomic.Pointer[http.Server]
 	log     *slog.Logger
+	manager *fs.FunctionManager
 }
 
 type serverOptions struct {
 	httpListener net.Listener
-	manager      *fs.FunctionManager
-	httpTube     *contube.HttpTubeFactory
+	managerOpts  []fs.ManagerOption
+	httpTubeFact *contube.HttpTubeFactory
 }
 
 type ServerOption interface {
@@ -59,9 +59,10 @@ func (f serverOptionFunc) apply(c *serverOptions) (*serverOptions, error) {
 	return f(c)
 }
 
-func WithFunctionManager(manager *fs.FunctionManager) ServerOption {
+// WithFunctionManager sets the function manager for the server.
+func WithFunctionManager(opts ...fs.ManagerOption) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
-		o.manager = manager
+		o.managerOpts = append(o.managerOpts, opts...)
 		return o, nil
 	})
 }
@@ -75,9 +76,56 @@ func WithHttpListener(listener net.Listener) ServerOption {
 	})
 }
 
-func (s *serverOptions) newDefaultFunctionManager(config *common.Config) (*fs.FunctionManager, error) {
+// WithHttpTubeFactory sets the factory for the HTTP tube.
+// If not set, the server will use the default HTTP tube factory.
+func WithHttpTubeFactory(factory *contube.HttpTubeFactory) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		o.httpTubeFact = factory
+		return o, nil
+	})
+}
+
+func NewServer(opts ...ServerOption) (*Server, error) {
+	options := &serverOptions{}
+	httpTubeFact := contube.NewHttpTubeFactory(context.Background())
+	options.managerOpts = []fs.ManagerOption{
+		fs.WithDefaultTubeFactory(contube.NewMemoryQueueFactory(context.Background())),
+		fs.WithTubeFactory("http", httpTubeFact),
+	}
+	options.httpTubeFact = httpTubeFact
+	for _, o := range opts {
+		if o == nil {
+			continue
+		}
+		_, err := o.apply(options)
+		if err != nil {
+			return nil, err
+		}
+	}
+	manager, err := fs.NewFunctionManager(options.managerOpts...)
+	if err != nil {
+		return nil, err
+	}
+	if options.httpListener == nil {
+		options.httpListener, err = net.Listen("tcp", "localhost:7300")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &Server{
+		options: options,
+		manager: manager,
+		log:     slog.With(),
+	}, nil
+}
+
+func NewServerWithConfig(config *common.Config) (*Server, error) {
+	ln, err := net.Listen("tcp", config.ListenAddr)
+	if err != nil {
+		return nil, err
+	}
+
 	var tubeFactory contube.TubeFactory
-	var err error
 	switch config.TubeType {
 	case common.PulsarTubeType:
 		tubeFactory, err = contube.NewPulsarEventQueueFactory(context.Background(), (&contube.PulsarTubeFactoryConfig{
@@ -89,38 +137,18 @@ func (s *serverOptions) newDefaultFunctionManager(config *common.Config) (*fs.Fu
 	case common.MemoryTubeType:
 		tubeFactory = contube.NewMemoryQueueFactory(context.Background())
 	}
-	s.httpTube = contube.NewHttpTubeFactory(context.Background()).(*contube.HttpTubeFactory)
-	manager, err := fs.NewFunctionManager(
+	managerOpts := []fs.ManagerOption{
 		fs.WithDefaultTubeFactory(tubeFactory),
-		fs.WithTubeFactory("http", s.httpTube),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create default function manager")
 	}
-	return manager, nil
+
+	return NewServer(
+		WithHttpListener(ln),
+		WithFunctionManager(managerOpts...),
+	)
 }
 
-func NewServer(config *common.Config, opts ...ServerOption) (*Server, error) {
-	options := &serverOptions{}
-	for _, o := range opts {
-		_, err := o.apply(options)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if options.manager == nil {
-		manager, err := options.newDefaultFunctionManager(config)
-		if err != nil {
-			return nil, err
-		}
-		options.manager = manager
-	}
-
-	return &Server{
-		options: options,
-		config:  config,
-		log:     slog.With(),
-	}, nil
+func NewDefaultServer() (*Server, error) {
+	return NewServerWithConfig(LoadConfigFromEnv())
 }
 
 func (s *Server) Run(context context.Context) {
@@ -180,7 +208,7 @@ func (s *Server) startRESTHandlers() error {
 			return
 		}
 
-		err = s.options.manager.StartFunction(f)
+		err = s.manager.StartFunction(f)
 		if err != nil {
 			log.Error("Failed to start function", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -194,7 +222,7 @@ func (s *Server) startRESTHandlers() error {
 		functionName := vars["function_name"]
 		log := s.log.With(slog.String("name", functionName), slog.String("phase", "deleting"))
 
-		err := s.options.manager.DeleteFunction(functionName)
+		err := s.manager.DeleteFunction(functionName)
 		if errors.Is(err, common.ErrorFunctionNotFound) {
 			log.Error("Function not found", "error", err)
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -206,7 +234,7 @@ func (s *Server) startRESTHandlers() error {
 	r.HandleFunc("/api/v1/functions", func(w http.ResponseWriter, r *http.Request) {
 		log := s.log.With()
 		log.Info("Listing functions")
-		functions := s.options.manager.ListFunctions()
+		functions := s.manager.ListFunctions()
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(functions)
 		if err != nil {
@@ -227,7 +255,7 @@ func (s *Server) startRESTHandlers() error {
 			http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
 			return
 		}
-		err = s.options.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
+		err = s.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
 		if err != nil {
 			log.Error("Failed to produce event", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -241,7 +269,7 @@ func (s *Server) startRESTHandlers() error {
 		queueName := vars["queue_name"]
 		log := s.log.With(slog.String("queue_name", queueName))
 		log.Info("Consuming event from queue")
-		event, err := s.options.manager.ConsumeEvent(queueName)
+		event, err := s.manager.ConsumeEvent(queueName)
 		if err != nil {
 			log.Error("Failed to consume event", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -257,25 +285,81 @@ func (s *Server) startRESTHandlers() error {
 		log.Info("Consumed event from queue")
 	}).Methods("GET")
 
-	r.HandleFunc("/api/v1/http-tube/{endpoint}", s.options.httpTube.GetHandleFunc(func(r *http.Request) (string, error) {
-		e, ok := mux.Vars(r)["endpoint"]
+	if s.options.httpTubeFact != nil {
+		r.HandleFunc("/api/v1/http-tube/{endpoint}", s.options.httpTubeFact.GetHandleFunc(func(r *http.Request) (string, error) {
+			e, ok := mux.Vars(r)["endpoint"]
+			if !ok {
+				return "", errors.New("endpoint not found")
+			}
+			return e, nil
+		}, s.log)).Methods("POST")
+	}
+
+	r.HandleFunc("/api/v1/state/{key}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		key, ok := vars["key"]
 		if !ok {
-			return "", errors.New("endpoint not found")
+			http.Error(w, "Key not found", http.StatusBadRequest)
+			return
 		}
-		return e, nil
-	}, s.log)).Methods("POST")
+		log := s.log.With(slog.String("key", key))
+		log.Info("Getting state")
+		state := s.manager.GetStateStore()
+		if state == nil {
+			log.Error("No state store configured")
+			http.Error(w, "No state store configured", http.StatusBadRequest)
+			return
+		}
+		content, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Error("Failed to read body", "error", err)
+			http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
+			return
+		}
+		err = state.PutState(key, content)
+		if err != nil {
+			log.Error("Failed to put state", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("POST")
+
+	r.HandleFunc("/api/v1/state/{key}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		key, ok := vars["key"]
+		if !ok {
+			http.Error(w, "Key not found", http.StatusBadRequest)
+			return
+		}
+		log := s.log.With(slog.String("key", key))
+		log.Info("Getting state")
+		state := s.manager.GetStateStore()
+		if state == nil {
+			log.Error("No state store configured")
+			http.Error(w, "No state store configured", http.StatusBadRequest)
+			return
+		}
+		content, err := state.GetState(key)
+		if err != nil {
+			log.Error("Failed to get state", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream") // Set the content type to application/octet-stream for binary data
+		_, err = w.Write(content)
+		if err != nil {
+			log.Error("Failed to write to response", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}).Methods("GET")
 
 	httpSvr := &http.Server{
-		Addr:    s.config.ListenAddr,
 		Handler: r,
 	}
 	s.httpSvr.Store(httpSvr)
 
-	if s.options.httpListener != nil {
-		return httpSvr.Serve(s.options.httpListener)
-	} else {
-		return httpSvr.ListenAndServe()
-	}
+	return httpSvr.Serve(s.options.httpListener)
 }
 
 func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
@@ -283,7 +367,7 @@ func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
 	detect := func() bool {
 		u := (&url.URL{
 			Scheme: "http",
-			Host:   s.config.ListenAddr,
+			Host:   s.options.httpListener.Addr().String(),
 			Path:   "/api/v1/status",
 		}).String()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -311,7 +395,7 @@ func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
 				return
 			case <-time.After(1 * time.Second):
 				if detect() {
-					s.log.Info("Server is ready", slog.String("address", s.config.ListenAddr))
+					s.log.Info("Server is ready", slog.String("address", s.options.httpListener.Addr().String()))
 					return
 				}
 			}
@@ -324,6 +408,12 @@ func (s *Server) Close() error {
 	s.log.Info("Shutting down function stream server")
 	if httpSvr := s.httpSvr.Load(); httpSvr != nil {
 		if err := httpSvr.Close(); err != nil {
+			return err
+		}
+	}
+	if s.manager != nil {
+		err := s.manager.Close()
+		if err != nil {
 			return err
 		}
 	}

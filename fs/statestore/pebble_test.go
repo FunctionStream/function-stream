@@ -14,32 +14,26 @@
  * limitations under the License.
  */
 
-package server
+package statestore_test
 
 import (
-	"context"
-	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/server"
-	"github.com/spf13/cobra"
-	"io"
+	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/statestore"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-var (
-	Cmd = &cobra.Command{
-		Use:   "server",
-		Short: "Start a server",
-		Long:  `Start a server`,
-		Run:   exec,
-	}
-)
+func TestPebbleStateStore(t *testing.T) {
+	store, err := statestore.NewTmpPebbleStateStore()
+	assert.Nil(t, err)
 
-func exec(*cobra.Command, []string) {
-	common.RunProcess(func() (io.Closer, error) {
-		s, err := server.NewServer()
-		if err != nil {
-			return nil, err
-		}
-		go s.Run(context.Background())
-		return s, nil
-	})
+	_, err = store.GetState("key")
+	assert.ErrorIs(t, err, api.ErrNotFound)
+
+	err = store.PutState("key", []byte("value"))
+	assert.Nil(t, err)
+
+	value, err := store.GetState("key")
+	assert.Nil(t, err)
+	assert.Equal(t, "value", string(value))
 }

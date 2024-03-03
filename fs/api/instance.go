@@ -25,6 +25,7 @@ import (
 
 type FunctionInstance interface {
 	Context() context.Context
+	FunctionContext() FunctionContext
 	Definition() *model.Function
 	Index() int32
 	Stop()
@@ -34,5 +35,5 @@ type FunctionInstance interface {
 }
 
 type FunctionInstanceFactory interface {
-	NewFunctionInstance(f *model.Function, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, i int32, logger *slog.Logger) FunctionInstance
+	NewFunctionInstance(f *model.Function, funcCtx FunctionContext, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, i int32, logger *slog.Logger) FunctionInstance
 }
