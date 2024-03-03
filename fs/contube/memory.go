@@ -83,10 +83,9 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 
 	var wg sync.WaitGroup
 	for _, topic := range config.Topics {
-		wg.Add(2)
+		wg.Add(1)
 		t := topic
 		go func() {
-			defer wg.Done()
 			<-ctx.Done()
 			f.release(t)
 		}()
