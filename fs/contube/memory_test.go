@@ -89,6 +89,7 @@ func TestMemoryNewSinkTube(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 	wg.Add(1)
 
 	var events []Record
@@ -103,11 +104,17 @@ func TestMemoryNewSinkTube(t *testing.T) {
 		}
 	}(count)
 
+	wg.Wait()
+
 	go func() {
+		memoryQueueFactory.mu.Lock()
+		defer memoryQueueFactory.mu.Unlock()
 		for {
 			select {
 			case event := <-memoryQueueFactory.queues[TopicKey].c:
+				mu.Lock()
 				events = append(events, event)
+				mu.Unlock()
 			case <-ctx.Done():
 				return
 			}
@@ -117,7 +124,9 @@ func TestMemoryNewSinkTube(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 	cancel()
-	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
 
 	if len(events) == count {
 		t.Log("Successful")
