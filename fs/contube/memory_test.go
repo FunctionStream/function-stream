@@ -103,8 +103,6 @@ func TestMemoryNewSinkTube(t *testing.T) {
 		}
 	}(count)
 
-	wg.Wait()
-
 	go func() {
 		for {
 			select {
@@ -117,8 +115,9 @@ func TestMemoryNewSinkTube(t *testing.T) {
 
 	}()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	cancel()
+	wg.Wait()
 
 	if len(events) == count {
 		t.Log("Successful")
