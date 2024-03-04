@@ -42,7 +42,7 @@ func TestMemoryNewSourceTube(t *testing.T) {
 			refCnt: 0,
 		}
 		memoryQueueFactory.queues[v].c <- &RecordImpl{
-			payload:    []byte{byte(i)},
+			payload:    []byte{byte(i + 1)},
 			commitFunc: nil,
 		}
 	}
@@ -64,7 +64,7 @@ func TestMemoryNewSourceTube(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(100 * time.Millisecond)
 	cancel()
 	wg.Wait()
 
@@ -73,4 +73,56 @@ func TestMemoryNewSourceTube(t *testing.T) {
 	} else {
 		t.Fatal("failed")
 	}
+}
+
+func TestMemoryNewSinkTube(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	memoryQueueFactory := MemoryQueueFactory{
+		ctx:    ctx,
+		mu:     sync.Mutex{},
+		queues: make(map[string]*queue),
+	}
+
+	wrapperC, err := memoryQueueFactory.NewSinkTube(ctx, (&SinkQueueConfig{Topic: TopicKey}).ToConfigMap())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	var events []Record
+	var count = 10
+	go func(n int) {
+		defer wg.Done()
+		for i := 0; i < n; i++ {
+			wrapperC <- &RecordImpl{
+				payload:    []byte{byte(i)},
+				commitFunc: func() {},
+			}
+		}
+	}(count)
+
+	go func() {
+		for {
+			select {
+			case event := <-memoryQueueFactory.queues[TopicKey].c:
+				events = append(events, event)
+			case <-ctx.Done():
+				return
+			}
+		}
+
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	wg.Wait()
+
+	if len(events) == count {
+		t.Log("Successful")
+	} else {
+		t.Fatal("failed")
+	}
+
 }
