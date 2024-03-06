@@ -38,17 +38,14 @@ func TestMemoryTube(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var events []Record
-	var sinks []chan<- Record
 
 	source, err := memoryQueueFactory.NewSourceTube(ctx, (&SourceQueueConfig{Topics: topics, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	for i, v := range topics {
 		wg.Add(1)
 		sink, err := memoryQueueFactory.NewSinkTube(ctx, (&SinkQueueConfig{Topic: v}).ToConfigMap())
-		sinks = append(sinks, sink)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -77,11 +74,15 @@ func TestMemoryTube(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // This time.Sleep is to wait for cancel() to notify all goroutines
 	wg.Wait()
 
+	// Add "sync. Mutex" to prevent multiple goroutines from accessing queues simultaneously
 	for _, topic := range topics {
+		memoryQueueFactory.mu.Lock()
 		_, ok := memoryQueueFactory.queues[topic]
+		memoryQueueFactory.mu.Unlock()
 		if ok {
 			t.Fatal("queue release failure")
 		}
+
 	}
 
 	if len(events) == len(topics) {
