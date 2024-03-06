@@ -84,13 +84,12 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 	var wg sync.WaitGroup
 	for _, topic := range config.Topics {
 		wg.Add(1)
-		t := topic
-		go func() {
+		go func(t string) {
 			<-ctx.Done()
 			f.release(t)
-		}()
+		}(topic)
 
-		go func() {
+		go func(t string) {
 			defer wg.Done()
 			c := f.getOrCreateChan(t)
 			for {
@@ -101,7 +100,7 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 					result <- event
 				}
 			}
-		}()
+		}(topic)
 	}
 
 	go func() {

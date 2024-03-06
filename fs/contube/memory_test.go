@@ -18,7 +18,6 @@ package contube
 
 import (
 	"context"
-	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -26,7 +25,8 @@ import (
 	"time"
 )
 
-func TestMemoryNewSourceTube(t *testing.T) {
+func TestMemoryTube(t *testing.T) {
+
 	ctx, cancel := context.WithCancel(context.Background())
 	memoryQueueFactory := MemoryQueueFactory{
 		ctx:    ctx,
@@ -34,101 +34,57 @@ func TestMemoryNewSourceTube(t *testing.T) {
 		queues: make(map[string]*queue),
 	}
 
-	// Create queues, corresponding to multiple topics
 	topics := []string{"topic1", "topic2", "topic3"}
+
+	var wg sync.WaitGroup
+	var events []Record
+	var sinks []chan<- Record
+
+	source, err := memoryQueueFactory.NewSourceTube(ctx, (&SourceQueueConfig{Topics: topics, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for i, v := range topics {
-		memoryQueueFactory.queues[v] = &queue{
-			c:      make(chan Record, 1),
-			refCnt: 0,
+		wg.Add(1)
+		sink, err := memoryQueueFactory.NewSinkTube(ctx, (&SinkQueueConfig{Topic: v}).ToConfigMap())
+		sinks = append(sinks, sink)
+		if err != nil {
+			t.Fatal(err)
 		}
-		memoryQueueFactory.queues[v].c <- &RecordImpl{
-			payload:    []byte{byte(i + 1)},
-			commitFunc: nil,
-		}
+		go func(i int) {
+			defer wg.Done()
+			defer close(sink)
+			sink <- NewRecordImpl([]byte{byte(i + 1)}, func() {})
+		}(i)
 	}
 
-	ch, err := memoryQueueFactory.NewSourceTube(ctx, (&SourceQueueConfig{Topics: []string{"topic1", "topic2", "topic3"}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var wg sync.WaitGroup
 	wg.Add(1)
-	var events []Record
-
 	go func() {
 		defer wg.Done()
-		for record := range ch {
-			log.Printf("Received record: %+v", record)
-			events = append(events, record)
-		}
-	}()
-
-	time.Sleep(100 * time.Millisecond)
-	cancel()
-	wg.Wait()
-
-	if len(events) == len(topics) {
-		t.Log("Successful")
-	} else {
-		t.Fatal("failed")
-	}
-}
-
-func TestMemoryNewSinkTube(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	memoryQueueFactory := MemoryQueueFactory{
-		ctx:    ctx,
-		mu:     sync.Mutex{},
-		queues: make(map[string]*queue),
-	}
-
-	wrapperC, err := memoryQueueFactory.NewSinkTube(ctx, (&SinkQueueConfig{Topic: TopicKey}).ToConfigMap())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	wg.Add(1)
-
-	var events []Record
-	var count = 10
-	go func(n int) {
-		defer wg.Done()
-		for i := 0; i < n; i++ {
-			wrapperC <- &RecordImpl{
-				payload:    []byte{byte(i)},
-				commitFunc: func() {},
-			}
-		}
-	}(count)
-
-	wg.Wait()
-
-	go func() {
-		memoryQueueFactory.mu.Lock()
-		defer memoryQueueFactory.mu.Unlock()
 		for {
 			select {
-			case event := <-memoryQueueFactory.queues[TopicKey].c:
-				mu.Lock()
-				events = append(events, event)
-				mu.Unlock()
 			case <-ctx.Done():
 				return
+			case event := <-source:
+				events = append(events, event)
 			}
 		}
-
 	}()
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Make sure all goroutines are running
 	cancel()
+	time.Sleep(100 * time.Millisecond) // This time.Sleep is to wait for cancel() to notify all goroutines
+	wg.Wait()
 
-	mu.Lock()
-	defer mu.Unlock()
+	for _, topic := range topics {
+		_, ok := memoryQueueFactory.queues[topic]
+		if ok {
+			t.Fatal("queue release failure")
+		}
+	}
 
-	if len(events) == count {
+	if len(events) == len(topics) {
 		t.Log("Successful")
 	} else {
 		t.Fatal("failed")
