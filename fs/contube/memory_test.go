@@ -86,7 +86,7 @@ func TestMemoryTube(t *testing.T) {
 	}
 
 	if len(events) == len(topics) {
-		t.Log("Successful")
+		t.Log("successful")
 	} else {
 		t.Fatal("failed")
 	}
