@@ -103,7 +103,7 @@ func TestStandaloneBasicFunction(t *testing.T) {
 		Name:     "test-func",
 		Replicas: 1,
 	}
-	err := s.manager.StartFunction(funcConf)
+	err := s.Manager.StartFunction(funcConf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,13 +116,13 @@ func TestStandaloneBasicFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.manager.ProduceEvent(inputTopic, contube.NewRecordImpl(jsonBytes, func() {
+	err = s.Manager.ProduceEvent(inputTopic, contube.NewRecordImpl(jsonBytes, func() {
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	event, err := s.manager.ConsumeEvent(outputTopic)
+	event, err := s.Manager.ConsumeEvent(outputTopic)
 	if err != nil {
 		t.Error(err)
 		return
@@ -163,7 +163,7 @@ func TestHttpTube(t *testing.T) {
 		Replicas: 1,
 	}
 
-	err := s.manager.StartFunction(funcConf)
+	err := s.Manager.StartFunction(funcConf)
 	assert.Nil(t, err)
 
 	p := &tests.Person{
@@ -178,7 +178,7 @@ func TestHttpTube(t *testing.T) {
 	_, err = http.Post(httpAddr+"/api/v1/http-tube/"+endpoint, "application/json", bytes.NewBuffer(jsonBytes))
 	assert.Nil(t, err)
 
-	event, err := s.manager.ConsumeEvent(funcConf.Output)
+	event, err := s.Manager.ConsumeEvent(funcConf.Output)
 	if err != nil {
 		t.Error(err)
 		return
@@ -243,7 +243,7 @@ func TestStatefulFunction(t *testing.T) {
 		Output:   "output",
 		Replicas: 1,
 	}
-	err := s.manager.StartFunction(funcConf)
+	err := s.Manager.StartFunction(funcConf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,11 +251,11 @@ func TestStatefulFunction(t *testing.T) {
 	_, err = http.Post(httpAddr+"/api/v1/state/key", "text/plain; charset=utf-8", bytes.NewBuffer([]byte("hello")))
 	assert.Nil(t, err)
 
-	err = s.manager.ProduceEvent(funcConf.Inputs[0], contube.NewRecordImpl(nil, func() {
+	err = s.Manager.ProduceEvent(funcConf.Inputs[0], contube.NewRecordImpl(nil, func() {
 	}))
 	assert.Nil(t, err)
 
-	_, err = s.manager.ConsumeEvent(funcConf.Output)
+	_, err = s.Manager.ConsumeEvent(funcConf.Output)
 	assert.Nil(t, err)
 
 	resp, err := http.Get(httpAddr + "/api/v1/state/key")

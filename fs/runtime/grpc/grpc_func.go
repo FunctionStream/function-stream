@@ -33,16 +33,17 @@ import (
 
 type GRPCFuncRuntime struct {
 	api.FunctionRuntime
-	Name      string
-	instance  api.FunctionInstance
-	ctx       context.Context
-	status    *proto.FunctionStatus
-	readyOnce sync.Once
-	readyCh   chan error
-	input     chan string
-	output    chan string
-	stopFunc  func()
-	log       *slog.Logger
+	Name       string
+	instance   api.FunctionInstance
+	ctx        context.Context
+	status     *proto.FunctionStatus
+	readyOnce  sync.Once
+	readyCh    chan error
+	input      chan contube.Record
+	output     chan contube.Record
+	stopFunc   func()
+	processing atomic.Bool
+	log        *slog.Logger
 }
 
 type Status int32
@@ -155,8 +156,8 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 		Name:     name,
 		instance: instance,
 		readyCh:  make(chan error),
-		input:    make(chan string),
-		output:   make(chan string),
+		input:    make(chan contube.Record),
+		output:   make(chan contube.Record),
 		status: &proto.FunctionStatus{
 			Name:   name,
 			Status: proto.FunctionStatus_CREATING,
@@ -227,9 +228,10 @@ func (f *GRPCFuncRuntime) Stop() {
 }
 
 func (f *GRPCFuncRuntime) Call(event contube.Record) (contube.Record, error) {
-	f.input <- string(event.GetPayload())
+	f.input <- event
 	out := <-f.output
-	return contube.NewRecordImpl([]byte(out), event.Commit), nil
+	f.processing.Store(false)
+	return out, nil
 }
 
 type FunctionServerImpl struct {
@@ -255,12 +257,20 @@ func (f *FunctionServerImpl) Process(req *proto.FunctionProcessRequest, stream p
 	})
 	errCh := make(chan error)
 
+	defer func() {
+		if runtime.processing.Load() {
+			runtime.output <- nil
+			runtime.processing.Store(false)
+		}
+	}()
+
 	logCounter := common.LogCounter()
 	for {
 		select {
-		case payload := <-runtime.input:
+		case event := <-runtime.input:
 			log.DebugContext(stream.Context(), "sending event", slog.Any("count", logCounter))
-			err := stream.Send(&proto.Event{Payload: payload})
+			runtime.processing.Store(true)
+			err := stream.Send(&proto.Event{Payload: string(event.GetPayload())}) // TODO: Change payload type to bytes
 			if err != nil {
 				log.Error("failed to send event", slog.Any("error", err))
 				return err
@@ -292,7 +302,7 @@ func (f *FunctionServerImpl) Output(ctx context.Context, e *proto.Event) (*proto
 		return nil, err
 	}
 	runtime.log.DebugContext(ctx, "received event")
-	runtime.output <- e.Payload
+	runtime.output <- contube.NewRecordImpl([]byte(e.Payload), func() {})
 	return &proto.Response{
 		Status: proto.Response_OK,
 	}, nil
