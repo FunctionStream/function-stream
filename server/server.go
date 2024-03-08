@@ -40,7 +40,7 @@ type Server struct {
 	options *serverOptions
 	httpSvr atomic.Pointer[http.Server]
 	log     *slog.Logger
-	manager *fs.FunctionManager
+	Manager *fs.FunctionManager
 }
 
 type serverOptions struct {
@@ -59,7 +59,7 @@ func (f serverOptionFunc) apply(c *serverOptions) (*serverOptions, error) {
 	return f(c)
 }
 
-// WithFunctionManager sets the function manager for the server.
+// WithFunctionManager sets the function Manager for the server.
 func WithFunctionManager(opts ...fs.ManagerOption) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		o.managerOpts = append(o.managerOpts, opts...)
@@ -114,7 +114,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	return &Server{
 		options: options,
-		manager: manager,
+		Manager: manager,
 		log:     slog.With(),
 	}, nil
 }
@@ -167,8 +167,29 @@ func (s *Server) Run(context context.Context) {
 	}
 }
 
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+		if r.Method == "OPTIONS" {
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) startRESTHandlers() error {
 	r := mux.NewRouter()
+
+	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	})).Methods("OPTIONS")
+
+	r.Use(corsMiddleware)
+
 	r.HandleFunc("/api/v1/status", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}).Methods("GET")
@@ -208,7 +229,7 @@ func (s *Server) startRESTHandlers() error {
 			return
 		}
 
-		err = s.manager.StartFunction(f)
+		err = s.Manager.StartFunction(f)
 		if err != nil {
 			log.Error("Failed to start function", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -222,7 +243,7 @@ func (s *Server) startRESTHandlers() error {
 		functionName := vars["function_name"]
 		log := s.log.With(slog.String("name", functionName), slog.String("phase", "deleting"))
 
-		err := s.manager.DeleteFunction(functionName)
+		err := s.Manager.DeleteFunction(functionName)
 		if errors.Is(err, common.ErrorFunctionNotFound) {
 			log.Error("Function not found", "error", err)
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -234,7 +255,7 @@ func (s *Server) startRESTHandlers() error {
 	r.HandleFunc("/api/v1/functions", func(w http.ResponseWriter, r *http.Request) {
 		log := s.log.With()
 		log.Info("Listing functions")
-		functions := s.manager.ListFunctions()
+		functions := s.Manager.ListFunctions()
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(functions)
 		if err != nil {
@@ -255,7 +276,7 @@ func (s *Server) startRESTHandlers() error {
 			http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
 			return
 		}
-		err = s.manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
+		err = s.Manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
 		if err != nil {
 			log.Error("Failed to produce event", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -269,7 +290,7 @@ func (s *Server) startRESTHandlers() error {
 		queueName := vars["queue_name"]
 		log := s.log.With(slog.String("queue_name", queueName))
 		log.Info("Consuming event from queue")
-		event, err := s.manager.ConsumeEvent(queueName)
+		event, err := s.Manager.ConsumeEvent(queueName)
 		if err != nil {
 			log.Error("Failed to consume event", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -304,7 +325,7 @@ func (s *Server) startRESTHandlers() error {
 		}
 		log := s.log.With(slog.String("key", key))
 		log.Info("Getting state")
-		state := s.manager.GetStateStore()
+		state := s.Manager.GetStateStore()
 		if state == nil {
 			log.Error("No state store configured")
 			http.Error(w, "No state store configured", http.StatusBadRequest)
@@ -333,7 +354,7 @@ func (s *Server) startRESTHandlers() error {
 		}
 		log := s.log.With(slog.String("key", key))
 		log.Info("Getting state")
-		state := s.manager.GetStateStore()
+		state := s.Manager.GetStateStore()
 		if state == nil {
 			log.Error("No state store configured")
 			http.Error(w, "No state store configured", http.StatusBadRequest)
@@ -411,8 +432,8 @@ func (s *Server) Close() error {
 			return err
 		}
 	}
-	if s.manager != nil {
-		err := s.manager.Close()
+	if s.Manager != nil {
+		err := s.Manager.Close()
 		if err != nil {
 			return err
 		}

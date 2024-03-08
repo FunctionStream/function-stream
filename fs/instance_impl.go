@@ -117,6 +117,10 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 			instance.log.ErrorContext(instance.ctx, "Error calling process function", slog.Any("error", err))
 			return
 		}
+		if output == nil {
+			instance.log.DebugContext(instance.ctx, "output is nil")
+			continue
+		}
 		select {
 		case sinkChan <- output:
 		case <-instance.ctx.Done():
