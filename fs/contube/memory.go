@@ -37,6 +37,7 @@ type MemoryQueueFactory struct {
 func NewMemoryQueueFactory(ctx context.Context) TubeFactory {
 	return &MemoryQueueFactory{
 		ctx:    ctx,
+		mu:     sync.Mutex{},
 		queues: make(map[string]*queue),
 	}
 }
@@ -83,13 +84,14 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 
 	var wg sync.WaitGroup
 	for _, topic := range config.Topics {
+		t := topic
 		wg.Add(1)
-		go func(t string) {
+		go func() {
 			<-ctx.Done()
 			f.release(t)
-		}(topic)
+		}()
 
-		go func(t string) {
+		go func() {
 			defer wg.Done()
 			c := f.getOrCreateChan(t)
 			for {
@@ -100,7 +102,7 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 					result <- event
 				}
 			}
-		}(topic)
+		}()
 	}
 
 	go func() {

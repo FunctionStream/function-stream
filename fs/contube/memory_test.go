@@ -28,21 +28,18 @@ import (
 func TestMemoryTube(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
-	memoryQueueFactory := MemoryQueueFactory{
-		ctx:    ctx,
-		mu:     sync.Mutex{},
-		queues: make(map[string]*queue),
-	}
-
-	topics := []string{"topic1", "topic2", "topic3"}
+	tubeFactory := NewMemoryQueueFactory(ctx)
+	memoryQueueFactory := tubeFactory.(*MemoryQueueFactory)
 
 	var wg sync.WaitGroup
 	var events []Record
 
+	topics := []string{"topic1", "topic2", "topic3"}
 	source, err := memoryQueueFactory.NewSourceTube(ctx, (&SourceQueueConfig{Topics: topics, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for i, v := range topics {
 		wg.Add(1)
 		sink, err := memoryQueueFactory.NewSinkTube(ctx, (&SinkQueueConfig{Topic: v}).ToConfigMap())
@@ -69,22 +66,22 @@ func TestMemoryTube(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(100 * time.Millisecond) // Make sure all goroutines are running
+	// The waiting event already contains enough results.
+	time.Sleep(100 * time.Millisecond)
 	cancel()
-	time.Sleep(100 * time.Millisecond) // This time.Sleep is to wait for cancel() to notify all goroutines
 	wg.Wait()
 
-	// Add "sync. Mutex" to prevent multiple goroutines from accessing queues simultaneously
-	for _, topic := range topics {
-		memoryQueueFactory.mu.Lock()
-		_, ok := memoryQueueFactory.queues[topic]
-		memoryQueueFactory.mu.Unlock()
-		if ok {
-			t.Fatal("queue release failure")
-		}
+	// Give enough time to ensure that the goroutine execution within NewSource Tube and NewSinkTube is complete and the released queue is successful.
+	time.Sleep(500 * time.Millisecond)
 
+	// assert the memoryQueueFactory.queues is empty.
+	memoryQueueFactory.mu.Lock()
+	if len(memoryQueueFactory.queues) != 0 {
+		t.Fatal("MemoryQueueFactory.queues is not empty")
 	}
+	memoryQueueFactory.mu.Unlock()
 
+	// Assert if the number of received events equals the number of topic.
 	if len(events) == len(topics) {
 		t.Log("successful")
 	} else {
