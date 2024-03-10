@@ -58,21 +58,22 @@ func TestMemoryTube(t *testing.T) {
 		defer wg.Done()
 		for {
 			select {
-			case <-ctx.Done():
-				return
 			case event := <-source:
 				events = append(events, event)
+				if len(events) == len(topics) {
+					return
+				}
+			default:
+				continue
 			}
 		}
 	}()
 
-	// The waiting event already contains enough results.
-	time.Sleep(100 * time.Millisecond)
-	cancel()
 	wg.Wait()
+	cancel()
 
 	// Give enough time to ensure that the goroutine execution within NewSource Tube and NewSinkTube is complete and the released queue is successful.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	// assert the memoryQueueFactory.queues is empty.
 	memoryQueueFactory.mu.Lock()
@@ -80,12 +81,5 @@ func TestMemoryTube(t *testing.T) {
 		t.Fatal("MemoryQueueFactory.queues is not empty")
 	}
 	memoryQueueFactory.mu.Unlock()
-
-	// Assert if the number of received events equals the number of topic.
-	if len(events) == len(topics) {
-		t.Log("successful")
-	} else {
-		t.Fatal("failed")
-	}
 
 }
