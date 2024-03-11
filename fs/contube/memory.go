@@ -37,7 +37,6 @@ type MemoryQueueFactory struct {
 func NewMemoryQueueFactory(ctx context.Context) TubeFactory {
 	return &MemoryQueueFactory{
 		ctx:    ctx,
-		mu:     sync.Mutex{},
 		queues: make(map[string]*queue),
 	}
 }
