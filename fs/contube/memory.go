@@ -80,15 +80,19 @@ func (f *MemoryQueueFactory) release(name string) {
 func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap ConfigMap) (<-chan Record, error) {
 	config := NewSourceQueueConfig(configMap)
 	result := make(chan Record)
+
+	var wg sync.WaitGroup
 	for _, topic := range config.Topics {
 		t := topic
+		wg.Add(1)
 		go func() {
 			<-ctx.Done()
 			f.release(t)
 		}()
+
 		go func() {
+			defer wg.Done()
 			c := f.getOrCreateChan(t)
-			defer close(result)
 			for {
 				select {
 				case <-ctx.Done():
@@ -99,6 +103,12 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 			}
 		}()
 	}
+
+	go func() {
+		wg.Wait()
+		close(result)
+	}()
+
 	return result, nil
 }
 
