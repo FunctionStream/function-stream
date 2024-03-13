@@ -1,0 +1,36 @@
+style: github
+template: CHANGELOG.tpl.md
+info:
+  title: CHANGELOG
+  repository_url: https://github.com/FunctionStream/function-stream
+options:
+  commit_groups:
+    title_maps:
+      feat: Features
+      fix: Bug Fixes
+      perf: Performance Improvements
+      refactor: Code Refactoring
+      docs: Documentation
+      style: Styles
+      test: Tests
+      chore: Miscellaneous
+    sort_by: Custom
+    title_order:
+      - feat
+      - fix
+      - perf
+      - refactor
+      - docs
+      - style
+      - test
+      - chore
+  header:
+    pattern: "^(\\w*)(?:\\(([\\w\\$\\.\\-\\*\\s]*)\\))?\\:\\s(.*)$"
+    pattern_maps:
+      - Type
+      - Scope
+      - Subject
+  notes:
+    keywords:
+      - BREAKING CHANGE
+  tag_filter_pattern: '^v\d+\.\d+\.\d+$'

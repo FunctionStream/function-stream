@@ -16,15 +16,15 @@
 
 # Function Stream
 
-Function stream is an event-streaming function platform based on Apache Pulsar and WebAssembly. It enables efficient and
+【Function stream is an event-streaming function platform based on Apache Pulsar and WebAssembly. It enables efficient and
 scalable processing of data streams by leveraging the power of WebAssembly. Function Stream provides seamless
-integration with Apache Pulsar, allowing users to take full advantage of its robust messaging capabilities.
+integration with Apache Pulsar, allowing users to take full advantage of its robust messaging capabilities.「根据下面列出的特性，详细补充这个介绍」】
 
 ## Features
 
-1. **Support for Multiple Programming Languages**: Function Stream aims to provide the capability to write code using
+1. 【**Support for Multiple Programming Languages**: Function Stream aims to provide the capability to write code using
    multiple programming languages. This allows developers to use their preferred language and harness its specific
-   strengths while working with Function Stream.
+   strengths while working with Function Stream.「不要使用Multiple这个词」】
 2. **High Performance and Throughput**: Function Stream is designed to deliver high performance and handle substantial
    throughput. It strives to optimize resource utilization and minimize latency, enabling efficient execution of code
    and processing of data.
