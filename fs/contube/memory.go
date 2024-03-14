@@ -44,13 +44,10 @@ func NewMemoryQueueFactory(ctx context.Context) TubeFactory {
 func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Record {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	defer func() {
+	if q, ok := f.queues[name]; ok {
 		slog.InfoContext(f.ctx, "Get memory queue chan",
 			"current_use_count", atomic.LoadInt32(&f.queues[name].refCnt),
 			"name", name)
-	}()
-	if q, ok := f.queues[name]; ok {
-		atomic.AddInt32(&q.refCnt, 1)
 		return q.c
 	}
 	c := make(chan Record, 100)
@@ -58,6 +55,9 @@ func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Record {
 		c:      c,
 		refCnt: 1,
 	}
+	slog.InfoContext(f.ctx, "Set memory queue chan",
+		"current_use_count", atomic.LoadInt32(&f.queues[name].refCnt),
+		"name", name)
 	return c
 }
 
@@ -117,7 +117,6 @@ func (f *MemoryQueueFactory) NewSinkTube(ctx context.Context, configMap ConfigMa
 	c := f.getOrCreateChan(config.Topic)
 	wrapperC := make(chan Record)
 	go func() {
-		defer f.release(config.Topic)
 		for {
 			select {
 			case <-ctx.Done():
