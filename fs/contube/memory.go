@@ -86,11 +86,6 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 		t := topic
 		wg.Add(1)
 		go func() {
-			<-ctx.Done()
-			f.release(t)
-		}()
-
-		go func() {
 			defer wg.Done()
 			c := f.getOrCreateChan(t)
 			for {
@@ -117,6 +112,7 @@ func (f *MemoryQueueFactory) NewSinkTube(ctx context.Context, configMap ConfigMa
 	c := f.getOrCreateChan(config.Topic)
 	wrapperC := make(chan Record)
 	go func() {
+		defer f.release(config.Topic)
 		for {
 			select {
 			case <-ctx.Done():
