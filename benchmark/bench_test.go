@@ -165,9 +165,4 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	perf.New(pConfig).Run(ctx)
 
 	pprof.StopCPUProfile()
-
-	err = s.Close()
-	if err != nil {
-		b.Fatal(err)
-	}
 }
