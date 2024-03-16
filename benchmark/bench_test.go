@@ -162,9 +162,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	}
 
 	<-s.WaitForReady(context.Background())
-	if false {
-		perf.New(pConfig).Run(ctx)
-	}
+	perf.New(pConfig).Run(ctx)
 
 	pprof.StopCPUProfile()
 }
