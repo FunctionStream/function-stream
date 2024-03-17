@@ -89,10 +89,9 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 			<-ctx.Done()
 			f.release(t)
 		}()
-
+		c := f.getOrCreateChan(t)
 		go func() {
 			defer wg.Done()
-			c := f.getOrCreateChan(t)
 			for {
 				select {
 				case <-ctx.Done():
