@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/common/lifecycle"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
@@ -28,6 +29,7 @@ import (
 )
 
 type FunctionInstanceImpl struct {
+	*lifecycle.Lifecycle
 	ctx           context.Context
 	funcCtx       api.FunctionContext
 	cancelFunc    context.CancelFunc
@@ -60,6 +62,7 @@ func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function,
 	ctx = context.WithValue(ctx, CtxKeyFunctionName, definition.Name)
 	ctx = context.WithValue(ctx, CtxKeyInstanceIndex, index)
 	return &FunctionInstanceImpl{
+		Lifecycle:     lifecycle.NewLifecycle(lifecycle.WithContext(ctx)),
 		ctx:           ctx,
 		funcCtx:       funcCtx,
 		cancelFunc:    cancelFunc,
@@ -75,10 +78,15 @@ func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function,
 
 func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFactory) {
 	runtime, err := runtimeFactory.NewFunctionRuntime(instance)
+	closeCh, closeF := instance.AddCloseHook("runtime")
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating runtime")
 		return
 	}
+	defer func() {
+		e := runtime.Close()
+		closeF(e)
+	}()
 	getTubeConfig := func(config contube.ConfigMap, tubeConfig *model.TubeConfig) contube.ConfigMap {
 		if tubeConfig != nil && tubeConfig.Config != nil {
 			return contube.MergeConfig(config, tubeConfig.Config)
@@ -123,7 +131,7 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 		}
 		select {
 		case sinkChan <- output:
-		case <-instance.ctx.Done():
+		case <-closeCh:
 			return
 		}
 
@@ -134,13 +142,14 @@ func (instance *FunctionInstanceImpl) WaitForReady() <-chan error {
 	return instance.readyCh
 }
 
-func (instance *FunctionInstanceImpl) Stop() {
+func (instance *FunctionInstanceImpl) Close() error {
 	instance.log.InfoContext(instance.ctx, "stopping function instance")
-	instance.cancelFunc()
-}
-
-func (instance *FunctionInstanceImpl) Context() context.Context {
-	return instance.ctx
+	err := instance.Lifecycle.Close()
+	if err != nil {
+		instance.log.Error("Error closing function instance", slog.Any("error", err))
+		return err
+	}
+	return nil
 }
 
 func (instance *FunctionInstanceImpl) FunctionContext() api.FunctionContext {

@@ -17,13 +17,15 @@
 package api
 
 import (
+	"github.com/functionstream/function-stream/common/lifecycle"
 	"github.com/functionstream/function-stream/fs/contube"
 )
 
 type FunctionRuntime interface {
+	GetLifecycle() *lifecycle.Lifecycle
 	WaitForReady() <-chan error
 	Call(e contube.Record) (contube.Record, error)
-	Stop()
+	Close() error
 }
 
 type FunctionRuntimeFactory interface {

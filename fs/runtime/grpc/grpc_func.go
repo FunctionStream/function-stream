@@ -19,6 +19,7 @@ package grpc
 import (
 	"fmt"
 	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/common/lifecycle"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/fs/runtime/grpc/proto"
@@ -32,7 +33,7 @@ import (
 )
 
 type GRPCFuncRuntime struct {
-	api.FunctionRuntime
+	*lifecycle.Lifecycle
 	Name       string
 	instance   api.FunctionInstance
 	ctx        context.Context
@@ -148,11 +149,12 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 	log := instance.Logger().With(
 		slog.String("component", "grpc-runtime"),
 	)
-	go func() {
-		<-instance.Context().Done()
-		s.removeFunction(name)
-	}()
 	runtime := &GRPCFuncRuntime{
+		Lifecycle: lifecycle.NewLifecycle(lifecycle.WithParent(instance.GetLifecycle()),
+			lifecycle.WithCloseFunc(func() error {
+				s.removeFunction(name)
+				return nil
+			})),
 		Name:     name,
 		instance: instance,
 		readyCh:  make(chan error),
@@ -163,9 +165,6 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 			Status: proto.FunctionStatus_CREATING,
 		},
 		ctx: instance.Context(),
-		stopFunc: func() { // TODO: remove it, we should use instance.ctx to control the lifecycle
-			s.removeFunction(name)
-		},
 		log: log,
 	}
 	{

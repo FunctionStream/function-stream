@@ -18,6 +18,7 @@ package wazero
 
 import (
 	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/common/lifecycle"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
@@ -84,6 +85,10 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 		return nil, errors.New("No process function found")
 	}
 	return &WazeroFunctionRuntime{
+		Lifecycle: lifecycle.NewLifecycle(lifecycle.WithParent(instance.GetLifecycle()),
+			lifecycle.WithCloseFunc(func() error {
+				return r.Close(instance.Context())
+			})),
 		callFunc: func(e contube.Record) (contube.Record, error) {
 			stdin.ResetBuffer(e.GetPayload())
 			_, err := process.Call(instance.Context())
@@ -93,20 +98,13 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 			output := stdout.GetAndReset()
 			return contube.NewRecordImpl(output, e.Commit), nil
 		},
-		stopFunc: func() {
-			err := r.Close(instance.Context())
-			if err != nil {
-				slog.ErrorContext(instance.Context(), "Error closing r", err)
-			}
-		},
 		log: log,
 	}, nil
 }
 
 type WazeroFunctionRuntime struct {
-	api.FunctionRuntime
+	*lifecycle.Lifecycle
 	callFunc func(e contube.Record) (contube.Record, error)
-	stopFunc func()
 	log      *slog.Logger
 }
 
@@ -118,8 +116,4 @@ func (r *WazeroFunctionRuntime) WaitForReady() <-chan error {
 
 func (r *WazeroFunctionRuntime) Call(e contube.Record) (contube.Record, error) {
 	return r.callFunc(e)
-}
-
-func (r *WazeroFunctionRuntime) Stop() {
-	r.stopFunc()
 }

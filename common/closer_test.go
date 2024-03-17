@@ -2,7 +2,6 @@ package common
 
 import (
 	"errors"
-	"github.com/hashicorp/go-multierror"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 	"log/slog"
@@ -18,7 +17,7 @@ func TestCloser(t *testing.T) {
 		{
 			name: "Basic closer",
 			setup: func() (Closer, error) {
-				return NewCloser(context.Background()), nil
+				return NewDefaultCloser(), nil
 			},
 		},
 		{
@@ -41,14 +40,14 @@ func TestCloser(t *testing.T) {
 					<-ac.OnClose()
 					ac.FinishClosing(expectedErr)
 				}()
-				return ac, multierror.Append(nil, expectedErr)
+				return ac, expectedErr
 			},
 		},
 		{
 			name: "Multiple Closers",
 			setup: func() (Closer, error) {
-				c := NewCloser(context.Background())
-				_ = c.AddChildCloser(NewCloser(context.Background()))
+				c := NewDefaultCloser()
+				_ = c.AddChildCloser(NewDefaultCloser())
 				child2 := c.AddChildCloser(NewAsyncCloser(context.Background())).(AsyncCloser)
 				go func() {
 					<-child2.OnClose()
@@ -60,33 +59,35 @@ func TestCloser(t *testing.T) {
 		{
 			name: "Multiple Closers with error",
 			setup: func() (Closer, error) {
-				c := NewCloser(context.Background())
-				_ = c.AddChildCloser(NewCloser(context.Background()))
+				c := NewDefaultCloser()
+				_ = c.AddChildCloser(NewDefaultCloser())
 				child2 := c.AddChildCloser(NewAsyncCloser(context.Background())).(AsyncCloser)
 				err := errors.New("expected error")
 				go func() {
 					<-child2.OnClose()
 					child2.FinishClosing(err)
 				}()
-				return c, multierror.Append(err, nil)
+				return c, err
 			},
 		},
 		{
 			name: "Multiple Closers with parent closer errors",
 			setup: func() (Closer, error) {
-				c := NewCloser(context.Background())
-				child1 := c.AddChildCloser(NewAsyncCloser(context.Background())).(AsyncCloser)
-				child2 := child1.AddChildCloser(NewAsyncCloser(context.Background())).(AsyncCloser)
+				c := NewDefaultCloser()
+				child1 := c.AddChildCloser(NewDefaultCloser())
+				child2 := c.AddChildCloser(NewDefaultCloser())
 				err := errors.New("expected error")
+				c1, f1 := child1.AddCloseHook("c1")
 				go func() {
-					<-child1.OnClose()
-					child1.FinishClosing(err)
+					<-c1
+					f1(err)
 				}()
+				c2, f2 := child2.AddCloseHook("c2")
 				go func() {
-					<-child2.OnClose()
-					child2.FinishClosing(nil)
+					<-c2
+					f2(nil)
 				}()
-				return c, multierror.Append(err, nil)
+				return c, err
 			},
 		},
 	}
@@ -97,14 +98,35 @@ func TestCloser(t *testing.T) {
 			assert.Nil(t, closer.Err())
 			err := closer.Close()
 			slog.Info("Closed", slog.Any("err", err))
-			assert.Equal(t, expectedErr, err)
-			assert.Equal(t, expectedErr, closer.Err())
+			assert.ErrorIs(t, err, expectedErr)
 		})
 	}
 }
 
 func TestCloserCloseMultipleTimes(t *testing.T) {
-	closer := NewCloser(context.Background())
+	closer := NewDefaultCloser()
 	assert.Nil(t, closer.Close())
 	assert.Equal(t, ErrAlreadyClosed, closer.Close())
+	assert.Equal(t, ErrAlreadyClosed, closer.Err())
+}
+
+func TestCloserFunc(t *testing.T) {
+	c := NewCloserWithFunc(func() error {
+		return nil
+	})
+
+	assert.Nil(t, c.Err())
+	assert.Nil(t, c.Close())
+	assert.ErrorIs(t, c.Close(), ErrAlreadyClosed)
+}
+
+func TestCloserFuncError(t *testing.T) {
+	expectedErr := errors.New("expected error")
+	c := NewCloserWithFunc(func() error {
+		return expectedErr
+	})
+
+	assert.Nil(t, c.Err())
+	assert.Equal(t, expectedErr, c.Close())
+	assert.ErrorIs(t, c.Close(), expectedErr)
 }

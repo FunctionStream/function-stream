@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/common/lifecycle"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/api"
@@ -205,6 +206,7 @@ func (f *MockRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance) (
 }
 
 type MockRuntime struct {
+	*lifecycle.Lifecycle
 	funcCtx api.FunctionContext
 }
 

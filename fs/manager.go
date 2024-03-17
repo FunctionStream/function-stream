@@ -24,6 +24,7 @@ import (
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/fs/runtime/wazero"
 	"github.com/functionstream/function-stream/fs/statestore"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"log/slog"
 	"math/rand"
@@ -207,7 +208,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		case err := <-instance.WaitForReady():
 			if err != nil {
 				fm.log.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", err.Error()))
-				instance.Stop()
+				_ = instance.Close()
 				return err
 			}
 		case <-instance.Context().Done():
@@ -226,10 +227,14 @@ func (fm *FunctionManager) DeleteFunction(name string) error {
 		return common.ErrorFunctionNotFound
 	}
 	delete(fm.functions, name)
+	var err error
 	for _, instance := range instances {
-		instance.Stop()
+		e := instance.Close()
+		if e != nil {
+			err = multierror.Append(err, e)
+		}
 	}
-	return nil
+	return err
 }
 
 func (fm *FunctionManager) ListFunctions() (result []string) {
@@ -274,14 +279,18 @@ func (fm *FunctionManager) GetStateStore() api.StateStore {
 func (fm *FunctionManager) Close() error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
+	var err error
 	for _, instances := range fm.functions {
 		for _, instance := range instances {
-			instance.Stop()
+			e := instance.Close()
+			if e != nil {
+				err = multierror.Append(err, e)
+			}
 		}
 	}
-	err := fm.options.stateStore.Close()
-	if err != nil {
-		return err
+	e := fm.options.stateStore.Close()
+	if e != nil {
+		err = multierror.Append(err, e)
 	}
-	return nil
+	return err
 }

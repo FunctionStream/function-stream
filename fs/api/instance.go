@@ -17,18 +17,21 @@
 package api
 
 import (
+	"github.com/functionstream/function-stream/common/lifecycle"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/contube"
 	"golang.org/x/net/context"
+	"io"
 	"log/slog"
 )
 
 type FunctionInstance interface {
+	io.Closer
+	GetLifecycle() *lifecycle.Lifecycle
 	Context() context.Context
 	FunctionContext() FunctionContext
 	Definition() *model.Function
 	Index() int32
-	Stop()
 	Run(factory FunctionRuntimeFactory)
 	WaitForReady() <-chan error
 	Logger() *slog.Logger
