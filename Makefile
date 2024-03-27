@@ -31,9 +31,12 @@ bench:
 bench_race:
 	go test -race -bench=. ./benchmark -timeout 10m
 
-gen_rest_client:
+get-apidocs:
+	curl -o apidocs.json http://localhost:7300/apidocs
+
+gen-rest-client:
 	mkdir -p restclient
-	openapi-generator generate -i ./openapi.yaml -g go -o restclient \
+	openapi-generator generate -i ./apidocs.json -g go -o restclient \
 		--git-user-id functionstream \
 		--git-repo-id functionstream/restclient \
 		--package-name restclient \
