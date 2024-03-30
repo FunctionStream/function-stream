@@ -28,7 +28,7 @@ type ApiGetStateRequest struct {
 	key        string
 }
 
-func (r ApiGetStateRequest) Execute() (*http.Response, error) {
+func (r ApiGetStateRequest) Execute() (string, *http.Response, error) {
 	return r.ApiService.GetStateExecute(r)
 }
 
@@ -48,16 +48,19 @@ func (a *StateAPIService) GetState(ctx context.Context, key string) ApiGetStateR
 }
 
 // Execute executes the request
-func (a *StateAPIService) GetStateExecute(r ApiGetStateRequest) (*http.Response, error) {
+//
+//	@return string
+func (a *StateAPIService) GetStateExecute(r ApiGetStateRequest) (string, *http.Response, error) {
 	var (
-		localVarHTTPMethod = http.MethodGet
-		localVarPostBody   interface{}
-		formFiles          []formFile
+		localVarHTTPMethod  = http.MethodGet
+		localVarPostBody    interface{}
+		formFiles           []formFile
+		localVarReturnValue string
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "StateAPIService.GetState")
 	if err != nil {
-		return nil, &GenericOpenAPIError{error: err.Error()}
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
 	localVarPath := localBasePath + "/api/v1/state/{key}"
@@ -77,7 +80,7 @@ func (a *StateAPIService) GetStateExecute(r ApiGetStateRequest) (*http.Response,
 	}
 
 	// to determine the Accept header
-	localVarHTTPHeaderAccepts := []string{}
+	localVarHTTPHeaderAccepts := []string{"*/*"}
 
 	// set Accept header
 	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
@@ -86,19 +89,19 @@ func (a *StateAPIService) GetStateExecute(r ApiGetStateRequest) (*http.Response,
 	}
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
-		return nil, err
+		return localVarReturnValue, nil, err
 	}
 
 	localVarHTTPResponse, err := a.client.callAPI(req)
 	if err != nil || localVarHTTPResponse == nil {
-		return localVarHTTPResponse, err
+		return localVarReturnValue, localVarHTTPResponse, err
 	}
 
 	localVarBody, err := io.ReadAll(localVarHTTPResponse.Body)
 	localVarHTTPResponse.Body.Close()
 	localVarHTTPResponse.Body = io.NopCloser(bytes.NewBuffer(localVarBody))
 	if err != nil {
-		return localVarHTTPResponse, err
+		return localVarReturnValue, localVarHTTPResponse, err
 	}
 
 	if localVarHTTPResponse.StatusCode >= 300 {
@@ -106,16 +109,31 @@ func (a *StateAPIService) GetStateExecute(r ApiGetStateRequest) (*http.Response,
 			body:  localVarBody,
 			error: localVarHTTPResponse.Status,
 		}
-		return localVarHTTPResponse, newErr
+		return localVarReturnValue, localVarHTTPResponse, newErr
 	}
 
-	return localVarHTTPResponse, nil
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
 type ApiSetStateRequest struct {
 	ctx        context.Context
 	ApiService *StateAPIService
 	key        string
+	body       *string
+}
+
+func (r ApiSetStateRequest) Body(body string) ApiSetStateRequest {
+	r.body = &body
+	return r
 }
 
 func (r ApiSetStateRequest) Execute() (*http.Response, error) {
@@ -156,6 +174,9 @@ func (a *StateAPIService) SetStateExecute(r ApiSetStateRequest) (*http.Response,
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
 	localVarFormParams := url.Values{}
+	if r.body == nil {
+		return nil, reportError("body is required and must be specified")
+	}
 
 	// to determine the Content-Type header
 	localVarHTTPContentTypes := []string{}
@@ -174,6 +195,8 @@ func (a *StateAPIService) SetStateExecute(r ApiSetStateRequest) (*http.Response,
 	if localVarHTTPHeaderAccept != "" {
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
+	// body params
+	localVarPostBody = r.body
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {
 		return nil, err

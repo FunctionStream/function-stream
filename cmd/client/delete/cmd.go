@@ -17,12 +17,9 @@
 package del
 
 import (
-	"context"
-	"fmt"
 	"github.com/functionstream/function-stream/cmd/client/common"
 	"github.com/functionstream/function-stream/restclient"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 var (
@@ -51,15 +48,15 @@ func exec(_ *cobra.Command, _ []string) {
 	cfg.Servers = []restclient.ServerConfiguration{{
 		URL: common.Config.ServiceAddr,
 	}}
-	cli := restclient.NewAPIClient(cfg)
+	_ = restclient.NewAPIClient(cfg)
 
-	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), config.name).Execute()
-	if err != nil {
-		fmt.Printf("Failed to delete function: %v\n", err)
-		os.Exit(1)
-	}
-	if res.StatusCode != 200 {
-		fmt.Printf("Failed to delete function with status code: %d\n", res.StatusCode)
-		os.Exit(1)
-	}
+	//res, err := cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), config.name).Execute()
+	//if err != nil {
+	//	fmt.Printf("Failed to delete function: %v\n", err)
+	//	os.Exit(1)
+	//}
+	//if res.StatusCode != 200 {
+	//	fmt.Printf("Failed to delete function with status code: %d\n", res.StatusCode)
+	//	os.Exit(1)
+	//}
 }

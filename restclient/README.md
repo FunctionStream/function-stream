@@ -92,6 +92,7 @@ Class | Method | HTTP request | Description
  - [ModelFunction](docs/ModelFunction.md)
  - [ModelRuntimeConfig](docs/ModelRuntimeConfig.md)
  - [ModelTubeConfig](docs/ModelTubeConfig.md)
+ - [RestfulspecSchemaType](docs/RestfulspecSchemaType.md)
 
 
 ## Documentation For Authorization

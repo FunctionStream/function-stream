@@ -8,9 +8,16 @@ import (
 	"net/http"
 )
 
+// Due to this issue: https://github.com/emicklei/go-restful-openapi/issues/115,
+// we need to use this schema to specify the format of the byte array.
+var bytesSchema = restfulspec.SchemaType{RawType: "string", Format: "byte"}
+
 func (s *Server) makeTubeService() *restful.WebService {
+
 	ws := new(restful.WebService)
-	ws.Path("/api/v1")
+	ws.Path("/api/v1").
+		Consumes(restful.MIME_JSON).
+		Produces(restful.MIME_JSON)
 
 	tags := []string{"tube"}
 
@@ -37,6 +44,7 @@ func (s *Server) makeTubeService() *restful.WebService {
 		Doc("produce a message").
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Operation("produceMessage").
+		Reads(bytesSchema).
 		Param(tubeName))
 
 	ws.Route(ws.GET("/consume/{name}").
@@ -52,6 +60,8 @@ func (s *Server) makeTubeService() *restful.WebService {
 		Doc("consume a message").
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Operation("consumeMessage").
+		Writes(bytesSchema).
+		Returns(http.StatusOK, "OK", bytesSchema).
 		Param(tubeName))
 
 	return ws

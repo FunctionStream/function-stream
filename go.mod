@@ -6,8 +6,9 @@ require (
 	github.com/apache/pulsar-client-go v0.12.0
 	github.com/bmizerany/perks v0.0.0-20230307044200-03f9df79da1e
 	github.com/cockroachdb/pebble v1.1.0
-	github.com/emicklei/go-restful-openapi/v2 v2.9.1
+	github.com/emicklei/go-restful-openapi/v2 v2.9.2-0.20231020145053-a5b7d60bb267
 	github.com/emicklei/go-restful/v3 v3.12.0
+	github.com/go-openapi/spec v0.21.0
 	github.com/gorilla/mux v1.8.1
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.8.0
@@ -41,7 +42,6 @@ require (
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
-	github.com/go-openapi/spec v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect

@@ -17,6 +17,12 @@
  "paths": {
   "/api/v1/consume/{name}": {
    "get": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
     "tags": [
      "tube"
     ],
@@ -33,7 +39,11 @@
     ],
     "responses": {
      "200": {
-      "description": "OK"
+      "description": "OK",
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
      }
     }
    }
@@ -53,7 +63,13 @@
     "operationId": "getAllFunctions",
     "responses": {
      "200": {
-      "description": "OK"
+      "description": "OK",
+      "schema": {
+       "type": "array",
+       "items": {
+        "$ref": "#/definitions/model.Function"
+       }
+      }
      }
     }
    },
@@ -117,12 +133,27 @@
   },
   "/api/v1/produce/{name}": {
    "post": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
     "tags": [
      "tube"
     ],
     "summary": "produce a message",
     "operationId": "produceMessage",
     "parameters": [
+     {
+      "name": "body",
+      "in": "body",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
+     },
      {
       "type": "string",
       "description": "tube name",
@@ -156,7 +187,11 @@
     ],
     "responses": {
      "200": {
-      "description": "OK"
+      "description": "OK",
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
      }
     }
    },
@@ -173,6 +208,15 @@
       "name": "key",
       "in": "path",
       "required": true
+     },
+     {
+      "name": "body",
+      "in": "body",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
      }
     ],
     "responses": {
@@ -241,6 +285,20 @@
      "type": "object"
     },
     "type": {
+     "type": "string"
+    }
+   }
+  },
+  "restfulspec.SchemaType": {
+   "required": [
+    "RawType",
+    "Format"
+   ],
+   "properties": {
+    "Format": {
+     "type": "string"
+    },
+    "RawType": {
      "type": "string"
     }
    }

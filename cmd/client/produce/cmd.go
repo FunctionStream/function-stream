@@ -17,11 +17,11 @@
 package produce
 
 import (
-	"context"
 	"fmt"
 	"github.com/functionstream/function-stream/cmd/client/common"
 	"github.com/functionstream/function-stream/restclient"
 	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
 	"os"
 )
 
@@ -55,7 +55,7 @@ func exec(_ *cobra.Command, _ []string) {
 	}}
 	cli := restclient.NewAPIClient(cfg)
 
-	res, err := cli.DefaultAPI.ApiV1ProduceQueueNamePut(context.Background(), config.name).Body(config.content).Execute()
+	res, err := cli.TubeAPI.ProduceMessage(context.Background(), config.name).Body(config.content).Execute()
 	if err != nil {
 		fmt.Printf("Failed to produce event: %v\n", err)
 		os.Exit(1)

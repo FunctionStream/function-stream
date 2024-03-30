@@ -46,26 +46,7 @@ func getListener(t *testing.T) net.Listener {
 }
 
 func startStandaloneSvr(t *testing.T, ctx context.Context, opts ...ServerOption) (*Server, string) {
-	//conf := &common.Config{
-	//	TubeType: common.MemoryTubeType,
-	//}
-	//tubeFactory := contube.NewMemoryQueueFactory(context.Background())
-	//httpTubeFact := contube.NewHttpTubeFactory(context.Background())
-	//store, err := statestore.NewTmpPebbleStateStore()
-	//assert.Nil(t, err)
-	//defaultFmOpts := []fs.ManagerOption{
-	//	fs.WithDefaultTubeFactory(tubeFactory),
-	//	fs.WithTubeFactory("http", httpTubeFact),
-	//	fs.WithStateStore(store),
-	//}
 	ln := getListener(t)
-	//
-	//assert.Nil(t, err)
-	//defaultSvrOpts := []ServerOption{
-	//	WithHttpListener(ln),
-	//	WithHttpTubeFactory(httpTubeFact),
-	//	WithFunctionManager(append(defaultFmOpts, fmOpts...)...),
-	//}
 	defaultOpts := []ServerOption{
 		WithHttpListener(ln),
 	}

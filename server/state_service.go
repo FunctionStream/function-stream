@@ -44,7 +44,8 @@ func (s *Server) makeStateService() *restful.WebService {
 		Doc("set a state").
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Operation("setState").
-		Param(keyParam))
+		Param(keyParam).
+		Reads(bytesSchema))
 
 	ws.Route(ws.GET("/{key}").
 		To(func(request *restful.Request, response *restful.Response) {
@@ -66,6 +67,8 @@ func (s *Server) makeStateService() *restful.WebService {
 		Doc("get a state").
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Operation("getState").
+		Writes(bytesSchema).
+		Returns(http.StatusOK, "OK", bytesSchema).
 		Param(keyParam))
 
 	return ws

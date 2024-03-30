@@ -81,7 +81,7 @@ func (p *perf) Run(ctx context.Context) {
 		slog.Any("config", p.config),
 	)
 
-	name := "perf-" + strconv.Itoa(rand.Int())
+	_ = "perf-" + strconv.Itoa(rand.Int())
 	var f restclient.Function
 	if p.config.Func != nil {
 		f = *p.config.Func
@@ -134,41 +134,41 @@ func (p *perf) Run(ctx context.Context) {
 	}
 
 	cfg := restclient.NewConfiguration()
-	cli := restclient.NewAPIClient(cfg)
+	_ = restclient.NewAPIClient(cfg)
 
-	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), name).Function(f).Execute()
-	if err != nil {
-		slog.Error(
-			"Failed to create Create Function",
-			slog.Any("error", err),
-		)
-		os.Exit(1)
-	}
-	if res.StatusCode != 200 {
-		slog.Error(
-			"Failed to create Create Function",
-			slog.Any("statusCode", res.StatusCode),
-		)
-		os.Exit(1)
-	}
-
-	defer func() {
-		res, err := cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), name).Execute()
-		if err != nil {
-			slog.Error(
-				"Failed to delete Function",
-				slog.Any("error", err),
-			)
-			os.Exit(1)
-		}
-		if res.StatusCode != 200 {
-			slog.Error(
-				"Failed to delete Function",
-				slog.Any("statusCode", res.StatusCode),
-			)
-			os.Exit(1)
-		}
-	}()
+	//res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), name).Function(f).Execute()
+	//if err != nil {
+	//	slog.Error(
+	//		"Failed to create Create Function",
+	//		slog.Any("error", err),
+	//	)
+	//	os.Exit(1)
+	//}
+	//if res.StatusCode != 200 {
+	//	slog.Error(
+	//		"Failed to create Create Function",
+	//		slog.Any("statusCode", res.StatusCode),
+	//	)
+	//	os.Exit(1)
+	//}
+	//
+	//defer func() {
+	//	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), name).Execute()
+	//	if err != nil {
+	//		slog.Error(
+	//			"Failed to delete Function",
+	//			slog.Any("error", err),
+	//		)
+	//		os.Exit(1)
+	//	}
+	//	if res.StatusCode != 200 {
+	//		slog.Error(
+	//			"Failed to delete Function",
+	//			slog.Any("statusCode", res.StatusCode),
+	//		)
+	//		os.Exit(1)
+	//	}
+	//}()
 
 	latencyCh := make(chan int64)
 	var failureCount int64

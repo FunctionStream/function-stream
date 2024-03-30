@@ -23,6 +23,7 @@ func (s *Server) makeFunctionService() *restful.WebService {
 		Doc("get all functions").
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Operation("getAllFunctions").
+		Returns(http.StatusOK, "OK", []model.Function{}).
 		Writes([]model.Function{}))
 
 	ws.Route(ws.POST("/").
