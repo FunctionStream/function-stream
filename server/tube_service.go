@@ -43,7 +43,9 @@ func (s *Server) makeTubeService() *restful.WebService {
 		To(func(request *restful.Request, response *restful.Response) {
 			name := request.PathParameter("name")
 			body := request.Request.Body
-			defer s.handleRestError(body.Close())
+			defer func() {
+				s.handleRestError(body.Close())
+			}()
 
 			content, err := io.ReadAll(body)
 			if err != nil {

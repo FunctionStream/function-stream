@@ -43,7 +43,9 @@ func (s *Server) makeStateService() *restful.WebService {
 			}
 
 			body := request.Request.Body
-			defer s.handleRestError(body.Close())
+			defer func() {
+				s.handleRestError(body.Close())
+			}()
 
 			content, err := io.ReadAll(body)
 			if err != nil {
