@@ -1,3 +1,19 @@
+/*
+ * Copyright 2024 Function Stream Org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package server
 
 import (
@@ -27,16 +43,16 @@ func (s *Server) makeTubeService() *restful.WebService {
 		To(func(request *restful.Request, response *restful.Response) {
 			name := request.PathParameter("name")
 			body := request.Request.Body
-			defer body.Close()
+			defer s.handleRestError(body.Close())
 
 			content, err := io.ReadAll(body)
 			if err != nil {
-				response.WriteErrorString(http.StatusInternalServerError, err.Error())
+				s.handleRestError(response.WriteErrorString(http.StatusInternalServerError, err.Error()))
 				return
 			}
 			err = s.Manager.ProduceEvent(name, contube.NewRecordImpl(content, func() {}))
 			if err != nil {
-				response.WriteError(http.StatusInternalServerError, err)
+				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return
 			}
 			response.WriteHeader(http.StatusOK)
@@ -52,10 +68,11 @@ func (s *Server) makeTubeService() *restful.WebService {
 			name := request.PathParameter("name")
 			record, err := s.Manager.ConsumeEvent(name)
 			if err != nil {
-				response.WriteError(http.StatusInternalServerError, err)
+				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return
 			}
-			response.Write(record.GetPayload())
+			_, err = response.Write(record.GetPayload())
+			s.handleRestError(err)
 		}).
 		Doc("consume a message").
 		Metadata(restfulspec.KeyOpenAPITags, tags).

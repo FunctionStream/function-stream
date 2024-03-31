@@ -24,7 +24,6 @@ import (
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/go-openapi/spec"
-	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"log/slog"
 	"net"
@@ -165,219 +164,30 @@ func (s *Server) Run(context context.Context) {
 	}
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-
-		if r.Method == "OPTIONS" {
-			w.Header().Set("Access-Control-Max-Age", "86400")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (s *Server) startRESTHandlers() error {
-	r := mux.NewRouter()
 
-	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	})).Methods("OPTIONS")
-
-	r.Use(corsMiddleware)
-
-	r.HandleFunc("/api/v1/status", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}).Methods("GET")
-
-	//r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
-	//	vars := mux.Vars(r)
-	//	functionName := vars["function_name"]
-	//	log := s.log.With(slog.String("name", functionName), slog.String("phase", "starting"))
-	//	log.Debug("Starting function")
-	//
-	//	body, err := io.ReadAll(r.Body)
-	//	if err != nil {
-	//		log.Error("Failed to read body", "error", err)
-	//		http.Error(w, err.Error(), http.StatusInternalServerError)
-	//		return
-	//	}
-	//
-	//	if len(body) == 0 {
-	//		log.Debug("The body is empty")
-	//		http.Error(w, "The body is empty. You should provide the function definition", http.StatusBadRequest)
-	//		return
-	//	}
-	//
-	//	var function restclient.Function
-	//	err = json.Unmarshal(body, &function)
-	//	if err != nil {
-	//		log.Error("Failed to parse function definition", "error", err)
-	//		http.Error(w, fmt.Errorf("failed to parse function definition: %w", err).Error(), http.StatusBadRequest)
-	//		return
-	//	}
-	//	function.Name = &functionName
-	//
-	//	f, err := constructFunction(&function)
-	//	if err != nil {
-	//		log.Error("Failed to construct function", "error", err)
-	//		http.Error(w, err.Error(), http.StatusBadRequest)
-	//		return
-	//	}
-	//
-	//	err = s.Manager.StartFunction(f)
-	//	if err != nil {
-	//		log.Error("Failed to start function", "error", err)
-	//		http.Error(w, err.Error(), http.StatusBadRequest)
-	//		return
-	//	}
-	//	log.Info("Started function")
-	//}).Methods("POST")
-	//
-	//r.HandleFunc("/api/v1/function/{function_name}", func(w http.ResponseWriter, r *http.Request) {
-	//	vars := mux.Vars(r)
-	//	functionName := vars["function_name"]
-	//	log := s.log.With(slog.String("name", functionName), slog.String("phase", "deleting"))
-	//
-	//	err := s.Manager.DeleteFunction(functionName)
-	//	if errors.Is(err, common.ErrorFunctionNotFound) {
-	//		log.Error("Function not found", "error", err)
-	//		http.Error(w, err.Error(), http.StatusNotFound)
-	//		return
-	//	}
-	//	log.Info("Deleted function")
-	//}).Methods("DELETE")
-	//
-	//r.HandleFunc("/api/v1/functions", func(w http.ResponseWriter, r *http.Request) {
-	//	log := s.log.With()
-	//	log.Info("Listing functions")
-	//	functions := s.Manager.ListFunctions()
-	//	w.Header().Set("Content-Type", "application/json")
-	//	err := json.NewEncoder(w).Encode(functions)
-	//	if err != nil {
-	//		slog.Error("Error when listing functions", err)
-	//		http.Error(w, err.Error(), http.StatusInternalServerError)
-	//		return
-	//	}
-	//}).Methods("GET")
-
-	//r.HandleFunc("/api/v1/produce/{queue_name}", func(w http.ResponseWriter, r *http.Request) {
-	//	vars := mux.Vars(r)
-	//	queueName := vars["queue_name"]
-	//	log := s.log.With(slog.String("queue_name", queueName))
-	//	log.Info("Producing event to queue")
-	//	content, err := io.ReadAll(r.Body)
-	//	if err != nil {
-	//		log.Error("Failed to read body", "error", err)
-	//		http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
-	//		return
-	//	}
-	//	err = s.Manager.ProduceEvent(queueName, contube.NewRecordImpl(content, func() {}))
-	//	if err != nil {
-	//		log.Error("Failed to produce event", "error", err)
-	//		http.Error(w, err.Error(), http.StatusInternalServerError)
-	//		return
-	//	}
-	//	log.Info("Produced event to queue")
-	//}).Methods("PUT")
-	//
-	//r.HandleFunc("/api/v1/consume/{queue_name}", func(w http.ResponseWriter, r *http.Request) {
-	//	vars := mux.Vars(r)
-	//	queueName := vars["queue_name"]
-	//	log := s.log.With(slog.String("queue_name", queueName))
-	//	log.Info("Consuming event from queue")
-	//	event, err := s.Manager.ConsumeEvent(queueName)
-	//	if err != nil {
-	//		log.Error("Failed to consume event", "error", err)
-	//		http.Error(w, err.Error(), http.StatusInternalServerError)
-	//		return
-	//	}
-	//	w.Header().Set("Content-Type", "application/json")
-	//	err = json.NewEncoder(w).Encode(string(event.GetPayload()))
-	//	if err != nil {
-	//		log.Error("Error when encoding event", "error", err)
-	//		http.Error(w, err.Error(), http.StatusInternalServerError)
-	//		return
-	//	}
-	//	log.Info("Consumed event from queue")
-	//}).Methods("GET")
-	//
-	//if s.options.httpTubeFact != nil {
-	//	r.HandleFunc("/api/v1/http-tube/{endpoint}", s.options.httpTubeFact.GetHandleFunc(func(r *http.Request) (string, error) {
-	//		e, ok := mux.Vars(r)["endpoint"]
-	//		if !ok {
-	//			return "", errors.New("endpoint not found")
-	//		}
-	//		return e, nil
-	//	}, s.log)).Methods("POST")
-	//}
-	//
-	//r.HandleFunc("/api/v1/state/{key}", func(w http.ResponseWriter, r *http.Request) {
-	//	vars := mux.Vars(r)
-	//	key, ok := vars["key"]
-	//	if !ok {
-	//		http.Error(w, "Key not found", http.StatusBadRequest)
-	//		return
-	//	}
-	//	log := s.log.With(slog.String("key", key))
-	//	log.Info("Getting state")
-	//	state := s.Manager.GetStateStore()
-	//	if state == nil {
-	//		log.Error("No state store configured")
-	//		http.Error(w, "No state store configured", http.StatusBadRequest)
-	//		return
-	//	}
-	//	content, err := io.ReadAll(r.Body)
-	//	if err != nil {
-	//		log.Error("Failed to read body", "error", err)
-	//		http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
-	//		return
-	//	}
-	//	err = state.PutState(key, content)
-	//	if err != nil {
-	//		log.Error("Failed to put state", "error", err)
-	//		http.Error(w, err.Error(), http.StatusInternalServerError)
-	//		return
-	//	}
-	//}).Methods("POST")
-	//
-	//r.HandleFunc("/api/v1/state/{key}", func(w http.ResponseWriter, r *http.Request) {
-	//	vars := mux.Vars(r)
-	//	key, ok := vars["key"]
-	//	if !ok {
-	//		http.Error(w, "Key not found", http.StatusBadRequest)
-	//		return
-	//	}
-	//	log := s.log.With(slog.String("key", key))
-	//	log.Info("Getting state")
-	//	state := s.Manager.GetStateStore()
-	//	if state == nil {
-	//		log.Error("No state store configured")
-	//		http.Error(w, "No state store configured", http.StatusBadRequest)
-	//		return
-	//	}
-	//	content, err := state.GetState(key)
-	//	if err != nil {
-	//		log.Error("Failed to get state", "error", err)
-	//		http.Error(w, err.Error(), http.StatusInternalServerError)
-	//		return
-	//	}
-	//	w.Header().Set("Content-Type", "application/octet-stream") // Set the content type to application/octet-stream for binary data
-	//	_, err = w.Write(content)
-	//	if err != nil {
-	//		log.Error("Failed to write to response", "error", err)
-	//		http.Error(w, err.Error(), http.StatusInternalServerError)
-	//		return
-	//	}
-	//}).Methods("GET")
+	statusSvr := new(restful.WebService)
+	statusSvr.Route(statusSvr.GET("/api/v1/status").To(func(request *restful.Request, response *restful.Response) {
+		response.WriteHeader(http.StatusOK)
+	}).
+		Doc("Get the status of the Function Stream").
+		Metadata(restfulspec.KeyOpenAPITags, []string{"status"}).
+		Operation("getStatus"))
 
 	container := restful.NewContainer()
 	container.Add(s.makeFunctionService())
 	container.Add(s.makeTubeService())
 	container.Add(s.makeStateService())
 	container.Add(s.makeHttpTubeService())
+	container.Add(statusSvr)
+
+	cors := restful.CrossOriginResourceSharing{
+		AllowedHeaders: []string{"Content-Type", "Accept"},
+		AllowedMethods: []string{"GET", "POST", "OPTIONS", "PUT", "DELETE"},
+		CookiesAllowed: false,
+		Container:      container}
+	container.Filter(cors.Filter)
+	container.Filter(container.OPTIONSFilter)
 
 	config := restfulspec.Config{
 		WebServices:                   container.RegisteredWebServices(),
@@ -496,4 +306,11 @@ func (s *Server) Close() error {
 	}
 	s.log.Info("Function stream server is shut down")
 	return nil
+}
+
+func (s *Server) handleRestError(e error) {
+	if e == nil {
+		return
+	}
+	s.log.Error("Error handling REST request", "error", e)
 }

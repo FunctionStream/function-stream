@@ -1,3 +1,19 @@
+/*
+ * Copyright 2024 Function Stream Org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package server
 
 import (
@@ -22,22 +38,22 @@ func (s *Server) makeStateService() *restful.WebService {
 
 			state := s.Manager.GetStateStore()
 			if state == nil {
-				response.WriteErrorString(http.StatusBadRequest, "No state store configured")
+				s.handleRestError(response.WriteErrorString(http.StatusBadRequest, "No state store configured"))
 				return
 			}
 
 			body := request.Request.Body
-			defer body.Close()
+			defer s.handleRestError(body.Close())
 
 			content, err := io.ReadAll(body)
 			if err != nil {
-				response.WriteError(http.StatusBadRequest, errors.Wrap(err, "Failed to read body"))
+				s.handleRestError(response.WriteError(http.StatusBadRequest, errors.Wrap(err, "Failed to read body")))
 				return
 			}
 
 			err = state.PutState(key, content)
 			if err != nil {
-				response.WriteError(http.StatusInternalServerError, err)
+				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return
 			}
 		}).
@@ -52,17 +68,18 @@ func (s *Server) makeStateService() *restful.WebService {
 			key := request.PathParameter("key")
 			state := s.Manager.GetStateStore()
 			if state == nil {
-				response.WriteErrorString(http.StatusBadRequest, "No state store configured")
+				s.handleRestError(response.WriteErrorString(http.StatusBadRequest, "No state store configured"))
 				return
 			}
 
 			content, err := state.GetState(key)
 			if err != nil {
-				response.WriteError(http.StatusInternalServerError, err)
+				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return
 			}
 
-			response.Write(content)
+			_, err = response.Write(content)
+			s.handleRestError(err)
 		}).
 		Doc("get a state").
 		Metadata(restfulspec.KeyOpenAPITags, tags).

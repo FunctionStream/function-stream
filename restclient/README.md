@@ -84,6 +84,7 @@ Class | Method | HTTP request | Description
 *HttpTubeAPI* | [**TriggerHttpTubeEndpoint**](docs/HttpTubeAPI.md#triggerhttptubeendpoint) | **Post** /api/v1/http-tube/{endpoint} | trigger the http tube endpoint
 *StateAPI* | [**GetState**](docs/StateAPI.md#getstate) | **Get** /api/v1/state/{key} | get a state
 *StateAPI* | [**SetState**](docs/StateAPI.md#setstate) | **Post** /api/v1/state/{key} | set a state
+*StatusAPI* | [**GetStatus**](docs/StatusAPI.md#getstatus) | **Get** /api/v1/status | Get the status of the Function Stream
 *TubeAPI* | [**ConsumeMessage**](docs/TubeAPI.md#consumemessage) | **Get** /api/v1/consume/{name} | consume a message
 *TubeAPI* | [**ProduceMessage**](docs/TubeAPI.md#producemessage) | **Post** /api/v1/produce/{name} | produce a message
 

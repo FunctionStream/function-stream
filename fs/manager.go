@@ -168,6 +168,9 @@ func (fm *FunctionManager) createFuncCtx(f *model.Function) api.FunctionContext 
 }
 
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
+	if f.Name == "" {
+		return errors.New("function name shouldn't be empty")
+	}
 	fm.functionsLock.Lock()
 	if _, exist := fm.functions[f.Name]; exist {
 		fm.functionsLock.Unlock()

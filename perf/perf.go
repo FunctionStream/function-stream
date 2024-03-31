@@ -87,7 +87,6 @@ func (p *perf) Run(ctx context.Context) {
 		f = *p.config.Func
 	} else {
 		f = restclient.ModelFunction{
-			Name: name,
 			Runtime: restclient.ModelRuntimeConfig{
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "./bin/example_basic.wasm",
@@ -97,6 +96,7 @@ func (p *perf) Run(ctx context.Context) {
 			Output: "test-output-" + strconv.Itoa(rand.Int()),
 		}
 	}
+	f.Name = name
 
 	config := &common.Config{
 		PulsarURL: p.config.PulsarURL,
