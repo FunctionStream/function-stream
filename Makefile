@@ -35,6 +35,7 @@ get-apidocs:
 	curl -o apidocs.json http://localhost:7300/apidocs
 
 gen-rest-client:
+	rm -r restclient
 	mkdir -p restclient
 	openapi-generator generate -i ./apidocs.json -g go -o restclient \
 		--git-user-id functionstream \
