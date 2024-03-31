@@ -17,21 +17,18 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/restclient"
 	"github.com/functionstream/function-stream/tests"
 	"github.com/stretchr/testify/assert"
-	"io"
 	"math/rand"
 	"net"
-	"net/http"
 	"strconv"
 	"testing"
 )
@@ -62,7 +59,7 @@ func startStandaloneSvr(t *testing.T, ctx context.Context, opts ...ServerOption)
 		<-ctx.Done()
 		svrCancel()
 	}()
-	return s, fmt.Sprintf("http://%s", ln.Addr())
+	return s, ln.Addr().String()
 }
 
 func TestStandaloneBasicFunction(t *testing.T) {
@@ -156,7 +153,10 @@ func TestHttpTube(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = http.Post(httpAddr+"/api/v1/http-tube/"+endpoint, "application/json", bytes.NewBuffer(jsonBytes))
+	cfg := restclient.NewConfiguration()
+	cfg.Host = httpAddr
+	cli := restclient.NewAPIClient(cfg)
+	_, err = cli.HttpTubeAPI.TriggerHttpTubeEndpoint(ctx, endpoint).Body(string(jsonBytes)).Execute()
 	assert.Nil(t, err)
 
 	event, err := s.Manager.ConsumeEvent(funcConf.Output)
@@ -229,7 +229,11 @@ func TestStatefulFunction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = http.Post(httpAddr+"/api/v1/state/key", "text/plain; charset=utf-8", bytes.NewBuffer([]byte("hello")))
+	cfg := restclient.NewConfiguration()
+	cfg.Host = httpAddr
+	cli := restclient.NewAPIClient(cfg)
+
+	_, err = cli.StateAPI.SetState(ctx, "key").Body("hello").Execute()
 	assert.Nil(t, err)
 
 	err = s.Manager.ProduceEvent(funcConf.Inputs[0], contube.NewRecordImpl(nil, func() {
@@ -239,12 +243,7 @@ func TestStatefulFunction(t *testing.T) {
 	_, err = s.Manager.ConsumeEvent(funcConf.Output)
 	assert.Nil(t, err)
 
-	resp, err := http.Get(httpAddr + "/api/v1/state/key")
+	result, _, err := cli.StateAPI.GetState(ctx, "key").Execute()
 	assert.Nil(t, err)
-	defer func() {
-		assert.Nil(t, resp.Body.Close())
-	}()
-	body, err := io.ReadAll(resp.Body)
-	assert.Nil(t, err)
-	assert.Equal(t, "hello!", string(body))
+	assert.Equal(t, "hello!", result)
 }

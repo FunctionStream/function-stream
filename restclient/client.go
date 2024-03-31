@@ -50,6 +50,8 @@ type APIClient struct {
 
 	FunctionAPI *FunctionAPIService
 
+	HttpTubeAPI *HttpTubeAPIService
+
 	StateAPI *StateAPIService
 
 	TubeAPI *TubeAPIService
@@ -72,6 +74,7 @@ func NewAPIClient(cfg *Configuration) *APIClient {
 
 	// API Services
 	c.FunctionAPI = (*FunctionAPIService)(&c.common)
+	c.HttpTubeAPI = (*HttpTubeAPIService)(&c.common)
 	c.StateAPI = (*StateAPIService)(&c.common)
 	c.TubeAPI = (*TubeAPIService)(&c.common)
 

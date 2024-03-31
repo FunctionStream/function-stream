@@ -64,7 +64,7 @@ func exec(_ *cobra.Command, _ []string) {
 	}}
 	cli := restclient.NewAPIClient(cfg)
 	f := restclient.ModelFunction{
-		Name: &config.name,
+		Name: config.name,
 		Runtime: restclient.ModelRuntimeConfig{Config: map[string]interface{}{
 			fs_cmmon.RuntimeArchiveConfigKey: config.archive,
 		}},

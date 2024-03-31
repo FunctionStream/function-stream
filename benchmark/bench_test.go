@@ -70,8 +70,8 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 	pConfig := &perf.Config{
 		PulsarURL:   "pulsar://localhost:6650",
 		RequestRate: 200000.0,
-		Func: &restclient.Function{
-			Runtime: &restclient.FunctionRuntime{
+		Func: &restclient.ModelFunction{
+			Runtime: restclient.ModelRuntimeConfig{
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 				},
@@ -127,8 +127,8 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	pConfig := &perf.Config{
 		RequestRate: 200000.0,
-		Func: &restclient.Function{
-			Runtime: &restclient.FunctionRuntime{
+		Func: &restclient.ModelFunction{
+			Runtime: restclient.ModelRuntimeConfig{
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 				},

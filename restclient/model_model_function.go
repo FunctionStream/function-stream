@@ -23,7 +23,7 @@ var _ MappedNullable = &ModelFunction{}
 type ModelFunction struct {
 	Config   *map[string]string `json:"config,omitempty"`
 	Inputs   []string           `json:"inputs"`
-	Name     *string            `json:"name,omitempty"`
+	Name     string             `json:"name"`
 	Output   string             `json:"output"`
 	Replicas int32              `json:"replicas"`
 	Runtime  ModelRuntimeConfig `json:"runtime"`
@@ -37,9 +37,10 @@ type _ModelFunction ModelFunction
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewModelFunction(inputs []string, output string, replicas int32, runtime ModelRuntimeConfig) *ModelFunction {
+func NewModelFunction(inputs []string, name string, output string, replicas int32, runtime ModelRuntimeConfig) *ModelFunction {
 	this := ModelFunction{}
 	this.Inputs = inputs
+	this.Name = name
 	this.Output = output
 	this.Replicas = replicas
 	this.Runtime = runtime
@@ -110,36 +111,28 @@ func (o *ModelFunction) SetInputs(v []string) {
 	o.Inputs = v
 }
 
-// GetName returns the Name field value if set, zero value otherwise.
+// GetName returns the Name field value
 func (o *ModelFunction) GetName() string {
-	if o == nil || IsNil(o.Name) {
+	if o == nil {
 		var ret string
 		return ret
 	}
-	return *o.Name
+
+	return o.Name
 }
 
-// GetNameOk returns a tuple with the Name field value if set, nil otherwise
+// GetNameOk returns a tuple with the Name field value
 // and a boolean to check if the value has been set.
 func (o *ModelFunction) GetNameOk() (*string, bool) {
-	if o == nil || IsNil(o.Name) {
+	if o == nil {
 		return nil, false
 	}
-	return o.Name, true
+	return &o.Name, true
 }
 
-// HasName returns a boolean if a field has been set.
-func (o *ModelFunction) HasName() bool {
-	if o != nil && !IsNil(o.Name) {
-		return true
-	}
-
-	return false
-}
-
-// SetName gets a reference to the given string and assigns it to the Name field.
+// SetName sets field value
 func (o *ModelFunction) SetName(v string) {
-	o.Name = &v
+	o.Name = v
 }
 
 // GetOutput returns the Output field value
@@ -292,9 +285,7 @@ func (o ModelFunction) ToMap() (map[string]interface{}, error) {
 		toSerialize["config"] = o.Config
 	}
 	toSerialize["inputs"] = o.Inputs
-	if !IsNil(o.Name) {
-		toSerialize["name"] = o.Name
-	}
+	toSerialize["name"] = o.Name
 	toSerialize["output"] = o.Output
 	toSerialize["replicas"] = o.Replicas
 	toSerialize["runtime"] = o.Runtime
@@ -313,6 +304,7 @@ func (o *ModelFunction) UnmarshalJSON(data []byte) (err error) {
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
 		"inputs",
+		"name",
 		"output",
 		"replicas",
 		"runtime",

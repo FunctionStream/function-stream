@@ -24,7 +24,6 @@ import (
 	"github.com/functionstream/function-stream/restclient"
 	"github.com/functionstream/function-stream/server"
 	"io"
-	"log/slog"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -59,6 +58,7 @@ func TestBasicFunction(t *testing.T) {
 
 	name := "func-" + strconv.Itoa(rand.Int())
 	f := restclient.ModelFunction{
+		Name: name,
 		Runtime: restclient.ModelRuntimeConfig{
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
@@ -86,13 +86,7 @@ func TestBasicFunction(t *testing.T) {
 
 	res, err := cli.FunctionAPI.CreateFunction(context.Background()).Body(f).Execute()
 	if err != nil {
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			t.Fatalf(err.Error())
-			return
-		}
-		slog.Error(string(body))
-		t.Fatal("failed to create function")
+		t.Fatalf("failed to create function: %v", err)
 		return
 	}
 	if res.StatusCode != 200 {

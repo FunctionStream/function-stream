@@ -1,4 +1,7 @@
 {
+ "schemes": [
+  "http"
+ ],
  "swagger": "2.0",
  "info": {
   "description": "Manage Function Stream Resources",
@@ -131,6 +134,44 @@
     }
    }
   },
+  "/api/v1/http-tube/{endpoint}": {
+   "post": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
+    "tags": [
+     "http-tube"
+    ],
+    "summary": "trigger the http tube endpoint",
+    "operationId": "triggerHttpTubeEndpoint",
+    "parameters": [
+     {
+      "type": "string",
+      "description": "Endpoint",
+      "name": "endpoint",
+      "in": "path",
+      "required": true
+     },
+     {
+      "name": "body",
+      "in": "body",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
   "/api/v1/produce/{name}": {
    "post": {
     "consumes": [
@@ -230,6 +271,7 @@
  "definitions": {
   "model.Function": {
    "required": [
+    "name",
     "runtime",
     "inputs",
     "output",
@@ -283,6 +325,9 @@
    "properties": {
     "config": {
      "type": "object"
+    },
+    "name": {
+     "type": "string"
     },
     "type": {
      "type": "string"

@@ -6,7 +6,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Config** | Pointer to **map[string]string** |  | [optional] 
 **Inputs** | **[]string** |  | 
-**Name** | Pointer to **string** |  | [optional] 
+**Name** | **string** |  | 
 **Output** | **string** |  | 
 **Replicas** | **int32** |  | 
 **Runtime** | [**ModelRuntimeConfig**](ModelRuntimeConfig.md) |  | 
@@ -17,7 +17,7 @@ Name | Type | Description | Notes
 
 ### NewModelFunction
 
-`func NewModelFunction(inputs []string, output string, replicas int32, runtime ModelRuntimeConfig, ) *ModelFunction`
+`func NewModelFunction(inputs []string, name string, output string, replicas int32, runtime ModelRuntimeConfig, ) *ModelFunction`
 
 NewModelFunction instantiates a new ModelFunction object
 This constructor will assign default values to properties that have it defined,
@@ -96,11 +96,6 @@ and a boolean to check if the value has been set.
 
 SetName sets Name field to given value.
 
-### HasName
-
-`func (o *ModelFunction) HasName() bool`
-
-HasName returns a boolean if a field has been set.
 
 ### GetOutput
 

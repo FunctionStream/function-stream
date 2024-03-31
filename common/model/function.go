@@ -21,7 +21,7 @@ import "github.com/functionstream/function-stream/fs/contube"
 type TubeConfig struct {
 	Config contube.ConfigMap `json:"config,omitempty" yaml:"config,omitempty"`
 	Type   *string           `json:"type,omitempty" yaml:"type,omitempty"` // Default to `default`
-	Name   *string           `json:"type,omitempty"`
+	Name   *string           `json:"name,omitempty"`
 }
 
 type ConfigMap map[string]interface{}
@@ -32,7 +32,7 @@ type RuntimeConfig struct {
 }
 
 type Function struct {
-	Name    string         `json:"name,omitempty" yaml:"name,omitempty"`
+	Name    string         `json:"name" yaml:"name"`
 	Runtime *RuntimeConfig `json:"runtime" yaml:"runtime"`
 	// Deprecate
 	Source *TubeConfig `json:"source,omitempty" yaml:"source,omitempty"`

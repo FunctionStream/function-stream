@@ -21,10 +21,8 @@ import (
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/restclient"
 	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -379,6 +377,7 @@ func (s *Server) startRESTHandlers() error {
 	container.Add(s.makeFunctionService())
 	container.Add(s.makeTubeService())
 	container.Add(s.makeStateService())
+	container.Add(s.makeHttpTubeService())
 
 	config := restfulspec.Config{
 		WebServices:                   container.RegisteredWebServices(),
@@ -415,6 +414,7 @@ func enrichSwaggerObject(swo *spec.Swagger) {
 		},
 	}
 	swo.Host = "localhost:7300"
+	swo.Schemes = []string{"http"}
 	swo.Tags = []spec.Tag{
 		{
 			TagProps: spec.TagProps{
@@ -496,28 +496,4 @@ func (s *Server) Close() error {
 	}
 	s.log.Info("Function stream server is shut down")
 	return nil
-}
-
-func constructFunction(function *restclient.Function) (*model.Function, error) {
-	if function.Name == nil {
-		return nil, errors.New("function name is required")
-	}
-	f := &model.Function{
-		Name:     *function.Name,
-		Inputs:   function.Inputs,
-		Output:   function.Output,
-		Replicas: function.Replicas,
-	}
-	if function.Runtime != nil {
-		f.Runtime = &model.RuntimeConfig{
-			Type:   function.Runtime.Type.Get(),
-			Config: function.Runtime.Config,
-		}
-	}
-	if function.Config != nil {
-		f.Config = *function.Config
-	} else {
-		f.Config = make(map[string]string)
-	}
-	return f, nil
 }

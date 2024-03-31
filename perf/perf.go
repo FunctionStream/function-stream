@@ -38,7 +38,7 @@ type TubeBuilder func(ctx context.Context, config *common.Config) (contube.TubeF
 type Config struct {
 	PulsarURL    string
 	RequestRate  float64
-	Func         *restclient.Function
+	Func         *restclient.ModelFunction
 	QueueBuilder TubeBuilder
 }
 
@@ -81,13 +81,14 @@ func (p *perf) Run(ctx context.Context) {
 		slog.Any("config", p.config),
 	)
 
-	_ = "perf-" + strconv.Itoa(rand.Int())
-	var f restclient.Function
+	name := "perf-" + strconv.Itoa(rand.Int())
+	var f restclient.ModelFunction
 	if p.config.Func != nil {
 		f = *p.config.Func
 	} else {
-		f = restclient.Function{
-			Runtime: &restclient.FunctionRuntime{
+		f = restclient.ModelFunction{
+			Name: name,
+			Runtime: restclient.ModelRuntimeConfig{
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "./bin/example_basic.wasm",
 				},
@@ -134,41 +135,41 @@ func (p *perf) Run(ctx context.Context) {
 	}
 
 	cfg := restclient.NewConfiguration()
-	_ = restclient.NewAPIClient(cfg)
+	cli := restclient.NewAPIClient(cfg)
 
-	//res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), name).Function(f).Execute()
-	//if err != nil {
-	//	slog.Error(
-	//		"Failed to create Create Function",
-	//		slog.Any("error", err),
-	//	)
-	//	os.Exit(1)
-	//}
-	//if res.StatusCode != 200 {
-	//	slog.Error(
-	//		"Failed to create Create Function",
-	//		slog.Any("statusCode", res.StatusCode),
-	//	)
-	//	os.Exit(1)
-	//}
-	//
-	//defer func() {
-	//	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), name).Execute()
-	//	if err != nil {
-	//		slog.Error(
-	//			"Failed to delete Function",
-	//			slog.Any("error", err),
-	//		)
-	//		os.Exit(1)
-	//	}
-	//	if res.StatusCode != 200 {
-	//		slog.Error(
-	//			"Failed to delete Function",
-	//			slog.Any("statusCode", res.StatusCode),
-	//		)
-	//		os.Exit(1)
-	//	}
-	//}()
+	res, err := cli.FunctionAPI.CreateFunction(context.Background()).Body(f).Execute()
+	if err != nil {
+		slog.Error(
+			"Failed to create Create Function",
+			slog.Any("error", err),
+		)
+		os.Exit(1)
+	}
+	if res.StatusCode != 200 {
+		slog.Error(
+			"Failed to create Create Function",
+			slog.Any("statusCode", res.StatusCode),
+		)
+		os.Exit(1)
+	}
+
+	defer func() {
+		res, err := cli.FunctionAPI.DeleteFunction(context.Background(), name).Execute()
+		if err != nil {
+			slog.Error(
+				"Failed to delete Function",
+				slog.Any("error", err),
+			)
+			os.Exit(1)
+		}
+		if res.StatusCode != 200 {
+			slog.Error(
+				"Failed to delete Function",
+				slog.Any("statusCode", res.StatusCode),
+			)
+			os.Exit(1)
+		}
+	}()
 
 	latencyCh := make(chan int64)
 	var failureCount int64
