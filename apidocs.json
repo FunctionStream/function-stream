@@ -1,0 +1,384 @@
+{
+ "schemes": [
+  "http"
+ ],
+ "swagger": "2.0",
+ "info": {
+  "description": "Manage Function Stream Resources",
+  "title": "Function Stream Service",
+  "contact": {
+   "name": "Function Stream Org",
+   "url": "https://github.com/FunctionStream"
+  },
+  "license": {
+   "name": "Apache 2",
+   "url": "http://www.apache.org/licenses/"
+  },
+  "version": "1.0.0"
+ },
+ "host": "localhost:7300",
+ "paths": {
+  "/api/v1/consume/{name}": {
+   "get": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
+    "tags": [
+     "tube"
+    ],
+    "summary": "consume a message",
+    "operationId": "consumeMessage",
+    "parameters": [
+     {
+      "type": "string",
+      "description": "tube name",
+      "name": "name",
+      "in": "path",
+      "required": true
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/function": {
+   "get": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
+    "tags": [
+     "function"
+    ],
+    "summary": "get all functions",
+    "operationId": "getAllFunctions",
+    "responses": {
+     "200": {
+      "description": "OK",
+      "schema": {
+       "type": "array",
+       "items": {
+        "$ref": "#/definitions/model.Function"
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
+    "tags": [
+     "function"
+    ],
+    "summary": "create a function",
+    "operationId": "createFunction",
+    "parameters": [
+     {
+      "name": "body",
+      "in": "body",
+      "required": true,
+      "schema": {
+       "$ref": "#/definitions/model.Function"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
+  "/api/v1/function/{name}": {
+   "delete": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
+    "tags": [
+     "function"
+    ],
+    "summary": "delete a function",
+    "operationId": "deleteFunction",
+    "parameters": [
+     {
+      "type": "string",
+      "description": "name of the function",
+      "name": "name",
+      "in": "path",
+      "required": true
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
+  "/api/v1/http-tube/{endpoint}": {
+   "post": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
+    "tags": [
+     "http-tube"
+    ],
+    "summary": "trigger the http tube endpoint",
+    "operationId": "triggerHttpTubeEndpoint",
+    "parameters": [
+     {
+      "type": "string",
+      "description": "Endpoint",
+      "name": "endpoint",
+      "in": "path",
+      "required": true
+     },
+     {
+      "name": "body",
+      "in": "body",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
+  "/api/v1/produce/{name}": {
+   "post": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
+    "tags": [
+     "tube"
+    ],
+    "summary": "produce a message",
+    "operationId": "produceMessage",
+    "parameters": [
+     {
+      "name": "body",
+      "in": "body",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
+     },
+     {
+      "type": "string",
+      "description": "tube name",
+      "name": "name",
+      "in": "path",
+      "required": true
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
+  "/api/v1/state/{key}": {
+   "get": {
+    "tags": [
+     "state"
+    ],
+    "summary": "get a state",
+    "operationId": "getState",
+    "parameters": [
+     {
+      "type": "string",
+      "description": "state key",
+      "name": "key",
+      "in": "path",
+      "required": true
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "state"
+    ],
+    "summary": "set a state",
+    "operationId": "setState",
+    "parameters": [
+     {
+      "type": "string",
+      "description": "state key",
+      "name": "key",
+      "in": "path",
+      "required": true
+     },
+     {
+      "name": "body",
+      "in": "body",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "format": "byte"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
+  "/api/v1/status": {
+   "get": {
+    "tags": [
+     "status"
+    ],
+    "summary": "Get the status of the Function Stream",
+    "operationId": "getStatus",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  }
+ },
+ "definitions": {
+  "model.Function": {
+   "required": [
+    "name",
+    "runtime",
+    "inputs",
+    "output",
+    "replicas"
+   ],
+   "properties": {
+    "config": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
+    "inputs": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "name": {
+     "type": "string"
+    },
+    "output": {
+     "type": "string"
+    },
+    "replicas": {
+     "type": "integer",
+     "format": "int32"
+    },
+    "runtime": {
+     "$ref": "#/definitions/model.RuntimeConfig"
+    },
+    "sink": {
+     "$ref": "#/definitions/model.TubeConfig"
+    },
+    "source": {
+     "$ref": "#/definitions/model.TubeConfig"
+    }
+   }
+  },
+  "model.RuntimeConfig": {
+   "properties": {
+    "config": {
+     "type": "object"
+    },
+    "type": {
+     "type": "string"
+    }
+   }
+  },
+  "model.TubeConfig": {
+   "properties": {
+    "config": {
+     "type": "object"
+    },
+    "name": {
+     "type": "string"
+    },
+    "type": {
+     "type": "string"
+    }
+   }
+  },
+  "restfulspec.SchemaType": {
+   "required": [
+    "RawType",
+    "Format"
+   ],
+   "properties": {
+    "Format": {
+     "type": "string"
+    },
+    "RawType": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "tags": [
+  {
+   "description": "Managing functions",
+   "name": "function"
+  },
+  {
+   "description": "Managing tubes",
+   "name": "tube"
+  },
+  {
+   "description": "Managing state",
+   "name": "state"
+  },
+  {
+   "description": "Managing HTTP tubes",
+   "name": "http-tube"
+  }
+ ]
+}

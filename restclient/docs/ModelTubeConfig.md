@@ -1,91 +1,107 @@
-# FunctionRuntime
+# ModelTubeConfig
 
 ## Properties
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Config** | Pointer to **map[string]interface{}** |  | [optional] 
-**Type** | Pointer to **NullableString** |  | [optional] 
+**Name** | Pointer to **string** |  | [optional] 
+**Type** | Pointer to **string** |  | [optional] 
 
 ## Methods
 
-### NewFunctionRuntime
+### NewModelTubeConfig
 
-`func NewFunctionRuntime() *FunctionRuntime`
+`func NewModelTubeConfig() *ModelTubeConfig`
 
-NewFunctionRuntime instantiates a new FunctionRuntime object
+NewModelTubeConfig instantiates a new ModelTubeConfig object
 This constructor will assign default values to properties that have it defined,
 and makes sure properties required by API are set, but the set of arguments
 will change when the set of required properties is changed
 
-### NewFunctionRuntimeWithDefaults
+### NewModelTubeConfigWithDefaults
 
-`func NewFunctionRuntimeWithDefaults() *FunctionRuntime`
+`func NewModelTubeConfigWithDefaults() *ModelTubeConfig`
 
-NewFunctionRuntimeWithDefaults instantiates a new FunctionRuntime object
+NewModelTubeConfigWithDefaults instantiates a new ModelTubeConfig object
 This constructor will only assign default values to properties that have it defined,
 but it doesn't guarantee that properties required by API are set
 
 ### GetConfig
 
-`func (o *FunctionRuntime) GetConfig() map[string]interface{}`
+`func (o *ModelTubeConfig) GetConfig() map[string]interface{}`
 
 GetConfig returns the Config field if non-nil, zero value otherwise.
 
 ### GetConfigOk
 
-`func (o *FunctionRuntime) GetConfigOk() (*map[string]interface{}, bool)`
+`func (o *ModelTubeConfig) GetConfigOk() (*map[string]interface{}, bool)`
 
 GetConfigOk returns a tuple with the Config field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetConfig
 
-`func (o *FunctionRuntime) SetConfig(v map[string]interface{})`
+`func (o *ModelTubeConfig) SetConfig(v map[string]interface{})`
 
 SetConfig sets Config field to given value.
 
 ### HasConfig
 
-`func (o *FunctionRuntime) HasConfig() bool`
+`func (o *ModelTubeConfig) HasConfig() bool`
 
 HasConfig returns a boolean if a field has been set.
 
+### GetName
+
+`func (o *ModelTubeConfig) GetName() string`
+
+GetName returns the Name field if non-nil, zero value otherwise.
+
+### GetNameOk
+
+`func (o *ModelTubeConfig) GetNameOk() (*string, bool)`
+
+GetNameOk returns a tuple with the Name field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetName
+
+`func (o *ModelTubeConfig) SetName(v string)`
+
+SetName sets Name field to given value.
+
+### HasName
+
+`func (o *ModelTubeConfig) HasName() bool`
+
+HasName returns a boolean if a field has been set.
+
 ### GetType
 
-`func (o *FunctionRuntime) GetType() string`
+`func (o *ModelTubeConfig) GetType() string`
 
 GetType returns the Type field if non-nil, zero value otherwise.
 
 ### GetTypeOk
 
-`func (o *FunctionRuntime) GetTypeOk() (*string, bool)`
+`func (o *ModelTubeConfig) GetTypeOk() (*string, bool)`
 
 GetTypeOk returns a tuple with the Type field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetType
 
-`func (o *FunctionRuntime) SetType(v string)`
+`func (o *ModelTubeConfig) SetType(v string)`
 
 SetType sets Type field to given value.
 
 ### HasType
 
-`func (o *FunctionRuntime) HasType() bool`
+`func (o *ModelTubeConfig) HasType() bool`
 
 HasType returns a boolean if a field has been set.
 
-### SetTypeNil
-
-`func (o *FunctionRuntime) SetTypeNil(b bool)`
-
- SetTypeNil sets the value for Type to be an explicit nil
-
-### UnsetType
-`func (o *FunctionRuntime) UnsetType()`
-
-UnsetType ensures that no value is present for Type, not even an explicit nil
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

@@ -63,9 +63,9 @@ func exec(_ *cobra.Command, _ []string) {
 		URL: common.Config.ServiceAddr,
 	}}
 	cli := restclient.NewAPIClient(cfg)
-	f := restclient.Function{
-		Name: &config.name,
-		Runtime: &restclient.FunctionRuntime{Config: map[string]interface{}{
+	f := restclient.ModelFunction{
+		Name: config.name,
+		Runtime: restclient.ModelRuntimeConfig{Config: map[string]interface{}{
 			fs_cmmon.RuntimeArchiveConfigKey: config.archive,
 		}},
 		Inputs:   config.inputs,
@@ -73,7 +73,7 @@ func exec(_ *cobra.Command, _ []string) {
 		Replicas: config.replica,
 	}
 
-	res, err := cli.DefaultAPI.ApiV1FunctionFunctionNamePost(context.Background(), config.name).Function(f).Execute()
+	res, err := cli.FunctionAPI.CreateFunction(context.Background()).Body(f).Execute()
 	if err != nil {
 		body, e := io.ReadAll(res.Body)
 		if e != nil {

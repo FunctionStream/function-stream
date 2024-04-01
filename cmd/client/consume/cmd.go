@@ -17,11 +17,11 @@
 package consume
 
 import (
-	"context"
 	"fmt"
 	"github.com/functionstream/function-stream/cmd/client/common"
 	"github.com/functionstream/function-stream/restclient"
 	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
 	"os"
 )
 
@@ -53,7 +53,7 @@ func exec(_ *cobra.Command, _ []string) {
 	}}
 	cli := restclient.NewAPIClient(cfg)
 
-	e, res, err := cli.DefaultAPI.ApiV1ConsumeQueueNameGet(context.Background(), config.name).Execute()
+	e, res, err := cli.TubeAPI.ConsumeMessage(context.Background(), config.name).Execute()
 	if err != nil {
 		fmt.Printf("Failed to consume event: %v\n", err)
 		os.Exit(1)

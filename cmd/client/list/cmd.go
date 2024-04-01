@@ -40,7 +40,7 @@ func exec(_ *cobra.Command, _ []string) {
 	}}
 	cli := restclient.NewAPIClient(cfg)
 
-	list, res, err := cli.DefaultAPI.ApiV1FunctionsGet(context.Background()).Execute()
+	list, res, err := cli.FunctionAPI.GetAllFunctions(context.Background()).Execute()
 	if err != nil {
 		fmt.Printf("Failed to list functions: %v\n", err)
 		os.Exit(1)
