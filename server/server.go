@@ -150,18 +150,22 @@ func WithConfig(config *Config) ServerOption {
 		if err != nil {
 			return nil, err
 		}
-		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory, func(n string, c *FactoryConfig) (api.FunctionRuntimeFactory, error) {
-			if c.Type == nil {
-				return nil, errors.Errorf("runtime factory %s type is not set", n)
-			}
-			switch strings.ToLower(*c.Type) {
-			case WASMRuntime:
-				return wazero.NewWazeroFunctionRuntimeFactory(), nil
-			}
-			return nil, errors.Errorf("unsupported runtime type %s", *c.Type)
-		}, func(n string, f api.FunctionRuntimeFactory) {
-			o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
-		})
+		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory,
+			func(n string, c *FactoryConfig) (api.FunctionRuntimeFactory, error) {
+				if c.Type == nil {
+					return nil, errors.Errorf("runtime factory %s type is not set", n)
+				}
+				switch strings.ToLower(*c.Type) {
+				case WASMRuntime:
+					return wazero.NewWazeroFunctionRuntimeFactory(), nil
+				}
+				return nil, errors.Errorf("unsupported runtime type %s", *c.Type)
+			}, func(n string, f api.FunctionRuntimeFactory) {
+				o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
+			})
+		if err != nil {
+			return nil, err
+		}
 		return o, nil
 	})
 }
