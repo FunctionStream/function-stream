@@ -33,9 +33,37 @@ var (
 	}
 )
 
+type flags struct {
+	configFile        string
+	loadConfigFromEnv bool
+}
+
+var (
+	config = flags{}
+)
+
+func init() {
+	Cmd.Flags().StringVarP(&config.configFile, "config-file", "c", "conf/function-stream.yaml",
+		"path to the config file (default is conf/function-stream.yaml)")
+	Cmd.Flags().BoolVarP(&config.loadConfigFromEnv, "load-config-from-env", "e", false, "load config from env (default is false)")
+}
+
 func exec(*cobra.Command, []string) {
 	common.RunProcess(func() (io.Closer, error) {
-		s, err := server.NewServer()
+		var c *server.Config
+		var err error
+		if config.loadConfigFromEnv {
+			c, err = server.LoadConfigFromEnv()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			c, err = server.LoadConfigFromFile(config.configFile)
+			if err != nil {
+				return nil, err
+			}
+		}
+		s, err := server.NewServer(server.WithConfig(c))
 		if err != nil {
 			return nil, err
 		}

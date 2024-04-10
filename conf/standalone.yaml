@@ -1,0 +1,11 @@
+listen_addr: ":7300"
+tube_factory:
+  memory:
+    Type: "memory"
+  default:
+    ref: "memory"
+runtime_factory:
+  wasm:
+    type: "wasm"
+  default:
+    ref: "wasm"

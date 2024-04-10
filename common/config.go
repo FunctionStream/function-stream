@@ -16,9 +16,18 @@
 
 package common
 
-// Config is a struct that holds the configuration for a function stream.
-type Config struct {
-	ListenAddr string // ListenAddr is the address that the function stream REST service will listen on.
-	PulsarURL  string // PulsarURL is the URL of the Pulsar service. It's used for the pulsar_tube
-	TubeType   string
+type ConfigMap map[string]interface{}
+
+// MergeConfig merges multiple ConfigMap into one
+func MergeConfig(configs ...*ConfigMap) *ConfigMap {
+	result := ConfigMap{}
+	for _, config := range configs {
+		if config == nil {
+			continue
+		}
+		for k, v := range *config {
+			result[k] = v
+		}
+	}
+	return &result
 }
