@@ -25,19 +25,21 @@ import (
 )
 
 const (
-	PulsarURLKey = "pulsarURL"
+	PulsarURLKey = "pulsar_url"
 )
 
 type PulsarTubeFactoryConfig struct {
 	PulsarURL string
 }
 
-func NewPulsarTubeFactoryConfig(configMap ConfigMap) *PulsarTubeFactoryConfig {
+func NewPulsarTubeFactoryConfig(configMap ConfigMap) (*PulsarTubeFactoryConfig, error) {
 	var result PulsarTubeFactoryConfig
 	if pulsarURL, ok := configMap[PulsarURLKey].(string); ok {
 		result.PulsarURL = pulsarURL
+	} else {
+		return nil, errors.Errorf("Missing required field %s", PulsarURLKey)
 	}
-	return &result
+	return &result, nil
 }
 
 func (c *PulsarTubeFactoryConfig) ToConfigMap() ConfigMap {
@@ -62,7 +64,10 @@ func (f *PulsarEventQueueFactory) NewSinkTube(ctx context.Context, configMap Con
 }
 
 func NewPulsarEventQueueFactory(ctx context.Context, configMap ConfigMap) (TubeFactory, error) {
-	config := NewPulsarTubeFactoryConfig(configMap)
+	config, err := NewPulsarTubeFactoryConfig(configMap)
+	if err != nil {
+		return nil, err
+	}
 	pc, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL: config.PulsarURL,
 	})
