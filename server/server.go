@@ -22,13 +22,17 @@ import (
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs"
+	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fs/runtime/wazero"
 	"github.com/go-openapi/spec"
 	"github.com/pkg/errors"
+	"k8s.io/utils/set"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -82,6 +86,90 @@ func WithHttpTubeFactory(factory *contube.HttpTubeFactory) ServerOption {
 	})
 }
 
+func getRefFactory(m map[string]*FactoryConfig, name string, visited set.Set[string]) (string, error) {
+	if visited.Has(name) {
+		return "", errors.Errorf("circular reference of factory %s", name)
+	}
+	visited.Insert(name)
+	f, ok := m[name]
+	if !ok {
+		return "", errors.Errorf("tube factory %s not found", name)
+	}
+	if f.Ref != nil {
+		return getRefFactory(m, strings.ToLower(*f.Ref), visited)
+	}
+	return name, nil
+}
+
+func initFactories[T any](m map[string]*FactoryConfig, newFactory func(n string, c *FactoryConfig) (T, error), setup func(n string, f T)) error {
+	factoryMap := make(map[string]T)
+
+	for name := range m {
+		refName, err := getRefFactory(m, name, set.New[string]())
+		if err != nil {
+			return err
+		}
+		if _, ok := factoryMap[refName]; !ok {
+			fc, exist := m[refName]
+			if !exist {
+				return errors.Errorf("factory %s not found, which the factory %s is pointed to", refName, name)
+			}
+			f, err := newFactory(refName, fc)
+			if err != nil {
+				return err
+			}
+			factoryMap[refName] = f
+		}
+		factoryMap[name] = factoryMap[refName]
+		setup(name, factoryMap[name])
+	}
+	return nil
+}
+
+func WithConfig(config *Config) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		ln, err := net.Listen("tcp", config.ListenAddr)
+		if err != nil {
+			return nil, err
+		}
+		o.httpListener = ln
+		err = initFactories[contube.TubeFactory](config.TubeFactory, func(n string, c *FactoryConfig) (contube.TubeFactory, error) {
+			if c.Type == nil {
+				return nil, errors.Errorf("tube factory %s type is not set", n)
+			}
+			switch strings.ToLower(*c.Type) {
+			case common.PulsarTubeType:
+				return contube.NewPulsarEventQueueFactory(context.Background(), contube.ConfigMap(*c.Config))
+			case common.MemoryTubeType:
+				return contube.NewMemoryQueueFactory(context.Background()), nil
+			}
+			return nil, errors.Errorf("unsupported tube type %s", *c.Type)
+		}, func(n string, f contube.TubeFactory) {
+			o.managerOpts = append(o.managerOpts, fs.WithTubeFactory(n, f))
+		})
+		if err != nil {
+			return nil, err
+		}
+		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory,
+			func(n string, c *FactoryConfig) (api.FunctionRuntimeFactory, error) {
+				if c.Type == nil {
+					return nil, errors.Errorf("runtime factory %s type is not set", n)
+				}
+				switch strings.ToLower(*c.Type) {
+				case WASMRuntime:
+					return wazero.NewWazeroFunctionRuntimeFactory(), nil
+				}
+				return nil, errors.Errorf("unsupported runtime type %s", *c.Type)
+			}, func(n string, f api.FunctionRuntimeFactory) {
+				o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
+			})
+		if err != nil {
+			return nil, err
+		}
+		return o, nil
+	})
+}
+
 func NewServer(opts ...ServerOption) (*Server, error) {
 	options := &serverOptions{}
 	httpTubeFact := contube.NewHttpTubeFactory(context.Background())
@@ -116,36 +204,30 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}, nil
 }
 
-func NewServerWithConfig(config *common.Config) (*Server, error) {
-	ln, err := net.Listen("tcp", config.ListenAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	var tubeFactory contube.TubeFactory
-	switch config.TubeType {
-	case common.PulsarTubeType:
-		tubeFactory, err = contube.NewPulsarEventQueueFactory(context.Background(), (&contube.PulsarTubeFactoryConfig{
-			PulsarURL: config.PulsarURL,
-		}).ToConfigMap())
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create default pulsar tube factory")
-		}
-	case common.MemoryTubeType:
-		tubeFactory = contube.NewMemoryQueueFactory(context.Background())
-	}
-	managerOpts := []fs.ManagerOption{
-		fs.WithDefaultTubeFactory(tubeFactory),
-	}
-
-	return NewServer(
-		WithHttpListener(ln),
-		WithFunctionManager(managerOpts...),
-	)
-}
-
 func NewDefaultServer() (*Server, error) {
-	return NewServerWithConfig(LoadConfigFromEnv())
+	defaultConfig := &Config{
+		ListenAddr: ":7300",
+		TubeFactory: map[string]*FactoryConfig{
+			"pulsar": {
+				Type: common.OptionalStr(common.PulsarTubeType),
+				Config: &common.ConfigMap{
+					contube.PulsarURLKey: "pulsar://localhost:6650",
+				},
+			},
+			"default": {
+				Ref: common.OptionalStr("pulsar"),
+			},
+		},
+		RuntimeFactory: map[string]*FactoryConfig{
+			"wasm": {
+				Type: common.OptionalStr(WASMRuntime),
+			},
+			"default": {
+				Ref: common.OptionalStr("wasm"),
+			},
+		},
+	}
+	return NewServer(WithConfig(defaultConfig))
 }
 
 func (s *Server) Run(context context.Context) {

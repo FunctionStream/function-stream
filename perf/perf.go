@@ -33,7 +33,7 @@ import (
 	"time"
 )
 
-type TubeBuilder func(ctx context.Context, config *common.Config) (contube.TubeFactory, error)
+type TubeBuilder func(ctx context.Context) (contube.TubeFactory, error)
 
 type Config struct {
 	PulsarURL    string
@@ -58,7 +58,7 @@ func New(config *Config) Perf {
 		config: config,
 	}
 	if config.QueueBuilder == nil {
-		p.tubeBuilder = func(ctx context.Context, c *common.Config) (contube.TubeFactory, error) {
+		p.tubeBuilder = func(ctx context.Context) (contube.TubeFactory, error) {
 			return contube.NewPulsarEventQueueFactory(ctx, (&contube.PulsarTubeFactoryConfig{
 				PulsarURL: config.PulsarURL,
 			}).ToConfigMap())
@@ -98,11 +98,7 @@ func (p *perf) Run(ctx context.Context) {
 	}
 	f.Name = name
 
-	config := &common.Config{
-		PulsarURL: p.config.PulsarURL,
-	}
-
-	queueFactory, err := p.tubeBuilder(ctx, config)
+	queueFactory, err := p.tubeBuilder(ctx)
 	if err != nil {
 		slog.Error(
 			"Failed to create Record Queue Factory",
