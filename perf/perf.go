@@ -124,7 +124,7 @@ func (p *perf) Run(ctx context.Context) {
 	}).ToConfigMap())
 	if err != nil {
 		slog.Error(
-			"Failed to create Source Perf Channel",
+			"Failed to create Sources Perf Channel",
 			slog.Any("error", err),
 		)
 		os.Exit(1)

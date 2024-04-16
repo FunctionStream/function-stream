@@ -90,7 +90,6 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 		channels[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s)}
 	}
 	channels[len(sources)] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(instance.ctx.Done())}
-	reflect.Select(channels)
 
 	for len(channels) > 0 {
 		// Use reflect.Select to select a channel from the slice

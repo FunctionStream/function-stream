@@ -54,6 +54,8 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	inputTopic := "input"
+	outputTopic := "output"
 	f := &model.Function{
 		Name: "test",
 		Runtime: &model.RuntimeConfig{
@@ -62,8 +64,19 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 				"addr": addr,
 			},
 		},
-		Inputs:   []string{"input"},
-		Output:   "output",
+		Sources: []*model.TubeConfig{
+			{
+				Config: (&contube.SourceQueueConfig{
+					Topics:  []string{inputTopic},
+					SubName: "test",
+				}).ToConfigMap(),
+			},
+		},
+		Sink: &model.TubeConfig{
+			Config: (&contube.SinkQueueConfig{
+				Topic: outputTopic,
+			}).ToConfigMap(),
+		},
 		Replicas: 1,
 	}
 
@@ -76,11 +89,11 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 	assert.Nil(t, err)
 
 	event := contube.NewRecordImpl([]byte("hello"), func() {})
-	err = fm.ProduceEvent(f.Inputs[0], event)
+	err = fm.ProduceEvent(inputTopic, event)
 	if err != nil {
 		t.Fatal(err)
 	}
-	output, err := fm.ConsumeEvent(f.Output)
+	output, err := fm.ConsumeEvent(outputTopic)
 	if err != nil {
 		t.Fatal(err)
 	}
