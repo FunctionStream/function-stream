@@ -29,10 +29,8 @@ func TestFunctionSerde(t *testing.T) {
 	f := Function{
 		Name:     "TestFunction",
 		Runtime:  &RuntimeConfig{Type: common.OptionalStr("runtime"), Config: map[string]interface{}{"key": "value"}},
-		Source:   &TubeConfig{Type: common.OptionalStr("source"), Config: map[string]interface{}{"key": "value"}},
+		Sources:  []*TubeConfig{{Type: common.OptionalStr("source"), Config: map[string]interface{}{"key": "value"}}},
 		Sink:     &TubeConfig{Type: common.OptionalStr("sink"), Config: map[string]interface{}{"key": "value"}},
-		Inputs:   []string{"input1", "input2"},
-		Output:   "output",
 		Config:   map[string]string{"key": "value"},
 		Replicas: 2,
 	}
@@ -79,10 +77,8 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 	f := Function{
 		Name:     "TestFunction",
 		Runtime:  nil,
-		Source:   nil,
+		Sources:  nil,
 		Sink:     nil,
-		Inputs:   []string{"input1", "input2"},
-		Output:   "output",
 		Config:   map[string]string{"key": "value"},
 		Replicas: 2,
 	}
@@ -113,6 +109,8 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 	}
 
 	fmt.Println(string(data))
+
+	f.Sources = []*TubeConfig{} // The nil would be expected to be converted to a zero-length array for the YAML serialization
 
 	// YAML Deserialization
 	err = yaml.Unmarshal(data, &f2)

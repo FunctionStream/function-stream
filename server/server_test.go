@@ -129,12 +129,12 @@ func TestHttpTube(t *testing.T) {
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Source: &model.TubeConfig{
+		Sources: []*model.TubeConfig{{
 			Type: common.OptionalStr(common.HttpTubeType),
 			Config: map[string]interface{}{
 				contube.EndpointKey: endpoint,
 			},
-		},
+		}},
 		Inputs:   []string{},
 		Output:   "output",
 		Name:     "test-func",

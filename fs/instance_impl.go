@@ -18,26 +18,24 @@ package fs
 
 import (
 	"context"
-	"fmt"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
 	"log/slog"
+	"reflect"
 )
 
 type FunctionInstanceImpl struct {
-	ctx           context.Context
-	funcCtx       api.FunctionContext
-	cancelFunc    context.CancelFunc
-	definition    *model.Function
-	sourceFactory contube.SourceTubeFactory
-	sinkFactory   contube.SinkTubeFactory
-	readyCh       chan error
-	index         int32
-	parentLog     *slog.Logger
-	log           *slog.Logger
+	ctx        context.Context
+	funcCtx    api.FunctionContext
+	cancelFunc context.CancelFunc
+	definition *model.Function
+	readyCh    chan error
+	index      int32
+	parentLog  *slog.Logger
+	log        *slog.Logger
 }
 
 type CtxKey string
@@ -55,49 +53,29 @@ func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
 	return &DefaultInstanceFactory{}
 }
 
-func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, funcCtx api.FunctionContext, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, index int32, logger *slog.Logger) api.FunctionInstance {
+func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, funcCtx api.FunctionContext, index int32, logger *slog.Logger) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, CtxKeyFunctionName, definition.Name)
 	ctx = context.WithValue(ctx, CtxKeyInstanceIndex, index)
 	return &FunctionInstanceImpl{
-		ctx:           ctx,
-		funcCtx:       funcCtx,
-		cancelFunc:    cancelFunc,
-		definition:    definition,
-		sourceFactory: sourceFactory,
-		sinkFactory:   sinkFactory,
-		readyCh:       make(chan error),
-		index:         index,
-		parentLog:     logger,
-		log:           logger.With(slog.String("component", "function-instance")),
+		ctx:        ctx,
+		funcCtx:    funcCtx,
+		cancelFunc: cancelFunc,
+		definition: definition,
+		readyCh:    make(chan error),
+		index:      index,
+		parentLog:  logger,
+		log:        logger.With(slog.String("component", "function-instance")),
 	}
 }
 
-func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFactory) {
+func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFactory, sources []<-chan contube.Record, sink chan<- contube.Record) {
 	runtime, err := runtimeFactory.NewFunctionRuntime(instance)
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating runtime")
 		return
 	}
-	getTubeConfig := func(config contube.ConfigMap, tubeConfig *model.TubeConfig) contube.ConfigMap {
-		if tubeConfig != nil && tubeConfig.Config != nil {
-			return contube.MergeConfig(config, tubeConfig.Config)
-		}
-		return config
-	}
-	sourceConfig := (&contube.SourceQueueConfig{Topics: instance.definition.Inputs, SubName: fmt.Sprintf("function-stream-%s", instance.definition.Name)}).ToConfigMap()
-	sourceChan, err := instance.sourceFactory.NewSourceTube(instance.ctx, getTubeConfig(sourceConfig, instance.definition.Source))
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error creating source event queue")
-		return
-	}
-	sinkConfig := (&contube.SinkQueueConfig{Topic: instance.definition.Output}).ToConfigMap()
-	sinkChan, err := instance.sinkFactory.NewSinkTube(instance.ctx, getTubeConfig(sinkConfig, instance.definition.Sink))
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error creating sink event queue")
-		return
-	}
-	defer close(sinkChan)
+	defer close(sink)
 	err = <-runtime.WaitForReady()
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error waiting for runtime to be ready")
@@ -107,26 +85,54 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 	close(instance.readyCh)
 	defer instance.log.InfoContext(instance.ctx, "function instance has been stopped")
 	logCounter := common.LogCounter()
-	for e := range sourceChan {
-		instance.log.DebugContext(instance.ctx, "calling process function", slog.Any("count", logCounter))
-		output, err := runtime.Call(e)
+	channels := make([]reflect.SelectCase, len(sources)+1)
+	for i, s := range sources {
+		channels[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s)}
+	}
+	channels[len(sources)] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(instance.ctx.Done())}
+	reflect.Select(channels)
+
+	for len(channels) > 0 {
+		// Use reflect.Select to select a channel from the slice
+		chosen, value, ok := reflect.Select(channels)
+		if !ok {
+			// The selected channel has been closed, remove it from the slice
+			channels = append(channels[:chosen], channels[chosen+1:]...)
+			continue
+		}
+
+		// Convert the selected value to the type Record
+		record := value.Interface().(contube.Record)
+		instance.log.DebugContext(instance.ctx, "Calling process function", slog.Any("count", logCounter))
+
+		// Call the processing function
+		output, err := runtime.Call(record)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return
 			}
+			// Log the error if there's an issue with the processing function
 			instance.log.ErrorContext(instance.ctx, "Error calling process function", slog.Any("error", err))
 			return
 		}
+
+		// If the output is nil, continue with the next iteration
 		if output == nil {
-			instance.log.DebugContext(instance.ctx, "output is nil")
+			instance.log.DebugContext(instance.ctx, "Output is nil")
 			continue
 		}
+
+		// Try to send the output to the sink, but also listen to the context's Done channel
 		select {
-		case sinkChan <- output:
+		case sink <- output:
 		case <-instance.ctx.Done():
 			return
 		}
 
+		// If the selected channel is the context's Done channel, exit the loop
+		if chosen == len(channels)-1 {
+			return
+		}
 	}
 }
 

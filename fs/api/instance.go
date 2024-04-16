@@ -29,11 +29,11 @@ type FunctionInstance interface {
 	Definition() *model.Function
 	Index() int32
 	Stop()
-	Run(factory FunctionRuntimeFactory)
+	Run(factory FunctionRuntimeFactory, sources []<-chan contube.Record, sink chan<- contube.Record)
 	WaitForReady() <-chan error
 	Logger() *slog.Logger
 }
 
 type FunctionInstanceFactory interface {
-	NewFunctionInstance(f *model.Function, funcCtx FunctionContext, sourceFactory contube.SourceTubeFactory, sinkFactory contube.SinkTubeFactory, i int32, logger *slog.Logger) FunctionInstance
+	NewFunctionInstance(f *model.Function, funcCtx FunctionContext, i int32, logger *slog.Logger) FunctionInstance
 }

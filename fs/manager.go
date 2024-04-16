@@ -131,7 +131,7 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 	}, nil
 }
 
-func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) {
+func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) { // TODO: Change input parameter to Type
 	get := func(t string) (contube.TubeFactory, error) {
 		factory, exist := fm.options.tubeFactoryMap[t]
 		if !exist {
@@ -183,17 +183,9 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	}
 	funcCtx := fm.createFuncCtx(f)
 	for i := int32(0); i < f.Replicas; i++ {
-		sourceFactory, err := fm.getTubeFactory(f.Source)
-		if err != nil {
-			return err
-		}
-		sinkFactory, err := fm.getTubeFactory(f.Sink)
-		if err != nil {
-			return err
-		}
 		runtimeType := fm.getRuntimeType(f.Runtime)
 
-		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, sourceFactory, sinkFactory, i, slog.With(
+		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, i, slog.With(
 			slog.String("name", f.Name),
 			slog.Int("index", int(i)),
 			slog.String("runtime", runtimeType),
@@ -205,7 +197,28 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		if err != nil {
 			return err
 		}
-		go instance.Run(runtimeFactory)
+		sources := []<-chan contube.Record{}
+		for _, t := range f.Sources {
+			sourceFactory, err := fm.getTubeFactory(t)
+			if err != nil {
+				return nil
+			}
+			sourceChan, err := sourceFactory.NewSourceTube(instance.Context(), t.Config)
+			if err != nil {
+				return errors.Wrap(err, "Error creating source event queue")
+			}
+			sources = append(sources, sourceChan)
+		}
+		sinkFactory, err := fm.getTubeFactory(f.Sink)
+		if err != nil {
+			return nil
+		}
+		sink, err := sinkFactory.NewSinkTube(instance.Context(), f.Sink.Config)
+		if err != nil {
+			return errors.Wrap(err, "Error creating sink event queue")
+		}
+
+		go instance.Run(runtimeFactory, sources, sink)
 		select {
 		case err := <-instance.WaitForReady():
 			if err != nil {
