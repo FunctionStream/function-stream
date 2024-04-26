@@ -18,6 +18,7 @@ package contube
 
 import (
 	"context"
+	"fmt"
 	"github.com/pkg/errors"
 )
 
@@ -45,20 +46,33 @@ const (
 	SubNameKey   = "subName"
 )
 
-func NewSourceQueueConfig(config ConfigMap) *SourceQueueConfig {
+func NewSourceQueueConfig(config ConfigMap) (*SourceQueueConfig, error) {
 	var result SourceQueueConfig
-	if topics, ok := config[TopicListKey].([]string); ok {
-		result.Topics = topics
+	// The list value type should be considered as interface{}
+	if topics, ok := config[TopicListKey].([]interface{}); ok {
+		var topicStrList []string
+		for _, v := range topics {
+			if topicStr, ok := v.(string); ok {
+				topicStrList = append(topicStrList, v.(string))
+			} else {
+				return nil, fmt.Errorf("invalid topic in the %s: %s", TopicListKey, topicStr)
+			}
+		}
+		result.Topics = topicStrList
 	}
 	if subName, ok := config[SubNameKey].(string); ok {
 		result.SubName = subName
 	}
-	return &result
+	return &result, nil
 }
 
 func (c *SourceQueueConfig) ToConfigMap() ConfigMap {
+	topicListInterface := make([]interface{}, len(c.Topics))
+	for i, v := range c.Topics {
+		topicListInterface[i] = v
+	}
 	return ConfigMap{
-		TopicListKey: c.Topics,
+		TopicListKey: topicListInterface,
 		SubNameKey:   c.SubName,
 	}
 }

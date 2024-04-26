@@ -78,7 +78,10 @@ func (f *MemoryQueueFactory) release(name string) {
 }
 
 func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap ConfigMap) (<-chan Record, error) {
-	config := NewSourceQueueConfig(configMap)
+	config, err := NewSourceQueueConfig(configMap)
+	if err != nil {
+		return nil, err
+	}
 	result := make(chan Record)
 
 	var wg sync.WaitGroup

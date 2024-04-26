@@ -20,11 +20,12 @@ import (
 	"context"
 	"github.com/apache/pulsar-client-go/pulsaradmin"
 	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
+	"github.com/functionstream/function-stream/admin/client"
+	adminutils "github.com/functionstream/function-stream/admin/utils"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/perf"
-	"github.com/functionstream/function-stream/restclient"
 	"github.com/functionstream/function-stream/server"
 	"math/rand"
 	"os"
@@ -70,14 +71,14 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 	pConfig := &perf.Config{
 		PulsarURL:   "pulsar://localhost:6650",
 		RequestRate: 200000.0,
-		Func: &restclient.ModelFunction{
-			Runtime: restclient.ModelRuntimeConfig{
+		Func: &adminclient.ModelFunction{
+			Runtime: adminclient.ModelRuntimeConfig{
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 				},
 			},
-			Inputs:   []string{inputTopic},
-			Output:   outputTopic,
+			Source:   adminutils.MakeQueueSourceTubeConfig("fs", inputTopic),
+			Sink:     adminutils.MakeQueueSinkTubeConfig(outputTopic),
 			Replicas: replicas,
 		},
 	}
@@ -127,14 +128,14 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	pConfig := &perf.Config{
 		RequestRate: 200000.0,
-		Func: &restclient.ModelFunction{
-			Runtime: restclient.ModelRuntimeConfig{
+		Func: &adminclient.ModelFunction{
+			Runtime: adminclient.ModelRuntimeConfig{
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 				},
 			},
-			Inputs:   []string{inputTopic},
-			Output:   outputTopic,
+			Source:   adminutils.MakeQueueSourceTubeConfig("fs", inputTopic),
+			Sink:     adminutils.MakeQueueSinkTubeConfig(outputTopic),
 			Replicas: replicas,
 		},
 		QueueBuilder: func(ctx context.Context) (contube.TubeFactory, error) {

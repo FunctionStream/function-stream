@@ -21,9 +21,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/bmizerany/perks/quantile"
+	"github.com/functionstream/function-stream/admin/client"
+	"github.com/functionstream/function-stream/admin/utils"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/restclient"
 	"golang.org/x/time/rate"
 	"log/slog"
 	"math/rand"
@@ -38,7 +39,7 @@ type TubeBuilder func(ctx context.Context) (contube.TubeFactory, error)
 type Config struct {
 	PulsarURL    string
 	RequestRate  float64
-	Func         *restclient.ModelFunction
+	Func         *adminclient.ModelFunction
 	QueueBuilder TubeBuilder
 }
 
@@ -82,18 +83,18 @@ func (p *perf) Run(ctx context.Context) {
 	)
 
 	name := "perf-" + strconv.Itoa(rand.Int())
-	var f restclient.ModelFunction
+	var f adminclient.ModelFunction
 	if p.config.Func != nil {
 		f = *p.config.Func
 	} else {
-		f = restclient.ModelFunction{
-			Runtime: restclient.ModelRuntimeConfig{
+		f = adminclient.ModelFunction{
+			Runtime: adminclient.ModelRuntimeConfig{
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "./bin/example_basic.wasm",
 				},
 			},
-			Inputs: []string{"test-input-" + strconv.Itoa(rand.Int())},
-			Output: "test-output-" + strconv.Itoa(rand.Int()),
+			Source: utils.MakeQueueSourceTubeConfig("test-sub", "test-input-"+strconv.Itoa(rand.Int())),
+			Sink:   utils.MakeQueueSinkTubeConfig("test-output-" + strconv.Itoa(rand.Int())),
 		}
 	}
 	f.Name = name
@@ -107,8 +108,17 @@ func (p *perf) Run(ctx context.Context) {
 		os.Exit(1)
 	}
 
+	inputTopic, err := utils.GetInputTopics(&f)
+	if err != nil {
+		slog.Error(
+			"Failed to get input topics",
+			slog.Any("error", err),
+		)
+		os.Exit(1)
+
+	}
 	p.input, err = queueFactory.NewSinkTube(ctx, (&contube.SinkQueueConfig{
-		Topic: f.Inputs[0],
+		Topic: inputTopic[0],
 	}).ToConfigMap())
 	if err != nil {
 		slog.Error(
@@ -118,8 +128,16 @@ func (p *perf) Run(ctx context.Context) {
 		os.Exit(1)
 	}
 
+	outputTopic, err := utils.GetOutputTopic(&f)
+	if err != nil {
+		slog.Error(
+			"Failed to get output topic",
+			slog.Any("error", err),
+		)
+		os.Exit(1)
+	}
 	p.output, err = queueFactory.NewSourceTube(ctx, (&contube.SourceQueueConfig{
-		Topics:  []string{f.Output},
+		Topics:  []string{outputTopic},
 		SubName: "perf",
 	}).ToConfigMap())
 	if err != nil {
@@ -130,8 +148,8 @@ func (p *perf) Run(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	cfg := restclient.NewConfiguration()
-	cli := restclient.NewAPIClient(cfg)
+	cfg := adminclient.NewConfiguration()
+	cli := adminclient.NewAPIClient(cfg)
 
 	res, err := cli.FunctionAPI.CreateFunction(context.Background()).Body(f).Execute()
 	if err != nil {

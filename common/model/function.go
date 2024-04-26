@@ -36,8 +36,6 @@ type Function struct {
 	Runtime  *RuntimeConfig    `json:"runtime"`
 	Sources  []*TubeConfig     `json:"source,omitempty"`
 	Sink     *TubeConfig       `json:"sink,omitempty"`
-	Inputs   []string          `json:"inputs"` // Deprecate
-	Output   string            `json:"output"` // Deprecate
 	Config   map[string]string `json:"config,omitempty""`
 	Replicas int32             `json:"replicas"`
 }

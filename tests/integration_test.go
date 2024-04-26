@@ -20,8 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/functionstream/function-stream/admin/client"
+	"github.com/functionstream/function-stream/admin/utils"
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/restclient"
 	"github.com/functionstream/function-stream/server"
 	"io"
 	"math/rand"
@@ -46,8 +47,8 @@ func init() {
 
 func TestBasicFunction(t *testing.T) {
 
-	cfg := restclient.NewConfiguration()
-	cli := restclient.NewAPIClient(cfg)
+	cfg := adminclient.NewConfiguration()
+	cli := adminclient.NewAPIClient(cfg)
 
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL: "pulsar://localhost:6650",
@@ -57,27 +58,36 @@ func TestBasicFunction(t *testing.T) {
 	}
 
 	name := "func-" + strconv.Itoa(rand.Int())
-	f := restclient.ModelFunction{
+	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
+	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
+	f := adminclient.ModelFunction{
 		Name: name,
-		Runtime: restclient.ModelRuntimeConfig{
+		Runtime: adminclient.ModelRuntimeConfig{
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Inputs:   []string{"test-input-" + strconv.Itoa(rand.Int())},
-		Output:   "test-output-" + strconv.Itoa(rand.Int()),
+		Source: []adminclient.ModelTubeConfig{
+			{
+				Config: map[string]interface{}{
+					"topicList": []string{inputTopic},
+					"subName":   "fs",
+				},
+			},
+		},
+		Sink:     utils.MakeQueueSinkTubeConfig(outputTopic),
 		Replicas: 1,
 	}
 
 	producer, err := client.CreateProducer(pulsar.ProducerOptions{
-		Topic: f.Inputs[0],
+		Topic: inputTopic,
 	})
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	consumer, err := client.Subscribe(pulsar.ConsumerOptions{
-		Topic:            f.Output,
+		Topic:            outputTopic,
 		SubscriptionName: "test-sub",
 	})
 	if err != nil {
@@ -85,12 +95,12 @@ func TestBasicFunction(t *testing.T) {
 	}
 
 	res, err := cli.FunctionAPI.CreateFunction(context.Background()).Body(f).Execute()
-	if err != nil {
-		t.Fatalf("failed to create function: %v", err)
-		return
+	if err != nil && res == nil {
+		t.Errorf("failed to create function: %v", err)
 	}
 	if res.StatusCode != 200 {
-		t.Fatalf("expected 200, got %d", res.StatusCode)
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("expected 200, got %d: %s", res.StatusCode, body)
 		return
 	}
 

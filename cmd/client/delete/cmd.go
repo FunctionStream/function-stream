@@ -17,8 +17,8 @@
 package del
 
 import (
+	"github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/cmd/client/common"
-	"github.com/functionstream/function-stream/restclient"
 	"github.com/spf13/cobra"
 )
 
@@ -44,11 +44,11 @@ func init() {
 }
 
 func exec(_ *cobra.Command, _ []string) {
-	cfg := restclient.NewConfiguration()
-	cfg.Servers = []restclient.ServerConfiguration{{
+	cfg := adminclient.NewConfiguration()
+	cfg.Servers = []adminclient.ServerConfiguration{{
 		URL: common.Config.ServiceAddr,
 	}}
-	_ = restclient.NewAPIClient(cfg)
+	_ = adminclient.NewAPIClient(cfg)
 
 	//res, err := cli.DefaultAPI.ApiV1FunctionFunctionNameDelete(context.Background(), config.name).Execute()
 	//if err != nil {

@@ -19,12 +19,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/restclient"
 	"github.com/functionstream/function-stream/tests"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
@@ -167,9 +167,9 @@ func TestHttpTube(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := restclient.NewConfiguration()
+	cfg := adminclient.NewConfiguration()
 	cfg.Host = httpAddr
-	cli := restclient.NewAPIClient(cfg)
+	cli := adminclient.NewAPIClient(cfg)
 	_, err = cli.HttpTubeAPI.TriggerHttpTubeEndpoint(ctx, endpoint).Body(string(jsonBytes)).Execute()
 	assert.Nil(t, err)
 
@@ -256,9 +256,9 @@ func TestStatefulFunction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := restclient.NewConfiguration()
+	cfg := adminclient.NewConfiguration()
 	cfg.Host = httpAddr
-	cli := restclient.NewAPIClient(cfg)
+	cli := adminclient.NewAPIClient(cfg)
 
 	_, err = cli.StateAPI.SetState(ctx, "key").Body("hello").Execute()
 	assert.Nil(t, err)
