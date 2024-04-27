@@ -19,9 +19,10 @@ package create
 import (
 	"context"
 	"fmt"
+	"github.com/functionstream/function-stream/admin/client"
+	"github.com/functionstream/function-stream/admin/utils"
 	"github.com/functionstream/function-stream/cmd/client/common"
 	fs_cmmon "github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/restclient"
 	"github.com/spf13/cobra"
 	"io"
 	"os"
@@ -58,18 +59,18 @@ func init() {
 }
 
 func exec(_ *cobra.Command, _ []string) {
-	cfg := restclient.NewConfiguration()
-	cfg.Servers = []restclient.ServerConfiguration{{
+	cfg := adminclient.NewConfiguration()
+	cfg.Servers = []adminclient.ServerConfiguration{{
 		URL: common.Config.ServiceAddr,
 	}}
-	cli := restclient.NewAPIClient(cfg)
-	f := restclient.ModelFunction{
+	cli := adminclient.NewAPIClient(cfg)
+	f := adminclient.ModelFunction{
 		Name: config.name,
-		Runtime: restclient.ModelRuntimeConfig{Config: map[string]interface{}{
+		Runtime: adminclient.ModelRuntimeConfig{Config: map[string]interface{}{
 			fs_cmmon.RuntimeArchiveConfigKey: config.archive,
 		}},
-		Inputs:   config.inputs,
-		Output:   config.output,
+		Source:   utils.MakeQueueSourceTubeConfig("fs", config.inputs...),
+		Sink:     utils.MakeQueueSinkTubeConfig(config.output),
 		Replicas: config.replica,
 	}
 

@@ -34,16 +34,18 @@ bench_race:
 get-apidocs:
 	curl -o apidocs.json http://localhost:7300/apidocs
 
+ADMIN_CLIENT_DIR := admin/client
+FILES_TO_REMOVE := go.mod go.sum .travis.yml .openapi-generator-ignore git_push.sh .openapi-generator api test
+
 gen-rest-client:
-	rm -r restclient
-	mkdir -p restclient
-	openapi-generator generate -i ./apidocs.json -g go -o restclient \
+	-rm -r $(ADMIN_CLIENT_DIR)
+	mkdir -p $(ADMIN_CLIENT_DIR)
+	openapi-generator generate -i ./apidocs.json -g go -o $(ADMIN_CLIENT_DIR) \
 		--git-user-id functionstream \
-		--git-repo-id functionstream/restclient \
-		--package-name restclient \
+		--git-repo-id functionstream/$(ADMIN_CLIENT_DIR) \
+		--package-name adminclient \
 		--global-property apiDocs,apis,models,supportingFiles
-	rm -r restclient/go.mod restclient/go.sum restclient/.travis.yml restclient/.openapi-generator-ignore \
-		restclient/git_push.sh restclient/.openapi-generator restclient/api restclient/test
+	rm -r $(addprefix $(ADMIN_CLIENT_DIR)/, $(FILES_TO_REMOVE))
 
 proto:
 	for PROTO_FILE in $$(find . -name '*.proto'); do \

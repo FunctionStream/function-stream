@@ -19,12 +19,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/restclient"
 	"github.com/functionstream/function-stream/tests"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
@@ -76,8 +76,19 @@ func TestStandaloneBasicFunction(t *testing.T) {
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Inputs:   []string{inputTopic},
-		Output:   outputTopic,
+		Sources: []*model.TubeConfig{
+			{
+				Config: (&contube.SourceQueueConfig{
+					Topics:  []string{inputTopic},
+					SubName: "test",
+				}).ToConfigMap(),
+			},
+		},
+		Sink: &model.TubeConfig{
+			Config: (&contube.SinkQueueConfig{
+				Topic: outputTopic,
+			}).ToConfigMap(),
+		},
 		Name:     "test-func",
 		Replicas: 1,
 	}
@@ -129,14 +140,17 @@ func TestHttpTube(t *testing.T) {
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Source: &model.TubeConfig{
+		Sources: []*model.TubeConfig{{
 			Type: common.OptionalStr(common.HttpTubeType),
 			Config: map[string]interface{}{
 				contube.EndpointKey: endpoint,
 			},
+		}},
+		Sink: &model.TubeConfig{
+			Config: (&contube.SinkQueueConfig{
+				Topic: "output",
+			}).ToConfigMap(),
 		},
-		Inputs:   []string{},
-		Output:   "output",
 		Name:     "test-func",
 		Replicas: 1,
 	}
@@ -153,13 +167,13 @@ func TestHttpTube(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := restclient.NewConfiguration()
+	cfg := adminclient.NewConfiguration()
 	cfg.Host = httpAddr
-	cli := restclient.NewAPIClient(cfg)
+	cli := adminclient.NewAPIClient(cfg)
 	_, err = cli.HttpTubeAPI.TriggerHttpTubeEndpoint(ctx, endpoint).Body(string(jsonBytes)).Execute()
 	assert.Nil(t, err)
 
-	event, err := s.Manager.ConsumeEvent(funcConf.Output)
+	event, err := s.Manager.ConsumeEvent("output")
 	if err != nil {
 		t.Error(err)
 		return
@@ -218,10 +232,23 @@ func TestStatefulFunction(t *testing.T) {
 	defer cancel()
 	s, httpAddr := startStandaloneSvr(t, ctx, WithFunctionManager(fs.WithDefaultRuntimeFactory(&MockRuntimeFactory{})))
 
+	input := "input"
+	output := "output"
 	funcConf := &model.Function{
-		Name:     "test-func",
-		Inputs:   []string{"input"},
-		Output:   "output",
+		Name: "test-func",
+		Sources: []*model.TubeConfig{
+			{
+				Config: (&contube.SourceQueueConfig{
+					Topics:  []string{input},
+					SubName: "test",
+				}).ToConfigMap(),
+			},
+		},
+		Sink: &model.TubeConfig{
+			Config: (&contube.SinkQueueConfig{
+				Topic: "output",
+			}).ToConfigMap(),
+		},
 		Replicas: 1,
 	}
 	err := s.Manager.StartFunction(funcConf)
@@ -229,18 +256,18 @@ func TestStatefulFunction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := restclient.NewConfiguration()
+	cfg := adminclient.NewConfiguration()
 	cfg.Host = httpAddr
-	cli := restclient.NewAPIClient(cfg)
+	cli := adminclient.NewAPIClient(cfg)
 
 	_, err = cli.StateAPI.SetState(ctx, "key").Body("hello").Execute()
 	assert.Nil(t, err)
 
-	err = s.Manager.ProduceEvent(funcConf.Inputs[0], contube.NewRecordImpl(nil, func() {
+	err = s.Manager.ProduceEvent(input, contube.NewRecordImpl(nil, func() {
 	}))
 	assert.Nil(t, err)
 
-	_, err = s.Manager.ConsumeEvent(funcConf.Output)
+	_, err = s.Manager.ConsumeEvent(output)
 	assert.Nil(t, err)
 
 	result, _, err := cli.StateAPI.GetState(ctx, "key").Execute()

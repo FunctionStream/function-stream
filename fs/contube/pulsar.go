@@ -54,7 +54,10 @@ type PulsarEventQueueFactory struct {
 }
 
 func (f *PulsarEventQueueFactory) NewSourceTube(ctx context.Context, configMap ConfigMap) (<-chan Record, error) {
-	config := NewSourceQueueConfig(configMap)
+	config, err := NewSourceQueueConfig(configMap)
+	if err != nil {
+		return nil, err
+	}
 	return f.newSourceChan(ctx, config)
 }
 

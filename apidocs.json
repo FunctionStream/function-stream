@@ -287,8 +287,6 @@
    "required": [
     "name",
     "runtime",
-    "inputs",
-    "output",
     "replicas"
    ],
    "properties": {
@@ -298,16 +296,7 @@
       "type": "string"
      }
     },
-    "inputs": {
-     "type": "array",
-     "items": {
-      "type": "string"
-     }
-    },
     "name": {
-     "type": "string"
-    },
-    "output": {
      "type": "string"
     },
     "replicas": {
@@ -321,7 +310,10 @@
      "$ref": "#/definitions/model.TubeConfig"
     },
     "source": {
-     "$ref": "#/definitions/model.TubeConfig"
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/model.TubeConfig"
+     }
     }
    }
   },

@@ -19,8 +19,8 @@ package list
 import (
 	"context"
 	"fmt"
+	"github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/cmd/client/common"
-	"github.com/functionstream/function-stream/restclient"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -34,11 +34,11 @@ var Cmd = &cobra.Command{
 }
 
 func exec(_ *cobra.Command, _ []string) {
-	cfg := restclient.NewConfiguration()
-	cfg.Servers = []restclient.ServerConfiguration{{
+	cfg := adminclient.NewConfiguration()
+	cfg.Servers = []adminclient.ServerConfiguration{{
 		URL: common.Config.ServiceAddr,
 	}}
-	cli := restclient.NewAPIClient(cfg)
+	cli := adminclient.NewAPIClient(cfg)
 
 	list, res, err := cli.FunctionAPI.GetAllFunctions(context.Background()).Execute()
 	if err != nil {

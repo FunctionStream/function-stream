@@ -5,19 +5,17 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Config** | Pointer to **map[string]string** |  | [optional] 
-**Inputs** | **[]string** |  | 
 **Name** | **string** |  | 
-**Output** | **string** |  | 
 **Replicas** | **int32** |  | 
 **Runtime** | [**ModelRuntimeConfig**](ModelRuntimeConfig.md) |  | 
 **Sink** | Pointer to [**ModelTubeConfig**](ModelTubeConfig.md) |  | [optional] 
-**Source** | Pointer to [**ModelTubeConfig**](ModelTubeConfig.md) |  | [optional] 
+**Source** | Pointer to [**[]ModelTubeConfig**](ModelTubeConfig.md) |  | [optional] 
 
 ## Methods
 
 ### NewModelFunction
 
-`func NewModelFunction(inputs []string, name string, output string, replicas int32, runtime ModelRuntimeConfig, ) *ModelFunction`
+`func NewModelFunction(name string, replicas int32, runtime ModelRuntimeConfig, ) *ModelFunction`
 
 NewModelFunction instantiates a new ModelFunction object
 This constructor will assign default values to properties that have it defined,
@@ -57,26 +55,6 @@ SetConfig sets Config field to given value.
 
 HasConfig returns a boolean if a field has been set.
 
-### GetInputs
-
-`func (o *ModelFunction) GetInputs() []string`
-
-GetInputs returns the Inputs field if non-nil, zero value otherwise.
-
-### GetInputsOk
-
-`func (o *ModelFunction) GetInputsOk() (*[]string, bool)`
-
-GetInputsOk returns a tuple with the Inputs field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetInputs
-
-`func (o *ModelFunction) SetInputs(v []string)`
-
-SetInputs sets Inputs field to given value.
-
-
 ### GetName
 
 `func (o *ModelFunction) GetName() string`
@@ -95,26 +73,6 @@ and a boolean to check if the value has been set.
 `func (o *ModelFunction) SetName(v string)`
 
 SetName sets Name field to given value.
-
-
-### GetOutput
-
-`func (o *ModelFunction) GetOutput() string`
-
-GetOutput returns the Output field if non-nil, zero value otherwise.
-
-### GetOutputOk
-
-`func (o *ModelFunction) GetOutputOk() (*string, bool)`
-
-GetOutputOk returns a tuple with the Output field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetOutput
-
-`func (o *ModelFunction) SetOutput(v string)`
-
-SetOutput sets Output field to given value.
 
 
 ### GetReplicas
@@ -184,20 +142,20 @@ HasSink returns a boolean if a field has been set.
 
 ### GetSource
 
-`func (o *ModelFunction) GetSource() ModelTubeConfig`
+`func (o *ModelFunction) GetSource() []ModelTubeConfig`
 
 GetSource returns the Source field if non-nil, zero value otherwise.
 
 ### GetSourceOk
 
-`func (o *ModelFunction) GetSourceOk() (*ModelTubeConfig, bool)`
+`func (o *ModelFunction) GetSourceOk() (*[]ModelTubeConfig, bool)`
 
 GetSourceOk returns a tuple with the Source field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetSource
 
-`func (o *ModelFunction) SetSource(v ModelTubeConfig)`
+`func (o *ModelFunction) SetSource(v []ModelTubeConfig)`
 
 SetSource sets Source field to given value.
 

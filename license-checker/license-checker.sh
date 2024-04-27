@@ -24,10 +24,10 @@ if [ ! -f "$LICENSE_CHECKER" ]; then
   export BINDIR=bin && curl -s https://raw.githubusercontent.com/lluissm/license-header-checker/master/install.sh | bash
 fi
 
-$LICENSE_CHECKER -a -r -i bin,restclient,common/run.go,common/signal.go,fs/runtime/grpc/proto ./license-checker/license-header.txt . go
+$LICENSE_CHECKER -a -r -i bin,admin/client,common/run.go,common/signal.go,fs/runtime/grpc/proto ./license-checker/license-header.txt . go
 $LICENSE_CHECKER -a -r ./license-checker/license-header.txt . proto
-$LICENSE_CHECKER -a -r -i bin,restclient,.chglog ./license-checker/license-header-sh.txt . sh yaml yml
-$LICENSE_CHECKER -a -r -i bin,restclient,.chglog,CHANGELOG.md ./license-checker/license-header-md.txt . md
+$LICENSE_CHECKER -a -r -i bin,admin/client,.chglog ./license-checker/license-header-sh.txt . sh yaml yml
+$LICENSE_CHECKER -a -r -i bin,admin/client,.chglog,CHANGELOG.md ./license-checker/license-header-md.txt . md
 
 if [[ -z $(git status -s) ]]; then
   echo "No license header issues found"
