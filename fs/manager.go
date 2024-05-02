@@ -187,8 +187,8 @@ func (fm *FunctionManager) createFuncCtx(f *model.Function) api.FunctionContext 
 }
 
 func (fm *FunctionManager) StartFunction(f *model.Function) error {
-	if f.Name == "" {
-		return errors.New("function name shouldn't be empty")
+	if err := f.Validate(); err != nil {
+		return err
 	}
 	fm.functionsLock.Lock()
 	if _, exist := fm.functions[getName(f.Namespace, f.Name)]; exist {
@@ -197,9 +197,6 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	}
 	fm.functions[getName(f.Namespace, f.Name)] = make([]api.FunctionInstance, f.Replicas)
 	fm.functionsLock.Unlock()
-	if f.Replicas <= 0 {
-		return errors.New("replicas should be greater than 0")
-	}
 	funcCtx := fm.createFuncCtx(f)
 	for i := int32(0); i < f.Replicas; i++ {
 		runtimeType := fm.getRuntimeType(f.Runtime)
