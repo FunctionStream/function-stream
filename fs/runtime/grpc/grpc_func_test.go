@@ -105,7 +105,7 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "1", string(counter))
 
-	err = fm.DeleteFunction(f.Name)
+	err = fm.DeleteFunction("", f.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
