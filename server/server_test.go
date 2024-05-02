@@ -235,7 +235,8 @@ func TestStatefulFunction(t *testing.T) {
 	input := "input"
 	output := "output"
 	funcConf := &model.Function{
-		Name: "test-func",
+		Name:    "test-func",
+		Runtime: &model.RuntimeConfig{},
 		Sources: []*model.TubeConfig{
 			{
 				Config: (&contube.SourceQueueConfig{

@@ -16,11 +16,14 @@
 
 package model
 
-import "github.com/functionstream/function-stream/fs/contube"
+import (
+	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/pkg/errors"
+	"strings"
+)
 
 type TubeConfig struct {
 	Type   *string           `json:"type,omitempty"` // Default to `default`
-	Name   *string           `json:"name,omitempty"`
 	Config contube.ConfigMap `json:"config,omitempty"`
 }
 
@@ -32,10 +35,36 @@ type RuntimeConfig struct {
 }
 
 type Function struct {
-	Name     string            `json:"name"`
-	Runtime  *RuntimeConfig    `json:"runtime"`
-	Sources  []*TubeConfig     `json:"source,omitempty"`
-	Sink     *TubeConfig       `json:"sink,omitempty"`
-	Config   map[string]string `json:"config,omitempty"`
-	Replicas int32             `json:"replicas"`
+	Name      string            `json:"name"`
+	Namespace string            `json:"namespace,omitempty"`
+	Runtime   *RuntimeConfig    `json:"runtime"`
+	Sources   []*TubeConfig     `json:"source,omitempty"`
+	Sink      *TubeConfig       `json:"sink,omitempty"`
+	Config    map[string]string `json:"config,omitempty"`
+	Replicas  int32             `json:"replicas"`
+}
+
+func (f *Function) Validate() error {
+	if f.Name == "" {
+		return errors.New("function name shouldn't be empty")
+	}
+	if strings.Contains(f.Name, "/") {
+		return errors.New("name should not contain '/'")
+	}
+	if strings.Contains(f.Namespace, "/") {
+		return errors.New("namespace should not contain '/'")
+	}
+	if f.Runtime == nil {
+		return errors.New("runtime should be configured")
+	}
+	if len(f.Sources) == 0 {
+		return errors.New("sources should be configured")
+	}
+	if f.Sink == nil {
+		return errors.New("sink should be configured")
+	}
+	if f.Replicas <= 0 {
+		return errors.New("replicas should be greater than 0")
+	}
+	return nil
 }

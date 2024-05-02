@@ -76,12 +76,16 @@ func exec(_ *cobra.Command, _ []string) {
 
 	res, err := cli.FunctionAPI.CreateFunction(context.Background()).Body(f).Execute()
 	if err != nil {
-		body, e := io.ReadAll(res.Body)
-		if e != nil {
+		if res != nil {
+			body, e := io.ReadAll(res.Body)
+			if e != nil {
+				fmt.Printf("Failed to create function: %v\n", err)
+			} else {
+				fmt.Printf("Failed to create function: %v, %s\n", err, string(body))
+			}
+		} else {
 			fmt.Printf("Failed to create function: %v\n", err)
-			os.Exit(1)
 		}
-		fmt.Printf("Failed to create function: %v, %s\n", err, string(body))
 		os.Exit(1)
 	}
 	if res.StatusCode != 200 {

@@ -70,7 +70,7 @@
       "schema": {
        "type": "array",
        "items": {
-        "$ref": "#/definitions/model.Function"
+        "type": "string"
        }
       }
      }
@@ -96,6 +96,42 @@
       "schema": {
        "$ref": "#/definitions/model.Function"
       }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
+  "/api/v1/function/{namespace}/{name}": {
+   "delete": {
+    "consumes": [
+     "application/json"
+    ],
+    "produces": [
+     "application/json"
+    ],
+    "tags": [
+     "function"
+    ],
+    "summary": "delete a namespaced function",
+    "operationId": "deleteNamespacedFunction",
+    "parameters": [
+     {
+      "type": "string",
+      "description": "name of the function",
+      "name": "name",
+      "in": "path",
+      "required": true
+     },
+     {
+      "type": "string",
+      "description": "namespace of the function",
+      "name": "namespace",
+      "in": "path",
+      "required": true
      }
     ],
     "responses": {
@@ -299,6 +335,9 @@
     "name": {
      "type": "string"
     },
+    "namespace": {
+     "type": "string"
+    },
     "replicas": {
      "type": "integer",
      "format": "int32"
@@ -331,9 +370,6 @@
    "properties": {
     "config": {
      "type": "object"
-    },
-    "name": {
-     "type": "string"
     },
     "type": {
      "type": "string"

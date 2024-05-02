@@ -5,7 +5,6 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Config** | Pointer to **map[string]interface{}** |  | [optional] 
-**Name** | Pointer to **string** |  | [optional] 
 **Type** | Pointer to **string** |  | [optional] 
 
 ## Methods
@@ -51,31 +50,6 @@ SetConfig sets Config field to given value.
 `func (o *ModelTubeConfig) HasConfig() bool`
 
 HasConfig returns a boolean if a field has been set.
-
-### GetName
-
-`func (o *ModelTubeConfig) GetName() string`
-
-GetName returns the Name field if non-nil, zero value otherwise.
-
-### GetNameOk
-
-`func (o *ModelTubeConfig) GetNameOk() (*string, bool)`
-
-GetNameOk returns a tuple with the Name field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetName
-
-`func (o *ModelTubeConfig) SetName(v string)`
-
-SetName sets Name field to given value.
-
-### HasName
-
-`func (o *ModelTubeConfig) HasName() bool`
-
-HasName returns a boolean if a field has been set.
 
 ### GetType
 

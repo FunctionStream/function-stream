@@ -84,6 +84,9 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 
 	close(instance.readyCh)
 	defer instance.log.InfoContext(instance.ctx, "function instance has been stopped")
+
+	instance.log.Info("function instance is running")
+
 	logCounter := common.LogCounter()
 	channels := make([]reflect.SelectCase, len(sources)+1)
 	for i, s := range sources {
