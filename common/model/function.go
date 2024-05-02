@@ -31,10 +31,11 @@ type RuntimeConfig struct {
 }
 
 type Function struct {
-	Name     string            `json:"name"`
-	Runtime  *RuntimeConfig    `json:"runtime"`
-	Sources  []*TubeConfig     `json:"source,omitempty"`
-	Sink     *TubeConfig       `json:"sink,omitempty"`
-	Config   map[string]string `json:"config,omitempty"`
-	Replicas int32             `json:"replicas"`
+	Name      string            `json:"name"`
+	Namespace string            `json:"namespace,omitempty"`
+	Runtime   *RuntimeConfig    `json:"runtime"`
+	Sources   []*TubeConfig     `json:"source,omitempty"`
+	Sink      *TubeConfig       `json:"sink,omitempty"`
+	Config    map[string]string `json:"config,omitempty"`
+	Replicas  int32             `json:"replicas"`
 }

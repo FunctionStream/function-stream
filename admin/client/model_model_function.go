@@ -21,12 +21,13 @@ var _ MappedNullable = &ModelFunction{}
 
 // ModelFunction struct for ModelFunction
 type ModelFunction struct {
-	Config   *map[string]string `json:"config,omitempty"`
-	Name     string             `json:"name"`
-	Replicas int32              `json:"replicas"`
-	Runtime  ModelRuntimeConfig `json:"runtime"`
-	Sink     *ModelTubeConfig   `json:"sink,omitempty"`
-	Source   []ModelTubeConfig  `json:"source,omitempty"`
+	Config    *map[string]string `json:"config,omitempty"`
+	Name      string             `json:"name"`
+	Namespace *string            `json:"namespace,omitempty"`
+	Replicas  int32              `json:"replicas"`
+	Runtime   ModelRuntimeConfig `json:"runtime"`
+	Sink      *ModelTubeConfig   `json:"sink,omitempty"`
+	Source    []ModelTubeConfig  `json:"source,omitempty"`
 }
 
 type _ModelFunction ModelFunction
@@ -105,6 +106,38 @@ func (o *ModelFunction) GetNameOk() (*string, bool) {
 // SetName sets field value
 func (o *ModelFunction) SetName(v string) {
 	o.Name = v
+}
+
+// GetNamespace returns the Namespace field value if set, zero value otherwise.
+func (o *ModelFunction) GetNamespace() string {
+	if o == nil || IsNil(o.Namespace) {
+		var ret string
+		return ret
+	}
+	return *o.Namespace
+}
+
+// GetNamespaceOk returns a tuple with the Namespace field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ModelFunction) GetNamespaceOk() (*string, bool) {
+	if o == nil || IsNil(o.Namespace) {
+		return nil, false
+	}
+	return o.Namespace, true
+}
+
+// HasNamespace returns a boolean if a field has been set.
+func (o *ModelFunction) HasNamespace() bool {
+	if o != nil && !IsNil(o.Namespace) {
+		return true
+	}
+
+	return false
+}
+
+// SetNamespace gets a reference to the given string and assigns it to the Namespace field.
+func (o *ModelFunction) SetNamespace(v string) {
+	o.Namespace = &v
 }
 
 // GetReplicas returns the Replicas field value
@@ -233,6 +266,9 @@ func (o ModelFunction) ToMap() (map[string]interface{}, error) {
 		toSerialize["config"] = o.Config
 	}
 	toSerialize["name"] = o.Name
+	if !IsNil(o.Namespace) {
+		toSerialize["namespace"] = o.Namespace
+	}
 	toSerialize["replicas"] = o.Replicas
 	toSerialize["runtime"] = o.Runtime
 	if !IsNil(o.Sink) {

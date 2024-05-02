@@ -31,9 +31,28 @@ import (
 	"sync"
 )
 
+type namespacedName struct {
+	namespace string
+	name      string
+}
+
+func (n namespacedName) String() string {
+	if n.namespace == "" {
+		return n.name
+	}
+	return n.namespace + "/" + n.name
+}
+
+func getName(namespace, name string) namespacedName {
+	return namespacedName{
+		namespace: namespace,
+		name:      name,
+	}
+}
+
 type FunctionManager struct {
 	options       *managerOptions
-	functions     map[string][]api.FunctionInstance //TODO: Use sync.map
+	functions     map[namespacedName][]api.FunctionInstance //TODO: Use sync.map
 	functionsLock sync.Mutex
 	log           *slog.Logger
 }
@@ -126,7 +145,7 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 	log.Info("Function manager created", slog.Any("runtime-factories", loadedRuntimeFact), slog.Any("tube-factories", loadedTubeFact))
 	return &FunctionManager{
 		options:   options,
-		functions: make(map[string][]api.FunctionInstance),
+		functions: make(map[namespacedName][]api.FunctionInstance),
 		log:       log,
 	}, nil
 }
@@ -172,11 +191,11 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		return errors.New("function name shouldn't be empty")
 	}
 	fm.functionsLock.Lock()
-	if _, exist := fm.functions[f.Name]; exist {
+	if _, exist := fm.functions[getName(f.Namespace, f.Name)]; exist {
 		fm.functionsLock.Unlock()
 		return common.ErrorFunctionExists
 	}
-	fm.functions[f.Name] = make([]api.FunctionInstance, f.Replicas)
+	fm.functions[getName(f.Namespace, f.Name)] = make([]api.FunctionInstance, f.Replicas)
 	fm.functionsLock.Unlock()
 	if f.Replicas <= 0 {
 		return errors.New("replicas should be greater than 0")
@@ -191,7 +210,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 			slog.String("runtime", runtimeType),
 		))
 		fm.functionsLock.Lock()
-		fm.functions[f.Name][i] = instance
+		fm.functions[getName(f.Namespace, f.Name)][i] = instance
 		fm.functionsLock.Unlock()
 		runtimeFactory, err := fm.getRuntimeFactory(runtimeType)
 		if err != nil {
@@ -234,14 +253,14 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	return nil
 }
 
-func (fm *FunctionManager) DeleteFunction(name string) error {
+func (fm *FunctionManager) DeleteFunction(namespace, name string) error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
-	instances, exist := fm.functions[name]
+	instances, exist := fm.functions[getName(namespace, name)]
 	if !exist {
 		return common.ErrorFunctionNotFound
 	}
-	delete(fm.functions, name)
+	delete(fm.functions, getName(namespace, name))
 	for _, instance := range instances {
 		instance.Stop()
 	}
@@ -254,7 +273,7 @@ func (fm *FunctionManager) ListFunctions() (result []string) {
 	result = make([]string, len(fm.functions))
 	i := 0
 	for k := range fm.functions {
-		result[i] = k
+		result[i] = k.String()
 		i++
 	}
 	return

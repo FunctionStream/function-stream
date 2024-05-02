@@ -6,6 +6,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Config** | Pointer to **map[string]string** |  | [optional] 
 **Name** | **string** |  | 
+**Namespace** | Pointer to **string** |  | [optional] 
 **Replicas** | **int32** |  | 
 **Runtime** | [**ModelRuntimeConfig**](ModelRuntimeConfig.md) |  | 
 **Sink** | Pointer to [**ModelTubeConfig**](ModelTubeConfig.md) |  | [optional] 
@@ -74,6 +75,31 @@ and a boolean to check if the value has been set.
 
 SetName sets Name field to given value.
 
+
+### GetNamespace
+
+`func (o *ModelFunction) GetNamespace() string`
+
+GetNamespace returns the Namespace field if non-nil, zero value otherwise.
+
+### GetNamespaceOk
+
+`func (o *ModelFunction) GetNamespaceOk() (*string, bool)`
+
+GetNamespaceOk returns a tuple with the Namespace field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetNamespace
+
+`func (o *ModelFunction) SetNamespace(v string)`
+
+SetNamespace sets Namespace field to given value.
+
+### HasNamespace
+
+`func (o *ModelFunction) HasNamespace() bool`
+
+HasNamespace returns a boolean if a field has been set.
 
 ### GetReplicas
 

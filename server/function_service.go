@@ -18,7 +18,6 @@ package server
 
 import (
 	"errors"
-	"fmt"
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/common"
@@ -69,8 +68,8 @@ func (s *Server) makeFunctionService() *restful.WebService {
 		Operation("createFunction").
 		Reads(model.Function{}))
 
-	deleteFunctionHandler := func(response *restful.Response, name string) {
-		err := s.Manager.DeleteFunction(name)
+	deleteFunctionHandler := func(response *restful.Response, namespace, name string) {
+		err := s.Manager.DeleteFunction(namespace, name)
 		if err != nil {
 			if errors.Is(err, common.ErrorFunctionNotFound) {
 				s.handleRestError(response.WriteError(http.StatusNotFound, err))
@@ -85,7 +84,7 @@ func (s *Server) makeFunctionService() *restful.WebService {
 	ws.Route(ws.DELETE("/{name}").
 		To(func(request *restful.Request, response *restful.Response) {
 			name := request.PathParameter("name")
-			deleteFunctionHandler(response, name)
+			deleteFunctionHandler(response, "", name)
 		}).
 		Doc("delete a function").
 		Metadata(restfulspec.KeyOpenAPITags, tags).
@@ -96,7 +95,7 @@ func (s *Server) makeFunctionService() *restful.WebService {
 		To(func(request *restful.Request, response *restful.Response) {
 			namespace := request.PathParameter("namespace")
 			name := request.PathParameter("name")
-			deleteFunctionHandler(response, fmt.Sprintf("%s/%s", namespace, name))
+			deleteFunctionHandler(response, namespace, name)
 		}).
 		Doc("delete a namespaced function").
 		Metadata(restfulspec.KeyOpenAPITags, tags).
