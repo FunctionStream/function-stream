@@ -197,7 +197,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 		if err != nil {
 			return err
 		}
-		sources := []<-chan contube.Record{}
+		var sources []<-chan contube.Record
 		for _, t := range f.Sources {
 			sourceFactory, err := fm.getTubeFactory(t)
 			if err != nil {

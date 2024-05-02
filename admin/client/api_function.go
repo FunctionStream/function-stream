@@ -209,12 +209,106 @@ func (a *FunctionAPIService) DeleteFunctionExecute(r ApiDeleteFunctionRequest) (
 	return localVarHTTPResponse, nil
 }
 
+type ApiDeleteNamespacedFunctionRequest struct {
+	ctx        context.Context
+	ApiService *FunctionAPIService
+	name       string
+	namespace  string
+}
+
+func (r ApiDeleteNamespacedFunctionRequest) Execute() (*http.Response, error) {
+	return r.ApiService.DeleteNamespacedFunctionExecute(r)
+}
+
+/*
+DeleteNamespacedFunction delete a namespaced function
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@param name name of the function
+	@param namespace namespace of the function
+	@return ApiDeleteNamespacedFunctionRequest
+*/
+func (a *FunctionAPIService) DeleteNamespacedFunction(ctx context.Context, name string, namespace string) ApiDeleteNamespacedFunctionRequest {
+	return ApiDeleteNamespacedFunctionRequest{
+		ApiService: a,
+		ctx:        ctx,
+		name:       name,
+		namespace:  namespace,
+	}
+}
+
+// Execute executes the request
+func (a *FunctionAPIService) DeleteNamespacedFunctionExecute(r ApiDeleteNamespacedFunctionRequest) (*http.Response, error) {
+	var (
+		localVarHTTPMethod = http.MethodDelete
+		localVarPostBody   interface{}
+		formFiles          []formFile
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FunctionAPIService.DeleteNamespacedFunction")
+	if err != nil {
+		return nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/api/v1/function/{namespace}/{name}"
+	localVarPath = strings.Replace(localVarPath, "{"+"name"+"}", url.PathEscape(parameterValueToString(r.name, "name")), -1)
+	localVarPath = strings.Replace(localVarPath, "{"+"namespace"+"}", url.PathEscape(parameterValueToString(r.namespace, "namespace")), -1)
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarHTTPResponse, err
+	}
+
+	localVarBody, err := io.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = io.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		return localVarHTTPResponse, newErr
+	}
+
+	return localVarHTTPResponse, nil
+}
+
 type ApiGetAllFunctionsRequest struct {
 	ctx        context.Context
 	ApiService *FunctionAPIService
 }
 
-func (r ApiGetAllFunctionsRequest) Execute() ([]ModelFunction, *http.Response, error) {
+func (r ApiGetAllFunctionsRequest) Execute() ([]string, *http.Response, error) {
 	return r.ApiService.GetAllFunctionsExecute(r)
 }
 
@@ -233,13 +327,13 @@ func (a *FunctionAPIService) GetAllFunctions(ctx context.Context) ApiGetAllFunct
 
 // Execute executes the request
 //
-//	@return []ModelFunction
-func (a *FunctionAPIService) GetAllFunctionsExecute(r ApiGetAllFunctionsRequest) ([]ModelFunction, *http.Response, error) {
+//	@return []string
+func (a *FunctionAPIService) GetAllFunctionsExecute(r ApiGetAllFunctionsRequest) ([]string, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
 		formFiles           []formFile
-		localVarReturnValue []ModelFunction
+		localVarReturnValue []string
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "FunctionAPIService.GetAllFunctions")

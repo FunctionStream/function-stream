@@ -80,6 +80,7 @@ Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 *FunctionAPI* | [**CreateFunction**](docs/FunctionAPI.md#createfunction) | **Post** /api/v1/function | create a function
 *FunctionAPI* | [**DeleteFunction**](docs/FunctionAPI.md#deletefunction) | **Delete** /api/v1/function/{name} | delete a function
+*FunctionAPI* | [**DeleteNamespacedFunction**](docs/FunctionAPI.md#deletenamespacedfunction) | **Delete** /api/v1/function/{namespace}/{name} | delete a namespaced function
 *FunctionAPI* | [**GetAllFunctions**](docs/FunctionAPI.md#getallfunctions) | **Get** /api/v1/function | get all functions
 *HttpTubeAPI* | [**TriggerHttpTubeEndpoint**](docs/HttpTubeAPI.md#triggerhttptubeendpoint) | **Post** /api/v1/http-tube/{endpoint} | trigger the http tube endpoint
 *StateAPI* | [**GetState**](docs/StateAPI.md#getstate) | **Get** /api/v1/state/{key} | get a state

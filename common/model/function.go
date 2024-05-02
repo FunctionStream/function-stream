@@ -20,7 +20,6 @@ import "github.com/functionstream/function-stream/fs/contube"
 
 type TubeConfig struct {
 	Type   *string           `json:"type,omitempty"` // Default to `default`
-	Name   *string           `json:"name,omitempty"`
 	Config contube.ConfigMap `json:"config,omitempty"`
 }
 
