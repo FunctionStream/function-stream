@@ -17,13 +17,14 @@
 package contube
 
 import (
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"io"
 	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
+
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 type state int
@@ -133,7 +134,8 @@ func (f *HttpTubeFactory) NewSinkTube(_ context.Context, _ ConfigMap) (chan<- Re
 	return nil, ErrSinkTubeNotImplemented
 }
 
-func (f *HttpTubeFactory) GetHandleFunc(getEndpoint func(r *http.Request) (string, error), logger *slog.Logger) func(http.ResponseWriter, *http.Request) {
+func (f *HttpTubeFactory) GetHandleFunc(getEndpoint func(r *http.Request) (string, error),
+	logger *slog.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		endpoint, err := getEndpoint(r)
 		if err != nil {

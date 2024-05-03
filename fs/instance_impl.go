@@ -18,13 +18,14 @@ package fs
 
 import (
 	"context"
+	"log/slog"
+	"reflect"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
-	"log/slog"
-	"reflect"
 )
 
 type FunctionInstanceImpl struct {
@@ -53,7 +54,8 @@ func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
 	return &DefaultInstanceFactory{}
 }
 
-func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, funcCtx api.FunctionContext, index int32, logger *slog.Logger) api.FunctionInstance {
+func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, funcCtx api.FunctionContext,
+	index int32, logger *slog.Logger) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, CtxKeyFunctionName, definition.Name)
 	ctx = context.WithValue(ctx, CtxKeyInstanceIndex, index)
@@ -69,7 +71,8 @@ func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function,
 	}
 }
 
-func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFactory, sources []<-chan contube.Record, sink chan<- contube.Record) {
+func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFactory, sources []<-chan contube.Record,
+	sink chan<- contube.Record) {
 	runtime, err := runtimeFactory.NewFunctionRuntime(instance)
 	if err != nil {
 		instance.readyCh <- errors.Wrap(err, "Error creating runtime")

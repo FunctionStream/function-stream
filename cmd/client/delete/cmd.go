@@ -17,7 +17,7 @@
 package del
 
 import (
-	"github.com/functionstream/function-stream/admin/client"
+	adminclient "github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/cmd/client/common"
 	"github.com/spf13/cobra"
 )

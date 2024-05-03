@@ -17,9 +17,10 @@
 package fs
 
 import (
-	"github.com/functionstream/function-stream/common/model"
 	"log/slog"
 	"testing"
+
+	"github.com/functionstream/function-stream/common/model"
 )
 
 func TestFunctionInstanceContextSetting(t *testing.T) {
@@ -38,7 +39,7 @@ func TestFunctionInstanceContextSetting(t *testing.T) {
 		t.Errorf("Expected '%s' in ctx to be '%s'", CtxKeyFunctionName, definition.Name)
 	}
 
-	if ctxValue, ok := instance.Context().Value(CtxKey(CtxKeyInstanceIndex)).(int32); !ok || ctxValue != index {
+	if ctxValue, ok := instance.Context().Value(CtxKeyInstanceIndex).(int32); !ok || ctxValue != index {
 		t.Errorf("Expected '%s' in ctx to be '%d'", CtxKeyInstanceIndex, index)
 	}
 

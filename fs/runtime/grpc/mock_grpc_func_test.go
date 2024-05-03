@@ -18,6 +18,11 @@ package grpc
 
 import (
 	"errors"
+	"io"
+	"log/slog"
+	"strconv"
+	"testing"
+
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/runtime/grpc/proto"
 	"github.com/stretchr/testify/assert"
@@ -25,10 +30,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	"io"
-	"log/slog"
-	"strconv"
-	"testing"
 )
 
 func StartMockGRPCFunc(t *testing.T, addr string) {

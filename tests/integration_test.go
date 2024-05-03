@@ -19,15 +19,16 @@ package tests
 import (
 	"context"
 	"encoding/json"
-	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/functionstream/function-stream/admin/client"
-	"github.com/functionstream/function-stream/admin/utils"
-	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/server"
 	"io"
 	"math/rand"
 	"strconv"
 	"testing"
+
+	"github.com/apache/pulsar-client-go/pulsar"
+	adminclient "github.com/functionstream/function-stream/admin/client"
+	"github.com/functionstream/function-stream/admin/utils"
+	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/server"
 )
 
 func startServer() {

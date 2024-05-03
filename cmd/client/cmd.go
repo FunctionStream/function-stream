@@ -35,7 +35,8 @@ var (
 )
 
 func init() {
-	Cmd.PersistentFlags().StringVarP(&c.Config.ServiceAddr, "service-address", "s", "http://localhost:7300", "Service address")
+	Cmd.PersistentFlags().StringVarP(&c.Config.ServiceAddr, "service-address", "s",
+		"http://localhost:7300", "Service address")
 
 	Cmd.AddCommand(create.Cmd)
 	Cmd.AddCommand(list.Cmd)

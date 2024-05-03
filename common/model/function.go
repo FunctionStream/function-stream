@@ -17,9 +17,10 @@
 package model
 
 import (
+	"strings"
+
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 type TubeConfig struct {

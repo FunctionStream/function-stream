@@ -17,11 +17,12 @@
 package statestore
 
 import (
+	"log/slog"
+	"os"
+
 	"github.com/cockroachdb/pebble"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/pkg/errors"
-	"log/slog"
-	"os"
 )
 
 type PebbleStateStore struct {
@@ -34,7 +35,7 @@ type PebbleStateStoreConfig struct {
 	DirName string
 }
 
-func NewTmpPebbleStateStore() (*PebbleStateStore, error) {
+func NewTmpPebbleStateStore() (api.StateStore, error) {
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, err

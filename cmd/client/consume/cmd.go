@@ -18,11 +18,12 @@ package consume
 
 import (
 	"fmt"
-	"github.com/functionstream/function-stream/admin/client"
+	"os"
+
+	adminclient "github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/cmd/client/common"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
-	"os"
 )
 
 var (

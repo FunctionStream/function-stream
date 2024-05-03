@@ -21,9 +21,9 @@ const (
 	MemoryTubeType = "memory"
 	HttpTubeType   = "http"
 
-	DefaultAddr      = "localhost:7300"
-	DefaultPulsarURL = "pulsar://localhost:6650"
-	DefaultTubeType  = PulsarTubeType
+	WASMRuntime = "wasm"
 
 	RuntimeArchiveConfigKey = "archive"
+
+	StateStorePebble = "pebble"
 )

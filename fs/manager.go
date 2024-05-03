@@ -18,6 +18,11 @@ package fs
 
 import (
 	"context"
+	"log/slog"
+	"math/rand"
+	"strconv"
+	"sync"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/api"
@@ -25,10 +30,6 @@ import (
 	"github.com/functionstream/function-stream/fs/runtime/wazero"
 	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/pkg/errors"
-	"log/slog"
-	"math/rand"
-	"strconv"
-	"sync"
 )
 
 type namespacedName struct {
@@ -142,7 +143,8 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 	for k := range options.tubeFactoryMap {
 		loadedTubeFact = append(loadedTubeFact, k)
 	}
-	log.Info("Function manager created", slog.Any("runtime-factories", loadedRuntimeFact), slog.Any("tube-factories", loadedTubeFact))
+	log.Info("Function manager created", slog.Any("runtime-factories", loadedRuntimeFact),
+		slog.Any("tube-factories", loadedTubeFact))
 	return &FunctionManager{
 		options:   options,
 		functions: make(map[namespacedName][]api.FunctionInstance),
@@ -150,7 +152,7 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 	}, nil
 }
 
-func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) { // TODO: Change input parameter to Type
+func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) {
 	get := func(t string) (contube.TubeFactory, error) {
 		factory, exist := fm.options.tubeFactoryMap[t]
 		if !exist {
@@ -182,7 +184,7 @@ func (fm *FunctionManager) getRuntimeFactory(t string) (api.FunctionRuntimeFacto
 	return factory, nil
 }
 
-func (fm *FunctionManager) createFuncCtx(f *model.Function) api.FunctionContext {
+func (fm *FunctionManager) createFuncCtx() api.FunctionContext {
 	return NewFuncCtxImpl(fm.options.stateStore)
 }
 
@@ -197,7 +199,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	}
 	fm.functions[getName(f.Namespace, f.Name)] = make([]api.FunctionInstance, f.Replicas)
 	fm.functionsLock.Unlock()
-	funcCtx := fm.createFuncCtx(f)
+	funcCtx := fm.createFuncCtx()
 	for i := int32(0); i < f.Replicas; i++ {
 		runtimeType := fm.getRuntimeType(f.Runtime)
 
@@ -290,7 +292,8 @@ func (fm *FunctionManager) ProduceEvent(name string, event contube.Record) error
 func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.options.tubeFactoryMap["default"].NewSourceTube(ctx, (&contube.SourceQueueConfig{Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
+	c, err := fm.options.tubeFactoryMap["default"].NewSourceTube(ctx, (&contube.SourceQueueConfig{
+		Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		return nil, err
 	}

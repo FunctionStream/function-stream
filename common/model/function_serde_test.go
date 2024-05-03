@@ -19,10 +19,11 @@ package model
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/functionstream/function-stream/common"
-	"gopkg.in/yaml.v3"
 	"reflect"
 	"testing"
+
+	"github.com/functionstream/function-stream/common"
+	"gopkg.in/yaml.v3"
 )
 
 func TestFunctionSerde(t *testing.T) {
@@ -110,7 +111,8 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 
 	fmt.Println(string(data))
 
-	f.Sources = []*TubeConfig{} // The nil would be expected to be converted to a zero-length array for the YAML serialization
+	f.Sources = []*TubeConfig{} // The nil would be expected to be converted to a zero-length array for the YAML
+	// serialization
 
 	// YAML Deserialization
 	err = yaml.Unmarshal(data, &f2)

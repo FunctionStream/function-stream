@@ -17,8 +17,9 @@
 package fs
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFuncCtx_NilStore(t *testing.T) {

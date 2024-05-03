@@ -18,12 +18,13 @@ package main
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/functionstream/function-stream/cmd/client"
 	"github.com/functionstream/function-stream/cmd/perf"
 	"github.com/functionstream/function-stream/cmd/server"
 	"github.com/functionstream/function-stream/cmd/standalone"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 var (

@@ -18,6 +18,11 @@ package grpc
 
 import (
 	"fmt"
+	"log/slog"
+	"net"
+	"sync"
+	"sync/atomic"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
@@ -25,10 +30,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"log/slog"
-	"net"
-	"sync"
-	"sync/atomic"
 )
 
 type GRPCFuncRuntime struct {
@@ -211,7 +212,8 @@ func (f *GRPCFuncRuntime) Update(new *proto.FunctionStatus) {
 		f.readyCh <- fmt.Errorf("function failed to start")
 	}
 	if f.status.Status != new.Status {
-		f.log.InfoContext(f.ctx, "Function status update", slog.Any("new_status", new.Status), slog.Any("old_status", f.status.Status))
+		f.log.InfoContext(f.ctx, "Function status update", slog.Any("new_status", new.Status),
+			slog.Any("old_status", f.status.Status))
 	}
 	f.status = new
 }
@@ -323,7 +325,8 @@ func (f *FunctionServerImpl) PutState(ctx context.Context, req *proto.PutStateRe
 	}, nil
 }
 
-func (f *FunctionServerImpl) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
+func (f *FunctionServerImpl) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse,
+	error) {
 	runtime, err := f.getFunctionRuntime(ctx)
 	if err != nil {
 		return nil, err

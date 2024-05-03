@@ -35,7 +35,8 @@ func TestMemoryTube(t *testing.T) {
 	var events []Record
 
 	topics := []string{"topic1", "topic2", "topic3"}
-	source, err := memoryQueueFactory.NewSourceTube(ctx, (&SourceQueueConfig{Topics: topics, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
+	source, err := memoryQueueFactory.NewSourceTube(ctx, (&SourceQueueConfig{Topics: topics,
+		SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +73,8 @@ func TestMemoryTube(t *testing.T) {
 	wg.Wait()
 	cancel()
 
-	// Give enough time to ensure that the goroutine execution within NewSource Tube and NewSinkTube is complete and the released queue is successful.
+	// Give enough time to ensure that the goroutine execution within NewSource Tube and NewSinkTube is complete and
+	// the released queue is successful.
 	time.Sleep(100 * time.Millisecond)
 
 	// assert the memoryQueueFactory.queues is empty.

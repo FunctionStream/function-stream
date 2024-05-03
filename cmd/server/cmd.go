@@ -18,10 +18,11 @@ package server
 
 import (
 	"context"
+	"io"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/server"
 	"github.com/spf13/cobra"
-	"io"
 )
 
 var (
@@ -45,7 +46,8 @@ var (
 func init() {
 	Cmd.Flags().StringVarP(&config.configFile, "config-file", "c", "conf/function-stream.yaml",
 		"path to the config file (default is conf/function-stream.yaml)")
-	Cmd.Flags().BoolVarP(&config.loadConfigFromEnv, "load-config-from-env", "e", false, "load config from env (default is false)")
+	Cmd.Flags().BoolVarP(&config.loadConfigFromEnv, "load-config-from-env", "e", false,
+		"load config from env (default is false)")
 }
 
 func exec(*cobra.Command, []string) {

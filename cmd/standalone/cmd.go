@@ -18,10 +18,11 @@ package standalone
 
 import (
 	"context"
+	"io"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/server"
 	"github.com/spf13/cobra"
-	"io"
 )
 
 var (

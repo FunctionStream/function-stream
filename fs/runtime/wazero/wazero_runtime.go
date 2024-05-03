@@ -17,6 +17,10 @@
 package wazero
 
 import (
+	"log/slog"
+	"os"
+	"strconv"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
@@ -26,9 +30,6 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 	"golang.org/x/net/context"
-	"log/slog"
-	"os"
-	"strconv"
 )
 
 type WazeroFunctionRuntimeFactory struct {
@@ -41,7 +42,8 @@ func NewWazeroFunctionRuntimeFactory() api.FunctionRuntimeFactory {
 func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
 	log := instance.Logger()
 	r := wazero.NewRuntime(instance.Context())
-	_, err := r.NewHostModuleBuilder("env").NewFunctionBuilder().WithFunc(func(ctx context.Context, m wazero_api.Module, a, b, c, d uint32) {
+	_, err := r.NewHostModuleBuilder("env").NewFunctionBuilder().WithFunc(func(ctx context.Context,
+		m wazero_api.Module, a, b, c, d uint32) {
 		panic("abort")
 	}).Export("abort").Instantiate(instance.Context())
 	if err != nil {
@@ -74,7 +76,8 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	mod, err := r.InstantiateWithConfig(instance.Context(), wasmBytes, config)
 	if err != nil {
 		if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
-			return nil, errors.Wrap(err, "Error instantiating function, function exit with code"+strconv.Itoa(int(exitErr.ExitCode())))
+			return nil, errors.Wrap(err, "Error instantiating function, function exit with code"+
+				strconv.Itoa(int(exitErr.ExitCode())))
 		} else if !ok {
 			return nil, errors.Wrap(err, "Error instantiating function")
 		}

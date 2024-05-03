@@ -17,10 +17,11 @@
 package statestore_test
 
 import (
+	"testing"
+
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestPebbleStateStore(t *testing.T) {

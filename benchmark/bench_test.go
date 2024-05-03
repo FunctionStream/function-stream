@@ -18,21 +18,22 @@ package benchmark
 
 import (
 	"context"
-	"github.com/apache/pulsar-client-go/pulsaradmin"
-	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
-	"github.com/functionstream/function-stream/admin/client"
-	adminutils "github.com/functionstream/function-stream/admin/utils"
-	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/fs"
-	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/perf"
-	"github.com/functionstream/function-stream/server"
 	"math/rand"
 	"os"
 	"runtime/pprof"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/apache/pulsar-client-go/pulsaradmin"
+	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
+	adminclient "github.com/functionstream/function-stream/admin/client"
+	adminutils "github.com/functionstream/function-stream/admin/utils"
+	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/fs"
+	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/perf"
+	"github.com/functionstream/function-stream/server"
 )
 
 func BenchmarkStressForBasicFunc(b *testing.B) {

@@ -18,10 +18,11 @@ package contube
 
 import (
 	"context"
-	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/pkg/errors"
 	"log/slog"
 	"sync/atomic"
+
+	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/pkg/errors"
 )
 
 const (
