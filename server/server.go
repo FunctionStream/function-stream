@@ -37,6 +37,11 @@ import (
 	"time"
 )
 
+var (
+	ErrUnsupportedTRuntimeType = errors.New("unsupported runtime type")
+	ErrUnsupportedTubeType     = errors.New("unsupported tube type")
+)
+
 type Server struct {
 	options *serverOptions
 	httpSvr atomic.Pointer[http.Server]
@@ -44,10 +49,15 @@ type Server struct {
 	Manager *fs.FunctionManager
 }
 
+type TubeLoaderType func(c *FactoryConfig) (contube.TubeFactory, error)
+type RuntimeLoaderType func(c *FactoryConfig) (api.FunctionRuntimeFactory, error)
+
 type serverOptions struct {
-	httpListener net.Listener
-	managerOpts  []fs.ManagerOption
-	httpTubeFact *contube.HttpTubeFactory
+	httpListener  net.Listener
+	managerOpts   []fs.ManagerOption
+	httpTubeFact  *contube.HttpTubeFactory
+	tubeLoader    TubeLoaderType
+	runtimeLoader RuntimeLoaderType
 }
 
 type ServerOption interface {
@@ -86,6 +96,24 @@ func WithHttpTubeFactory(factory *contube.HttpTubeFactory) ServerOption {
 	})
 }
 
+// WithTubeLoader sets the loader for the tube factory.
+// This must be called before WithConfig.
+func WithTubeLoader(loader TubeLoaderType) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		o.tubeLoader = loader
+		return o, nil
+	})
+}
+
+// WithRuntimeLoader sets the loader for the runtime factory.
+// This must be called before WithConfig.
+func WithRuntimeLoader(loader RuntimeLoaderType) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		o.runtimeLoader = loader
+		return o, nil
+	})
+}
+
 func getRefFactory(m map[string]*FactoryConfig, name string, visited set.Set[string]) (string, error) {
 	if visited.Has(name) {
 		return "", errors.Errorf("circular reference of factory %s", name)
@@ -101,7 +129,7 @@ func getRefFactory(m map[string]*FactoryConfig, name string, visited set.Set[str
 	return name, nil
 }
 
-func initFactories[T any](m map[string]*FactoryConfig, newFactory func(n string, c *FactoryConfig) (T, error), setup func(n string, f T)) error {
+func initFactories[T any](m map[string]*FactoryConfig, newFactory func(c *FactoryConfig) (T, error), setup func(n string, f T)) error {
 	factoryMap := make(map[string]T)
 
 	for name := range m {
@@ -114,7 +142,10 @@ func initFactories[T any](m map[string]*FactoryConfig, newFactory func(n string,
 			if !exist {
 				return errors.Errorf("factory %s not found, which the factory %s is pointed to", refName, name)
 			}
-			f, err := newFactory(refName, fc)
+			if fc.Type == nil {
+				return errors.Errorf("factory %s type is not set", refName)
+			}
+			f, err := newFactory(fc)
 			if err != nil {
 				return err
 			}
@@ -126,6 +157,24 @@ func initFactories[T any](m map[string]*FactoryConfig, newFactory func(n string,
 	return nil
 }
 
+func DefaultTubeLoader(c *FactoryConfig) (contube.TubeFactory, error) {
+	switch strings.ToLower(*c.Type) {
+	case common.PulsarTubeType:
+		return contube.NewPulsarEventQueueFactory(context.Background(), contube.ConfigMap(*c.Config))
+	case common.MemoryTubeType:
+		return contube.NewMemoryQueueFactory(context.Background()), nil
+	}
+	return nil, errors.WithMessagef(ErrUnsupportedTubeType, "unsupported tube type :%s", *c.Type)
+}
+
+func DefaultRuntimeLoader(c *FactoryConfig) (api.FunctionRuntimeFactory, error) {
+	switch strings.ToLower(*c.Type) {
+	case WASMRuntime:
+		return wazero.NewWazeroFunctionRuntimeFactory(), nil
+	}
+	return nil, errors.WithMessagef(ErrUnsupportedTRuntimeType, "unsupported runtime type: %s", *c.Type)
+}
+
 func WithConfig(config *Config) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		ln, err := net.Listen("tcp", config.ListenAddr)
@@ -133,36 +182,15 @@ func WithConfig(config *Config) ServerOption {
 			return nil, err
 		}
 		o.httpListener = ln
-		err = initFactories[contube.TubeFactory](config.TubeFactory, func(n string, c *FactoryConfig) (contube.TubeFactory, error) {
-			if c.Type == nil {
-				return nil, errors.Errorf("tube factory %s type is not set", n)
-			}
-			switch strings.ToLower(*c.Type) {
-			case common.PulsarTubeType:
-				return contube.NewPulsarEventQueueFactory(context.Background(), contube.ConfigMap(*c.Config))
-			case common.MemoryTubeType:
-				return contube.NewMemoryQueueFactory(context.Background()), nil
-			}
-			return nil, errors.Errorf("unsupported tube type %s", *c.Type)
-		}, func(n string, f contube.TubeFactory) {
+		err = initFactories[contube.TubeFactory](config.TubeFactory, o.tubeLoader, func(n string, f contube.TubeFactory) {
 			o.managerOpts = append(o.managerOpts, fs.WithTubeFactory(n, f))
 		})
 		if err != nil {
 			return nil, err
 		}
-		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory,
-			func(n string, c *FactoryConfig) (api.FunctionRuntimeFactory, error) {
-				if c.Type == nil {
-					return nil, errors.Errorf("runtime factory %s type is not set", n)
-				}
-				switch strings.ToLower(*c.Type) {
-				case WASMRuntime:
-					return wazero.NewWazeroFunctionRuntimeFactory(), nil
-				}
-				return nil, errors.Errorf("unsupported runtime type %s", *c.Type)
-			}, func(n string, f api.FunctionRuntimeFactory) {
-				o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
-			})
+		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory, o.runtimeLoader, func(n string, f api.FunctionRuntimeFactory) {
+			o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -178,6 +206,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		fs.WithTubeFactory("http", httpTubeFact),
 	}
 	options.httpTubeFact = httpTubeFact
+	options.tubeLoader = DefaultTubeLoader
+	options.runtimeLoader = DefaultRuntimeLoader
 	for _, o := range opts {
 		if o == nil {
 			continue
