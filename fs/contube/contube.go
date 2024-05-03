@@ -139,5 +139,7 @@ func (e *RecordImpl) GetPayload() []byte {
 }
 
 func (e *RecordImpl) Commit() {
-	e.commitFunc()
+	if e.commitFunc != nil {
+		e.commitFunc()
+	}
 }
