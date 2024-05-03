@@ -17,12 +17,13 @@
 package server
 
 import (
-	"github.com/functionstream/function-stream/common"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/functionstream/function-stream/common"
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
 type FactoryConfig struct {

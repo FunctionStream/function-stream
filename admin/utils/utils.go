@@ -18,7 +18,8 @@ package utils
 
 import (
 	"fmt"
-	"github.com/functionstream/function-stream/admin/client"
+
+	adminclient "github.com/functionstream/function-stream/admin/client"
 )
 
 func MakeQueueSourceTubeConfig(subName string, topics ...string) []adminclient.ModelTubeConfig {

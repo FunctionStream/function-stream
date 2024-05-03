@@ -17,9 +17,10 @@
 package server
 
 import (
+	"net/http"
+
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
-	"net/http"
 )
 
 func (s *Server) makeHttpTubeService() *restful.WebService {

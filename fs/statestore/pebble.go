@@ -17,11 +17,12 @@
 package statestore
 
 import (
+	"log/slog"
+	"os"
+
 	"github.com/cockroachdb/pebble"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/pkg/errors"
-	"log/slog"
-	"os"
 )
 
 type PebbleStateStore struct {

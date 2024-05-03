@@ -18,6 +18,14 @@ package server
 
 import (
 	"context"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/common"
@@ -29,13 +37,6 @@ import (
 	"github.com/go-openapi/spec"
 	"github.com/pkg/errors"
 	"k8s.io/utils/set"
-	"log/slog"
-	"net"
-	"net/http"
-	"net/url"
-	"strings"
-	"sync/atomic"
-	"time"
 )
 
 var (
@@ -140,7 +141,8 @@ func getRefFactory(m map[string]*FactoryConfig, name string, visited set.Set[str
 	return name, nil
 }
 
-func initFactories[T any](m map[string]*FactoryConfig, newFactory func(c *FactoryConfig) (T, error), setup func(n string, f T)) error {
+func initFactories[T any](m map[string]*FactoryConfig, newFactory func(c *FactoryConfig) (T, error),
+	setup func(n string, f T)) error {
 	factoryMap := make(map[string]T)
 
 	for name := range m {
@@ -207,9 +209,10 @@ func WithConfig(config *Config) ServerOption {
 		if err != nil {
 			return nil, err
 		}
-		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory, o.runtimeLoader, func(n string, f api.FunctionRuntimeFactory) {
-			o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
-		})
+		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory, o.runtimeLoader,
+			func(n string, f api.FunctionRuntimeFactory) {
+				o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
+			})
 		if err != nil {
 			return nil, err
 		}

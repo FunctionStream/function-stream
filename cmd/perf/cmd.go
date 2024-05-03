@@ -18,10 +18,11 @@ package perf
 
 import (
 	"context"
+	"io"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/perf"
 	"github.com/spf13/cobra"
-	"io"
 )
 
 var (

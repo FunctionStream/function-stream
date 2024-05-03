@@ -20,6 +20,9 @@ build_example:
 lint:
 	golangci-lint run
 
+lint-fix:
+	golangci-lint run --fix
+
 build_all: build build_example
 
 test:

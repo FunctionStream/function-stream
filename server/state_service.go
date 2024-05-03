@@ -17,11 +17,12 @@
 package server
 
 import (
+	"io"
+	"net/http"
+
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/pkg/errors"
-	"io"
-	"net/http"
 )
 
 func (s *Server) makeStateService() *restful.WebService {

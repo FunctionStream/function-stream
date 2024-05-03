@@ -19,7 +19,12 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"github.com/functionstream/function-stream/admin/client"
+	"math/rand"
+	"net"
+	"strconv"
+	"testing"
+
+	adminclient "github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
@@ -27,10 +32,6 @@ import (
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/tests"
 	"github.com/stretchr/testify/assert"
-	"math/rand"
-	"net"
-	"strconv"
-	"testing"
 )
 
 func getListener(t *testing.T) net.Listener {

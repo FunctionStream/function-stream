@@ -17,9 +17,10 @@
 package contube
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
-	"testing"
 )
 
 func TestHttpTubeHandleRecord(t *testing.T) {

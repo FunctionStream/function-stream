@@ -18,11 +18,12 @@ package server
 
 import (
 	"errors"
+	"net/http"
+
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
-	"net/http"
 )
 
 func (s *Server) makeFunctionService() *restful.WebService {
