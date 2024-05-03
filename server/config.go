@@ -20,7 +20,6 @@ import (
 	"github.com/functionstream/function-stream/common"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"k8s.io/utils/set"
 	"log/slog"
 	"os"
 	"strings"
@@ -52,7 +51,7 @@ func init() {
 	viper.SetDefault("ListenAddr", "7300")
 }
 
-func preprocessFactoriesConfig(n string, m map[string]*FactoryConfig, supportedTypes set.Set[string]) error {
+func preprocessFactoriesConfig(n string, m map[string]*FactoryConfig) error {
 	for name, factory := range m {
 		if ref := factory.Ref; ref != nil && *ref != "" {
 			referred, ok := m[strings.ToLower(*ref)]
@@ -70,9 +69,6 @@ func preprocessFactoriesConfig(n string, m map[string]*FactoryConfig, supportedT
 		if factory.Type == nil {
 			return errors.Errorf("%s factory %s has no type", n, name)
 		}
-		if !supportedTypes.Has(strings.ToLower(*factory.Type)) {
-			return errors.Errorf("%s factory %s has unsupported type %s", n, name, *factory.Type)
-		}
 	}
 	return nil
 }
@@ -81,11 +77,11 @@ func (c *Config) preprocessConfig() error {
 	if c.ListenAddr == "" {
 		return errors.New("ListenAddr shouldn't be empty")
 	}
-	err := preprocessFactoriesConfig("Tube", c.TubeFactory, set.New[string](common.PulsarTubeType, common.MemoryTubeType))
+	err := preprocessFactoriesConfig("Tube", c.TubeFactory)
 	if err != nil {
 		return err
 	}
-	return preprocessFactoriesConfig("Runtime", c.RuntimeFactory, set.New[string](WASMRuntime, GRPCRuntime))
+	return preprocessFactoriesConfig("Runtime", c.RuntimeFactory)
 }
 
 func loadConfig() (*Config, error) {
