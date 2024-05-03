@@ -25,13 +25,13 @@ import (
 	"strings"
 )
 
-const (
-	WASMRuntime = "wasm"
-	GRPCRuntime = "grpc"
-)
-
 type FactoryConfig struct {
 	Ref    *string           `mapstructure:"ref"`
+	Type   *string           `mapstructure:"type"`
+	Config *common.ConfigMap `mapstructure:"config"`
+}
+
+type StateStoreConfig struct {
 	Type   *string           `mapstructure:"type"`
 	Config *common.ConfigMap `mapstructure:"config"`
 }
@@ -45,6 +45,10 @@ type Config struct {
 
 	// RuntimeFactory is the list of runtime factories that the function stream server will use.
 	RuntimeFactory map[string]*FactoryConfig `mapstructure:"runtime_factory"`
+
+	// StateStore is the configuration for the state store that the function stream server will use.
+	// Optional
+	StateStore *StateStoreConfig `mapstructure:"state_store"`
 }
 
 func init() {

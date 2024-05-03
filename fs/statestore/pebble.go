@@ -34,7 +34,7 @@ type PebbleStateStoreConfig struct {
 	DirName string
 }
 
-func NewTmpPebbleStateStore() (*PebbleStateStore, error) {
+func NewTmpPebbleStateStore() (api.StateStore, error) {
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, err

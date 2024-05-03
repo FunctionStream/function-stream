@@ -25,6 +25,7 @@ import (
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/fs/runtime/wazero"
+	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/go-openapi/spec"
 	"github.com/pkg/errors"
 	"k8s.io/utils/set"
@@ -40,6 +41,7 @@ import (
 var (
 	ErrUnsupportedTRuntimeType = errors.New("unsupported runtime type")
 	ErrUnsupportedTubeType     = errors.New("unsupported tube type")
+	ErrUnsupportedStateStore   = errors.New("unsupported state store")
 )
 
 type Server struct {
@@ -51,13 +53,15 @@ type Server struct {
 
 type TubeLoaderType func(c *FactoryConfig) (contube.TubeFactory, error)
 type RuntimeLoaderType func(c *FactoryConfig) (api.FunctionRuntimeFactory, error)
+type StateStoreLoaderType func(c *StateStoreConfig) (api.StateStore, error)
 
 type serverOptions struct {
-	httpListener  net.Listener
-	managerOpts   []fs.ManagerOption
-	httpTubeFact  *contube.HttpTubeFactory
-	tubeLoader    TubeLoaderType
-	runtimeLoader RuntimeLoaderType
+	httpListener     net.Listener
+	managerOpts      []fs.ManagerOption
+	httpTubeFact     *contube.HttpTubeFactory
+	tubeLoader       TubeLoaderType
+	runtimeLoader    RuntimeLoaderType
+	stateStoreLoader StateStoreLoaderType
 }
 
 type ServerOption interface {
@@ -110,6 +114,13 @@ func WithTubeLoader(loader TubeLoaderType) ServerOption {
 func WithRuntimeLoader(loader RuntimeLoaderType) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		o.runtimeLoader = loader
+		return o, nil
+	})
+}
+
+func WithStateStoreLoader(loader func(c *StateStoreConfig) (api.StateStore, error)) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		o.stateStoreLoader = loader
 		return o, nil
 	})
 }
@@ -169,10 +180,18 @@ func DefaultTubeLoader(c *FactoryConfig) (contube.TubeFactory, error) {
 
 func DefaultRuntimeLoader(c *FactoryConfig) (api.FunctionRuntimeFactory, error) {
 	switch strings.ToLower(*c.Type) {
-	case WASMRuntime:
+	case common.WASMRuntime:
 		return wazero.NewWazeroFunctionRuntimeFactory(), nil
 	}
 	return nil, errors.WithMessagef(ErrUnsupportedTRuntimeType, "unsupported runtime type: %s", *c.Type)
+}
+
+func DefaultStateStoreLoader(c *StateStoreConfig) (api.StateStore, error) {
+	switch strings.ToLower(*c.Type) {
+	case common.StateStorePebble:
+		return statestore.NewTmpPebbleStateStore()
+	}
+	return nil, errors.WithMessagef(ErrUnsupportedStateStore, "unsupported state store type: %s", *c.Type)
 }
 
 func WithConfig(config *Config) ServerOption {
@@ -194,6 +213,13 @@ func WithConfig(config *Config) ServerOption {
 		if err != nil {
 			return nil, err
 		}
+		if config.StateStore != nil {
+			stateStore, err := o.stateStoreLoader(config.StateStore)
+			if err != nil {
+				return nil, err
+			}
+			o.managerOpts = append(o.managerOpts, fs.WithStateStore(stateStore))
+		}
 		return o, nil
 	})
 }
@@ -208,6 +234,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	options.httpTubeFact = httpTubeFact
 	options.tubeLoader = DefaultTubeLoader
 	options.runtimeLoader = DefaultRuntimeLoader
+	options.stateStoreLoader = DefaultStateStoreLoader
 	for _, o := range opts {
 		if o == nil {
 			continue
@@ -250,7 +277,7 @@ func NewDefaultServer() (*Server, error) {
 		},
 		RuntimeFactory: map[string]*FactoryConfig{
 			"wasm": {
-				Type: common.OptionalStr(WASMRuntime),
+				Type: common.OptionalStr(common.WASMRuntime),
 			},
 			"default": {
 				Ref: common.OptionalStr("wasm"),
