@@ -65,17 +65,7 @@ func NewHttpTubeFactory(ctx context.Context) *HttpTubeFactory {
 }
 
 type httpSourceTubeConfig struct {
-	endpoint string
-}
-
-func (c ConfigMap) toHttpSourceTubeConfig() (*httpSourceTubeConfig, error) {
-	endpoint, ok := c[EndpointKey].(string)
-	if !ok {
-		return nil, ErrEndpointNotFound
-	}
-	return &httpSourceTubeConfig{
-		endpoint: endpoint,
-	}, nil
+	Endpoint string `json:"endpoint" validate:"required"`
 }
 
 func (f *HttpTubeFactory) Handle(ctx context.Context, endpoint string, payload []byte) error {
@@ -100,14 +90,14 @@ func (f *HttpTubeFactory) Handle(ctx context.Context, endpoint string, payload [
 }
 
 func (f *HttpTubeFactory) NewSourceTube(ctx context.Context, config ConfigMap) (<-chan Record, error) {
-	c, err := config.toHttpSourceTubeConfig()
-	if err != nil {
+	c := httpSourceTubeConfig{}
+	if err := config.ToConfigStruct(&c); err != nil {
 		return nil, err
 	}
 	result := make(chan Record, 10)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if _, ok := f.endpoints[c.endpoint]; ok {
+	if _, ok := f.endpoints[c.Endpoint]; ok {
 		return nil, ErrorEndpointAlreadyExists
 	}
 	var s atomic.Value
@@ -118,14 +108,14 @@ func (f *HttpTubeFactory) NewSourceTube(ctx context.Context, config ConfigMap) (
 		s:   s,
 		ctx: handlerCtx,
 	}
-	f.endpoints[c.endpoint] = e
+	f.endpoints[c.Endpoint] = e
 	go func() {
 		<-ctx.Done()
 		cancel()
 		close(result)
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		delete(f.endpoints, c.endpoint)
+		delete(f.endpoints, c.Endpoint)
 	}()
 	return result, nil
 }

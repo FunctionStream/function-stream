@@ -18,8 +18,9 @@ package contube
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-
+	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 )
 
@@ -103,6 +104,18 @@ func MergeConfig(configs ...ConfigMap) ConfigMap {
 		}
 	}
 	return result
+}
+
+func (c ConfigMap) ToConfigStruct(v any) error {
+	jsonData, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(jsonData, v); err != nil {
+		return err
+	}
+	validate := validator.New()
+	return validate.Struct(v)
 }
 
 type SourceTubeFactory interface {
