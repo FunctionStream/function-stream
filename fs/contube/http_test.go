@@ -18,13 +18,14 @@ package contube
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 )
 
 func TestHttpTubeHandleRecord(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	f := NewHttpTubeFactory(ctx)
 
 	endpoint := "test"
