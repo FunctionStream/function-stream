@@ -6,7 +6,7 @@
 ### {{ .Title }}
 
 {{ range .Commits -}}
-* {{ if .Scope }}**{{ .Scope }}:** {{ end }}{{ .Subject }}
+* {{ if .Scope }}**{{ .Scope }}:** {{ end }}{{ .Subject }} - _by {{ .Author.Name }}_
 {{ end }}
 {{ end -}}
 
@@ -14,7 +14,7 @@
 ### Reverts
 
 {{ range .RevertCommits -}}
-* {{ .Revert.Header }}
+* {{ .Revert.Header }} - _by {{ .Revert.Author.Name }}_
 {{ end }}
 {{ end -}}
 
