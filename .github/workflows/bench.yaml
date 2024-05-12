@@ -48,7 +48,7 @@ jobs:
         with:
           tinygo-version: '0.30.0'
       - run: docker-compose -f ./tests/docker-compose.yaml up -d
-      - run: make build_all
+      - run: make build-all
       - name: Wait for Pulsar service
         run: until curl http://localhost:8080/metrics > /dev/null 2>&1 ; do sleep 1; done
       - run: make bench

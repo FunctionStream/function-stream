@@ -23,6 +23,7 @@ import (
 	del "github.com/functionstream/function-stream/cmd/client/delete"
 	"github.com/functionstream/function-stream/cmd/client/list"
 	"github.com/functionstream/function-stream/cmd/client/produce"
+	"github.com/functionstream/function-stream/cmd/client/reload"
 	"github.com/spf13/cobra"
 )
 
@@ -43,4 +44,5 @@ func init() {
 	Cmd.AddCommand(del.Cmd)
 	Cmd.AddCommand(produce.Cmd)
 	Cmd.AddCommand(consume.Cmd)
+	Cmd.AddCommand(reload.Cmd)
 }

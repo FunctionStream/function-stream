@@ -32,28 +32,38 @@ import (
 	"github.com/pkg/errors"
 )
 
-type namespacedName struct {
+type NamespacedName struct {
 	namespace string
 	name      string
 }
 
-func (n namespacedName) String() string {
+func (n NamespacedName) String() string {
 	if n.namespace == "" {
 		return n.name
 	}
 	return n.namespace + "/" + n.name
 }
 
-func getName(namespace, name string) namespacedName {
-	return namespacedName{
+func GetNamespacedName(namespace, name string) NamespacedName {
+	return NamespacedName{
 		namespace: namespace,
 		name:      name,
 	}
 }
 
-type FunctionManager struct {
+type FunctionManager interface {
+	StartFunction(f *model.Function) error
+	DeleteFunction(namespace, name string) error
+	ListFunctions() []string
+	ProduceEvent(name string, event contube.Record) error
+	ConsumeEvent(name string) (contube.Record, error)
+	GetStateStore() api.StateStore
+	Close() error
+}
+
+type functionManagerImpl struct {
 	options       *managerOptions
-	functions     map[namespacedName][]api.FunctionInstance //TODO: Use sync.map
+	functions     map[NamespacedName][]api.FunctionInstance //TODO: Use sync.map
 	functionsLock sync.Mutex
 	log           *slog.Logger
 }
@@ -113,7 +123,7 @@ func WithStateStore(store api.StateStore) ManagerOption {
 	})
 }
 
-func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
+func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 	options := &managerOptions{
 		tubeFactoryMap:    make(map[string]contube.TubeFactory),
 		runtimeFactoryMap: make(map[string]api.FunctionRuntimeFactory),
@@ -145,14 +155,14 @@ func NewFunctionManager(opts ...ManagerOption) (*FunctionManager, error) {
 	}
 	log.Info("Function manager created", slog.Any("runtime-factories", loadedRuntimeFact),
 		slog.Any("tube-factories", loadedTubeFact))
-	return &FunctionManager{
+	return &functionManagerImpl{
 		options:   options,
-		functions: make(map[namespacedName][]api.FunctionInstance),
+		functions: make(map[NamespacedName][]api.FunctionInstance),
 		log:       log,
 	}, nil
 }
 
-func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) {
+func (fm *functionManagerImpl) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) {
 	get := func(t string) (contube.TubeFactory, error) {
 		factory, exist := fm.options.tubeFactoryMap[t]
 		if !exist {
@@ -168,14 +178,14 @@ func (fm *FunctionManager) getTubeFactory(tubeConfig *model.TubeConfig) (contube
 	return get(*tubeConfig.Type)
 }
 
-func (fm *FunctionManager) getRuntimeType(runtimeConfig *model.RuntimeConfig) string {
+func (fm *functionManagerImpl) getRuntimeType(runtimeConfig *model.RuntimeConfig) string {
 	if runtimeConfig == nil || runtimeConfig.Type == nil {
 		return "default"
 	}
 	return *runtimeConfig.Type
 }
 
-func (fm *FunctionManager) getRuntimeFactory(t string) (api.FunctionRuntimeFactory, error) {
+func (fm *functionManagerImpl) getRuntimeFactory(t string) (api.FunctionRuntimeFactory, error) {
 	factory, exist := fm.options.runtimeFactoryMap[t]
 	if !exist {
 		fm.log.ErrorContext(context.Background(), "runtime factory not found", "type", t)
@@ -184,20 +194,20 @@ func (fm *FunctionManager) getRuntimeFactory(t string) (api.FunctionRuntimeFacto
 	return factory, nil
 }
 
-func (fm *FunctionManager) createFuncCtx() api.FunctionContext {
+func (fm *functionManagerImpl) createFuncCtx() api.FunctionContext {
 	return NewFuncCtxImpl(fm.options.stateStore)
 }
 
-func (fm *FunctionManager) StartFunction(f *model.Function) error {
+func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO: Shouldn't use pointer here
 	if err := f.Validate(); err != nil {
 		return err
 	}
 	fm.functionsLock.Lock()
-	if _, exist := fm.functions[getName(f.Namespace, f.Name)]; exist {
+	if _, exist := fm.functions[GetNamespacedName(f.Namespace, f.Name)]; exist {
 		fm.functionsLock.Unlock()
 		return common.ErrorFunctionExists
 	}
-	fm.functions[getName(f.Namespace, f.Name)] = make([]api.FunctionInstance, f.Replicas)
+	fm.functions[GetNamespacedName(f.Namespace, f.Name)] = make([]api.FunctionInstance, f.Replicas)
 	fm.functionsLock.Unlock()
 	funcCtx := fm.createFuncCtx()
 	for i := int32(0); i < f.Replicas; i++ {
@@ -209,7 +219,7 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 			slog.String("runtime", runtimeType),
 		))
 		fm.functionsLock.Lock()
-		fm.functions[getName(f.Namespace, f.Name)][i] = instance
+		fm.functions[GetNamespacedName(f.Namespace, f.Name)][i] = instance
 		fm.functionsLock.Unlock()
 		runtimeFactory, err := fm.getRuntimeFactory(runtimeType)
 		if err != nil {
@@ -252,21 +262,21 @@ func (fm *FunctionManager) StartFunction(f *model.Function) error {
 	return nil
 }
 
-func (fm *FunctionManager) DeleteFunction(namespace, name string) error {
+func (fm *functionManagerImpl) DeleteFunction(namespace, name string) error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
-	instances, exist := fm.functions[getName(namespace, name)]
+	instances, exist := fm.functions[GetNamespacedName(namespace, name)]
 	if !exist {
 		return common.ErrorFunctionNotFound
 	}
-	delete(fm.functions, getName(namespace, name))
+	delete(fm.functions, GetNamespacedName(namespace, name))
 	for _, instance := range instances {
 		instance.Stop()
 	}
 	return nil
 }
 
-func (fm *FunctionManager) ListFunctions() (result []string) {
+func (fm *functionManagerImpl) ListFunctions() (result []string) {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
 	result = make([]string, len(fm.functions))
@@ -278,7 +288,7 @@ func (fm *FunctionManager) ListFunctions() (result []string) {
 	return
 }
 
-func (fm *FunctionManager) ProduceEvent(name string, event contube.Record) error {
+func (fm *functionManagerImpl) ProduceEvent(name string, event contube.Record) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c, err := fm.options.tubeFactoryMap["default"].NewSinkTube(ctx, (&contube.SinkQueueConfig{Topic: name}).ToConfigMap())
@@ -289,7 +299,7 @@ func (fm *FunctionManager) ProduceEvent(name string, event contube.Record) error
 	return nil
 }
 
-func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
+func (fm *functionManagerImpl) ConsumeEvent(name string) (contube.Record, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c, err := fm.options.tubeFactoryMap["default"].NewSourceTube(ctx, (&contube.SourceQueueConfig{
@@ -302,11 +312,11 @@ func (fm *FunctionManager) ConsumeEvent(name string) (contube.Record, error) {
 
 // GetStateStore returns the state store used by the function manager
 // Return nil if no state store is configured
-func (fm *FunctionManager) GetStateStore() api.StateStore {
+func (fm *functionManagerImpl) GetStateStore() api.StateStore {
 	return fm.options.stateStore
 }
 
-func (fm *FunctionManager) Close() error {
+func (fm *functionManagerImpl) Close() error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
 	for _, instances := range fm.functions {

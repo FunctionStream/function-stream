@@ -50,10 +50,14 @@ type Config struct {
 	// StateStore is the configuration for the state store that the function stream server will use.
 	// Optional
 	StateStore *StateStoreConfig `mapstructure:"state_store"`
+
+	// FunctionStore is the path to the function store
+	FunctionStore string `mapstructure:"function_store"`
 }
 
 func init() {
-	viper.SetDefault("ListenAddr", "7300")
+	viper.SetDefault("listen_addr", ":7300")
+	viper.SetDefault("function_store", "./functions")
 }
 
 func preprocessFactoriesConfig(n string, m map[string]*FactoryConfig) error {
