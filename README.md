@@ -93,7 +93,7 @@ The Function Stream project is organized as follows:
 To compile Function Stream, use this command:
 
 ```shell
-make build_all
+make build-all
 ```
 
 This creates the function-stream binary program and example wasm files in the `bin` directory,

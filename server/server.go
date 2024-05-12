@@ -46,10 +46,11 @@ var (
 )
 
 type Server struct {
-	options *serverOptions
-	httpSvr atomic.Pointer[http.Server]
-	log     *slog.Logger
-	Manager *fs.FunctionManager
+	options       *serverOptions
+	httpSvr       atomic.Pointer[http.Server]
+	log           *slog.Logger
+	Manager       fs.FunctionManager
+	FunctionStore FunctionStore
 }
 
 type TubeLoaderType func(c *FactoryConfig) (contube.TubeFactory, error)
@@ -63,6 +64,7 @@ type serverOptions struct {
 	tubeLoader       TubeLoaderType
 	runtimeLoader    RuntimeLoaderType
 	stateStoreLoader StateStoreLoaderType
+	functionStore    string
 }
 
 type ServerOption interface {
@@ -223,6 +225,7 @@ func WithConfig(config *Config) ServerOption {
 			}
 			o.managerOpts = append(o.managerOpts, fs.WithStateStore(stateStore))
 		}
+		o.functionStore = config.FunctionStore
 		return o, nil
 	})
 }
@@ -257,10 +260,24 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			return nil, err
 		}
 	}
+	var functionStore FunctionStore
+	if options.functionStore != "" {
+		functionStore, err = NewFunctionStoreImpl(manager, options.functionStore)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		functionStore = NewFunctionStoreDisabled()
+	}
+	err = functionStore.Load()
+	if err != nil {
+		return nil, err
+	}
 	return &Server{
-		options: options,
-		Manager: manager,
-		log:     slog.With(),
+		options:       options,
+		Manager:       manager,
+		log:           slog.With(),
+		FunctionStore: functionStore,
 	}, nil
 }
 
@@ -321,6 +338,7 @@ func (s *Server) startRESTHandlers() error {
 	container.Add(s.makeTubeService())
 	container.Add(s.makeStateService())
 	container.Add(s.makeHttpTubeService())
+	container.Add(s.makeFunctionStoreService())
 	container.Add(statusSvr)
 
 	cors := restful.CrossOriginResourceSharing{
@@ -387,6 +405,11 @@ func enrichSwaggerObject(swo *spec.Swagger) {
 			TagProps: spec.TagProps{
 				Name:        "http-tube",
 				Description: "Managing HTTP tubes"},
+		},
+		{
+			TagProps: spec.TagProps{
+				Name:        "function-store",
+				Description: "Managing function store"},
 		},
 	}
 }

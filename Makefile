@@ -14,7 +14,7 @@
 build:
 	go build -v -o bin/function-stream ./cmd
 
-build_example:
+build-example:
 	tinygo build -o bin/example_basic.wasm -target=wasi ./examples/basic
 
 lint:
@@ -23,7 +23,7 @@ lint:
 lint-fix:
 	golangci-lint run --fix
 
-build_all: build build_example
+build-all: build build-example
 
 test:
 	go test -race ./... -timeout 10m

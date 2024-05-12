@@ -105,6 +105,20 @@
     }
    }
   },
+  "/api/v1/function-store/reload": {
+   "get": {
+    "tags": [
+     "function-store"
+    ],
+    "summary": "reload functions from the function store",
+    "operationId": "reloadFunctions",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
   "/api/v1/function/{namespace}/{name}": {
    "delete": {
     "consumes": [
@@ -407,6 +421,10 @@
   {
    "description": "Managing HTTP tubes",
    "name": "http-tube"
+  },
+  {
+   "description": "Managing function store",
+   "name": "function-store"
   }
  ]
 }
