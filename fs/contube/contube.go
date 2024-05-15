@@ -25,7 +25,9 @@ import (
 )
 
 var (
-	ErrSinkTubeNotImplemented = errors.New("sink tube not implemented")
+	ErrTubeNotImplemented       = errors.New("tube not implemented")
+	ErrSinkTubeNotImplemented   = errors.Wrap(ErrTubeNotImplemented, "sink tube not implemented")
+	ErrSourceTubeNotImplemented = errors.Wrap(ErrTubeNotImplemented, "source tube not implemented")
 )
 
 type Record interface {

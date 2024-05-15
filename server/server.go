@@ -65,6 +65,9 @@ type serverOptions struct {
 	runtimeLoader    RuntimeLoaderType
 	stateStoreLoader StateStoreLoaderType
 	functionStore    string
+	enableTls        bool
+	tlsCertFile      string
+	tlsKeyFile       string
 }
 
 type ServerOption interface {
@@ -205,6 +208,14 @@ func WithConfig(config *Config) ServerOption {
 			return nil, err
 		}
 		o.httpListener = ln
+		o.enableTls = config.EnableTLS
+		if o.enableTls {
+			if config.TLSCertFile == "" || config.TLSKeyFile == "" {
+				return nil, errors.New("TLS certificate and key file must be provided")
+			}
+			o.tlsCertFile = config.TLSCertFile
+			o.tlsKeyFile = config.TLSKeyFile
+		}
 		err = initFactories[contube.TubeFactory](config.TubeFactory, o.tubeLoader, func(n string, f contube.TubeFactory) {
 			o.managerOpts = append(o.managerOpts, fs.WithTubeFactory(n, f))
 		})
@@ -326,7 +337,8 @@ func (s *Server) Run(context context.Context) {
 func (s *Server) startRESTHandlers() error {
 
 	statusSvr := new(restful.WebService)
-	statusSvr.Route(statusSvr.GET("/api/v1/status").To(func(request *restful.Request, response *restful.Response) {
+	statusSvr.Path("/api/v1/status")
+	statusSvr.Route(statusSvr.GET("/").To(func(request *restful.Request, response *restful.Response) {
 		response.WriteHeader(http.StatusOK)
 	}).
 		Doc("Get the status of the Function Stream").
@@ -360,7 +372,11 @@ func (s *Server) startRESTHandlers() error {
 	}
 	s.httpSvr.Store(httpSvr)
 
-	return httpSvr.Serve(s.options.httpListener)
+	if s.options.enableTls {
+		return httpSvr.ServeTLS(s.options.httpListener, s.options.tlsCertFile, s.options.tlsKeyFile)
+	} else {
+		return httpSvr.Serve(s.options.httpListener)
+	}
 }
 
 func enrichSwaggerObject(swo *spec.Swagger) {
@@ -432,6 +448,7 @@ func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
 		if err != nil {
 			s.log.InfoContext(ctx, "Detect connection to server failed", slog.Any("error", err))
 		}
+		s.log.Info("Server is ready", slog.String("address", s.options.httpListener.Addr().String()))
 		return true
 	}
 	go func() {
@@ -447,7 +464,6 @@ func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
 				return
 			case <-time.After(1 * time.Second):
 				if detect() {
-					s.log.Info("Server is ready", slog.String("address", s.options.httpListener.Addr().String()))
 					return
 				}
 			}
