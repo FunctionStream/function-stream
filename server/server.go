@@ -53,8 +53,8 @@ type Server struct {
 	FunctionStore FunctionStore
 }
 
-type TubeLoaderType func(c *FactoryConfig) (contube.TubeFactory, error)
-type RuntimeLoaderType func(c *FactoryConfig) (api.FunctionRuntimeFactory, error)
+type TubeLoaderType func(name string, c *TypeConfig) (contube.TubeFactory, error)
+type RuntimeLoaderType func(name string, c *TypeConfig) (api.FunctionRuntimeFactory, error)
 type StateStoreLoaderType func(c *StateStoreConfig) (api.StateStore, error)
 
 type serverOptions struct {
@@ -131,7 +131,7 @@ func WithStateStoreLoader(loader func(c *StateStoreConfig) (api.StateStore, erro
 	})
 }
 
-func getRefFactory(m map[string]*FactoryConfig, name string, visited set.Set[string]) (string, error) {
+func getRefFactory(m map[string]*TypeConfig, name string, visited set.Set[string]) (string, error) {
 	if visited.Has(name) {
 		return "", errors.Errorf("circular reference of factory %s", name)
 	}
@@ -146,7 +146,7 @@ func getRefFactory(m map[string]*FactoryConfig, name string, visited set.Set[str
 	return name, nil
 }
 
-func initFactories[T any](m map[string]*FactoryConfig, newFactory func(c *FactoryConfig) (T, error),
+func initFactories[T any](m map[string]*TypeConfig, newFactory func(name string, c *TypeConfig) (T, error),
 	setup func(n string, f T)) error {
 	factoryMap := make(map[string]T)
 
@@ -160,10 +160,7 @@ func initFactories[T any](m map[string]*FactoryConfig, newFactory func(c *Factor
 			if !exist {
 				return errors.Errorf("factory %s not found, which the factory %s is pointed to", refName, name)
 			}
-			if fc.Type == nil {
-				return errors.Errorf("factory %s type is not set", refName)
-			}
-			f, err := newFactory(fc)
+			f, err := newFactory(refName, fc)
 			if err != nil {
 				return err
 			}
@@ -175,22 +172,22 @@ func initFactories[T any](m map[string]*FactoryConfig, newFactory func(c *Factor
 	return nil
 }
 
-func DefaultTubeLoader(c *FactoryConfig) (contube.TubeFactory, error) {
-	switch strings.ToLower(*c.Type) {
+func DefaultTubeLoader(name string, c *TypeConfig) (contube.TubeFactory, error) {
+	switch strings.ToLower(name) {
 	case common.PulsarTubeType:
 		return contube.NewPulsarEventQueueFactory(context.Background(), contube.ConfigMap(*c.Config))
 	case common.MemoryTubeType:
 		return contube.NewMemoryQueueFactory(context.Background()), nil
 	}
-	return nil, errors.WithMessagef(ErrUnsupportedTubeType, "unsupported tube type :%s", *c.Type)
+	return nil, errors.WithMessagef(ErrUnsupportedTubeType, "unsupported tube type :%s", name)
 }
 
-func DefaultRuntimeLoader(c *FactoryConfig) (api.FunctionRuntimeFactory, error) {
-	switch strings.ToLower(*c.Type) {
+func DefaultRuntimeLoader(name string, c *TypeConfig) (api.FunctionRuntimeFactory, error) {
+	switch strings.ToLower(name) {
 	case common.WASMRuntime:
 		return wazero.NewWazeroFunctionRuntimeFactory(), nil
 	}
-	return nil, errors.WithMessagef(ErrUnsupportedTRuntimeType, "unsupported runtime type: %s", *c.Type)
+	return nil, errors.WithMessagef(ErrUnsupportedTRuntimeType, "unsupported runtime type: %s", name)
 }
 
 func DefaultStateStoreLoader(c *StateStoreConfig) (api.StateStore, error) {
@@ -216,13 +213,13 @@ func WithConfig(config *Config) ServerOption {
 			o.tlsCertFile = config.TLSCertFile
 			o.tlsKeyFile = config.TLSKeyFile
 		}
-		err = initFactories[contube.TubeFactory](config.TubeFactory, o.tubeLoader, func(n string, f contube.TubeFactory) {
+		err = initFactories[contube.TubeFactory](config.tubeTypesMap, o.tubeLoader, func(n string, f contube.TubeFactory) {
 			o.managerOpts = append(o.managerOpts, fs.WithTubeFactory(n, f))
 		})
 		if err != nil {
 			return nil, err
 		}
-		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory, o.runtimeLoader,
+		err = initFactories[api.FunctionRuntimeFactory](config.runtimeTypesMap, o.runtimeLoader,
 			func(n string, f api.FunctionRuntimeFactory) {
 				o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
 			})
@@ -245,7 +242,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	options := &serverOptions{}
 	httpTubeFact := contube.NewHttpTubeFactory(context.Background())
 	options.managerOpts = []fs.ManagerOption{
-		fs.WithDefaultTubeFactory(contube.NewMemoryQueueFactory(context.Background())),
 		fs.WithTubeFactory("http", httpTubeFact),
 	}
 	options.httpTubeFact = httpTubeFact
@@ -295,9 +291,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 func NewDefaultServer() (*Server, error) {
 	defaultConfig := &Config{
 		ListenAddr: ":7300",
-		TubeFactory: map[string]*FactoryConfig{
+		tubeTypesMap: map[string]*TypeConfig{
 			"pulsar": {
-				Type: common.OptionalStr(common.PulsarTubeType),
 				Config: &common.ConfigMap{
 					contube.PulsarURLKey: "pulsar://localhost:6650",
 				},
@@ -306,10 +301,8 @@ func NewDefaultServer() (*Server, error) {
 				Ref: common.OptionalStr("pulsar"),
 			},
 		},
-		RuntimeFactory: map[string]*FactoryConfig{
-			"wasm": {
-				Type: common.OptionalStr(common.WASMRuntime),
-			},
+		runtimeTypesMap: map[string]*TypeConfig{
+			"wasm": {},
 			"default": {
 				Ref: common.OptionalStr("wasm"),
 			},

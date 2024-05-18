@@ -26,9 +26,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-type FactoryConfig struct {
+type TypeConfig struct {
+	Name   string            `mapstructure:"name"`
 	Ref    *string           `mapstructure:"ref"`
-	Type   *string           `mapstructure:"type"`
 	Config *common.ConfigMap `mapstructure:"config"`
 }
 
@@ -41,11 +41,13 @@ type Config struct {
 	// ListenAddr is the address that the function stream REST service will listen on.
 	ListenAddr string `mapstructure:"listen_addr"`
 
-	// TubeFactory is the list of tube factories that the function stream server will use.
-	TubeFactory map[string]*FactoryConfig `mapstructure:"tube_factory"`
+	TubeTypes []*TypeConfig `mapstructure:"tube_types"`
 
-	// RuntimeFactory is the list of runtime factories that the function stream server will use.
-	RuntimeFactory map[string]*FactoryConfig `mapstructure:"runtime_factory"`
+	tubeTypesMap map[string]*TypeConfig
+
+	RuntimeTypes []*TypeConfig `mapstructure:"runtime_types"`
+
+	runtimeTypesMap map[string]*TypeConfig
 
 	// StateStore is the configuration for the state store that the function stream server will use.
 	// Optional
@@ -64,23 +66,14 @@ func init() {
 	viper.SetDefault("function_store", "./functions")
 }
 
-func preprocessFactoriesConfig(n string, m map[string]*FactoryConfig) error {
+func preprocessFactoriesConfig(n string, m map[string]*TypeConfig) error {
 	for name, factory := range m {
 		if ref := factory.Ref; ref != nil && *ref != "" {
 			referred, ok := m[strings.ToLower(*ref)]
 			if !ok {
 				return errors.Errorf("%s factory %s refers to non-existent factory %s", n, name, *ref)
 			}
-			if factory.Type == nil {
-				factory.Type = referred.Type
-			}
 			factory.Config = common.MergeConfig(referred.Config, factory.Config)
-		}
-	}
-
-	for name, factory := range m {
-		if factory.Type == nil {
-			return errors.Errorf("%s factory %s has no type", n, name)
 		}
 	}
 	return nil
@@ -90,17 +83,31 @@ func (c *Config) preprocessConfig() error {
 	if c.ListenAddr == "" {
 		return errors.New("ListenAddr shouldn't be empty")
 	}
-	err := preprocessFactoriesConfig("Tube", c.TubeFactory)
+	err := preprocessFactoriesConfig("Tube", c.tubeTypesMap)
 	if err != nil {
 		return err
 	}
-	return preprocessFactoriesConfig("Runtime", c.RuntimeFactory)
+	return preprocessFactoriesConfig("Runtime", c.runtimeTypesMap)
 }
 
 func loadConfig() (*Config, error) {
 	var c Config
 	if err := viper.Unmarshal(&c); err != nil {
 		return nil, err
+	}
+	c.tubeTypesMap = make(map[string]*TypeConfig)
+	for _, t := range c.TubeTypes {
+		if t.Config == nil {
+			t.Config = &common.ConfigMap{}
+		}
+		c.tubeTypesMap[strings.ToLower(t.Name)] = t
+	}
+	c.runtimeTypesMap = make(map[string]*TypeConfig)
+	for _, t := range c.RuntimeTypes {
+		if t.Config == nil {
+			t.Config = &common.ConfigMap{}
+		}
+		c.runtimeTypesMap[strings.ToLower(t.Name)] = t
 	}
 	if err := c.preprocessConfig(); err != nil {
 		return nil, err
@@ -118,6 +125,7 @@ func LoadConfigFromFile(filePath string) (*Config, error) {
 	return loadConfig()
 }
 
+// Deprecate
 func LoadConfigFromEnv() (*Config, error) {
 	for _, env := range os.Environ() {
 		if strings.HasPrefix(env, "FS_") {

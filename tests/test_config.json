@@ -1,17 +1,21 @@
 {
   "listen_addr": ":17300",
-  "tube_factory": {
-    "my_pulsar": {
-      "type": "pulsar",
+  "tube_types": [
+    {
+      "name": "my_pulsar",
       "config": {
         "pulsar_url": "pulsar://localhost:6651"
       }
     },
-    "my_memory": {
-      "type": "memory"
+    {
+      "name": "my_memory",
+      "config": {
+        "test": 1
+      }
     },
-    "default": {
+    {
+      "name": "default",
       "ref": "my_pulsar"
     }
-  }
+  ]
 }

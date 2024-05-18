@@ -13,12 +13,12 @@
 # limitations under the License.
 
 listen_addr: ":17300"
-tube_factory:
-  my_pulsar:
-    type: "pulsar"
+tube_types:
+  - name: my_pulsar
     config:
       pulsar_url: "pulsar://localhost:6651"
-  my_memory:
-    type: "memory"
-  default:
+  - name: my_memory
+    config:
+      test: 1
+  - name: default
     ref: "my_pulsar"
