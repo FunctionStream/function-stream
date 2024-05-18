@@ -53,6 +53,10 @@ type Config struct {
 
 	// FunctionStore is the path to the function store
 	FunctionStore string `mapstructure:"function_store"`
+
+	EnableTLS   bool   `mapstructure:"enable_tls"`
+	TLSCertFile string `mapstructure:"tls_cert_file"`
+	TLSKeyFile  string `mapstructure:"tls_key_file"`
 }
 
 func init() {

@@ -50,6 +50,10 @@ func (f *FunctionStoreImpl) Load() error {
 	f.loadingFunctions = make(map[string]*model.Function)
 	info, err := os.Stat(f.path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			slog.Info("the path to the function store does not exist. skip loading functions")
+			return nil
+		}
 		return errors.Wrapf(err, "the path to the function store %s is invalid", f.path)
 	}
 	if !info.IsDir() {
