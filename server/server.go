@@ -202,6 +202,10 @@ func DefaultStateStoreLoader(c *StateStoreConfig) (api.StateStore, error) {
 
 func WithConfig(config *Config) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		err := config.preprocessConfig()
+		if err != nil {
+			return nil, err
+		}
 		ln, err := net.Listen("tcp", config.ListenAddr)
 		if err != nil {
 			return nil, err
