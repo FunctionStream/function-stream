@@ -38,16 +38,15 @@ type StateStoreConfig struct {
 }
 
 type Config struct {
+	tubeTypesMap    map[string]*TypeConfig
+	runtimeTypesMap map[string]*TypeConfig
+
 	// ListenAddr is the address that the function stream REST service will listen on.
 	ListenAddr string `mapstructure:"listen_addr"`
 
 	TubeTypes []*TypeConfig `mapstructure:"tube_types"`
 
-	tubeTypesMap map[string]*TypeConfig
-
 	RuntimeTypes []*TypeConfig `mapstructure:"runtime_types"`
-
-	runtimeTypesMap map[string]*TypeConfig
 
 	// StateStore is the configuration for the state store that the function stream server will use.
 	// Optional
@@ -80,6 +79,20 @@ func preprocessFactoriesConfig(n string, m map[string]*TypeConfig) error {
 }
 
 func (c *Config) preprocessConfig() error {
+	c.tubeTypesMap = make(map[string]*TypeConfig)
+	for _, t := range c.TubeTypes {
+		if t.Config == nil {
+			t.Config = &common.ConfigMap{}
+		}
+		c.tubeTypesMap[strings.ToLower(t.Name)] = t
+	}
+	c.runtimeTypesMap = make(map[string]*TypeConfig)
+	for _, t := range c.RuntimeTypes {
+		if t.Config == nil {
+			t.Config = &common.ConfigMap{}
+		}
+		c.runtimeTypesMap[strings.ToLower(t.Name)] = t
+	}
 	if c.ListenAddr == "" {
 		return errors.New("ListenAddr shouldn't be empty")
 	}
@@ -94,20 +107,6 @@ func loadConfig() (*Config, error) {
 	var c Config
 	if err := viper.Unmarshal(&c); err != nil {
 		return nil, err
-	}
-	c.tubeTypesMap = make(map[string]*TypeConfig)
-	for _, t := range c.TubeTypes {
-		if t.Config == nil {
-			t.Config = &common.ConfigMap{}
-		}
-		c.tubeTypesMap[strings.ToLower(t.Name)] = t
-	}
-	c.runtimeTypesMap = make(map[string]*TypeConfig)
-	for _, t := range c.RuntimeTypes {
-		if t.Config == nil {
-			t.Config = &common.ConfigMap{}
-		}
-		c.runtimeTypesMap[strings.ToLower(t.Name)] = t
 	}
 	if err := c.preprocessConfig(); err != nil {
 		return nil, err

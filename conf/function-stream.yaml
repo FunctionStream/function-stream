@@ -13,14 +13,14 @@
 # limitations under the License.
 
 listen_addr: ":7300"
-tube_factory:
+tube_types:
   pulsar:
     config:
       pulsar_url: "pulsar://localhost:6650"
   memory:
   default:
     ref: "pulsar"
-runtime_factory:
+runtime_types:
   wasm:
   default:
     ref: "wasm"
