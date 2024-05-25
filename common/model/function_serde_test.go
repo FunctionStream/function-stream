@@ -19,18 +19,16 @@ package model
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/functionstream/function-stream/fs/contube"
 	"reflect"
 	"testing"
 
-	"github.com/functionstream/function-stream/common"
 	"gopkg.in/yaml.v3"
 )
 
 func TestFunctionSerde(t *testing.T) {
 	f := Function{
 		Name:     "TestFunction",
-		Runtime:  &RuntimeConfig{Type: common.OptionalStr("runtime"), Config: map[string]interface{}{"key": "value"}},
+		Runtime:  RuntimeConfig{Type: "runtime", Config: map[string]interface{}{"key": "value"}},
 		Sources:  []TubeConfig{{Type: "source", Config: map[string]interface{}{"key": "value"}}},
 		Sink:     TubeConfig{Type: "sink", Config: map[string]interface{}{"key": "value"}},
 		Config:   map[string]string{"key": "value"},
@@ -78,9 +76,9 @@ func TestFunctionSerde(t *testing.T) {
 func TestFunctionSerdeWithNil(t *testing.T) {
 	f := Function{
 		Name:     "TestFunction",
-		Runtime:  nil,
-		Sources:  nil,
-		Sink:     TubeConfig{},
+		Runtime:  RuntimeConfig{Config: map[string]interface{}{}},
+		Sources:  []TubeConfig{},
+		Sink:     TubeConfig{Config: map[string]interface{}{}},
 		Config:   map[string]string{"key": "value"},
 		Replicas: 2,
 	}
@@ -100,6 +98,10 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 		t.Fatal("JSON Deserialization error:", err)
 	}
 
+	// TODO: We should override the MarshalJson for the Function
+	f2.Sink.Config = map[string]interface{}{}
+	f2.Runtime.Config = map[string]interface{}{}
+
 	if !reflect.DeepEqual(f, f2) {
 		t.Error("JSON Deserialization does not match original")
 	}
@@ -111,10 +113,6 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 	}
 
 	fmt.Println(string(data))
-
-	f.Sources = []TubeConfig{} // The nil would be expected to be converted to a zero-length array for the YAML
-	f.Sink.Config = contube.ConfigMap{}
-	// serialization
 
 	// YAML Deserialization
 	err = yaml.Unmarshal(data, &f2)

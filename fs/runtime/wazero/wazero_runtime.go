@@ -57,7 +57,7 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 
 	wasi_snapshot_preview1.MustInstantiate(instance.Context(), r)
 
-	if instance.Definition().Runtime == nil || instance.Definition().Runtime.Config == nil {
+	if instance.Definition().Runtime.Config == nil {
 		return nil, errors.New("No runtime config found")
 	}
 	path, exist := instance.Definition().Runtime.Config["archive"]

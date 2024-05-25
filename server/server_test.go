@@ -48,6 +48,7 @@ func startStandaloneSvr(t *testing.T, ctx context.Context, opts ...ServerOption)
 	defaultOpts := []ServerOption{
 		WithHttpListener(ln),
 		WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()),
+		WithRuntimeFactoryBuilders(GetBuiltinRuntimeFactoryBuilder()),
 	}
 	s, err := NewServer(
 		append(defaultOpts, opts...)...,
@@ -73,7 +74,8 @@ func TestStandaloneBasicFunction(t *testing.T) {
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
 
 	funcConf := &model.Function{
-		Runtime: &model.RuntimeConfig{
+		Runtime: model.RuntimeConfig{
+			Type: common.WASMRuntime,
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
@@ -139,7 +141,8 @@ func TestHttpTube(t *testing.T) {
 
 	endpoint := "test-endpoint"
 	funcConf := &model.Function{
-		Runtime: &model.RuntimeConfig{
+		Runtime: model.RuntimeConfig{
+			Type: common.WASMRuntime,
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
@@ -235,13 +238,15 @@ func (r *MockRuntime) Stop() {
 func TestStatefulFunction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s, httpAddr := startStandaloneSvr(t, ctx, WithFunctionManager(fs.WithDefaultRuntimeFactory(&MockRuntimeFactory{})))
+	s, httpAddr := startStandaloneSvr(t, ctx, WithFunctionManager(fs.WithRuntimeFactory("mock", &MockRuntimeFactory{})))
 
 	input := "input"
 	output := "output"
 	funcConf := &model.Function{
-		Name:    "test-func",
-		Runtime: &model.RuntimeConfig{},
+		Name: "test-func",
+		Runtime: model.RuntimeConfig{
+			Type: "mock",
+		},
 		Sources: []model.TubeConfig{
 			{
 				Type: common.MemoryTubeType,

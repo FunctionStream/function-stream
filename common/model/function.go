@@ -31,14 +31,14 @@ type TubeConfig struct {
 type ConfigMap map[string]interface{}
 
 type RuntimeConfig struct {
-	Config ConfigMap `json:"config,omitempty" yaml:"config,omitempty"`
-	Type   *string   `json:"type,omitempty" yaml:"type,omitempty"`
+	Config ConfigMap `json:"config,omitempty"`
+	Type   string    `json:"type"`
 }
 
 type Function struct {
 	Name      string            `json:"name"`
 	Namespace string            `json:"namespace,omitempty"`
-	Runtime   *RuntimeConfig    `json:"runtime"`
+	Runtime   RuntimeConfig     `json:"runtime"`
 	Sources   []TubeConfig      `json:"source"`
 	Sink      TubeConfig        `json:"sink"`
 	Config    map[string]string `json:"config,omitempty"`
@@ -54,9 +54,6 @@ func (f *Function) Validate() error {
 	}
 	if strings.Contains(f.Namespace, "/") {
 		return errors.New("namespace should not contain '/'")
-	}
-	if f.Runtime == nil {
-		return errors.New("runtime should be configured")
 	}
 	if len(f.Sources) == 0 {
 		return errors.New("sources should be configured")

@@ -65,7 +65,10 @@ func exec(*cobra.Command, []string) {
 				return nil, err
 			}
 		}
-		s, err := server.NewServer(server.WithTubeFactoryBuilders(server.GetBuiltinTubeFactoryBuilder()), server.WithConfig(c))
+		s, err := server.NewServer(
+			server.WithTubeFactoryBuilders(server.GetBuiltinTubeFactoryBuilder()),
+			server.WithRuntimeFactoryBuilders(server.GetBuiltinRuntimeFactoryBuilder()),
+			server.WithConfig(c))
 		if err != nil {
 			return nil, err
 		}

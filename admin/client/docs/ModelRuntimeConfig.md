@@ -5,13 +5,13 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Config** | Pointer to **map[string]interface{}** |  | [optional] 
-**Type** | Pointer to **string** |  | [optional] 
+**Type** | **string** |  | 
 
 ## Methods
 
 ### NewModelRuntimeConfig
 
-`func NewModelRuntimeConfig() *ModelRuntimeConfig`
+`func NewModelRuntimeConfig(type_ string, ) *ModelRuntimeConfig`
 
 NewModelRuntimeConfig instantiates a new ModelRuntimeConfig object
 This constructor will assign default values to properties that have it defined,
@@ -70,11 +70,6 @@ and a boolean to check if the value has been set.
 
 SetType sets Type field to given value.
 
-### HasType
-
-`func (o *ModelRuntimeConfig) HasType() bool`
-
-HasType returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

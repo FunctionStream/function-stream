@@ -70,7 +70,8 @@ func newTestFunctionManagerImpl() fs.FunctionManager {
 
 func createTestFunction(name string) *model.Function {
 	return &model.Function{
-		Runtime: &model.RuntimeConfig{
+		Runtime: model.RuntimeConfig{
+			Type: common.WASMRuntime,
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},

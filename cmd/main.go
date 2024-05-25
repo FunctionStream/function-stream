@@ -23,7 +23,6 @@ import (
 	"github.com/functionstream/function-stream/cmd/client"
 	"github.com/functionstream/function-stream/cmd/perf"
 	"github.com/functionstream/function-stream/cmd/server"
-	"github.com/functionstream/function-stream/cmd/standalone"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +38,6 @@ func init() {
 	rootCmd.AddCommand(server.Cmd)
 	rootCmd.AddCommand(client.Cmd)
 	rootCmd.AddCommand(perf.Cmd)
-	rootCmd.AddCommand(standalone.Cmd)
 }
 
 func main() {

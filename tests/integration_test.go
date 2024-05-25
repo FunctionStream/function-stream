@@ -64,6 +64,7 @@ func TestBasicFunction(t *testing.T) {
 	f := adminclient.ModelFunction{
 		Name: name,
 		Runtime: adminclient.ModelRuntimeConfig{
+			Type: common.WASMRuntime,
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},

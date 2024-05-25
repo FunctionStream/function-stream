@@ -51,8 +51,7 @@ type Config struct {
 
 	TubeConfig map[string]common.ConfigMap `mapstructure:"tube-config"`
 
-	// RuntimeFactory is the list of runtime factories that the function stream server will use.
-	RuntimeFactory map[string]*FactoryConfig `mapstructure:"runtime_factory"`
+	RuntimeConfig map[string]common.ConfigMap `mapstructure:"runtime-config"`
 
 	// StateStore is the configuration for the state store that the function stream server will use.
 	// Optional
@@ -71,33 +70,11 @@ func init() {
 	viper.SetDefault("function_store", "./functions")
 }
 
-func preprocessFactoriesConfig(n string, m map[string]*FactoryConfig) error {
-	for name, factory := range m {
-		if ref := factory.Ref; ref != nil && *ref != "" {
-			referred, ok := m[strings.ToLower(*ref)]
-			if !ok {
-				return errors.Errorf("%s factory %s refers to non-existent factory %s", n, name, *ref)
-			}
-			if factory.Type == nil {
-				factory.Type = referred.Type
-			}
-			factory.Config = common.MergeConfig(referred.Config, factory.Config)
-		}
-	}
-
-	for name, factory := range m {
-		if factory.Type == nil {
-			return errors.Errorf("%s factory %s has no type", n, name)
-		}
-	}
-	return nil
-}
-
 func (c *Config) preprocessConfig() error {
 	if c.ListenAddr == "" {
 		return errors.New("ListenAddr shouldn't be empty")
 	}
-	return preprocessFactoriesConfig("Runtime", c.RuntimeFactory)
+	return nil
 }
 
 func loadConfig() (*Config, error) {

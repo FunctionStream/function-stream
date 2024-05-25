@@ -61,19 +61,20 @@ type RuntimeLoaderType func(c *FactoryConfig) (api.FunctionRuntimeFactory, error
 type StateStoreLoaderType func(c *StateStoreConfig) (api.StateStore, error)
 
 type serverOptions struct {
-	httpListener        net.Listener
-	managerOpts         []fs.ManagerOption
-	httpTubeFact        *contube.HttpTubeFactory
-	tubeOldLoader       TubeLoaderType
-	runtimeLoader       RuntimeLoaderType
-	stateStoreLoader    StateStoreLoaderType
-	functionStore       string
-	enableTls           bool
-	tlsCertFile         string
-	tlsKeyFile          string
-	tubeFactoryBuilders map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error)
-	tubeConfig          map[string]common.ConfigMap
-	queueConfig         QueueConfig
+	httpListener           net.Listener
+	managerOpts            []fs.ManagerOption
+	httpTubeFact           *contube.HttpTubeFactory
+	runtimeLoader          RuntimeLoaderType
+	stateStoreLoader       StateStoreLoaderType
+	functionStore          string
+	enableTls              bool
+	tlsCertFile            string
+	tlsKeyFile             string
+	tubeFactoryBuilders    map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error)
+	tubeConfig             map[string]common.ConfigMap
+	runtimeFactoryBuilders map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error)
+	runtimeConfig          map[string]common.ConfigMap
+	queueConfig            QueueConfig
 }
 
 type ServerOption interface {
@@ -139,11 +140,18 @@ func WithTubeFactoryBuilders(builder map[string]func(configMap common.ConfigMap)
 	})
 }
 
-// WithRuntimeLoader sets the loader for the runtime factory.
-// This must be called before WithConfig.
-func WithRuntimeLoader(loader RuntimeLoaderType) ServerOption {
+func WithRuntimeFactoryBuilder(name string, builder func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error)) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
-		o.runtimeLoader = loader
+		o.runtimeFactoryBuilders[name] = builder
+		return o, nil
+	})
+}
+
+func WithRuntimeFactoryBuilders(builder map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error)) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		for n, b := range builder {
+			o.runtimeFactoryBuilders[n] = b
+		}
 		return o, nil
 	})
 }
@@ -162,6 +170,14 @@ func GetBuiltinTubeFactoryBuilder() map[string]func(configMap common.ConfigMap) 
 		},
 		common.MemoryTubeType: func(configMap common.ConfigMap) (contube.TubeFactory, error) {
 			return contube.NewMemoryQueueFactory(context.Background()), nil
+		},
+	}
+}
+
+func GetBuiltinRuntimeFactoryBuilder() map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+	return map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error){
+		common.WASMRuntime: func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+			return wazero.NewWazeroFunctionRuntimeFactory(), nil
 		},
 	}
 }
@@ -224,6 +240,20 @@ func setupFactories(factoryBuilder map[string]func(configMap common.ConfigMap) (
 	return factories, nil
 }
 
+func setupRuntimeFactories(factoryBuilder map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error),
+	config map[string]common.ConfigMap,
+) (map[string]api.FunctionRuntimeFactory, error) {
+	factories := make(map[string]api.FunctionRuntimeFactory)
+	for name, builder := range factoryBuilder {
+		f, err := builder(config[name])
+		if err != nil {
+			return nil, errors.WithMessagef(ErrCreateFactory, "error creating factory %s: %v", name, err)
+		}
+		factories[name] = f
+	}
+	return factories, nil
+}
+
 func DefaultTubeLoader(c *FactoryConfig) (contube.TubeFactory, error) {
 	switch strings.ToLower(*c.Type) {
 	case common.PulsarTubeType:
@@ -267,13 +297,7 @@ func WithConfig(config *Config) ServerOption {
 		}
 		o.tubeConfig = config.TubeConfig
 		o.queueConfig = config.Queue
-		err = initFactories[api.FunctionRuntimeFactory](config.RuntimeFactory, o.runtimeLoader,
-			func(n string, f api.FunctionRuntimeFactory) {
-				o.managerOpts = append(o.managerOpts, fs.WithRuntimeFactory(n, f))
-			})
-		if err != nil {
-			return nil, err
-		}
+		o.runtimeConfig = config.RuntimeConfig
 		if config.StateStore != nil {
 			stateStore, err := o.stateStoreLoader(config.StateStore)
 			if err != nil {
@@ -295,7 +319,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	options.httpTubeFact = httpTubeFact
 	options.tubeFactoryBuilders = make(map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error))
 	options.tubeConfig = make(map[string]common.ConfigMap)
-	options.tubeOldLoader = DefaultTubeLoader
+	options.runtimeFactoryBuilders = make(map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error))
+	options.runtimeConfig = make(map[string]common.ConfigMap)
 	options.runtimeLoader = DefaultRuntimeLoader
 	options.stateStoreLoader = DefaultStateStoreLoader
 	for _, o := range opts {
@@ -312,6 +337,15 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if tubeFactories, err := setupFactories(options.tubeFactoryBuilders, options.tubeConfig); err == nil {
 		for name, f := range tubeFactories {
 			options.managerOpts = append(options.managerOpts, fs.WithTubeFactory(name, f))
+		}
+	} else {
+		return nil, err
+	}
+
+	// Config Runtime Factory
+	if runtimeFactories, err := setupRuntimeFactories(options.runtimeFactoryBuilders, options.runtimeConfig); err == nil {
+		for name, f := range runtimeFactories {
+			options.managerOpts = append(options.managerOpts, fs.WithRuntimeFactory(name, f))
 		}
 	} else {
 		return nil, err
@@ -373,16 +407,9 @@ func NewDefaultServer() (*Server, error) {
 				contube.PulsarURLKey: "pulsar://localhost:6650",
 			},
 		},
-		RuntimeFactory: map[string]*FactoryConfig{
-			"wasm": {
-				Type: common.OptionalStr(common.WASMRuntime),
-			},
-			"default": {
-				Ref: common.OptionalStr("wasm"),
-			},
-		},
+		RuntimeConfig: map[string]common.ConfigMap{},
 	}
-	return NewServer(WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()), WithConfig(defaultConfig))
+	return NewServer(WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()), WithRuntimeFactoryBuilders(GetBuiltinRuntimeFactoryBuilder()), WithConfig(defaultConfig))
 }
 
 func (s *Server) Run(context context.Context) {

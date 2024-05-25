@@ -59,8 +59,8 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 	outputTopic := "output"
 	f := &model.Function{
 		Name: "test",
-		Runtime: &model.RuntimeConfig{
-			Type: common.OptionalStr("grpc"),
+		Runtime: model.RuntimeConfig{
+			Type: "grpc",
 			Config: map[string]interface{}{
 				"addr": addr,
 			},

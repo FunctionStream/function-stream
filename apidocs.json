@@ -373,6 +373,9 @@
    }
   },
   "model.RuntimeConfig": {
+   "required": [
+    "type"
+   ],
    "properties": {
     "config": {
      "type": "object"

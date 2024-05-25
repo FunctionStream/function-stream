@@ -93,11 +93,6 @@ func WithTubeFactory(name string, factory contube.TubeFactory) ManagerOption {
 		return c, nil
 	})
 }
-
-func WithDefaultTubeFactory(factory contube.TubeFactory) ManagerOption {
-	return WithTubeFactory("default", factory)
-}
-
 func WithQueueFactory(factory contube.TubeFactory) ManagerOption {
 	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
 		c.queueFactory = factory
@@ -110,10 +105,6 @@ func WithRuntimeFactory(name string, factory api.FunctionRuntimeFactory) Manager
 		c.runtimeFactoryMap[name] = factory
 		return c, nil
 	})
-}
-
-func WithDefaultRuntimeFactory(factory api.FunctionRuntimeFactory) ManagerOption {
-	return WithRuntimeFactory("default", factory)
 }
 
 func WithInstanceFactory(factory api.FunctionInstanceFactory) ManagerOption {
@@ -178,13 +169,6 @@ func (fm *functionManagerImpl) getTubeFactory(tubeConfig *model.TubeConfig) (con
 	return factory, nil
 }
 
-func (fm *functionManagerImpl) getRuntimeType(runtimeConfig *model.RuntimeConfig) string {
-	if runtimeConfig == nil || runtimeConfig.Type == nil {
-		return "default"
-	}
-	return *runtimeConfig.Type
-}
-
 func (fm *functionManagerImpl) getRuntimeFactory(t string) (api.FunctionRuntimeFactory, error) {
 	factory, exist := fm.options.runtimeFactoryMap[t]
 	if !exist {
@@ -211,7 +195,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 	fm.functionsLock.Unlock()
 	funcCtx := fm.createFuncCtx()
 	for i := int32(0); i < f.Replicas; i++ {
-		runtimeType := fm.getRuntimeType(f.Runtime)
+		runtimeType := f.Runtime.Type
 
 		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, i, slog.With(
 			slog.String("name", f.Name),
