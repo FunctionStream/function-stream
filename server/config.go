@@ -27,6 +27,7 @@ import (
 )
 
 type FactoryConfig struct {
+	// Deprecate
 	Ref    *string           `mapstructure:"ref"`
 	Type   *string           `mapstructure:"type"`
 	Config *common.ConfigMap `mapstructure:"config"`
@@ -37,12 +38,18 @@ type StateStoreConfig struct {
 	Config *common.ConfigMap `mapstructure:"config"`
 }
 
+type QueueConfig struct {
+	Type   string           `mapstructure:"type"`
+	Config common.ConfigMap `mapstructure:"config"`
+}
+
 type Config struct {
 	// ListenAddr is the address that the function stream REST service will listen on.
 	ListenAddr string `mapstructure:"listen_addr"`
 
-	// TubeFactory is the list of tube factories that the function stream server will use.
-	TubeFactory map[string]*FactoryConfig `mapstructure:"tube_factory"`
+	Queue QueueConfig `mapstructure:"queue"`
+
+	TubeConfig map[string]common.ConfigMap `mapstructure:"tube-config"`
 
 	// RuntimeFactory is the list of runtime factories that the function stream server will use.
 	RuntimeFactory map[string]*FactoryConfig `mapstructure:"runtime_factory"`
@@ -89,10 +96,6 @@ func preprocessFactoriesConfig(n string, m map[string]*FactoryConfig) error {
 func (c *Config) preprocessConfig() error {
 	if c.ListenAddr == "" {
 		return errors.New("ListenAddr shouldn't be empty")
-	}
-	err := preprocessFactoriesConfig("Tube", c.TubeFactory)
-	if err != nil {
-		return err
 	}
 	return preprocessFactoriesConfig("Runtime", c.RuntimeFactory)
 }

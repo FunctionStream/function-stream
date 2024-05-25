@@ -13,11 +13,8 @@
 # limitations under the License.
 
 listen_addr: ":7300"
-tube_factory:
-  memory:
-    Type: "memory"
-  default:
-    ref: "memory"
+queue:
+  type: "memory"
 runtime_factory:
   wasm:
     type: "wasm"

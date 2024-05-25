@@ -38,7 +38,7 @@ func NewPulsarTubeFactoryConfig(configMap ConfigMap) (*PulsarTubeFactoryConfig, 
 	if pulsarURL, ok := configMap[PulsarURLKey].(string); ok {
 		result.PulsarURL = pulsarURL
 	} else {
-		return nil, errors.Errorf("Missing required field %s", PulsarURLKey)
+		result.PulsarURL = "pulsar://localhost:6650"
 	}
 	return &result, nil
 }
@@ -55,16 +55,19 @@ type PulsarEventQueueFactory struct {
 }
 
 func (f *PulsarEventQueueFactory) NewSourceTube(ctx context.Context, configMap ConfigMap) (<-chan Record, error) {
-	config, err := NewSourceQueueConfig(configMap)
-	if err != nil {
+	config := SourceQueueConfig{}
+	if err := configMap.ToConfigStruct(&config); err != nil {
 		return nil, err
 	}
-	return f.newSourceChan(ctx, config)
+	return f.newSourceChan(ctx, &config)
 }
 
 func (f *PulsarEventQueueFactory) NewSinkTube(ctx context.Context, configMap ConfigMap) (chan<- Record, error) {
-	config := NewSinkQueueConfig(configMap)
-	return f.newSinkChan(ctx, config)
+	config := SinkQueueConfig{}
+	if err := configMap.ToConfigStruct(&config); err != nil {
+		return nil, err
+	}
+	return f.newSinkChan(ctx, &config)
 }
 
 func NewPulsarEventQueueFactory(ctx context.Context, configMap ConfigMap) (TubeFactory, error) {

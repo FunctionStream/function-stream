@@ -47,6 +47,7 @@ func startStandaloneSvr(t *testing.T, ctx context.Context, opts ...ServerOption)
 	ln := getListener(t)
 	defaultOpts := []ServerOption{
 		WithHttpListener(ln),
+		WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()),
 	}
 	s, err := NewServer(
 		append(defaultOpts, opts...)...,
@@ -77,15 +78,17 @@ func TestStandaloneBasicFunction(t *testing.T) {
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Sources: []*model.TubeConfig{
+		Sources: []model.TubeConfig{
 			{
+				Type: common.MemoryTubeType,
 				Config: (&contube.SourceQueueConfig{
 					Topics:  []string{inputTopic},
 					SubName: "test",
 				}).ToConfigMap(),
 			},
 		},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: outputTopic,
 			}).ToConfigMap(),
@@ -141,13 +144,14 @@ func TestHttpTube(t *testing.T) {
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Sources: []*model.TubeConfig{{
-			Type: common.OptionalStr(common.HttpTubeType),
+		Sources: []model.TubeConfig{{
+			Type: common.HttpTubeType,
 			Config: map[string]interface{}{
 				contube.EndpointKey: endpoint,
 			},
 		}},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: "output",
 			}).ToConfigMap(),
@@ -238,15 +242,17 @@ func TestStatefulFunction(t *testing.T) {
 	funcConf := &model.Function{
 		Name:    "test-func",
 		Runtime: &model.RuntimeConfig{},
-		Sources: []*model.TubeConfig{
+		Sources: []model.TubeConfig{
 			{
+				Type: common.MemoryTubeType,
 				Config: (&contube.SourceQueueConfig{
 					Topics:  []string{input},
 					SubName: "test",
 				}).ToConfigMap(),
 			},
 		},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: "output",
 			}).ToConfigMap(),

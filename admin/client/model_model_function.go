@@ -26,8 +26,8 @@ type ModelFunction struct {
 	Namespace *string            `json:"namespace,omitempty"`
 	Replicas  int32              `json:"replicas"`
 	Runtime   ModelRuntimeConfig `json:"runtime"`
-	Sink      *ModelTubeConfig   `json:"sink,omitempty"`
-	Source    []ModelTubeConfig  `json:"source,omitempty"`
+	Sink      ModelTubeConfig    `json:"sink"`
+	Source    []ModelTubeConfig  `json:"source"`
 }
 
 type _ModelFunction ModelFunction
@@ -36,11 +36,13 @@ type _ModelFunction ModelFunction
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewModelFunction(name string, replicas int32, runtime ModelRuntimeConfig) *ModelFunction {
+func NewModelFunction(name string, replicas int32, runtime ModelRuntimeConfig, sink ModelTubeConfig, source []ModelTubeConfig) *ModelFunction {
 	this := ModelFunction{}
 	this.Name = name
 	this.Replicas = replicas
 	this.Runtime = runtime
+	this.Sink = sink
+	this.Source = source
 	return &this
 }
 
@@ -188,66 +190,50 @@ func (o *ModelFunction) SetRuntime(v ModelRuntimeConfig) {
 	o.Runtime = v
 }
 
-// GetSink returns the Sink field value if set, zero value otherwise.
+// GetSink returns the Sink field value
 func (o *ModelFunction) GetSink() ModelTubeConfig {
-	if o == nil || IsNil(o.Sink) {
+	if o == nil {
 		var ret ModelTubeConfig
 		return ret
 	}
-	return *o.Sink
+
+	return o.Sink
 }
 
-// GetSinkOk returns a tuple with the Sink field value if set, nil otherwise
+// GetSinkOk returns a tuple with the Sink field value
 // and a boolean to check if the value has been set.
 func (o *ModelFunction) GetSinkOk() (*ModelTubeConfig, bool) {
-	if o == nil || IsNil(o.Sink) {
+	if o == nil {
 		return nil, false
 	}
-	return o.Sink, true
+	return &o.Sink, true
 }
 
-// HasSink returns a boolean if a field has been set.
-func (o *ModelFunction) HasSink() bool {
-	if o != nil && !IsNil(o.Sink) {
-		return true
-	}
-
-	return false
-}
-
-// SetSink gets a reference to the given ModelTubeConfig and assigns it to the Sink field.
+// SetSink sets field value
 func (o *ModelFunction) SetSink(v ModelTubeConfig) {
-	o.Sink = &v
+	o.Sink = v
 }
 
-// GetSource returns the Source field value if set, zero value otherwise.
+// GetSource returns the Source field value
 func (o *ModelFunction) GetSource() []ModelTubeConfig {
-	if o == nil || IsNil(o.Source) {
+	if o == nil {
 		var ret []ModelTubeConfig
 		return ret
 	}
+
 	return o.Source
 }
 
-// GetSourceOk returns a tuple with the Source field value if set, nil otherwise
+// GetSourceOk returns a tuple with the Source field value
 // and a boolean to check if the value has been set.
 func (o *ModelFunction) GetSourceOk() ([]ModelTubeConfig, bool) {
-	if o == nil || IsNil(o.Source) {
+	if o == nil {
 		return nil, false
 	}
 	return o.Source, true
 }
 
-// HasSource returns a boolean if a field has been set.
-func (o *ModelFunction) HasSource() bool {
-	if o != nil && !IsNil(o.Source) {
-		return true
-	}
-
-	return false
-}
-
-// SetSource gets a reference to the given []ModelTubeConfig and assigns it to the Source field.
+// SetSource sets field value
 func (o *ModelFunction) SetSource(v []ModelTubeConfig) {
 	o.Source = v
 }
@@ -271,12 +257,8 @@ func (o ModelFunction) ToMap() (map[string]interface{}, error) {
 	}
 	toSerialize["replicas"] = o.Replicas
 	toSerialize["runtime"] = o.Runtime
-	if !IsNil(o.Sink) {
-		toSerialize["sink"] = o.Sink
-	}
-	if !IsNil(o.Source) {
-		toSerialize["source"] = o.Source
-	}
+	toSerialize["sink"] = o.Sink
+	toSerialize["source"] = o.Source
 	return toSerialize, nil
 }
 
@@ -288,6 +270,8 @@ func (o *ModelFunction) UnmarshalJSON(data []byte) (err error) {
 		"name",
 		"replicas",
 		"runtime",
+		"sink",
+		"source",
 	}
 
 	allProperties := make(map[string]interface{})

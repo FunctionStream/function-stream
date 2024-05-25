@@ -68,15 +68,8 @@ func TestBasicFunction(t *testing.T) {
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Source: []adminclient.ModelTubeConfig{
-			{
-				Config: map[string]interface{}{
-					"topicList": []string{inputTopic},
-					"subName":   "fs",
-				},
-			},
-		},
-		Sink:     utils.MakeQueueSinkTubeConfig(outputTopic),
+		Source:   utils.MakePulsarSourceTubeConfig(inputTopic),
+		Sink:     *utils.MakePulsarSinkTubeConfig(outputTopic),
 		Replicas: 1,
 	}
 

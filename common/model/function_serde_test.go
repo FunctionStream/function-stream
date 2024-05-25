@@ -19,6 +19,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/functionstream/function-stream/fs/contube"
 	"reflect"
 	"testing"
 
@@ -30,8 +31,8 @@ func TestFunctionSerde(t *testing.T) {
 	f := Function{
 		Name:     "TestFunction",
 		Runtime:  &RuntimeConfig{Type: common.OptionalStr("runtime"), Config: map[string]interface{}{"key": "value"}},
-		Sources:  []*TubeConfig{{Type: common.OptionalStr("source"), Config: map[string]interface{}{"key": "value"}}},
-		Sink:     &TubeConfig{Type: common.OptionalStr("sink"), Config: map[string]interface{}{"key": "value"}},
+		Sources:  []TubeConfig{{Type: "source", Config: map[string]interface{}{"key": "value"}}},
+		Sink:     TubeConfig{Type: "sink", Config: map[string]interface{}{"key": "value"}},
 		Config:   map[string]string{"key": "value"},
 		Replicas: 2,
 	}
@@ -79,7 +80,7 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 		Name:     "TestFunction",
 		Runtime:  nil,
 		Sources:  nil,
-		Sink:     nil,
+		Sink:     TubeConfig{},
 		Config:   map[string]string{"key": "value"},
 		Replicas: 2,
 	}
@@ -111,7 +112,8 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 
 	fmt.Println(string(data))
 
-	f.Sources = []*TubeConfig{} // The nil would be expected to be converted to a zero-length array for the YAML
+	f.Sources = []TubeConfig{} // The nil would be expected to be converted to a zero-length array for the YAML
+	f.Sink.Config = contube.ConfigMap{}
 	// serialization
 
 	// YAML Deserialization

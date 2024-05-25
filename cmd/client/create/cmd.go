@@ -70,8 +70,8 @@ func exec(_ *cobra.Command, _ []string) {
 		Runtime: adminclient.ModelRuntimeConfig{Config: map[string]interface{}{
 			fs_cmmon.RuntimeArchiveConfigKey: config.archive,
 		}},
-		Source:   utils.MakeQueueSourceTubeConfig("fs", config.inputs...),
-		Sink:     utils.MakeQueueSinkTubeConfig(config.output),
+		Source:   utils.MakeMemorySourceTubeConfig(config.inputs...),
+		Sink:     *utils.MakeMemorySinkTubeConfig(config.output),
 		Replicas: config.replica,
 	}
 

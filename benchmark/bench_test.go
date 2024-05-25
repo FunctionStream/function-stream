@@ -78,8 +78,8 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 				},
 			},
-			Source:   adminutils.MakeQueueSourceTubeConfig("fs", inputTopic),
-			Sink:     adminutils.MakeQueueSinkTubeConfig(outputTopic),
+			Source:   adminutils.MakePulsarSourceTubeConfig(inputTopic),
+			Sink:     *adminutils.MakePulsarSinkTubeConfig(outputTopic),
 			Replicas: replicas,
 		},
 	}
@@ -135,8 +135,8 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 				},
 			},
-			Source:   adminutils.MakeQueueSourceTubeConfig("fs", inputTopic),
-			Sink:     adminutils.MakeQueueSinkTubeConfig(outputTopic),
+			Source:   adminutils.MakeMemorySourceTubeConfig(inputTopic),
+			Sink:     *adminutils.MakeMemorySinkTubeConfig(outputTopic),
 			Replicas: replicas,
 		},
 		QueueBuilder: func(ctx context.Context) (contube.TubeFactory, error) {

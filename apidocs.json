@@ -337,6 +337,8 @@
    "required": [
     "name",
     "runtime",
+    "source",
+    "sink",
     "replicas"
    ],
    "properties": {
@@ -381,6 +383,9 @@
    }
   },
   "model.TubeConfig": {
+   "required": [
+    "type"
+   ],
    "properties": {
     "config": {
      "type": "object"

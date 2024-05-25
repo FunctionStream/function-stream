@@ -75,15 +75,17 @@ func createTestFunction(name string) *model.Function {
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Sources: []*model.TubeConfig{
+		Sources: []model.TubeConfig{
 			{
+				Type: common.MemoryTubeType,
 				Config: (&contube.SourceQueueConfig{
 					Topics:  []string{"input"},
 					SubName: "test",
 				}).ToConfigMap(),
 			},
 		},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: "output",
 			}).ToConfigMap(),

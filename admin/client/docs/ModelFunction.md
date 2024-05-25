@@ -9,14 +9,14 @@ Name | Type | Description | Notes
 **Namespace** | Pointer to **string** |  | [optional] 
 **Replicas** | **int32** |  | 
 **Runtime** | [**ModelRuntimeConfig**](ModelRuntimeConfig.md) |  | 
-**Sink** | Pointer to [**ModelTubeConfig**](ModelTubeConfig.md) |  | [optional] 
-**Source** | Pointer to [**[]ModelTubeConfig**](ModelTubeConfig.md) |  | [optional] 
+**Sink** | [**ModelTubeConfig**](ModelTubeConfig.md) |  | 
+**Source** | [**[]ModelTubeConfig**](ModelTubeConfig.md) |  | 
 
 ## Methods
 
 ### NewModelFunction
 
-`func NewModelFunction(name string, replicas int32, runtime ModelRuntimeConfig, ) *ModelFunction`
+`func NewModelFunction(name string, replicas int32, runtime ModelRuntimeConfig, sink ModelTubeConfig, source []ModelTubeConfig, ) *ModelFunction`
 
 NewModelFunction instantiates a new ModelFunction object
 This constructor will assign default values to properties that have it defined,
@@ -160,11 +160,6 @@ and a boolean to check if the value has been set.
 
 SetSink sets Sink field to given value.
 
-### HasSink
-
-`func (o *ModelFunction) HasSink() bool`
-
-HasSink returns a boolean if a field has been set.
 
 ### GetSource
 
@@ -185,11 +180,6 @@ and a boolean to check if the value has been set.
 
 SetSource sets Source field to given value.
 
-### HasSource
-
-`func (o *ModelFunction) HasSource() bool`
-
-HasSource returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

@@ -20,10 +20,12 @@ runtime:
     archive: "bin/example_basic.wasm"
 sources:
   - config:
-      topicList:
+      inputs:
         - "input"
-      subName: "fs"
+      subscription-name: "fs"
+    type: "memory"
 sink:
   config:
-    topic: "output"
+    output: "output"
+  type: "memory"
 replicas: 1

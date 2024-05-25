@@ -74,6 +74,7 @@ type managerOptions struct {
 	instanceFactory          api.FunctionInstanceFactory
 	stateStore               api.StateStore
 	dontUseDefaultStateStore bool
+	queueFactory             contube.TubeFactory
 }
 
 type ManagerOption interface {
@@ -95,6 +96,13 @@ func WithTubeFactory(name string, factory contube.TubeFactory) ManagerOption {
 
 func WithDefaultTubeFactory(factory contube.TubeFactory) ManagerOption {
 	return WithTubeFactory("default", factory)
+}
+
+func WithQueueFactory(factory contube.TubeFactory) ManagerOption {
+	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.queueFactory = factory
+		return c, nil
+	})
 }
 
 func WithRuntimeFactory(name string, factory api.FunctionRuntimeFactory) ManagerOption {
@@ -129,7 +137,6 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 		runtimeFactoryMap: make(map[string]api.FunctionRuntimeFactory),
 	}
 	options.runtimeFactoryMap["default"] = wazero.NewWazeroFunctionRuntimeFactory()
-	options.tubeFactoryMap["default"] = contube.NewMemoryQueueFactory(context.Background())
 	options.instanceFactory = NewDefaultInstanceFactory()
 	for _, o := range opts {
 		_, err := o.apply(options)
@@ -163,19 +170,12 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 }
 
 func (fm *functionManagerImpl) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) {
-	get := func(t string) (contube.TubeFactory, error) {
-		factory, exist := fm.options.tubeFactoryMap[t]
-		if !exist {
-			fm.log.ErrorContext(context.Background(), "tube factory not found", "type", t)
-			return nil, common.ErrorTubeFactoryNotFound
-		}
-		return factory, nil
-
+	factory, exist := fm.options.tubeFactoryMap[tubeConfig.Type]
+	if !exist {
+		fm.log.ErrorContext(context.Background(), "tube factory not found", "type", tubeConfig.Type)
+		return nil, common.ErrorTubeFactoryNotFound
 	}
-	if tubeConfig == nil || tubeConfig.Type == nil {
-		return get("default")
-	}
-	return get(*tubeConfig.Type)
+	return factory, nil
 }
 
 func (fm *functionManagerImpl) getRuntimeType(runtimeConfig *model.RuntimeConfig) string {
@@ -227,7 +227,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		}
 		var sources []<-chan contube.Record
 		for _, t := range f.Sources {
-			sourceFactory, err := fm.getTubeFactory(t)
+			sourceFactory, err := fm.getTubeFactory(&t)
 			if err != nil {
 				return nil
 			}
@@ -237,7 +237,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 			}
 			sources = append(sources, sourceChan)
 		}
-		sinkFactory, err := fm.getTubeFactory(f.Sink)
+		sinkFactory, err := fm.getTubeFactory(&f.Sink)
 		if err != nil {
 			return nil
 		}
@@ -291,7 +291,11 @@ func (fm *functionManagerImpl) ListFunctions() (result []string) {
 func (fm *functionManagerImpl) ProduceEvent(name string, event contube.Record) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.options.tubeFactoryMap["default"].NewSinkTube(ctx, (&contube.SinkQueueConfig{Topic: name}).ToConfigMap())
+	factory, ok := fm.options.tubeFactoryMap[common.MemoryTubeType]
+	if !ok {
+		return errors.New("memory tube factory not found")
+	}
+	c, err := factory.NewSinkTube(ctx, (&contube.SinkQueueConfig{Topic: name}).ToConfigMap())
 	if err != nil {
 		return err
 	}
@@ -302,7 +306,11 @@ func (fm *functionManagerImpl) ProduceEvent(name string, event contube.Record) e
 func (fm *functionManagerImpl) ConsumeEvent(name string) (contube.Record, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c, err := fm.options.tubeFactoryMap["default"].NewSourceTube(ctx, (&contube.SourceQueueConfig{
+	factory, ok := fm.options.tubeFactoryMap[common.MemoryTubeType]
+	if !ok {
+		return nil, errors.New("memory tube factory not found")
+	}
+	c, err := factory.NewSourceTube(ctx, (&contube.SourceQueueConfig{
 		Topics: []string{name}, SubName: "consume-" + strconv.Itoa(rand.Int())}).ToConfigMap())
 	if err != nil {
 		return nil, err
