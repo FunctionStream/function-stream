@@ -63,7 +63,6 @@ type serverOptions struct {
 	httpListener           net.Listener
 	managerOpts            []fs.ManagerOption
 	httpTubeFact           *contube.HttpTubeFactory
-	runtimeLoader          RuntimeLoaderType
 	stateStoreLoader       StateStoreLoaderType
 	functionStore          string
 	enableTls              bool
@@ -181,10 +180,10 @@ func GetBuiltinRuntimeFactoryBuilder() map[string]func(configMap common.ConfigMa
 	}
 }
 
-func setupFactories(factoryBuilder map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error),
+func setupFactories[T any](factoryBuilder map[string]func(configMap common.ConfigMap) (T, error),
 	config map[string]common.ConfigMap,
-) (map[string]contube.TubeFactory, error) {
-	factories := make(map[string]contube.TubeFactory)
+) (map[string]T, error) {
+	factories := make(map[string]T)
 	for name, builder := range factoryBuilder {
 		f, err := builder(config[name])
 		if err != nil {
@@ -193,38 +192,6 @@ func setupFactories(factoryBuilder map[string]func(configMap common.ConfigMap) (
 		factories[name] = f
 	}
 	return factories, nil
-}
-
-func setupRuntimeFactories(factoryBuilder map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error),
-	config map[string]common.ConfigMap,
-) (map[string]api.FunctionRuntimeFactory, error) {
-	factories := make(map[string]api.FunctionRuntimeFactory)
-	for name, builder := range factoryBuilder {
-		f, err := builder(config[name])
-		if err != nil {
-			return nil, errors.WithMessagef(ErrCreateFactory, "error creating factory %s: %v", name, err)
-		}
-		factories[name] = f
-	}
-	return factories, nil
-}
-
-func DefaultTubeLoader(c *FactoryConfig) (contube.TubeFactory, error) {
-	switch strings.ToLower(*c.Type) {
-	case common.PulsarTubeType:
-		return contube.NewPulsarEventQueueFactory(context.Background(), contube.ConfigMap(*c.Config))
-	case common.MemoryTubeType:
-		return contube.NewMemoryQueueFactory(context.Background()), nil
-	}
-	return nil, errors.WithMessagef(ErrUnsupportedTubeType, "unsupported tube type :%s", *c.Type)
-}
-
-func DefaultRuntimeLoader(c *FactoryConfig) (api.FunctionRuntimeFactory, error) {
-	switch strings.ToLower(*c.Type) {
-	case common.WASMRuntime:
-		return wazero.NewWazeroFunctionRuntimeFactory(), nil
-	}
-	return nil, errors.WithMessagef(ErrUnsupportedTRuntimeType, "unsupported runtime type: %s", *c.Type)
 }
 
 func DefaultStateStoreLoader(c *StateStoreConfig) (api.StateStore, error) {
@@ -276,7 +243,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	options.tubeConfig = make(map[string]common.ConfigMap)
 	options.runtimeFactoryBuilders = make(map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error))
 	options.runtimeConfig = make(map[string]common.ConfigMap)
-	options.runtimeLoader = DefaultRuntimeLoader
 	options.stateStoreLoader = DefaultStateStoreLoader
 	for _, o := range opts {
 		if o == nil {
@@ -298,7 +264,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	// Config Runtime Factory
-	if runtimeFactories, err := setupRuntimeFactories(options.runtimeFactoryBuilders, options.runtimeConfig); err == nil {
+	if runtimeFactories, err := setupFactories(options.runtimeFactoryBuilders, options.runtimeConfig); err == nil {
 		for name, f := range runtimeFactories {
 			options.managerOpts = append(options.managerOpts, fs.WithRuntimeFactory(name, f))
 		}
