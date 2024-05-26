@@ -16,9 +16,13 @@
 
 package fs
 
+import "fmt"
+
 import (
 	"context"
-	"log/slog"
+	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -27,7 +31,6 @@ import (
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/fs/runtime/wazero"
 	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/pkg/errors"
 )
@@ -65,7 +68,7 @@ type functionManagerImpl struct {
 	options       *managerOptions
 	functions     map[NamespacedName][]api.FunctionInstance //TODO: Use sync.map
 	functionsLock sync.Mutex
-	log           *slog.Logger
+	log           *common.Logger
 }
 
 type managerOptions struct {
@@ -75,6 +78,7 @@ type managerOptions struct {
 	stateStore               api.StateStore
 	dontUseDefaultStateStore bool
 	queueFactory             contube.TubeFactory
+	log                      *logr.Logger
 }
 
 type ManagerOption interface {
@@ -122,12 +126,18 @@ func WithStateStore(store api.StateStore) ManagerOption {
 	})
 }
 
+func WithLogger(log *logr.Logger) ManagerOption {
+	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.log = log
+		return c, nil
+	})
+}
+
 func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 	options := &managerOptions{
 		tubeFactoryMap:    make(map[string]contube.TubeFactory),
 		runtimeFactoryMap: make(map[string]api.FunctionRuntimeFactory),
 	}
-	options.runtimeFactoryMap["default"] = wazero.NewWazeroFunctionRuntimeFactory()
 	options.instanceFactory = NewDefaultInstanceFactory()
 	for _, o := range opts {
 		_, err := o.apply(options)
@@ -135,14 +145,24 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 			return nil, err
 		}
 	}
+	var log *common.Logger
+	if options.log == nil {
+		if zapLogger, err := zap.NewDevelopment(); err == nil {
+			zaprLog := zapr.NewLogger(zapLogger)
+			log = common.NewLogger(&zaprLog)
+		} else {
+			panic("failed to create zap logger:" + err.Error())
+		}
+	} else {
+		log = common.NewLogger(options.log)
+	}
 	if !options.dontUseDefaultStateStore {
 		var err error
 		options.stateStore, err = statestore.NewTmpPebbleStateStore()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create default state store")
+			return nil, fmt.Errorf("failed to create default state store: %w", err)
 		}
 	}
-	log := slog.With()
 	loadedRuntimeFact := make([]string, 0, len(options.runtimeFactoryMap))
 	for k := range options.runtimeFactoryMap {
 		loadedRuntimeFact = append(loadedRuntimeFact, k)
@@ -151,8 +171,8 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 	for k := range options.tubeFactoryMap {
 		loadedTubeFact = append(loadedTubeFact, k)
 	}
-	log.Info("Function manager created", slog.Any("runtime-factories", loadedRuntimeFact),
-		slog.Any("tube-factories", loadedTubeFact))
+	log.Info("Function manager created", "runtime-factories", loadedRuntimeFact,
+		"tube-factories", loadedTubeFact)
 	return &functionManagerImpl{
 		options:   options,
 		functions: make(map[NamespacedName][]api.FunctionInstance),
@@ -163,8 +183,7 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 func (fm *functionManagerImpl) getTubeFactory(tubeConfig *model.TubeConfig) (contube.TubeFactory, error) {
 	factory, exist := fm.options.tubeFactoryMap[tubeConfig.Type]
 	if !exist {
-		fm.log.ErrorContext(context.Background(), "tube factory not found", "type", tubeConfig.Type)
-		return nil, common.ErrorTubeFactoryNotFound
+		return nil, fmt.Errorf("failed to get tube factory: %w, type: %s", common.ErrorTubeFactoryNotFound, tubeConfig.Type)
 	}
 	return factory, nil
 }
@@ -172,8 +191,7 @@ func (fm *functionManagerImpl) getTubeFactory(tubeConfig *model.TubeConfig) (con
 func (fm *functionManagerImpl) getRuntimeFactory(t string) (api.FunctionRuntimeFactory, error) {
 	factory, exist := fm.options.runtimeFactoryMap[t]
 	if !exist {
-		fm.log.ErrorContext(context.Background(), "runtime factory not found", "type", t)
-		return nil, common.ErrorRuntimeFactoryNotFound
+		return nil, fmt.Errorf("failed to get runtime factory: %w, type: %s", common.ErrorRuntimeFactoryNotFound, t)
 	}
 	return factory, nil
 }
@@ -197,11 +215,8 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 	for i := int32(0); i < f.Replicas; i++ {
 		runtimeType := f.Runtime.Type
 
-		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, i, slog.With(
-			slog.String("name", f.Name),
-			slog.Int("index", int(i)),
-			slog.String("runtime", runtimeType),
-		))
+		instanceLogger := fm.log.SubLogger("functionName", f.Name, "instanceIndex", int(i), "runtimeType", runtimeType)
+		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, i, instanceLogger)
 		fm.functionsLock.Lock()
 		fm.functions[GetNamespacedName(f.Namespace, f.Name)][i] = instance
 		fm.functionsLock.Unlock()
@@ -217,7 +232,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 			}
 			sourceChan, err := sourceFactory.NewSourceTube(instance.Context(), t.Config)
 			if err != nil {
-				return errors.Wrap(err, "Error creating source event queue")
+				return fmt.Errorf("failed to create source event queue: %w", err)
 			}
 			sources = append(sources, sourceChan)
 		}
@@ -227,20 +242,23 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		}
 		sink, err := sinkFactory.NewSinkTube(instance.Context(), f.Sink.Config)
 		if err != nil {
-			return errors.Wrap(err, "Error creating sink event queue")
+			return fmt.Errorf("failed to create sink event queue: %w", err)
 		}
 
-		go instance.Run(runtimeFactory, sources, sink)
+		runtime, err := runtimeFactory.NewFunctionRuntime(instance)
+		if err != nil {
+			return fmt.Errorf("failed to create runtime: %w", err)
+		}
+
+		go instance.Run(runtime, sources, sink)
 		select {
 		case err := <-instance.WaitForReady():
 			if err != nil {
-				fm.log.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", err.Error()))
 				instance.Stop()
-				return err
+				return fmt.Errorf("failed to start function instance: %w", err)
 			}
 		case <-instance.Context().Done():
-			fm.log.ErrorContext(instance.Context(), "Error starting function instance", slog.Any("error", "context cancelled"))
-			return errors.New("context cancelled")
+			return fmt.Errorf("failed to start function instance: the context has been cancelled")
 		}
 	}
 	return nil

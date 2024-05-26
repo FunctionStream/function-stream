@@ -17,8 +17,7 @@
 package api
 
 import (
-	"log/slog"
-
+	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/contube"
 	"golang.org/x/net/context"
@@ -30,11 +29,11 @@ type FunctionInstance interface {
 	Definition() *model.Function
 	Index() int32
 	Stop()
-	Run(factory FunctionRuntimeFactory, sources []<-chan contube.Record, sink chan<- contube.Record)
+	Run(runtime FunctionRuntime, sources []<-chan contube.Record, sink chan<- contube.Record)
 	WaitForReady() <-chan error
-	Logger() *slog.Logger
+	Logger() *common.Logger
 }
 
 type FunctionInstanceFactory interface {
-	NewFunctionInstance(f *model.Function, funcCtx FunctionContext, i int32, logger *slog.Logger) FunctionInstance
+	NewFunctionInstance(f *model.Function, funcCtx FunctionContext, i int32, logger *common.Logger) FunctionInstance
 }

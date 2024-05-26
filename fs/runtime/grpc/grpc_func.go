@@ -32,7 +32,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type GRPCFuncRuntime struct {
+type FuncRuntime struct {
 	api.FunctionRuntime
 	Name       string
 	instance   api.FunctionInstance
@@ -44,7 +44,7 @@ type GRPCFuncRuntime struct {
 	output     chan contube.Record
 	stopFunc   func()
 	processing atomic.Bool
-	log        *slog.Logger
+	log        *common.Logger
 }
 
 type Status int32
@@ -61,7 +61,7 @@ type FSSReconcileServer struct {
 	readyCh     chan struct{}
 	connected   sync.Once
 	reconcile   chan *proto.FunctionStatus
-	functions   map[string]*GRPCFuncRuntime
+	functions   map[string]*FuncRuntime
 	functionsMu sync.Mutex
 	status      int32
 	log         *slog.Logger
@@ -72,7 +72,7 @@ func NewFSReconcile(ctx context.Context) *FSSReconcileServer {
 		ctx:       ctx,
 		readyCh:   make(chan struct{}),
 		reconcile: make(chan *proto.FunctionStatus, 100),
-		functions: make(map[string]*GRPCFuncRuntime),
+		functions: make(map[string]*FuncRuntime),
 		log:       slog.With(slog.String("component", "grpc-reconcile-server")),
 	}
 }
@@ -146,14 +146,14 @@ func (s *FSSReconcileServer) UpdateStatus(_ context.Context, newStatus *proto.Fu
 
 func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
 	name := instance.Definition().Name
-	log := instance.Logger().With(
-		slog.String("component", "grpc-runtime"),
+	log := instance.Logger().SubLogger(
+		"component", "grpc-runtime",
 	)
 	go func() {
 		<-instance.Context().Done()
 		s.removeFunction(name)
 	}()
-	runtime := &GRPCFuncRuntime{
+	runtime := &FuncRuntime{
 		Name:     name,
 		instance: instance,
 		readyCh:  make(chan error),
@@ -178,11 +178,11 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 		s.functions[name] = runtime
 	}
 	s.reconcile <- runtime.status
-	log.InfoContext(runtime.ctx, "Creating GRPC function runtime")
+	log.Info("Creating GRPC function runtime")
 	return runtime, nil
 }
 
-func (s *FSSReconcileServer) getFunc(name string) (*GRPCFuncRuntime, error) {
+func (s *FSSReconcileServer) getFunc(name string) (*FuncRuntime, error) {
 	s.functionsMu.Lock()
 	defer s.functionsMu.Unlock()
 	instance, ok := s.functions[name]
@@ -207,29 +207,29 @@ func isFinalStatus(status proto.FunctionStatus_Status) bool {
 	return status == proto.FunctionStatus_FAILED || status == proto.FunctionStatus_DELETED
 }
 
-func (f *GRPCFuncRuntime) Update(new *proto.FunctionStatus) {
+func (f *FuncRuntime) Update(new *proto.FunctionStatus) {
 	if f.status.Status == proto.FunctionStatus_CREATING && isFinalStatus(new.Status) {
 		f.readyCh <- fmt.Errorf("function failed to start")
 	}
 	if f.status.Status != new.Status {
-		f.log.InfoContext(f.ctx, "Function status update", slog.Any("new_status", new.Status),
+		f.log.Info("Function status update", slog.Any("new_status", new.Status),
 			slog.Any("old_status", f.status.Status))
 	}
 	f.status = new
 }
 
-func (f *GRPCFuncRuntime) WaitForReady() <-chan error {
+func (f *FuncRuntime) WaitForReady() <-chan error {
 	return f.readyCh
 }
 
 // Stop stops the function runtime and remove it
 // It is different from the ctx.Cancel. It will make sure the runtime has been deleted after this method returns.
-func (f *GRPCFuncRuntime) Stop() {
-	f.log.InfoContext(f.ctx, "Stopping function runtime")
+func (f *FuncRuntime) Stop() {
+	f.log.Info("Stopping function runtime")
 	f.stopFunc()
 }
 
-func (f *GRPCFuncRuntime) Call(event contube.Record) (contube.Record, error) {
+func (f *FuncRuntime) Call(event contube.Record) (contube.Record, error) {
 	f.input <- event
 	out := <-f.output
 	f.processing.Store(false)
@@ -253,7 +253,7 @@ func (f *FunctionServerImpl) Process(req *proto.FunctionProcessRequest, stream p
 		return err
 	}
 	log := runtime.log
-	log.InfoContext(stream.Context(), "Start processing events using GRPC")
+	log.Info("Start processing events using GRPC")
 	runtime.readyOnce.Do(func() {
 		runtime.readyCh <- err
 	})
@@ -270,11 +270,11 @@ func (f *FunctionServerImpl) Process(req *proto.FunctionProcessRequest, stream p
 	for {
 		select {
 		case event := <-runtime.input:
-			log.DebugContext(stream.Context(), "sending event", slog.Any("count", logCounter))
+			log.Debug("sending event", "count", logCounter)
 			runtime.processing.Store(true)
 			err := stream.Send(&proto.Event{Payload: string(event.GetPayload())}) // TODO: Change payload type to bytes
 			if err != nil {
-				log.Error("failed to send event", slog.Any("error", err))
+				log.Error(err, "failed to send event")
 				return err
 			}
 		case <-stream.Context().Done():
@@ -287,7 +287,7 @@ func (f *FunctionServerImpl) Process(req *proto.FunctionProcessRequest, stream p
 	}
 }
 
-func (f *FunctionServerImpl) getFunctionRuntime(ctx context.Context) (*GRPCFuncRuntime, error) {
+func (f *FunctionServerImpl) getFunctionRuntime(ctx context.Context) (*FuncRuntime, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, fmt.Errorf("failed to get metadata")
@@ -303,7 +303,7 @@ func (f *FunctionServerImpl) Output(ctx context.Context, e *proto.Event) (*proto
 	if err != nil {
 		return nil, err
 	}
-	runtime.log.DebugContext(ctx, "received event")
+	runtime.log.Debug("received event")
 	runtime.output <- contube.NewRecordImpl([]byte(e.Payload), func() {})
 	return &proto.Response{
 		Status: proto.Response_OK,
@@ -315,7 +315,7 @@ func (f *FunctionServerImpl) PutState(ctx context.Context, req *proto.PutStateRe
 	if err != nil {
 		return nil, err
 	}
-	runtime.log.DebugContext(ctx, "put state")
+	runtime.log.Debug("put state")
 	err = runtime.instance.FunctionContext().PutState(req.Key, req.Value)
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func (f *FunctionServerImpl) GetState(ctx context.Context, req *proto.GetStateRe
 	if err != nil {
 		return nil, err
 	}
-	runtime.log.DebugContext(ctx, "get state")
+	runtime.log.Debug("get state")
 	v, err := runtime.instance.FunctionContext().GetState(req.Key)
 	if err != nil {
 		return nil, err
