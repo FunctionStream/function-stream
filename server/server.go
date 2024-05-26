@@ -36,7 +36,6 @@ import (
 	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/go-openapi/spec"
 	"github.com/pkg/errors"
-	"k8s.io/utils/set"
 )
 
 var (
@@ -180,50 +179,6 @@ func GetBuiltinRuntimeFactoryBuilder() map[string]func(configMap common.ConfigMa
 			return wazero.NewWazeroFunctionRuntimeFactory(), nil
 		},
 	}
-}
-
-func getRefFactory(m map[string]*FactoryConfig, name string, visited set.Set[string]) (string, error) {
-	if visited.Has(name) {
-		return "", errors.Errorf("circular reference of factory %s", name)
-	}
-	visited.Insert(name)
-	f, ok := m[name]
-	if !ok {
-		return "", errors.Errorf("tube factory %s not found", name)
-	}
-	if f.Ref != nil {
-		return getRefFactory(m, strings.ToLower(*f.Ref), visited)
-	}
-	return name, nil
-}
-
-func initFactories[T any](m map[string]*FactoryConfig, newFactory func(c *FactoryConfig) (T, error),
-	setup func(n string, f T)) error {
-	factoryMap := make(map[string]T)
-
-	for name := range m {
-		refName, err := getRefFactory(m, name, set.New[string]())
-		if err != nil {
-			return err
-		}
-		if _, ok := factoryMap[refName]; !ok {
-			fc, exist := m[refName]
-			if !exist {
-				return errors.Errorf("factory %s not found, which the factory %s is pointed to", refName, name)
-			}
-			if fc.Type == nil {
-				return errors.Errorf("factory %s type is not set", refName)
-			}
-			f, err := newFactory(fc)
-			if err != nil {
-				return err
-			}
-			factoryMap[refName] = f
-		}
-		factoryMap[name] = factoryMap[refName]
-		setup(name, factoryMap[name])
-	}
-	return nil
 }
 
 func setupFactories(factoryBuilder map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error),

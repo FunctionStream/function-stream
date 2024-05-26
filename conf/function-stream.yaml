@@ -20,10 +20,3 @@ queue:
 tube-config:
   pulsar:
     pulsar_url: "pulsar://localhost:6650"
-  memory:
-    Type: "memory"
-runtime_factory:
-  wasm:
-    type: "wasm"
-  default:
-    ref: "wasm"

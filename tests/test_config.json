@@ -1,17 +1,13 @@
 {
-  "listen_addr": ":17300",
-  "tube_factory": {
-    "my_pulsar": {
-      "type": "pulsar",
-      "config": {
-        "pulsar_url": "pulsar://localhost:6651"
-      }
-    },
-    "my_memory": {
-      "type": "memory"
-    },
-    "default": {
-      "ref": "my_pulsar"
+  "listen-addr": ":17300",
+  "tube-config": {
+    "my-tube": {
+      "key": "value"
+    }
+  },
+  "runtime-config": {
+    "custom-runtime": {
+      "name": "test"
     }
   }
 }
