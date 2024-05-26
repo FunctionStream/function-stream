@@ -27,6 +27,7 @@ import (
 )
 
 type FactoryConfig struct {
+	// Deprecate
 	Ref    *string           `mapstructure:"ref"`
 	Type   *string           `mapstructure:"type"`
 	Config *common.ConfigMap `mapstructure:"config"`
@@ -37,64 +38,43 @@ type StateStoreConfig struct {
 	Config *common.ConfigMap `mapstructure:"config"`
 }
 
+type QueueConfig struct {
+	Type   string           `mapstructure:"type"`
+	Config common.ConfigMap `mapstructure:"config"`
+}
+
 type Config struct {
 	// ListenAddr is the address that the function stream REST service will listen on.
-	ListenAddr string `mapstructure:"listen_addr"`
+	ListenAddr string `mapstructure:"listen-addr"`
 
-	// TubeFactory is the list of tube factories that the function stream server will use.
-	TubeFactory map[string]*FactoryConfig `mapstructure:"tube_factory"`
+	Queue QueueConfig `mapstructure:"queue"`
 
-	// RuntimeFactory is the list of runtime factories that the function stream server will use.
-	RuntimeFactory map[string]*FactoryConfig `mapstructure:"runtime_factory"`
+	TubeConfig map[string]common.ConfigMap `mapstructure:"tube-config"`
+
+	RuntimeConfig map[string]common.ConfigMap `mapstructure:"runtime-config"`
 
 	// StateStore is the configuration for the state store that the function stream server will use.
 	// Optional
-	StateStore *StateStoreConfig `mapstructure:"state_store"`
+	StateStore *StateStoreConfig `mapstructure:"state-store"`
 
 	// FunctionStore is the path to the function store
-	FunctionStore string `mapstructure:"function_store"`
+	FunctionStore string `mapstructure:"function-store"`
 
-	EnableTLS   bool   `mapstructure:"enable_tls"`
-	TLSCertFile string `mapstructure:"tls_cert_file"`
-	TLSKeyFile  string `mapstructure:"tls_key_file"`
+	EnableTLS   bool   `mapstructure:"enable-tls"`
+	TLSCertFile string `mapstructure:"tls-cert-file"`
+	TLSKeyFile  string `mapstructure:"tls-key-file"`
 }
 
 func init() {
-	viper.SetDefault("listen_addr", ":7300")
-	viper.SetDefault("function_store", "./functions")
-}
-
-func preprocessFactoriesConfig(n string, m map[string]*FactoryConfig) error {
-	for name, factory := range m {
-		if ref := factory.Ref; ref != nil && *ref != "" {
-			referred, ok := m[strings.ToLower(*ref)]
-			if !ok {
-				return errors.Errorf("%s factory %s refers to non-existent factory %s", n, name, *ref)
-			}
-			if factory.Type == nil {
-				factory.Type = referred.Type
-			}
-			factory.Config = common.MergeConfig(referred.Config, factory.Config)
-		}
-	}
-
-	for name, factory := range m {
-		if factory.Type == nil {
-			return errors.Errorf("%s factory %s has no type", n, name)
-		}
-	}
-	return nil
+	viper.SetDefault("listen-addr", ":7300")
+	viper.SetDefault("function-store", "./functions")
 }
 
 func (c *Config) preprocessConfig() error {
 	if c.ListenAddr == "" {
 		return errors.New("ListenAddr shouldn't be empty")
 	}
-	err := preprocessFactoriesConfig("Tube", c.TubeFactory)
-	if err != nil {
-		return err
-	}
-	return preprocessFactoriesConfig("Runtime", c.RuntimeFactory)
+	return nil
 }
 
 func loadConfig() (*Config, error) {
@@ -126,7 +106,9 @@ func LoadConfigFromEnv() (*Config, error) {
 			value := parts[1]
 
 			slog.Info("Loading environment variable", "key", key, "value", value)
-			viper.Set(strings.Replace(key, "__", ".", -1), value)
+			key = strings.Replace(key, "__", ".", -1)
+			key = strings.Replace(key, "_", "-", -1)
+			viper.Set(key, value)
 		}
 	}
 

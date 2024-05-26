@@ -19,7 +19,6 @@ package contube
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 )
@@ -36,63 +35,22 @@ type Record interface {
 }
 
 type SourceQueueConfig struct {
-	Topics  []string
-	SubName string
+	Topics  []string `json:"inputs" validate:"required"`
+	SubName string   `json:"subscription-name" validate:"required"`
 }
 
 type SinkQueueConfig struct {
-	Topic string
-}
-
-const (
-	TopicKey     = "topic"
-	TopicListKey = "topicList"
-	SubNameKey   = "subName"
-)
-
-func NewSourceQueueConfig(config ConfigMap) (*SourceQueueConfig, error) {
-	var result SourceQueueConfig
-	// The list value type should be considered as interface{}
-	if topics, ok := config[TopicListKey].([]interface{}); ok {
-		var topicStrList []string
-		for _, v := range topics {
-			if topicStr, ok := v.(string); ok {
-				topicStrList = append(topicStrList, v.(string))
-			} else {
-				return nil, fmt.Errorf("invalid topic in the %s: %s", TopicListKey, topicStr)
-			}
-		}
-		result.Topics = topicStrList
-	}
-	if subName, ok := config[SubNameKey].(string); ok {
-		result.SubName = subName
-	}
-	return &result, nil
+	Topic string `json:"output" validate:"required"`
 }
 
 func (c *SourceQueueConfig) ToConfigMap() ConfigMap {
-	topicListInterface := make([]interface{}, len(c.Topics))
-	for i, v := range c.Topics {
-		topicListInterface[i] = v
-	}
-	return ConfigMap{
-		TopicListKey: topicListInterface,
-		SubNameKey:   c.SubName,
-	}
-}
-
-func NewSinkQueueConfig(config ConfigMap) *SinkQueueConfig {
-	var result SinkQueueConfig
-	if topic, ok := config[TopicKey].(string); ok {
-		result.Topic = topic
-	}
-	return &result
+	configMap, _ := ToConfigMap(c)
+	return configMap
 }
 
 func (c *SinkQueueConfig) ToConfigMap() ConfigMap {
-	return ConfigMap{
-		TopicKey: c.Topic,
-	}
+	configMap, _ := ToConfigMap(c)
+	return configMap
 }
 
 type ConfigMap map[string]interface{}
@@ -118,6 +76,18 @@ func (c ConfigMap) ToConfigStruct(v any) error {
 	}
 	validate := validator.New()
 	return validate.Struct(v)
+}
+
+func ToConfigMap(v any) (ConfigMap, error) {
+	jsonData, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var result ConfigMap
+	if err := json.Unmarshal(jsonData, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 type SourceTubeFactory interface {

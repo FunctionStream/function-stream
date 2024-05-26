@@ -17,12 +17,11 @@
 package server
 
 import (
-	"os"
-	"testing"
-
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"os"
+	"testing"
 )
 
 func TestLoadConfigFromYaml(t *testing.T) {
@@ -39,10 +38,8 @@ func TestLoadConfigFromJson(t *testing.T) {
 
 func TestLoadConfigFromEnv(t *testing.T) {
 	assert.Nil(t, os.Setenv("FS_LISTEN_ADDR", ":17300"))
-	assert.Nil(t, os.Setenv("FS_TUBE_FACTORY__MY_PULSAR__TYPE", "pulsar"))
-	assert.Nil(t, os.Setenv("FS_TUBE_FACTORY__MY_PULSAR__CONFIG__PULSAR_URL", "pulsar://localhost:6651"))
-	assert.Nil(t, os.Setenv("FS_TUBE_FACTORY__MY_MEMORY__TYPE", "memory"))
-	assert.Nil(t, os.Setenv("FS_TUBE_FACTORY__DEFAULT__REF", "my_pulsar"))
+	assert.Nil(t, os.Setenv("FS_TUBE_CONFIG__MY_TUBE__KEY", "value"))
+	assert.Nil(t, os.Setenv("FS_RUNTIME_CONFIG__CUSTOM_RUNTIME__NAME", "test"))
 
 	viper.AutomaticEnv()
 
@@ -53,23 +50,9 @@ func TestLoadConfigFromEnv(t *testing.T) {
 
 func assertConfig(t *testing.T, c *Config) {
 	assert.Equal(t, ":17300", c.ListenAddr)
-	require.Contains(t, c.TubeFactory, "my_pulsar")
-	assert.Equal(t, "pulsar", *c.TubeFactory["my_pulsar"].Type)
+	require.Contains(t, c.TubeConfig, "my-tube")
+	assert.Equal(t, "value", c.TubeConfig["my-tube"]["key"])
 
-	if config := c.TubeFactory["my_pulsar"].Config; config != nil {
-		assert.Equal(t, "pulsar://localhost:6651", (*config)["pulsar_url"])
-	} else {
-		t.Fatal("pulsar config is nil")
-	}
-
-	require.Contains(t, c.TubeFactory, "my_memory")
-	assert.Equal(t, "memory", *c.TubeFactory["my_memory"].Type)
-
-	require.Contains(t, c.TubeFactory, "default")
-	assert.Equal(t, "my_pulsar", *c.TubeFactory["default"].Ref)
-	if config := c.TubeFactory["default"].Config; config != nil {
-		assert.Equal(t, "pulsar://localhost:6651", (*config)["pulsar_url"])
-	} else {
-		t.Fatal("pulsar config is nil")
-	}
+	require.Contains(t, c.RuntimeConfig, "custom-runtime")
+	assert.Equal(t, "test", c.RuntimeConfig["custom-runtime"]["name"])
 }

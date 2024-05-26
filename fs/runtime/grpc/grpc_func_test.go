@@ -49,7 +49,7 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 
 	fm, err := fs.NewFunctionManager(
 		fs.WithRuntimeFactory("grpc", fsService),
-		fs.WithDefaultTubeFactory(contube.NewMemoryQueueFactory(ctx)),
+		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(ctx)),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -59,21 +59,23 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 	outputTopic := "output"
 	f := &model.Function{
 		Name: "test",
-		Runtime: &model.RuntimeConfig{
-			Type: common.OptionalStr("grpc"),
+		Runtime: model.RuntimeConfig{
+			Type: "grpc",
 			Config: map[string]interface{}{
 				"addr": addr,
 			},
 		},
-		Sources: []*model.TubeConfig{
+		Sources: []model.TubeConfig{
 			{
+				Type: common.MemoryTubeType,
 				Config: (&contube.SourceQueueConfig{
 					Topics:  []string{inputTopic},
 					SubName: "test",
 				}).ToConfigMap(),
 			},
 		},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: outputTopic,
 			}).ToConfigMap(),

@@ -47,6 +47,8 @@ func startStandaloneSvr(t *testing.T, ctx context.Context, opts ...ServerOption)
 	ln := getListener(t)
 	defaultOpts := []ServerOption{
 		WithHttpListener(ln),
+		WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()),
+		WithRuntimeFactoryBuilders(GetBuiltinRuntimeFactoryBuilder()),
 	}
 	s, err := NewServer(
 		append(defaultOpts, opts...)...,
@@ -72,20 +74,23 @@ func TestStandaloneBasicFunction(t *testing.T) {
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
 
 	funcConf := &model.Function{
-		Runtime: &model.RuntimeConfig{
+		Runtime: model.RuntimeConfig{
+			Type: common.WASMRuntime,
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Sources: []*model.TubeConfig{
+		Sources: []model.TubeConfig{
 			{
+				Type: common.MemoryTubeType,
 				Config: (&contube.SourceQueueConfig{
 					Topics:  []string{inputTopic},
 					SubName: "test",
 				}).ToConfigMap(),
 			},
 		},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: outputTopic,
 			}).ToConfigMap(),
@@ -136,18 +141,20 @@ func TestHttpTube(t *testing.T) {
 
 	endpoint := "test-endpoint"
 	funcConf := &model.Function{
-		Runtime: &model.RuntimeConfig{
+		Runtime: model.RuntimeConfig{
+			Type: common.WASMRuntime,
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Sources: []*model.TubeConfig{{
-			Type: common.OptionalStr(common.HttpTubeType),
+		Sources: []model.TubeConfig{{
+			Type: common.HttpTubeType,
 			Config: map[string]interface{}{
 				contube.EndpointKey: endpoint,
 			},
 		}},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: "output",
 			}).ToConfigMap(),
@@ -231,22 +238,26 @@ func (r *MockRuntime) Stop() {
 func TestStatefulFunction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s, httpAddr := startStandaloneSvr(t, ctx, WithFunctionManager(fs.WithDefaultRuntimeFactory(&MockRuntimeFactory{})))
+	s, httpAddr := startStandaloneSvr(t, ctx, WithFunctionManager(fs.WithRuntimeFactory("mock", &MockRuntimeFactory{})))
 
 	input := "input"
 	output := "output"
 	funcConf := &model.Function{
-		Name:    "test-func",
-		Runtime: &model.RuntimeConfig{},
-		Sources: []*model.TubeConfig{
+		Name: "test-func",
+		Runtime: model.RuntimeConfig{
+			Type: "mock",
+		},
+		Sources: []model.TubeConfig{
 			{
+				Type: common.MemoryTubeType,
 				Config: (&contube.SourceQueueConfig{
 					Topics:  []string{input},
 					SubName: "test",
 				}).ToConfigMap(),
 			},
 		},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: "output",
 			}).ToConfigMap(),

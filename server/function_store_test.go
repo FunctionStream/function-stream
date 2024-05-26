@@ -70,20 +70,23 @@ func newTestFunctionManagerImpl() fs.FunctionManager {
 
 func createTestFunction(name string) *model.Function {
 	return &model.Function{
-		Runtime: &model.RuntimeConfig{
+		Runtime: model.RuntimeConfig{
+			Type: common.WASMRuntime,
 			Config: map[string]interface{}{
 				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 			},
 		},
-		Sources: []*model.TubeConfig{
+		Sources: []model.TubeConfig{
 			{
+				Type: common.MemoryTubeType,
 				Config: (&contube.SourceQueueConfig{
 					Topics:  []string{"input"},
 					SubName: "test",
 				}).ToConfigMap(),
 			},
 		},
-		Sink: &model.TubeConfig{
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
 			Config: (&contube.SinkQueueConfig{
 				Topic: "output",
 			}).ToConfigMap(),

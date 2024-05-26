@@ -103,19 +103,7 @@ like `bin/example_basic.wasm`.
 
 You have two ways to start the function stream server.
 
-### Option 1: Standalone Mode (for development and testing)
-
-Use this command to start the standalone server:
-
-```shell
-bin/function-stream standalone
-```
-
-### Option 2: Server Mode (for production)
-
-First, start an Apache Pulsar service. See this [doc](https://pulsar.apache.org/docs/en/standalone/) for instructions.
-
-Then, use this command to start the server based on Apache Pulsar:
+Use this command to start the function stream server:
 
 ```shell
 bin/function-stream server

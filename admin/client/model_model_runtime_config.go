@@ -11,7 +11,9 @@ API version: 1.0.0
 package adminclient
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 )
 
 // checks if the ModelRuntimeConfig type satisfies the MappedNullable interface at compile time
@@ -20,15 +22,18 @@ var _ MappedNullable = &ModelRuntimeConfig{}
 // ModelRuntimeConfig struct for ModelRuntimeConfig
 type ModelRuntimeConfig struct {
 	Config map[string]interface{} `json:"config,omitempty"`
-	Type   *string                `json:"type,omitempty"`
+	Type   string                 `json:"type"`
 }
+
+type _ModelRuntimeConfig ModelRuntimeConfig
 
 // NewModelRuntimeConfig instantiates a new ModelRuntimeConfig object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewModelRuntimeConfig() *ModelRuntimeConfig {
+func NewModelRuntimeConfig(type_ string) *ModelRuntimeConfig {
 	this := ModelRuntimeConfig{}
+	this.Type = type_
 	return &this
 }
 
@@ -72,36 +77,28 @@ func (o *ModelRuntimeConfig) SetConfig(v map[string]interface{}) {
 	o.Config = v
 }
 
-// GetType returns the Type field value if set, zero value otherwise.
+// GetType returns the Type field value
 func (o *ModelRuntimeConfig) GetType() string {
-	if o == nil || IsNil(o.Type) {
+	if o == nil {
 		var ret string
 		return ret
 	}
-	return *o.Type
+
+	return o.Type
 }
 
-// GetTypeOk returns a tuple with the Type field value if set, nil otherwise
+// GetTypeOk returns a tuple with the Type field value
 // and a boolean to check if the value has been set.
 func (o *ModelRuntimeConfig) GetTypeOk() (*string, bool) {
-	if o == nil || IsNil(o.Type) {
+	if o == nil {
 		return nil, false
 	}
-	return o.Type, true
+	return &o.Type, true
 }
 
-// HasType returns a boolean if a field has been set.
-func (o *ModelRuntimeConfig) HasType() bool {
-	if o != nil && !IsNil(o.Type) {
-		return true
-	}
-
-	return false
-}
-
-// SetType gets a reference to the given string and assigns it to the Type field.
+// SetType sets field value
 func (o *ModelRuntimeConfig) SetType(v string) {
-	o.Type = &v
+	o.Type = v
 }
 
 func (o ModelRuntimeConfig) MarshalJSON() ([]byte, error) {
@@ -117,10 +114,45 @@ func (o ModelRuntimeConfig) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Config) {
 		toSerialize["config"] = o.Config
 	}
-	if !IsNil(o.Type) {
-		toSerialize["type"] = o.Type
-	}
+	toSerialize["type"] = o.Type
 	return toSerialize, nil
+}
+
+func (o *ModelRuntimeConfig) UnmarshalJSON(data []byte) (err error) {
+	// This validates that all required properties are included in the JSON object
+	// by unmarshalling the object into a generic map with string keys and checking
+	// that every required field exists as a key in the generic map.
+	requiredProperties := []string{
+		"type",
+	}
+
+	allProperties := make(map[string]interface{})
+
+	err = json.Unmarshal(data, &allProperties)
+
+	if err != nil {
+		return err
+	}
+
+	for _, requiredProperty := range requiredProperties {
+		if _, exists := allProperties[requiredProperty]; !exists {
+			return fmt.Errorf("no value given for required property %v", requiredProperty)
+		}
+	}
+
+	varModelRuntimeConfig := _ModelRuntimeConfig{}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&varModelRuntimeConfig)
+
+	if err != nil {
+		return err
+	}
+
+	*o = ModelRuntimeConfig(varModelRuntimeConfig)
+
+	return err
 }
 
 type NullableModelRuntimeConfig struct {

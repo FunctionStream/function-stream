@@ -18,6 +18,8 @@ package benchmark
 
 import (
 	"context"
+	"github.com/functionstream/function-stream/fs"
+	"github.com/functionstream/function-stream/fs/runtime/wazero"
 	"math/rand"
 	"os"
 	"runtime/pprof"
@@ -30,7 +32,6 @@ import (
 	adminclient "github.com/functionstream/function-stream/admin/client"
 	adminutils "github.com/functionstream/function-stream/admin/utils"
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/perf"
 	"github.com/functionstream/function-stream/server"
@@ -74,12 +75,13 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 		RequestRate: 200000.0,
 		Func: &adminclient.ModelFunction{
 			Runtime: adminclient.ModelRuntimeConfig{
+				Type: common.WASMRuntime,
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 				},
 			},
-			Source:   adminutils.MakeQueueSourceTubeConfig("fs", inputTopic),
-			Sink:     adminutils.MakeQueueSinkTubeConfig(outputTopic),
+			Source:   adminutils.MakePulsarSourceTubeConfig(inputTopic),
+			Sink:     *adminutils.MakePulsarSinkTubeConfig(outputTopic),
 			Replicas: replicas,
 		},
 	}
@@ -112,7 +114,8 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
-	s, err := server.NewServer(server.WithFunctionManager(fs.WithDefaultTubeFactory(memoryQueueFactory)))
+	s, err := server.NewServer(server.WithFunctionManager(fs.WithTubeFactory(common.MemoryTubeType, memoryQueueFactory),
+		fs.WithRuntimeFactory(common.WASMRuntime, wazero.NewWazeroFunctionRuntimeFactory())))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -131,12 +134,13 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 		RequestRate: 200000.0,
 		Func: &adminclient.ModelFunction{
 			Runtime: adminclient.ModelRuntimeConfig{
+				Type: common.WASMRuntime,
 				Config: map[string]interface{}{
 					common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
 				},
 			},
-			Source:   adminutils.MakeQueueSourceTubeConfig("fs", inputTopic),
-			Sink:     adminutils.MakeQueueSinkTubeConfig(outputTopic),
+			Source:   adminutils.MakeMemorySourceTubeConfig(inputTopic),
+			Sink:     *adminutils.MakeMemorySinkTubeConfig(outputTopic),
 			Replicas: replicas,
 		},
 		QueueBuilder: func(ctx context.Context) (contube.TubeFactory, error) {

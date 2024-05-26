@@ -78,8 +78,8 @@ func (f *MemoryQueueFactory) release(name string) {
 }
 
 func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap ConfigMap) (<-chan Record, error) {
-	config, err := NewSourceQueueConfig(configMap)
-	if err != nil {
+	config := SourceQueueConfig{}
+	if err := configMap.ToConfigStruct(&config); err != nil {
 		return nil, err
 	}
 	result := make(chan Record)
@@ -115,7 +115,10 @@ func (f *MemoryQueueFactory) NewSourceTube(ctx context.Context, configMap Config
 }
 
 func (f *MemoryQueueFactory) NewSinkTube(ctx context.Context, configMap ConfigMap) (chan<- Record, error) {
-	config := NewSinkQueueConfig(configMap)
+	config := SinkQueueConfig{}
+	if err := configMap.ToConfigStruct(&config); err != nil {
+		return nil, err
+	}
 	c := f.getOrCreateChan(config.Topic)
 	wrapperC := make(chan Record)
 	go func() {

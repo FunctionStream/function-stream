@@ -94,8 +94,8 @@ func (p *perf) Run(ctx context.Context) {
 					common.RuntimeArchiveConfigKey: "./bin/example_basic.wasm",
 				},
 			},
-			Source: utils.MakeQueueSourceTubeConfig("test-sub", "test-input-"+strconv.Itoa(rand.Int())),
-			Sink:   utils.MakeQueueSinkTubeConfig("test-output-" + strconv.Itoa(rand.Int())),
+			Source: utils.MakeMemorySourceTubeConfig("test-input-" + strconv.Itoa(rand.Int())),
+			Sink:   *utils.MakeMemorySinkTubeConfig("test-output-" + strconv.Itoa(rand.Int())),
 		}
 	}
 	f.Name = name

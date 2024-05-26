@@ -24,23 +24,23 @@ import (
 )
 
 type TubeConfig struct {
-	Type   *string           `json:"type,omitempty"` // Default to `default`
+	Type   string            `json:"type"` // Default to `default`
 	Config contube.ConfigMap `json:"config,omitempty"`
 }
 
 type ConfigMap map[string]interface{}
 
 type RuntimeConfig struct {
-	Config ConfigMap `json:"config,omitempty" yaml:"config,omitempty"`
-	Type   *string   `json:"type,omitempty" yaml:"type,omitempty"`
+	Config ConfigMap `json:"config,omitempty"`
+	Type   string    `json:"type"`
 }
 
 type Function struct {
 	Name      string            `json:"name"`
 	Namespace string            `json:"namespace,omitempty"`
-	Runtime   *RuntimeConfig    `json:"runtime"`
-	Sources   []*TubeConfig     `json:"source,omitempty"`
-	Sink      *TubeConfig       `json:"sink,omitempty"`
+	Runtime   RuntimeConfig     `json:"runtime"`
+	Sources   []TubeConfig      `json:"source"`
+	Sink      TubeConfig        `json:"sink"`
 	Config    map[string]string `json:"config,omitempty"`
 	Replicas  int32             `json:"replicas"`
 }
@@ -55,14 +55,8 @@ func (f *Function) Validate() error {
 	if strings.Contains(f.Namespace, "/") {
 		return errors.New("namespace should not contain '/'")
 	}
-	if f.Runtime == nil {
-		return errors.New("runtime should be configured")
-	}
 	if len(f.Sources) == 0 {
 		return errors.New("sources should be configured")
-	}
-	if f.Sink == nil {
-		return errors.New("sink should be configured")
 	}
 	if f.Replicas <= 0 {
 		return errors.New("replicas should be greater than 0")
