@@ -18,7 +18,8 @@ package server
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
+	"github.com/go-logr/logr"
 	"net"
 	"net/http"
 	"net/url"
@@ -50,7 +51,7 @@ var (
 type Server struct {
 	options       *serverOptions
 	httpSvr       atomic.Pointer[http.Server]
-	log           *slog.Logger
+	log           *common.Logger
 	Manager       fs.FunctionManager
 	FunctionStore FunctionStore
 }
@@ -73,6 +74,7 @@ type serverOptions struct {
 	runtimeFactoryBuilders map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error)
 	runtimeConfig          map[string]common.ConfigMap
 	queueConfig            QueueConfig
+	log                    *logr.Logger
 }
 
 type ServerOption interface {
@@ -161,6 +163,13 @@ func WithStateStoreLoader(loader func(c *StateStoreConfig) (api.StateStore, erro
 	})
 }
 
+func WithLogger(log *logr.Logger) ServerOption {
+	return serverOptionFunc(func(c *serverOptions) (*serverOptions, error) {
+		c.log = log
+		return c, nil
+	})
+}
+
 func GetBuiltinTubeFactoryBuilder() map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error) {
 	return map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error){
 		common.PulsarTubeType: func(configMap common.ConfigMap) (contube.TubeFactory, error) {
@@ -187,7 +196,7 @@ func setupFactories[T any](factoryBuilder map[string]func(configMap common.Confi
 	for name, builder := range factoryBuilder {
 		f, err := builder(config[name])
 		if err != nil {
-			return nil, errors.WithMessagef(ErrCreateFactory, "error creating factory %s: %v", name, err)
+			return nil, fmt.Errorf("error creating factory [%s] %w", name, err)
 		}
 		factories[name] = f
 	}
@@ -199,7 +208,7 @@ func DefaultStateStoreLoader(c *StateStoreConfig) (api.StateStore, error) {
 	case common.StateStorePebble:
 		return statestore.NewTmpPebbleStateStore()
 	}
-	return nil, errors.WithMessagef(ErrUnsupportedStateStore, "unsupported state store type: %s", *c.Type)
+	return nil, fmt.Errorf("unsupported state store type [%s] %w", *c.Type, ErrUnsupportedStateStore)
 }
 
 func WithConfig(config *Config) ServerOption {
@@ -212,7 +221,7 @@ func WithConfig(config *Config) ServerOption {
 		o.enableTls = config.EnableTLS
 		if o.enableTls {
 			if config.TLSCertFile == "" || config.TLSKeyFile == "" {
-				return nil, errors.New("TLS certificate and key file must be provided")
+				return nil, fmt.Errorf("TLS certificate and key file must be provided")
 			}
 			o.tlsCertFile = config.TLSCertFile
 			o.tlsKeyFile = config.TLSKeyFile
@@ -253,6 +262,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			return nil, err
 		}
 	}
+	var log *common.Logger
+	if options.log == nil {
+		log = common.NewDefaultLogger()
+	} else {
+		log = common.NewLogger(options.log)
+	}
+
+	options.managerOpts = append(options.managerOpts, fs.WithLogger(log.Logger))
 
 	// Config Tube Factory
 	if tubeFactories, err := setupFactories(options.tubeFactoryBuilders, options.tubeConfig); err == nil {
@@ -276,11 +293,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if options.queueConfig.Type != "" {
 		queueFactoryBuilder, ok := options.tubeFactoryBuilders[options.queueConfig.Type]
 		if !ok {
-			return nil, errors.WithMessagef(ErrUnsupportedQueueType, "unsupported queue type %s", options.queueConfig.Type)
+			return nil, fmt.Errorf("unsupported queue type [%s] %w", options.queueConfig.Type, ErrUnsupportedQueueType)
 		}
 		queueFactory, err := queueFactoryBuilder(options.queueConfig.Config)
 		if err != nil {
-			return nil, errors.WithMessagef(ErrCreateFactory, "error creating queue factory: %v", err)
+			return nil, fmt.Errorf("error creating queue factory %w", err)
 		}
 		options.managerOpts = append(options.managerOpts, fs.WithQueueFactory(queueFactory))
 	}
@@ -311,7 +328,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	return &Server{
 		options:       options,
 		Manager:       manager,
-		log:           slog.With(),
+		log:           log,
 		FunctionStore: functionStore,
 	}, nil
 }
@@ -334,18 +351,18 @@ func NewDefaultServer() (*Server, error) {
 }
 
 func (s *Server) Run(context context.Context) {
-	s.log.Info("Hello, Function Stream!")
+	s.log.Info("Hello from the function stream server!")
 	go func() {
 		<-context.Done()
 		err := s.Close()
 		if err != nil {
-			s.log.Error("Error shutting down server", "error", err)
+			s.log.Error(err, "failed to shutdown server")
 			return
 		}
 	}()
 	err := s.startRESTHandlers()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		s.log.Error("Error starting REST handlers", "error", err)
+		s.log.Error(err, "Error starting REST handlers")
 	}
 }
 
@@ -455,15 +472,15 @@ func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
 		}).String()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
-			s.log.InfoContext(ctx, "Failed to create detect request", slog.Any("error", err))
+			s.log.Error(err, "Failed to create detect request")
 			return false
 		}
 		client := &http.Client{}
 		_, err = client.Do(req)
 		if err != nil {
-			s.log.InfoContext(ctx, "Detect connection to server failed", slog.Any("error", err))
+			s.log.Info("Detect connection to server failed", "error", err)
 		}
-		s.log.Info("Server is ready", slog.String("address", s.options.httpListener.Addr().String()))
+		s.log.Info("Server is ready", "address", s.options.httpListener.Addr().String())
 		return true
 	}
 	go func() {
@@ -508,5 +525,5 @@ func (s *Server) handleRestError(e error) {
 	if e == nil {
 		return
 	}
-	s.log.Error("Error handling REST request", "error", e)
+	s.log.Error(e, "Error handling REST request")
 }

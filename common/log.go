@@ -1,6 +1,10 @@
 package common
 
-import "github.com/go-logr/logr"
+import (
+	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
+)
 
 const (
 	DebugLevel int = 4
@@ -8,6 +12,15 @@ const (
 
 type Logger struct {
 	*logr.Logger
+}
+
+func NewDefaultLogger() *Logger {
+	zapLogger, err := zap.NewDevelopment()
+	if err != nil {
+		panic("failed to create zap logger:" + err.Error())
+	}
+	zaprLog := zapr.NewLogger(zapLogger)
+	return NewLogger(&zaprLog)
 }
 
 func NewLogger(logger *logr.Logger) *Logger {

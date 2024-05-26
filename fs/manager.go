@@ -21,8 +21,6 @@ import "fmt"
 import (
 	"context"
 	"github.com/go-logr/logr"
-	"github.com/go-logr/zapr"
-	"go.uber.org/zap"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -147,12 +145,7 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 	}
 	var log *common.Logger
 	if options.log == nil {
-		if zapLogger, err := zap.NewDevelopment(); err == nil {
-			zaprLog := zapr.NewLogger(zapLogger)
-			log = common.NewLogger(&zaprLog)
-		} else {
-			panic("failed to create zap logger:" + err.Error())
-		}
+		log = common.NewDefaultLogger()
 	} else {
 		log = common.NewLogger(options.log)
 	}

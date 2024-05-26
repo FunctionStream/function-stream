@@ -212,8 +212,8 @@ func (f *FuncRuntime) Update(new *proto.FunctionStatus) {
 		f.readyCh <- fmt.Errorf("function failed to start")
 	}
 	if f.status.Status != new.Status {
-		f.log.Info("Function status update", slog.Any("new_status", new.Status),
-			slog.Any("old_status", f.status.Status))
+		f.log.Info("Function status update", "new_status", new.Status,
+			"old_status", f.status.Status)
 	}
 	f.status = new
 }

@@ -17,8 +17,8 @@
 package contube
 
 import (
+	"github.com/functionstream/function-stream/common"
 	"io"
-	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -141,26 +141,26 @@ func (f *HttpTubeFactory) NewSinkTube(_ context.Context, _ ConfigMap) (chan<- Re
 }
 
 func (f *HttpTubeFactory) GetHandleFunc(getEndpoint func(r *http.Request) (string, error),
-	logger *slog.Logger) func(http.ResponseWriter, *http.Request) {
+	logger *common.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		endpoint, err := getEndpoint(r)
 		if err != nil {
-			logger.Error("Failed to get endpoint", "error", err)
+			logger.Error(err, "Failed to get endpoint")
 			http.Error(w, errors.Wrap(err, "Failed to get endpoint").Error(), http.StatusBadRequest)
 			return
 		}
-		log := logger.With(slog.String("endpoint", endpoint), slog.String("component", "http-tube"))
+		log := logger.SubLogger("endpoint", endpoint, "component", "http-tube")
 		log.Info("Handle records from http request")
 		content, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.Error("Failed to read body", "error", err)
+			log.Error(err, "Failed to read body")
 			http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
 			return
 		}
 		record := f.handler(w, r, content)
 		err = f.Handle(r.Context(), endpoint, record)
 		if err != nil {
-			log.Error("Failed to handle record", "error", err)
+			log.Error(err, "Failed to handle record")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
