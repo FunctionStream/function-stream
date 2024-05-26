@@ -109,12 +109,6 @@ type FunctionRuntime struct {
 	log      *common.Logger
 }
 
-func (r *FunctionRuntime) WaitForReady() <-chan error {
-	c := make(chan error)
-	close(c)
-	return c
-}
-
 func (r *FunctionRuntime) Call(e contube.Record) (contube.Record, error) {
 	return r.callFunc(e)
 }

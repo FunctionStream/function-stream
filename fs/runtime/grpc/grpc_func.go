@@ -169,16 +169,16 @@ func (s *FSSReconcileServer) NewFunctionRuntime(instance api.FunctionInstance) (
 		},
 		log: log,
 	}
-	{
-		s.functionsMu.Lock()
-		defer s.functionsMu.Unlock()
-		if _, ok := s.functions[name]; ok {
-			return nil, fmt.Errorf("function already exists")
-		}
-		s.functions[name] = runtime
+	s.functionsMu.Lock()
+	if _, ok := s.functions[name]; ok {
+		s.functionsMu.Unlock()
+		return nil, fmt.Errorf("function already exists")
 	}
+	s.functionsMu.Unlock()
+	s.functions[name] = runtime
 	s.reconcile <- runtime.status
 	log.Info("Creating GRPC function runtime")
+	<-runtime.WaitForReady()
 	return runtime, nil
 }
 

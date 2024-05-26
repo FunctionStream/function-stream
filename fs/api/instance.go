@@ -30,7 +30,6 @@ type FunctionInstance interface {
 	Index() int32
 	Stop()
 	Run(runtime FunctionRuntime, sources []<-chan contube.Record, sink chan<- contube.Record)
-	WaitForReady() <-chan error
 	Logger() *common.Logger
 }
 

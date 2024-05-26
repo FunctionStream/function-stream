@@ -244,15 +244,6 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		}
 
 		go instance.Run(runtime, sources, sink)
-		select {
-		case err := <-instance.WaitForReady():
-			if err != nil {
-				instance.Stop()
-				return fmt.Errorf("failed to start function instance: %w", err)
-			}
-		case <-instance.Context().Done():
-			return fmt.Errorf("failed to start function instance: the context has been cancelled")
-		}
 	}
 	return nil
 }

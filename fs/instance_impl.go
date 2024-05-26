@@ -72,13 +72,7 @@ func (instance *FunctionInstanceImpl) Run(runtime api.FunctionRuntime, sources [
 	sink chan<- contube.Record) {
 	logger := instance.logger
 	defer close(sink)
-	err := <-runtime.WaitForReady()
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error waiting for runtime to be ready")
-		return
-	}
 
-	close(instance.readyCh)
 	defer logger.Info("function instance has been stopped")
 
 	logger.Info("function instance is running")
@@ -133,10 +127,6 @@ func (instance *FunctionInstanceImpl) Run(runtime api.FunctionRuntime, sources [
 			return
 		}
 	}
-}
-
-func (instance *FunctionInstanceImpl) WaitForReady() <-chan error {
-	return instance.readyCh
 }
 
 func (instance *FunctionInstanceImpl) Stop() {
