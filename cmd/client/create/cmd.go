@@ -67,9 +67,11 @@ func exec(_ *cobra.Command, _ []string) {
 	cli := adminclient.NewAPIClient(cfg)
 	f := adminclient.ModelFunction{
 		Name: config.name,
-		Runtime: adminclient.ModelRuntimeConfig{Config: map[string]interface{}{
-			fs_cmmon.RuntimeArchiveConfigKey: config.archive,
-		}},
+		Runtime: adminclient.ModelRuntimeConfig{
+			Type: fs_cmmon.WASMRuntime,
+			Config: map[string]interface{}{
+				fs_cmmon.RuntimeArchiveConfigKey: config.archive,
+			}},
 		Source:   utils.MakeMemorySourceTubeConfig(config.inputs...),
 		Sink:     *utils.MakeMemorySinkTubeConfig(config.output),
 		Replicas: config.replica,
