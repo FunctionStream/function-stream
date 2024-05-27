@@ -40,12 +40,8 @@ import (
 )
 
 var (
-	ErrUnsupportedTRuntimeType = errors.New("unsupported runtime type")
-	ErrUnsupportedTubeType     = errors.New("unsupported tube type")
-	ErrUnsupportedStateStore   = errors.New("unsupported state store")
-
-	ErrCreateFactory        = errors.New("error creating factory")
-	ErrUnsupportedQueueType = errors.New("unsupported queue type")
+	ErrUnsupportedStateStore = errors.New("unsupported state store")
+	ErrUnsupportedQueueType  = errors.New("unsupported queue type")
 )
 
 type Server struct {
@@ -243,11 +239,6 @@ func WithConfig(config *Config) ServerOption {
 
 func NewServer(opts ...ServerOption) (*Server, error) {
 	options := &serverOptions{}
-	httpTubeFact := contube.NewHttpTubeFactory(context.Background())
-	options.managerOpts = []fs.ManagerOption{
-		fs.WithTubeFactory("http", httpTubeFact),
-	}
-	options.httpTubeFact = httpTubeFact
 	options.tubeFactoryBuilders = make(map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error))
 	options.tubeConfig = make(map[string]common.ConfigMap)
 	options.runtimeFactoryBuilders = make(map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error))
@@ -267,6 +258,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		log = common.NewDefaultLogger()
 	} else {
 		log = common.NewLogger(options.log)
+	}
+	if options.httpTubeFact == nil {
+		options.httpTubeFact = contube.NewHttpTubeFactory(context.Background())
+		log.Info("Using the default HTTP tube factory")
+	}
+	options.managerOpts = []fs.ManagerOption{
+		fs.WithTubeFactory("http", options.httpTubeFact),
 	}
 
 	options.managerOpts = append(options.managerOpts, fs.WithLogger(log.Logger))
@@ -293,7 +291,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if options.queueConfig.Type != "" {
 		queueFactoryBuilder, ok := options.tubeFactoryBuilders[options.queueConfig.Type]
 		if !ok {
-			return nil, fmt.Errorf("unsupported queue type [%s] %w", options.queueConfig.Type, ErrUnsupportedQueueType)
+			return nil, fmt.Errorf("%w, queueType: %s", ErrUnsupportedQueueType, options.queueConfig.Type)
 		}
 		queueFactory, err := queueFactoryBuilder(options.queueConfig.Config)
 		if err != nil {
