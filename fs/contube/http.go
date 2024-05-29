@@ -150,7 +150,9 @@ func (f *HttpTubeFactory) GetHandleFunc(getEndpoint func(r *http.Request) (strin
 			return
 		}
 		log := logger.SubLogger("endpoint", endpoint, "component", "http-tube")
-		log.Info("Handle records from http request")
+		if log.DebugEnabled() {
+			log.Debug("Handle records from http request")
+		}
 		content, err := io.ReadAll(r.Body)
 		if err != nil {
 			log.Error(err, "Failed to read body")
@@ -164,6 +166,8 @@ func (f *HttpTubeFactory) GetHandleFunc(getEndpoint func(r *http.Request) (strin
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Info("Handled records from http request")
+		if log.DebugEnabled() {
+			log.Debug("Handled records from http request")
+		}
 	}
 }
