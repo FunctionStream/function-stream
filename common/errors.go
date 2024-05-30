@@ -16,11 +16,11 @@
 
 package common
 
-import "errors"
+import "fmt"
 
 var (
-	ErrorFunctionNotFound       = errors.New("function not found")
-	ErrorFunctionExists         = errors.New("function already exists")
-	ErrorTubeFactoryNotFound    = errors.New("tube factory not found")
-	ErrorRuntimeFactoryNotFound = errors.New("runtime factory not found")
+	ErrorFunctionNotFound       = fmt.Errorf("function not found")
+	ErrorFunctionExists         = fmt.Errorf("function already exists")
+	ErrorRuntimeFactoryNotFound = fmt.Errorf("runtime factory not found")
+	ErrorTubeFactoryNotFound    = fmt.Errorf("tube factory not found")
 )

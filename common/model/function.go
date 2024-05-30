@@ -24,7 +24,7 @@ import (
 )
 
 type TubeConfig struct {
-	Type   string            `json:"type"` // Default to `default`
+	Type   string            `json:"type"`
 	Config contube.ConfigMap `json:"config,omitempty"`
 }
 

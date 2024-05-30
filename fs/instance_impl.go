@@ -18,7 +18,6 @@ package fs
 
 import (
 	"context"
-	"log/slog"
 	"reflect"
 
 	"github.com/functionstream/function-stream/common"
@@ -35,8 +34,7 @@ type FunctionInstanceImpl struct {
 	definition *model.Function
 	readyCh    chan error
 	index      int32
-	parentLog  *slog.Logger
-	log        *slog.Logger
+	logger     *common.Logger
 }
 
 type CtxKey string
@@ -55,7 +53,7 @@ func NewDefaultInstanceFactory() api.FunctionInstanceFactory {
 }
 
 func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function, funcCtx api.FunctionContext,
-	index int32, logger *slog.Logger) api.FunctionInstance {
+	index int32, logger *common.Logger) api.FunctionInstance {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, CtxKeyFunctionName, definition.Name)
 	ctx = context.WithValue(ctx, CtxKeyInstanceIndex, index)
@@ -66,29 +64,18 @@ func (f *DefaultInstanceFactory) NewFunctionInstance(definition *model.Function,
 		definition: definition,
 		readyCh:    make(chan error),
 		index:      index,
-		parentLog:  logger,
-		log:        logger.With(slog.String("component", "function-instance")),
+		logger:     logger,
 	}
 }
 
-func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFactory, sources []<-chan contube.Record,
+func (instance *FunctionInstanceImpl) Run(runtime api.FunctionRuntime, sources []<-chan contube.Record,
 	sink chan<- contube.Record) {
-	runtime, err := runtimeFactory.NewFunctionRuntime(instance)
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error creating runtime")
-		return
-	}
+	logger := instance.logger
 	defer close(sink)
-	err = <-runtime.WaitForReady()
-	if err != nil {
-		instance.readyCh <- errors.Wrap(err, "Error waiting for runtime to be ready")
-		return
-	}
 
-	close(instance.readyCh)
-	defer instance.log.InfoContext(instance.ctx, "function instance has been stopped")
+	defer logger.Info("function instance has been stopped")
 
-	instance.log.Info("function instance is running")
+	logger.Info("function instance is running")
 
 	logCounter := common.LogCounter()
 	channels := make([]reflect.SelectCase, len(sources)+1)
@@ -108,7 +95,9 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 
 		// Convert the selected value to the type Record
 		record := value.Interface().(contube.Record)
-		instance.log.DebugContext(instance.ctx, "Calling process function", slog.Any("count", logCounter))
+		if logger.DebugEnabled() {
+			logger.Debug("Calling process function", "count", logCounter)
+		}
 
 		// Call the processing function
 		output, err := runtime.Call(record)
@@ -117,13 +106,12 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 				return
 			}
 			// Log the error if there's an issue with the processing function
-			instance.log.ErrorContext(instance.ctx, "Error calling process function", slog.Any("error", err))
+			logger.Error(err, "failed to process record")
 			return
 		}
 
 		// If the output is nil, continue with the next iteration
 		if output == nil {
-			instance.log.DebugContext(instance.ctx, "Output is nil")
 			continue
 		}
 
@@ -141,12 +129,8 @@ func (instance *FunctionInstanceImpl) Run(runtimeFactory api.FunctionRuntimeFact
 	}
 }
 
-func (instance *FunctionInstanceImpl) WaitForReady() <-chan error {
-	return instance.readyCh
-}
-
 func (instance *FunctionInstanceImpl) Stop() {
-	instance.log.InfoContext(instance.ctx, "stopping function instance")
+	instance.logger.Info("stopping function instance")
 	instance.cancelFunc()
 }
 
@@ -166,6 +150,6 @@ func (instance *FunctionInstanceImpl) Index() int32 {
 	return instance.index
 }
 
-func (instance *FunctionInstanceImpl) Logger() *slog.Logger {
-	return instance.parentLog
+func (instance *FunctionInstanceImpl) Logger() *common.Logger {
+	return instance.logger
 }

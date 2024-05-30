@@ -8,18 +8,21 @@ require (
 	github.com/cockroachdb/pebble v1.1.0
 	github.com/emicklei/go-restful-openapi/v2 v2.9.2-0.20231020145053-a5b7d60bb267
 	github.com/emicklei/go-restful/v3 v3.12.0
+	github.com/go-logr/logr v1.4.1
+	github.com/go-logr/zapr v1.3.0
 	github.com/go-openapi/spec v0.21.0
+	github.com/go-playground/validator/v10 v10.11.1
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.9.0
 	github.com/tetratelabs/wazero v1.6.0
+	go.uber.org/zap v1.26.0
 	golang.org/x/net v0.23.0
 	golang.org/x/time v0.5.0
 	google.golang.org/grpc v1.61.1
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/utils v0.0.0-20240102154912-e7106e64919e
 )
 
 require (
@@ -40,13 +43,11 @@ require (
 	github.com/dvsekhvalnov/jose2go v1.6.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/getsentry/sentry-go v0.27.0 // indirect
-	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
-	github.com/go-playground/validator/v10 v10.11.1 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
@@ -107,6 +108,7 @@ require (
 	k8s.io/apimachinery v0.29.1 // indirect
 	k8s.io/client-go v0.29.1 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
+	k8s.io/utils v0.0.0-20240102154912-e7106e64919e // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect

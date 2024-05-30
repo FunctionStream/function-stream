@@ -17,8 +17,8 @@
 package contube
 
 import (
+	"github.com/functionstream/function-stream/common"
 	"io"
-	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -30,9 +30,10 @@ import (
 type state int
 
 const (
-	EndpointKey = "endpoint"
+	EndpointKey     = "endpoint"
+	IncludeMetadata = "includeMetadata"
 
-	stateReady  state = iota
+	stateReady  state = iota // TODO: Why do we need this? Maybe we can remove it.
 	stateClosed state = iota
 )
 
@@ -43,6 +44,11 @@ var (
 )
 
 type EndpointHandler func(ctx context.Context, endpoint string, payload []byte) error
+type HttpHandler func(w http.ResponseWriter, r *http.Request, payload []byte) Record
+
+func DefaultHttpHandler(_ http.ResponseWriter, _ *http.Request, payload []byte) Record {
+	return NewRecordImpl(payload, func() {})
+}
 
 type endpointHandler struct {
 	ctx context.Context
@@ -55,12 +61,18 @@ type HttpTubeFactory struct {
 	ctx       context.Context
 	mu        sync.RWMutex
 	endpoints map[string]*endpointHandler
+	handler   HttpHandler
 }
 
 func NewHttpTubeFactory(ctx context.Context) *HttpTubeFactory {
+	return NewHttpTubeFactoryWithIntercept(ctx, DefaultHttpHandler)
+}
+
+func NewHttpTubeFactoryWithIntercept(ctx context.Context, handler HttpHandler) *HttpTubeFactory {
 	return &HttpTubeFactory{
 		ctx:       ctx,
 		endpoints: make(map[string]*endpointHandler),
+		handler:   handler,
 	}
 }
 
@@ -68,19 +80,23 @@ type httpSourceTubeConfig struct {
 	Endpoint string `json:"endpoint" validate:"required"`
 }
 
-func (f *HttpTubeFactory) Handle(ctx context.Context, endpoint string, payload []byte) error {
+func (f *HttpTubeFactory) getEndpoint(endpoint string) (*endpointHandler, bool) {
 	f.mu.RLock()
+	defer f.mu.RUnlock()
 	e, ok := f.endpoints[endpoint]
+	return e, ok
+}
+
+func (f *HttpTubeFactory) Handle(ctx context.Context, endpoint string, record Record) error {
+	e, ok := f.getEndpoint(endpoint)
 	if !ok {
-		f.mu.RUnlock()
 		return ErrEndpointNotFound
 	}
-	f.mu.RUnlock()
 	if e.s.Load() == stateClosed {
 		return ErrEndpointClosed
 	}
 	select {
-	case e.c <- NewRecordImpl(payload, func() {}):
+	case e.c <- record:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -125,28 +141,33 @@ func (f *HttpTubeFactory) NewSinkTube(_ context.Context, _ ConfigMap) (chan<- Re
 }
 
 func (f *HttpTubeFactory) GetHandleFunc(getEndpoint func(r *http.Request) (string, error),
-	logger *slog.Logger) func(http.ResponseWriter, *http.Request) {
+	logger *common.Logger) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		endpoint, err := getEndpoint(r)
 		if err != nil {
-			logger.Error("Failed to get endpoint", "error", err)
+			logger.Error(err, "Failed to get endpoint")
 			http.Error(w, errors.Wrap(err, "Failed to get endpoint").Error(), http.StatusBadRequest)
 			return
 		}
-		log := logger.With(slog.String("endpoint", endpoint), slog.String("component", "http-tube"))
-		log.Info("Handle records from http request")
+		log := logger.SubLogger("endpoint", endpoint, "component", "http-tube")
+		if log.DebugEnabled() {
+			log.Debug("Handle records from http request")
+		}
 		content, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.Error("Failed to read body", "error", err)
+			log.Error(err, "Failed to read body")
 			http.Error(w, errors.Wrap(err, "Failed to read body").Error(), http.StatusBadRequest)
 			return
 		}
-		err = f.Handle(r.Context(), endpoint, content)
+		record := f.handler(w, r, content)
+		err = f.Handle(r.Context(), endpoint, record)
 		if err != nil {
-			log.Error("Failed to handle record", "error", err)
+			log.Error(err, "Failed to handle record")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Info("Handled records from http request")
+		if log.DebugEnabled() {
+			log.Debug("Handled records from http request")
+		}
 	}
 }

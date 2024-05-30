@@ -17,12 +17,11 @@
 package server
 
 import (
-	"log/slog"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/functionstream/function-stream/common"
-	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
 
@@ -72,7 +71,7 @@ func init() {
 
 func (c *Config) preprocessConfig() error {
 	if c.ListenAddr == "" {
-		return errors.New("ListenAddr shouldn't be empty")
+		return fmt.Errorf("ListenAddr shouldn't be empty")
 	}
 	return nil
 }
@@ -105,7 +104,6 @@ func LoadConfigFromEnv() (*Config, error) {
 			key := parts[0]
 			value := parts[1]
 
-			slog.Info("Loading environment variable", "key", key, "value", value)
 			key = strings.Replace(key, "__", ".", -1)
 			key = strings.Replace(key, "_", "-", -1)
 			viper.Set(key, value)

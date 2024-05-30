@@ -17,19 +17,16 @@
 package wazero
 
 import (
-	"log/slog"
-	"os"
-	"strconv"
-
+	"fmt"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/pkg/errors"
 	"github.com/tetratelabs/wazero"
 	wazero_api "github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 	"golang.org/x/net/context"
+	"os"
 )
 
 type WazeroFunctionRuntimeFactory struct {
@@ -44,10 +41,10 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	r := wazero.NewRuntime(instance.Context())
 	_, err := r.NewHostModuleBuilder("env").NewFunctionBuilder().WithFunc(func(ctx context.Context,
 		m wazero_api.Module, a, b, c, d uint32) {
-		panic("abort")
+		log.Error(fmt.Errorf("abort(%d, %d, %d, %d)", a, b, c, d), "the function is calling abort")
 	}).Export("abort").Instantiate(instance.Context())
 	if err != nil {
-		return nil, errors.Wrap(err, "Error instantiating function module")
+		return nil, fmt.Errorf("error instantiating function module: %w", err)
 	}
 	stdin := common.NewChanReader()
 	stdout := common.NewChanWriter()
@@ -58,40 +55,39 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	wasi_snapshot_preview1.MustInstantiate(instance.Context(), r)
 
 	if instance.Definition().Runtime.Config == nil {
-		return nil, errors.New("No runtime config found")
+		return nil, fmt.Errorf("no runtime config found")
 	}
 	path, exist := instance.Definition().Runtime.Config["archive"]
 	if !exist {
-		return nil, errors.New("No wasm archive found")
+		return nil, fmt.Errorf("no wasm archive found")
 	}
 	pathStr := path.(string)
 	if pathStr == "" {
-		return nil, errors.New("Empty wasm archive found")
+		return nil, fmt.Errorf("empty wasm archive found")
 	}
 	wasmBytes, err := os.ReadFile(pathStr)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error reading wasm file")
+		return nil, fmt.Errorf("error reading wasm file: %w", err)
 	}
 	// Trigger the "_start" function, WASI's "main".
 	mod, err := r.InstantiateWithConfig(instance.Context(), wasmBytes, config)
 	if err != nil {
 		if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
-			return nil, errors.Wrap(err, "Error instantiating function, function exit with code"+
-				strconv.Itoa(int(exitErr.ExitCode())))
+			return nil, fmt.Errorf("failed to instantiate function, function exit with code %d", exitErr.ExitCode())
 		} else if !ok {
-			return nil, errors.Wrap(err, "Error instantiating function")
+			return nil, fmt.Errorf("failed to instantiate function: %w", err)
 		}
 	}
 	process := mod.ExportedFunction("process")
 	if process == nil {
-		return nil, errors.New("No process function found")
+		return nil, fmt.Errorf("no process function found")
 	}
-	return &WazeroFunctionRuntime{
+	return &FunctionRuntime{
 		callFunc: func(e contube.Record) (contube.Record, error) {
 			stdin.ResetBuffer(e.GetPayload())
 			_, err := process.Call(instance.Context())
 			if err != nil {
-				return nil, errors.Wrap(err, "Error calling wasm function")
+				return nil, fmt.Errorf("error calling wasm function: %w", err)
 			}
 			output := stdout.GetAndReset()
 			return contube.NewRecordImpl(output, e.Commit), nil
@@ -99,30 +95,24 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 		stopFunc: func() {
 			err := r.Close(instance.Context())
 			if err != nil {
-				slog.ErrorContext(instance.Context(), "Error closing r", err)
+				log.Error(err, "failed to close the runtime")
 			}
 		},
 		log: log,
 	}, nil
 }
 
-type WazeroFunctionRuntime struct {
+type FunctionRuntime struct {
 	api.FunctionRuntime
 	callFunc func(e contube.Record) (contube.Record, error)
 	stopFunc func()
-	log      *slog.Logger
+	log      *common.Logger
 }
 
-func (r *WazeroFunctionRuntime) WaitForReady() <-chan error {
-	c := make(chan error)
-	close(c)
-	return c
-}
-
-func (r *WazeroFunctionRuntime) Call(e contube.Record) (contube.Record, error) {
+func (r *FunctionRuntime) Call(e contube.Record) (contube.Record, error) {
 	return r.callFunc(e)
 }
 
-func (r *WazeroFunctionRuntime) Stop() {
+func (r *FunctionRuntime) Stop() {
 	r.stopFunc()
 }

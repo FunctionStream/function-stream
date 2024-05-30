@@ -17,7 +17,7 @@
 package fs
 
 import (
-	"log/slog"
+	"github.com/functionstream/function-stream/common"
 	"testing"
 
 	"github.com/functionstream/function-stream/common/model"
@@ -29,7 +29,7 @@ func TestFunctionInstanceContextSetting(t *testing.T) {
 		Name: "test-function",
 	}
 	index := int32(1)
-	instance := defaultInstanceFactory.NewFunctionInstance(definition, nil, index, slog.Default())
+	instance := defaultInstanceFactory.NewFunctionInstance(definition, nil, index, common.NewDefaultLogger())
 
 	if instance == nil {
 		t.Error("FunctionInstance should not be nil")

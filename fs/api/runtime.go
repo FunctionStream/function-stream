@@ -21,7 +21,6 @@ import (
 )
 
 type FunctionRuntime interface {
-	WaitForReady() <-chan error
 	Call(e contube.Record) (contube.Record, error)
 	Stop()
 }

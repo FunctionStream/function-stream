@@ -27,7 +27,6 @@ import (
 	adminclient "github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/tests"
@@ -238,7 +237,9 @@ func (r *MockRuntime) Stop() {
 func TestStatefulFunction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s, httpAddr := startStandaloneSvr(t, ctx, WithFunctionManager(fs.WithRuntimeFactory("mock", &MockRuntimeFactory{})))
+	s, httpAddr := startStandaloneSvr(t, ctx, WithRuntimeFactoryBuilder("mock", func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+		return &MockRuntimeFactory{}, nil
+	}))
 
 	input := "input"
 	output := "output"

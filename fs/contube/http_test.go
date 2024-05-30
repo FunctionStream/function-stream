@@ -29,7 +29,7 @@ func TestHttpTubeHandleRecord(t *testing.T) {
 	f := NewHttpTubeFactory(ctx)
 
 	endpoint := "test"
-	err := f.Handle(ctx, "test", []byte("test"))
+	err := f.Handle(ctx, "test", NewRecordImpl([]byte("test"), nil))
 	assert.ErrorIs(t, err, ErrEndpointNotFound)
 
 	config := make(ConfigMap)
@@ -39,7 +39,7 @@ func TestHttpTubeHandleRecord(t *testing.T) {
 	_, err = f.NewSourceTube(ctx, config)
 	assert.ErrorIs(t, err, ErrorEndpointAlreadyExists)
 
-	err = f.Handle(ctx, endpoint, []byte("test"))
+	err = f.Handle(ctx, endpoint, NewRecordImpl([]byte("test"), nil))
 	assert.Nil(t, err)
 
 	record := <-source
@@ -48,7 +48,7 @@ func TestHttpTubeHandleRecord(t *testing.T) {
 	cancel()
 
 	assert.Nil(t, <-source)
-	err = f.Handle(ctx, endpoint, []byte("test"))
+	err = f.Handle(ctx, endpoint, NewRecordImpl([]byte("test"), nil))
 	assert.Error(t, err, ErrEndpointNotFound)
 }
 
