@@ -83,18 +83,6 @@ func (f serverOptionFunc) apply(c *serverOptions) (*serverOptions, error) {
 	return f(c)
 }
 
-// Low-level server configuration
-
-// WithFunctionManager sets the function Manager for the server.
-// Only for testing
-// Deprecate
-func WithFunctionManager(opts ...fs.ManagerOption) ServerOption {
-	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
-		o.managerOpts = append(o.managerOpts, opts...)
-		return o, nil
-	})
-}
-
 // WithHttpListener sets the listener for the HTTP server.
 // If not set, the server will listen on the Config.ListenAddr.
 func WithHttpListener(listener net.Listener) ServerOption {

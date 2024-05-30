@@ -18,7 +18,7 @@ package benchmark
 
 import (
 	"context"
-	"github.com/functionstream/function-stream/fs"
+	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/runtime/wazero"
 	"math/rand"
 	"os"
@@ -114,8 +114,14 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
-	s, err := server.NewServer(server.WithFunctionManager(fs.WithTubeFactory(common.MemoryTubeType, memoryQueueFactory),
-		fs.WithRuntimeFactory(common.WASMRuntime, wazero.NewWazeroFunctionRuntimeFactory())))
+	s, err := server.NewServer(
+		server.WithRuntimeFactoryBuilder(common.WASMRuntime, func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+			return wazero.NewWazeroFunctionRuntimeFactory(), nil
+		}),
+		server.WithTubeFactoryBuilder(common.MemoryTubeType, func(configMap common.ConfigMap) (contube.TubeFactory, error) {
+			return memoryQueueFactory, nil
+		}),
+	)
 	if err != nil {
 		b.Fatal(err)
 	}

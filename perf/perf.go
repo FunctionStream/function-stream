@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -154,16 +155,11 @@ func (p *perf) Run(ctx context.Context) {
 
 	res, err := cli.FunctionAPI.CreateFunction(context.Background()).Body(f).Execute()
 	if err != nil {
+		body, _ := io.ReadAll(res.Body)
 		slog.Error(
 			"Failed to create Create Function",
 			slog.Any("error", err),
-		)
-		os.Exit(1)
-	}
-	if res.StatusCode != 200 {
-		slog.Error(
-			"Failed to create Create Function",
-			slog.Any("statusCode", res.StatusCode),
+			slog.Any("body", body),
 		)
 		os.Exit(1)
 	}
