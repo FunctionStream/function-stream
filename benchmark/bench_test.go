@@ -134,7 +134,7 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	inputTopic := "test-input-" + strconv.Itoa(rand.Int())
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
 
-	replicas := int32(1)
+	replicas := int32(5)
 
 	pConfig := &perf.Config{
 		RequestRate: 200000.0,

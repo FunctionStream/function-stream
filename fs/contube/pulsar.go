@@ -155,8 +155,14 @@ func NewPulsarEventQueueFactory(ctx context.Context, configMap ConfigMap) (TubeF
 							flush()
 							return
 						}
+						schemaDef := e.GetSchema()
+						var schema pulsar.Schema
+						if schemaDef != "" {
+							schema = pulsar.NewJSONSchema(schemaDef, nil)
+						}
 						producer.SendAsync(ctx, &pulsar.ProducerMessage{
 							Payload: e.GetPayload(),
+							Schema:  schema,
 						}, func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
 							if err != nil {
 								handleErr(ctx, err, "Error sending message", "error", err, "messageId", id)

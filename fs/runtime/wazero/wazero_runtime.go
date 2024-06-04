@@ -17,15 +17,16 @@
 package wazero
 
 import (
+	"context"
 	"fmt"
 	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/common/wasm_utils"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/tetratelabs/wazero"
 	wazero_api "github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
-	"golang.org/x/net/context"
 	"os"
 )
 
@@ -44,7 +45,7 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 		log.Error(fmt.Errorf("abort(%d, %d, %d, %d)", a, b, c, d), "the function is calling abort")
 	}).Export("abort").Instantiate(instance.Context())
 	if err != nil {
-		return nil, fmt.Errorf("error instantiating function module: %w", err)
+		return nil, fmt.Errorf("error instantiating env module: %w", err)
 	}
 	stdin := common.NewChanReader()
 	stdout := common.NewChanWriter()
@@ -69,6 +70,29 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	if err != nil {
 		return nil, fmt.Errorf("error reading wasm file: %w", err)
 	}
+	var outputSchemaDef string
+	_, err = r.NewHostModuleBuilder("fs").
+		NewFunctionBuilder().
+		WithFunc(func(ctx context.Context, m wazero_api.Module, inputSchema uint64, outputSchema uint64) {
+			inputBuf, ok := m.Memory().Read(wasm_utils.ExtractPtrSize(inputSchema))
+			if !ok {
+				log.Error(fmt.Errorf("failed to read memory"), "failed to read memory")
+				return
+			}
+			if log.DebugEnabled() {
+				log.Info("Register the input schema", "schema", string(inputBuf))
+			}
+			outputBuf, ok := m.Memory().Read(wasm_utils.ExtractPtrSize(outputSchema))
+			if !ok {
+				log.Error(fmt.Errorf("failed to read memory"), "failed to read memory")
+				return
+			}
+			if log.DebugEnabled() {
+				log.Info("Register the output schema", "schema", string(outputBuf))
+			}
+			outputSchemaDef = string(outputBuf)
+		}).Export("registerSchema").
+		Instantiate(instance.Context())
 	// Trigger the "_start" function, WASI's "main".
 	mod, err := r.InstantiateWithConfig(instance.Context(), wasmBytes, config)
 	if err != nil {
@@ -79,18 +103,50 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 		}
 	}
 	process := mod.ExportedFunction("process")
+	malloc := mod.ExportedFunction("malloc")
+	free := mod.ExportedFunction("free")
+	init := mod.ExportedFunction("init")
+	processRecord := mod.ExportedFunction("processRecord")
+
+	if err != nil {
+		return nil, fmt.Errorf("error instantiating fs module: %w", err)
+	}
+	_, err = init.Call(instance.Context())
+	if err != nil {
+		return nil, err
+	}
 	if process == nil {
 		return nil, fmt.Errorf("no process function found")
 	}
 	return &FunctionRuntime{
 		callFunc: func(e contube.Record) (contube.Record, error) {
-			stdin.ResetBuffer(e.GetPayload())
-			_, err := process.Call(instance.Context())
+			payload := e.GetPayload()
+			payloadSize := len(payload)
+			mallocResults, err := malloc.Call(instance.Context(), uint64(payloadSize))
 			if err != nil {
-				return nil, fmt.Errorf("error calling wasm function: %w", err)
+				panic(err)
 			}
-			output := stdout.GetAndReset()
-			return contube.NewRecordImpl(output, e.Commit), nil
+			ptr := mallocResults[0]
+			defer func() {
+				_, err := free.Call(instance.Context(), ptr)
+				if err != nil {
+					panic(err)
+				}
+			}()
+			if !mod.Memory().Write(uint32(ptr), payload) {
+				log.Error(fmt.Errorf("Memory.Write(%d, %d) out of range of memory size %d",
+					ptr, payloadSize, mod.Memory().Size()), "failed to write memory")
+			}
+			outputPtrSize, err := processRecord.Call(instance.Context(), wasm_utils.PtrSize(uint32(ptr), uint32(payloadSize)))
+			if err != nil {
+				panic(err)
+			}
+			//fmt.Println(wasm_utils.ExtractPtrSize(outputPtrSize[0]))
+			if bytes, ok := mod.Memory().Read(wasm_utils.ExtractPtrSize(outputPtrSize[0])); !ok {
+				return nil, fmt.Errorf("failed to read memory")
+			} else {
+				return contube.NewSchemaRecordImpl(bytes, outputSchemaDef, e.Commit), nil
+			}
 		},
 		stopFunc: func() {
 			err := r.Close(instance.Context())
