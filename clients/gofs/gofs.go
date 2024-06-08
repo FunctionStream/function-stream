@@ -61,11 +61,8 @@ func Register[I any, O any](process func(*I) *O) error {
 }
 
 //export process
-func process() {
+func internalProcess() {
 	payload, _ := io.ReadAll(processFile)
 	outputPayload := processFunc(payload)
-	n, _ := processFile.Write(outputPayload)
-	if n != len(outputPayload) {
-		_, _ = fmt.Fprintln(os.Stderr, "NO!")
-	}
+	_, _ = processFile.Write(outputPayload)
 }
