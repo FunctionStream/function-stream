@@ -19,6 +19,7 @@ require (
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.9.0
 	github.com/tetratelabs/wazero v1.6.0
+	github.com/wirelessr/avroschema v0.0.0-20240111032105-ef4f4560e2a7
 	go.uber.org/zap v1.26.0
 	golang.org/x/net v0.23.0
 	golang.org/x/time v0.5.0
@@ -92,7 +93,6 @@ require (
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/wirelessr/avroschema v0.0.0-20240111032105-ef4f4560e2a7 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect

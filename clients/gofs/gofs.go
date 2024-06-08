@@ -19,8 +19,10 @@ package gofs
 import "C"
 import (
 	"encoding/json"
+	"fmt"
 	. "github.com/functionstream/function-stream/common/wasm_utils"
 	"github.com/wirelessr/avroschema"
+	"os"
 )
 
 var processFunc func(uint64) uint64
@@ -42,7 +44,7 @@ func Register[I any, O any](process func(*I) *O) error {
 		input := new(I)
 		err = json.Unmarshal([]byte(payload), input)
 		if err != nil {
-			//fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s", err, payload)
+			fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s", err, payload)
 		}
 		output := process(input)
 		outputPayload, _ := json.Marshal(output)
