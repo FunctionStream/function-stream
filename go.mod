@@ -2,8 +2,6 @@ module github.com/functionstream/function-stream
 
 go 1.21.4
 
-toolchain go1.22.0
-
 require (
 	github.com/apache/pulsar-client-go v0.12.0
 	github.com/bmizerany/perks v0.0.0-20230307044200-03f9df79da1e
