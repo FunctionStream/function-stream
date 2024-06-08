@@ -93,6 +93,9 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 			outputSchemaDef = string(outputBuf)
 		}).Export("registerSchema").
 		Instantiate(instance.Context())
+	if err != nil {
+		return nil, fmt.Errorf("error creating fs module: %w", err)
+	}
 	// Trigger the "_start" function, WASI's "main".
 	mod, err := r.InstantiateWithConfig(instance.Context(), wasmBytes, config)
 	if err != nil {
@@ -102,13 +105,12 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 			return nil, fmt.Errorf("failed to instantiate function: %w", err)
 		}
 	}
+	if err != nil {
+		return nil, fmt.Errorf("error instantiating runtime: %w", err)
+	}
 	malloc := mod.ExportedFunction("malloc")
 	free := mod.ExportedFunction("free")
 	processRecord := mod.ExportedFunction("processRecord")
-
-	if err != nil {
-		return nil, fmt.Errorf("error instantiating fs module: %w", err)
-	}
 	if processRecord == nil {
 		return nil, fmt.Errorf("no process function found")
 	}
