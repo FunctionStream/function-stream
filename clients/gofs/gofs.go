@@ -22,10 +22,17 @@ import (
 	"fmt"
 	. "github.com/functionstream/function-stream/common/wasm_utils"
 	"github.com/wirelessr/avroschema"
+	"io"
 	"os"
 )
 
-var processFunc func(uint64) uint64
+var processFile *os.File
+
+func init() {
+	processFile, _ = os.Open("/process")
+}
+
+var processFunc func([]byte) []byte
 
 //go:wasmimport fs registerSchema
 func registerSchema(inputSchemaPtrSize, outputSchemaPtrSize uint64)
@@ -39,22 +46,26 @@ func Register[I any, O any](process func(*I) *O) error {
 	if err != nil {
 		return err
 	}
-	processFunc = func(ptrSize uint64) uint64 {
-		payload := PtrToString(ExtractPtrSize(ptrSize))
+	processFunc = func(payload []byte) []byte {
 		input := new(I)
-		err = json.Unmarshal([]byte(payload), input)
+		err = json.Unmarshal(payload, input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s", err, payload)
 		}
 		output := process(input)
 		outputPayload, _ := json.Marshal(output)
-		return PtrSize(StringToPtr(string(outputPayload)))
+		return outputPayload
 	}
 	registerSchema(PtrSize(StringToPtr(inputSchema)), PtrSize(StringToPtr(outputSchema)))
 	return nil
 }
 
-//export processRecord
-func processRecord(ptrSize uint64) uint64 {
-	return processFunc(ptrSize)
+//export process
+func process() {
+	payload, _ := io.ReadAll(processFile)
+	outputPayload := processFunc(payload)
+	n, _ := processFile.Write(outputPayload)
+	if n != len(outputPayload) {
+		_, _ = fmt.Fprintln(os.Stderr, "NO!")
+	}
 }

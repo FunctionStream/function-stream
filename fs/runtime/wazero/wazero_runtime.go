@@ -25,6 +25,8 @@ import (
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/tetratelabs/wazero"
 	wazero_api "github.com/tetratelabs/wazero/api"
+	exp_sys "github.com/tetratelabs/wazero/experimental/sys"
+	"github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 	"os"
@@ -50,8 +52,13 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	stdin := common.NewChanReader()
 	stdout := common.NewChanWriter()
 
+	processFile := &memoryFile{}
+	fileMap := map[string]exp_sys.File{
+		"process": processFile,
+	}
+	fsConfig := wazero.NewFSConfig().(sysfs.FSConfig).WithSysFSMount(newMemoryFS(fileMap), "")
 	config := wazero.NewModuleConfig().
-		WithStdout(stdout).WithStdin(stdin).WithStderr(os.Stderr)
+		WithStdout(stdout).WithStdin(stdin).WithStderr(os.Stderr).WithFSConfig(fsConfig)
 
 	wasi_snapshot_preview1.MustInstantiate(instance.Context(), r)
 
@@ -108,41 +115,23 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	if err != nil {
 		return nil, fmt.Errorf("error instantiating runtime: %w", err)
 	}
-	malloc := mod.ExportedFunction("malloc")
-	free := mod.ExportedFunction("free")
-	processRecord := mod.ExportedFunction("processRecord")
-	if processRecord == nil {
+	process := mod.ExportedFunction("process")
+	if process == nil {
 		return nil, fmt.Errorf("no process function found")
 	}
 	return &FunctionRuntime{
 		callFunc: func(e contube.Record) (contube.Record, error) {
 			payload := e.GetPayload()
-			payloadSize := len(payload)
-			mallocResults, err := malloc.Call(instance.Context(), uint64(payloadSize))
+			processFile.writeBuf.Reset()
+			_, _ = processFile.readBuf.Write(payload)
+			_, err := process.Call(instance.Context())
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
-			ptr := mallocResults[0]
-			defer func() {
-				_, err := free.Call(instance.Context(), ptr)
-				if err != nil {
-					panic(err)
-				}
-			}()
-			if !mod.Memory().Write(uint32(ptr), payload) {
-				log.Error(fmt.Errorf("Memory.Write(%d, %d) out of range of memory size %d",
-					ptr, payloadSize, mod.Memory().Size()), "failed to write memory")
-			}
-			outputPtrSize, err := processRecord.Call(instance.Context(), wasm_utils.PtrSize(uint32(ptr), uint32(payloadSize)))
-			if err != nil {
-				panic(err)
-			}
-			//fmt.Println(wasm_utils.ExtractPtrSize(outputPtrSize[0]))
-			if bytes, ok := mod.Memory().Read(wasm_utils.ExtractPtrSize(outputPtrSize[0])); !ok {
-				return nil, fmt.Errorf("failed to read memory")
-			} else {
-				return contube.NewSchemaRecordImpl(bytes, outputSchemaDef, e.Commit), nil
-			}
+			outBuf := processFile.writeBuf.Bytes()
+			outputPayload := make([]byte, len(outBuf))
+			copy(outputPayload, outBuf)
+			return contube.NewSchemaRecordImpl(outputPayload, outputSchemaDef, e.Commit), nil
 		},
 		stopFunc: func() {
 			err := r.Close(instance.Context())
