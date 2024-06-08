@@ -18,14 +18,15 @@ package benchmark
 
 import (
 	"context"
-	"github.com/functionstream/function-stream/fs/api"
-	"github.com/functionstream/function-stream/fs/runtime/wazero"
 	"math/rand"
 	"os"
 	"runtime/pprof"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/runtime/wazero"
 
 	"github.com/apache/pulsar-client-go/pulsaradmin"
 	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
@@ -115,12 +116,14 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
 	s, err := server.NewServer(
-		server.WithRuntimeFactoryBuilder(common.WASMRuntime, func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
-			return wazero.NewWazeroFunctionRuntimeFactory(), nil
-		}),
-		server.WithTubeFactoryBuilder(common.MemoryTubeType, func(configMap common.ConfigMap) (contube.TubeFactory, error) {
-			return memoryQueueFactory, nil
-		}),
+		server.WithRuntimeFactoryBuilder(common.WASMRuntime,
+			func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+				return wazero.NewWazeroFunctionRuntimeFactory(), nil
+			}),
+		server.WithTubeFactoryBuilder(common.MemoryTubeType,
+			func(configMap common.ConfigMap) (contube.TubeFactory, error) {
+				return memoryQueueFactory, nil
+			}),
 	)
 	if err != nil {
 		b.Fatal(err)

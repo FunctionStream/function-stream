@@ -17,11 +17,12 @@
 package contube
 
 import (
-	"github.com/functionstream/function-stream/common"
 	"io"
 	"net/http"
 	"sync"
 	"sync/atomic"
+
+	"github.com/functionstream/function-stream/common"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"

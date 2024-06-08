@@ -16,11 +16,9 @@
 
 package fs
 
-import "fmt"
-
 import (
 	"context"
-	"github.com/go-logr/logr"
+	"fmt"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -30,6 +28,7 @@ import (
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/functionstream/function-stream/fs/statestore"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 )
 

@@ -19,6 +19,8 @@ package wazero
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/wasm_utils"
 	"github.com/functionstream/function-stream/fs/api"
@@ -29,7 +31,6 @@ import (
 	"github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
-	"os"
 )
 
 type WazeroFunctionRuntimeFactory struct {

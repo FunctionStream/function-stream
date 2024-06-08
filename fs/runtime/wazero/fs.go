@@ -18,9 +18,10 @@ package wazero
 
 import (
 	"bytes"
+	"io/fs"
+
 	. "github.com/tetratelabs/wazero/experimental/sys"
 	"github.com/tetratelabs/wazero/sys"
-	"io/fs"
 )
 
 type memoryFS struct {

@@ -20,10 +20,11 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
-	. "github.com/functionstream/function-stream/common/wasm_utils"
-	"github.com/wirelessr/avroschema"
 	"io"
 	"os"
+
+	. "github.com/functionstream/function-stream/common/wasm_utils"
+	"github.com/wirelessr/avroschema"
 )
 
 var processFile *os.File
@@ -61,7 +62,7 @@ func Register[I any, O any](process func(*I) *O) error {
 }
 
 //export process
-func internalProcess() {
+func process() {
 	payload, _ := io.ReadAll(processFile)
 	outputPayload := processFunc(payload)
 	_, _ = processFile.Write(outputPayload)
