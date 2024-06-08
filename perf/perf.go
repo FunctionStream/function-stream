@@ -256,6 +256,7 @@ func (p *perf) generateTraffic(ctx context.Context, latencyCh chan int64, failur
 				slog.Error(
 					"Failed to unmarshal Person",
 					slog.Any("error", err),
+					slog.Any("payload", payload),
 				)
 				os.Exit(1)
 			}

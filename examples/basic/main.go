@@ -32,7 +32,6 @@ type Person struct {
 	Expected int    `json:"expected"`
 }
 
-//export init
 func init() {
 	_ = gofs.Register(myProcess)
 }

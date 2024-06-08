@@ -102,20 +102,14 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 			return nil, fmt.Errorf("failed to instantiate function: %w", err)
 		}
 	}
-	process := mod.ExportedFunction("process")
 	malloc := mod.ExportedFunction("malloc")
 	free := mod.ExportedFunction("free")
-	init := mod.ExportedFunction("init")
 	processRecord := mod.ExportedFunction("processRecord")
 
 	if err != nil {
 		return nil, fmt.Errorf("error instantiating fs module: %w", err)
 	}
-	_, err = init.Call(instance.Context())
-	if err != nil {
-		return nil, err
-	}
-	if process == nil {
+	if processRecord == nil {
 		return nil, fmt.Errorf("no process function found")
 	}
 	return &FunctionRuntime{
