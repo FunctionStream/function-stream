@@ -17,8 +17,9 @@
 package fs
 
 import (
-	"github.com/functionstream/function-stream/common"
 	"testing"
+
+	"github.com/functionstream/function-stream/common"
 
 	"github.com/functionstream/function-stream/common/model"
 )

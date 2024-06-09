@@ -17,6 +17,9 @@
 package server
 
 import (
+	"os"
+	"testing"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
@@ -24,8 +27,6 @@ import (
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
-	"os"
-	"testing"
 )
 
 type testFunctionManagerImpl struct {

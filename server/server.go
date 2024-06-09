@@ -19,13 +19,14 @@ package server
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/go-logr/logr"
 
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
@@ -108,14 +109,19 @@ func WithQueueConfig(config QueueConfig) ServerOption {
 	})
 }
 
-func WithTubeFactoryBuilder(name string, builder func(configMap common.ConfigMap) (contube.TubeFactory, error)) ServerOption {
+func WithTubeFactoryBuilder(
+	name string,
+	builder func(configMap common.ConfigMap) (contube.TubeFactory, error),
+) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		o.tubeFactoryBuilders[name] = builder
 		return o, nil
 	})
 }
 
-func WithTubeFactoryBuilders(builder map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error)) ServerOption {
+func WithTubeFactoryBuilders(
+	builder map[string]func(configMap common.ConfigMap,
+	) (contube.TubeFactory, error)) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		for n, b := range builder {
 			o.tubeFactoryBuilders[n] = b
@@ -124,14 +130,19 @@ func WithTubeFactoryBuilders(builder map[string]func(configMap common.ConfigMap)
 	})
 }
 
-func WithRuntimeFactoryBuilder(name string, builder func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error)) ServerOption {
+func WithRuntimeFactoryBuilder(
+	name string,
+	builder func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error),
+) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		o.runtimeFactoryBuilders[name] = builder
 		return o, nil
 	})
 }
 
-func WithRuntimeFactoryBuilders(builder map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error)) ServerOption {
+func WithRuntimeFactoryBuilders(
+	builder map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error),
+) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		for n, b := range builder {
 			o.runtimeFactoryBuilders[n] = b
@@ -159,7 +170,8 @@ func GetBuiltinTubeFactoryBuilder() map[string]func(configMap common.ConfigMap) 
 		common.PulsarTubeType: func(configMap common.ConfigMap) (contube.TubeFactory, error) {
 			return contube.NewPulsarEventQueueFactory(context.Background(), contube.ConfigMap(configMap))
 		},
-		common.MemoryTubeType: func(configMap common.ConfigMap) (contube.TubeFactory, error) {
+		//nolint:unparam
+		common.MemoryTubeType: func(_ common.ConfigMap) (contube.TubeFactory, error) {
 			return contube.NewMemoryQueueFactory(context.Background()), nil
 		},
 	}
@@ -167,6 +179,7 @@ func GetBuiltinTubeFactoryBuilder() map[string]func(configMap common.ConfigMap) 
 
 func GetBuiltinRuntimeFactoryBuilder() map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
 	return map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error){
+		//nolint:unparam
 		common.WASMRuntime: func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
 			return wazero.NewWazeroFunctionRuntimeFactory(), nil
 		},
@@ -333,7 +346,10 @@ func NewDefaultServer() (*Server, error) {
 		},
 		RuntimeConfig: map[string]common.ConfigMap{},
 	}
-	return NewServer(WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()), WithRuntimeFactoryBuilders(GetBuiltinRuntimeFactoryBuilder()), WithConfig(defaultConfig))
+	return NewServer(
+		WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()),
+		WithRuntimeFactoryBuilders(GetBuiltinRuntimeFactoryBuilder()),
+		WithConfig(defaultConfig))
 }
 
 func (s *Server) Run(context context.Context) {

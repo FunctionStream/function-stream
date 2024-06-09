@@ -17,16 +17,20 @@
 package wazero
 
 import (
+	"context"
 	"fmt"
+	"os"
+
 	"github.com/functionstream/function-stream/common"
+	"github.com/functionstream/function-stream/common/wasm_utils"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/tetratelabs/wazero"
 	wazero_api "github.com/tetratelabs/wazero/api"
+	exp_sys "github.com/tetratelabs/wazero/experimental/sys"
+	"github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
-	"golang.org/x/net/context"
-	"os"
 )
 
 type WazeroFunctionRuntimeFactory struct {
@@ -44,13 +48,18 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 		log.Error(fmt.Errorf("abort(%d, %d, %d, %d)", a, b, c, d), "the function is calling abort")
 	}).Export("abort").Instantiate(instance.Context())
 	if err != nil {
-		return nil, fmt.Errorf("error instantiating function module: %w", err)
+		return nil, fmt.Errorf("error instantiating env module: %w", err)
 	}
 	stdin := common.NewChanReader()
 	stdout := common.NewChanWriter()
 
+	processFile := &memoryFile{}
+	fileMap := map[string]exp_sys.File{
+		"process": processFile,
+	}
+	fsConfig := wazero.NewFSConfig().(sysfs.FSConfig).WithSysFSMount(newMemoryFS(fileMap), "")
 	config := wazero.NewModuleConfig().
-		WithStdout(stdout).WithStdin(stdin).WithStderr(os.Stderr)
+		WithStdout(stdout).WithStdin(stdin).WithStderr(os.Stderr).WithFSConfig(fsConfig)
 
 	wasi_snapshot_preview1.MustInstantiate(instance.Context(), r)
 
@@ -69,6 +78,32 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	if err != nil {
 		return nil, fmt.Errorf("error reading wasm file: %w", err)
 	}
+	var outputSchemaDef string
+	_, err = r.NewHostModuleBuilder("fs").
+		NewFunctionBuilder().
+		WithFunc(func(ctx context.Context, m wazero_api.Module, inputSchema uint64, outputSchema uint64) {
+			inputBuf, ok := m.Memory().Read(wasm_utils.ExtractPtrSize(inputSchema))
+			if !ok {
+				log.Error(fmt.Errorf("failed to read memory"), "failed to read memory")
+				return
+			}
+			if log.DebugEnabled() {
+				log.Info("Register the input schema", "schema", string(inputBuf))
+			}
+			outputBuf, ok := m.Memory().Read(wasm_utils.ExtractPtrSize(outputSchema))
+			if !ok {
+				log.Error(fmt.Errorf("failed to read memory"), "failed to read memory")
+				return
+			}
+			if log.DebugEnabled() {
+				log.Info("Register the output schema", "schema", string(outputBuf))
+			}
+			outputSchemaDef = string(outputBuf)
+		}).Export("registerSchema").
+		Instantiate(instance.Context())
+	if err != nil {
+		return nil, fmt.Errorf("error creating fs module: %w", err)
+	}
 	// Trigger the "_start" function, WASI's "main".
 	mod, err := r.InstantiateWithConfig(instance.Context(), wasmBytes, config)
 	if err != nil {
@@ -78,19 +113,26 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 			return nil, fmt.Errorf("failed to instantiate function: %w", err)
 		}
 	}
+	if err != nil {
+		return nil, fmt.Errorf("error instantiating runtime: %w", err)
+	}
 	process := mod.ExportedFunction("process")
 	if process == nil {
 		return nil, fmt.Errorf("no process function found")
 	}
 	return &FunctionRuntime{
 		callFunc: func(e contube.Record) (contube.Record, error) {
-			stdin.ResetBuffer(e.GetPayload())
+			payload := e.GetPayload()
+			processFile.writeBuf.Reset()
+			_, _ = processFile.readBuf.Write(payload)
 			_, err := process.Call(instance.Context())
 			if err != nil {
-				return nil, fmt.Errorf("error calling wasm function: %w", err)
+				return nil, err
 			}
-			output := stdout.GetAndReset()
-			return contube.NewRecordImpl(output, e.Commit), nil
+			outBuf := processFile.writeBuf.Bytes()
+			outputPayload := make([]byte, len(outBuf))
+			copy(outputPayload, outBuf)
+			return contube.NewSchemaRecordImpl(outputPayload, outputSchemaDef, e.Commit), nil
 		},
 		stopFunc: func() {
 			err := r.Close(instance.Context())

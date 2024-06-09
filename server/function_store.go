@@ -17,12 +17,6 @@
 package server
 
 import (
-	restfulspec "github.com/emicklei/go-restful-openapi/v2"
-	"github.com/emicklei/go-restful/v3"
-	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
 	"io"
 	"log/slog"
 	"net/http"
@@ -30,6 +24,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	restfulspec "github.com/emicklei/go-restful-openapi/v2"
+	"github.com/emicklei/go-restful/v3"
+	"github.com/functionstream/function-stream/common/model"
+	"github.com/functionstream/function-stream/fs"
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
 )
 
 type FunctionStore interface {

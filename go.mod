@@ -1,6 +1,6 @@
 module github.com/functionstream/function-stream
 
-go 1.21
+go 1.21.4
 
 require (
 	github.com/apache/pulsar-client-go v0.12.0
@@ -17,6 +17,7 @@ require (
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.9.0
 	github.com/tetratelabs/wazero v1.6.0
+	github.com/wirelessr/avroschema v0.0.0-20240111032105-ef4f4560e2a7
 	go.uber.org/zap v1.26.0
 	golang.org/x/net v0.23.0
 	golang.org/x/time v0.5.0

@@ -237,9 +237,10 @@ func (r *MockRuntime) Stop() {
 func TestStatefulFunction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s, httpAddr := startStandaloneSvr(t, ctx, WithRuntimeFactoryBuilder("mock", func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
-		return &MockRuntimeFactory{}, nil
-	}))
+	s, httpAddr := startStandaloneSvr(t, ctx,
+		WithRuntimeFactoryBuilder("mock", func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+			return &MockRuntimeFactory{}, nil
+		}))
 
 	input := "input"
 	output := "output"

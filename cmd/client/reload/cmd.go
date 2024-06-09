@@ -19,10 +19,11 @@ package reload
 import (
 	"context"
 	"fmt"
+	"os"
+
 	adminclient "github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/cmd/client/common"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 var Cmd = &cobra.Command{

@@ -19,6 +19,7 @@ package contube
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 )
@@ -31,6 +32,7 @@ var (
 
 type Record interface {
 	GetPayload() []byte
+	GetSchema() string
 	Commit()
 }
 
@@ -110,6 +112,7 @@ type TubeFactory interface {
 
 type RecordImpl struct {
 	payload    []byte
+	schema     string
 	commitFunc func()
 }
 
@@ -120,8 +123,20 @@ func NewRecordImpl(payload []byte, ackFunc func()) *RecordImpl {
 	}
 }
 
+func NewSchemaRecordImpl(payload []byte, schema string, ackFunc func()) *RecordImpl {
+	return &RecordImpl{
+		payload:    payload,
+		schema:     schema,
+		commitFunc: ackFunc,
+	}
+}
+
 func (e *RecordImpl) GetPayload() []byte {
 	return e.payload
+}
+
+func (e *RecordImpl) GetSchema() string {
+	return e.schema
 }
 
 func (e *RecordImpl) Commit() {

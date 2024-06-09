@@ -17,11 +17,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
+	"github.com/functionstream/function-stream/clients/gofs"
 	"os"
 )
+
+func main() {
+	_, _ = fmt.Fprintln(os.Stderr, "Hello from Go!")
+}
 
 type Person struct {
 	Name     string `json:"name"`
@@ -29,36 +32,11 @@ type Person struct {
 	Expected int    `json:"expected"`
 }
 
-func main() {
-	_, _ = fmt.Fprintln(os.Stderr, "Hello from Go!")
+func init() {
+	_ = gofs.Register(myProcess)
 }
 
-//export process
-func process() {
-	dataBytes, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "Failed to read data:", err)
-		os.Exit(1)
-	}
-
-	var person Person
-	err = json.Unmarshal(dataBytes, &person)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "Failed to parse JSON:", err)
-		os.Exit(1)
-	}
-
-	person.Money++
-
-	jsonBytes, err := json.Marshal(person)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "Failed to encode JSON:", err)
-		os.Exit(1)
-	}
-
-	_, err = fmt.Printf("%s", jsonBytes)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "Failed to print JSON:", err)
-		os.Exit(1)
-	}
+func myProcess(person *Person) *Person {
+	person.Money += 1
+	return person
 }
