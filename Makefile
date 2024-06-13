@@ -65,3 +65,6 @@ proto:
 
 license:
 	./license-checker/license-checker.sh
+
+gen-changelog:
+	.chglog/gen-chg-log.sh
