@@ -1,4 +1,20 @@
 
+<a name="v0.5.0"></a>
+## [v0.5.0](https://github.com/FunctionStream/function-stream/compare/v0.4.0...v0.5.0) (2024-06-13)
+
+### Features
+
+* add data schema support ([#182](https://github.com/FunctionStream/function-stream/issues/182)) - _by Zike Yang_
+* improve log ([#181](https://github.com/FunctionStream/function-stream/issues/181)) - _by Zike Yang_
+* improve tube configuration ([#180](https://github.com/FunctionStream/function-stream/issues/180)) - _by Zike Yang_
+* support tls ([#179](https://github.com/FunctionStream/function-stream/issues/179)) - _by Zike Yang_
+* function store ([#178](https://github.com/FunctionStream/function-stream/issues/178)) - _by Zike Yang_
+
+### Documentation
+
+* add changelog for v0.4.0 ([#177](https://github.com/FunctionStream/function-stream/issues/177)) - _by Zike Yang_
+
+
 <a name="v0.4.0"></a>
 ## [v0.4.0](https://github.com/FunctionStream/function-stream/compare/v0.3.0...v0.4.0) (2024-05-09)
 
