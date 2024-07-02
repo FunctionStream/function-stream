@@ -32,25 +32,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type NamespacedName struct {
-	namespace string
-	name      string
-}
-
-func (n NamespacedName) String() string {
-	if n.namespace == "" {
-		return n.name
-	}
-	return n.namespace + "/" + n.name
-}
-
-func GetNamespacedName(namespace, name string) NamespacedName {
-	return NamespacedName{
-		namespace: namespace,
-		name:      name,
-	}
-}
-
 type FunctionManager interface {
 	StartFunction(f *model.Function) error
 	DeleteFunction(namespace, name string) error
@@ -63,7 +44,7 @@ type FunctionManager interface {
 
 type functionManagerImpl struct {
 	options       *managerOptions
-	functions     map[NamespacedName][]api.FunctionInstance //TODO: Use sync.map
+	functions     map[common.NamespacedName][]api.FunctionInstance //TODO: Use sync.map
 	functionsLock sync.Mutex
 	log           *common.Logger
 }
@@ -167,7 +148,7 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 		"tube-factories", loadedTubeFact)
 	return &functionManagerImpl{
 		options:   options,
-		functions: make(map[NamespacedName][]api.FunctionInstance),
+		functions: make(map[common.NamespacedName][]api.FunctionInstance),
 		log:       log,
 	}, nil
 }
@@ -188,8 +169,8 @@ func (fm *functionManagerImpl) getRuntimeFactory(t string) (api.FunctionRuntimeF
 	return factory, nil
 }
 
-func (fm *functionManagerImpl) createFuncCtx() api.FunctionContext {
-	return NewFuncCtxImpl(fm.options.stateStore)
+func (fm *functionManagerImpl) createFuncCtx() *funcCtxImpl {
+	return newFuncCtxImpl(fm.options.stateStore)
 }
 
 func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO: Shouldn't use pointer here
@@ -197,20 +178,21 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		return err
 	}
 	fm.functionsLock.Lock()
-	if _, exist := fm.functions[GetNamespacedName(f.Namespace, f.Name)]; exist {
+	if _, exist := fm.functions[common.GetNamespacedName(f.Namespace, f.Name)]; exist {
 		fm.functionsLock.Unlock()
 		return common.ErrorFunctionExists
 	}
-	fm.functions[GetNamespacedName(f.Namespace, f.Name)] = make([]api.FunctionInstance, f.Replicas)
+	fm.functions[common.GetNamespacedName(f.Namespace, f.Name)] = make([]api.FunctionInstance, f.Replicas)
 	fm.functionsLock.Unlock()
-	funcCtx := fm.createFuncCtx()
+
 	for i := int32(0); i < f.Replicas; i++ {
 		runtimeType := f.Runtime.Type
 
+		funcCtx := fm.createFuncCtx()
 		instanceLogger := fm.log.SubLogger("functionName", f.Name, "instanceIndex", int(i), "runtimeType", runtimeType)
 		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, i, instanceLogger)
 		fm.functionsLock.Lock()
-		fm.functions[GetNamespacedName(f.Namespace, f.Name)][i] = instance
+		fm.functions[common.GetNamespacedName(f.Namespace, f.Name)][i] = instance
 		fm.functionsLock.Unlock()
 		runtimeFactory, err := fm.getRuntimeFactory(runtimeType)
 		if err != nil {
@@ -236,6 +218,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		if err != nil {
 			return fmt.Errorf("failed to create sink event queue: %w", err)
 		}
+		funcCtx.setSink(sink)
 
 		runtime, err := runtimeFactory.NewFunctionRuntime(instance)
 		if err != nil {
@@ -250,11 +233,11 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 func (fm *functionManagerImpl) DeleteFunction(namespace, name string) error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
-	instances, exist := fm.functions[GetNamespacedName(namespace, name)]
+	instances, exist := fm.functions[common.GetNamespacedName(namespace, name)]
 	if !exist {
 		return common.ErrorFunctionNotFound
 	}
-	delete(fm.functions, GetNamespacedName(namespace, name))
+	delete(fm.functions, common.GetNamespacedName(namespace, name))
 	for _, instance := range instances {
 		instance.Stop()
 	}

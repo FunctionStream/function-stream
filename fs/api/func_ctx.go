@@ -16,7 +16,10 @@
 
 package api
 
+import "github.com/functionstream/function-stream/fs/contube"
+
 type FunctionContext interface {
 	PutState(key string, value []byte) error
 	GetState(key string) ([]byte, error)
+	Write(record contube.Record) error
 }

@@ -69,7 +69,7 @@ func init() {
 	viper.SetDefault("function-store", "./functions")
 }
 
-func (c *Config) preprocessConfig() error {
+func (c *Config) PreprocessConfig() error {
 	if c.ListenAddr == "" {
 		return fmt.Errorf("ListenAddr shouldn't be empty")
 	}
@@ -81,7 +81,7 @@ func loadConfig() (*Config, error) {
 	if err := viper.Unmarshal(&c); err != nil {
 		return nil, err
 	}
-	if err := c.preprocessConfig(); err != nil {
+	if err := c.PreprocessConfig(); err != nil {
 		return nil, err
 	}
 	return &c, nil

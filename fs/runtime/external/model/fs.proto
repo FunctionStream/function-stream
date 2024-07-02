@@ -14,32 +14,31 @@
  * limitations under the License.
  */
 
-package main
+syntax = "proto3";
+option go_package = "fs/runtime/external/model";
+package fs_external;
 
-import (
-	"github.com/functionstream/function-stream/clients/gofs"
-	"log/slog"
-)
-
-func main() {
-	slog.Info("Hello from Go wasm!")
-	gofs.Run()
+message RegisterSchemaRequest {
+  string schema = 1;
 }
 
-type Person struct {
-	Name     string `json:"name"`
-	Money    int    `json:"money"`
-	Expected int    `json:"expected"`
+message RegisterSchemaResponse {
 }
 
-func init() {
-	err := gofs.Register(myProcess)
-	if err != nil {
-		slog.Error(err.Error())
-	}
+message ReadRequest {
+
 }
 
-func myProcess(person *Person) *Person {
-	person.Money += 1
-	return person
+message Event {
+  bytes payload = 1;
+}
+
+message WriteResponse {
+
+}
+
+service Function {
+  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
+  rpc Read(ReadRequest) returns (Event);
+  rpc Write(Event) returns (WriteResponse);
 }

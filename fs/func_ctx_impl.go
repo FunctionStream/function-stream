@@ -18,19 +18,21 @@ package fs
 
 import (
 	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
 )
 
 var ErrStateStoreNotLoaded = errors.New("state store not loaded")
 
-type FuncCtxImpl struct {
+type funcCtxImpl struct {
 	api.FunctionContext
 	store        api.StateStore
 	putStateFunc func(key string, value []byte) error
 	getStateFunc func(key string) ([]byte, error)
+	sink         chan<- contube.Record
 }
 
-func NewFuncCtxImpl(store api.StateStore) *FuncCtxImpl {
+func newFuncCtxImpl(store api.StateStore) *funcCtxImpl {
 	putStateFunc := func(key string, value []byte) error {
 		return ErrStateStoreNotLoaded
 	}
@@ -41,15 +43,27 @@ func NewFuncCtxImpl(store api.StateStore) *FuncCtxImpl {
 		putStateFunc = store.PutState
 		getStateFunc = store.GetState
 	}
-	return &FuncCtxImpl{store: store,
+	return &funcCtxImpl{store: store,
 		putStateFunc: putStateFunc,
 		getStateFunc: getStateFunc}
 }
 
-func (f *FuncCtxImpl) PutState(key string, value []byte) error {
+func (f *funcCtxImpl) PutState(key string, value []byte) error {
 	return f.putStateFunc(key, value)
 }
 
-func (f *FuncCtxImpl) GetState(key string) ([]byte, error) {
+func (f *funcCtxImpl) GetState(key string) ([]byte, error) {
 	return f.getStateFunc(key)
+}
+
+func (f *funcCtxImpl) Write(record contube.Record) error {
+	if f.sink == nil {
+		return errors.New("sink not set")
+	}
+	f.sink <- record
+	return nil
+}
+
+func (f *funcCtxImpl) setSink(sink chan<- contube.Record) {
+	f.sink = sink
 }

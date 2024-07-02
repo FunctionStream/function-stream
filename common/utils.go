@@ -50,3 +50,22 @@ func (l *logCounter) LogValue() slog.Value {
 func LogCounter() slog.LogValuer {
 	return &logCounter{}
 }
+
+type NamespacedName struct {
+	namespace string
+	name      string
+}
+
+func (n NamespacedName) String() string {
+	if n.namespace == "" {
+		return n.name
+	}
+	return n.namespace + "/" + n.name
+}
+
+func GetNamespacedName(namespace, name string) NamespacedName {
+	return NamespacedName{
+		namespace: namespace,
+		name:      name,
+	}
+}
