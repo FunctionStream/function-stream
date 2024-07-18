@@ -224,6 +224,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		if err != nil {
 			return fmt.Errorf("failed to create runtime: %w", err)
 		}
+		fm.log.Info("Starting function instance", "function", f)
 
 		go instance.Run(runtime, sources, sink)
 	}

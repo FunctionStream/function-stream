@@ -33,6 +33,7 @@ import (
 )
 
 type WazeroFunctionRuntimeFactory struct {
+	opts *options
 }
 
 type WASMFetcher interface {
@@ -55,7 +56,9 @@ func NewWazeroFunctionRuntimeFactoryWithOptions(opts ...func(*options)) api.Func
 	for _, opt := range opts {
 		opt(o)
 	}
-	return &WazeroFunctionRuntimeFactory{}
+	return &WazeroFunctionRuntimeFactory{
+		opts: o,
+	}
 }
 
 type options struct {
@@ -105,7 +108,7 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	if pathStr == "" {
 		return nil, fmt.Errorf("empty wasm archive found")
 	}
-	wasmBytes, err := os.ReadFile(pathStr)
+	wasmBytes, err := f.opts.wasmFetcher.Fetch(pathStr)
 	if err != nil {
 		return nil, fmt.Errorf("error reading wasm file: %w", err)
 	}

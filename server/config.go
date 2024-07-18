@@ -18,6 +18,7 @@ package server
 
 import (
 	"fmt"
+	"github.com/go-playground/validator/v10"
 	"os"
 	"strings"
 
@@ -73,6 +74,10 @@ func (c *Config) PreprocessConfig() error {
 	if c.ListenAddr == "" {
 		return fmt.Errorf("ListenAddr shouldn't be empty")
 	}
+	validate := validator.New()
+	if err := validate.Struct(c); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -99,7 +104,7 @@ func LoadConfigFromFile(filePath string) (*Config, error) {
 
 func LoadConfigFromEnv() (*Config, error) {
 	for _, env := range os.Environ() {
-		if strings.HasPrefix(env, "FS_") {
+		if strings.HasPrefix(env, envPrefix) {
 			parts := strings.SplitN(strings.TrimPrefix(env, envPrefix), "=", 2)
 			key := parts[0]
 			value := parts[1]

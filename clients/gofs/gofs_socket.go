@@ -19,15 +19,20 @@ var ctx = context.Background()
 
 var processFunc func([]byte) []byte
 
+const (
+	FSSocketPath   = "FS_SOCKET_PATH"
+	FSFunctionName = "FS_FUNCTION_NAME"
+)
+
 func check() error {
 	if client == nil {
-		socketPath := os.Getenv("FS_SOCKET_PATH")
+		socketPath := os.Getenv(FSSocketPath)
 		if socketPath == "" {
-			return fmt.Errorf("FS_SOCKET_PATH is not set")
+			return fmt.Errorf("%s is not set", FSSocketPath)
 		}
-		funcName := os.Getenv("FS_FUNCTION_NAME")
+		funcName := os.Getenv(FSFunctionName)
 		if funcName == "" {
-			return fmt.Errorf("FS_FUNCTION_NAME is not set")
+			return fmt.Errorf("%s is not set", FSFunctionName)
 		}
 
 		serviceConfig := `{

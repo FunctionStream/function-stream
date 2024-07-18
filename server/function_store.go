@@ -17,6 +17,7 @@
 package server
 
 import (
+	"github.com/functionstream/function-stream/common"
 	"io"
 	"log/slog"
 	"net/http"
@@ -32,6 +33,8 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
+
+var log = common.NewDefaultLogger()
 
 type FunctionStore interface {
 	Load() error
@@ -52,7 +55,7 @@ func (f *FunctionStoreImpl) Load() error {
 	info, err := os.Stat(f.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			slog.Info("the path to the function store does not exist. skip loading functions")
+			log.Info("the path to the function store does not exist. skip loading functions", "path", f.path)
 			return nil
 		}
 		return errors.Wrapf(err, "the path to the function store %s is invalid", f.path)

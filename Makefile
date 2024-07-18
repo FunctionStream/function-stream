@@ -45,7 +45,7 @@ gen-rest-client:
 	mkdir -p $(ADMIN_CLIENT_DIR)
 	openapi-generator generate -i ./apidocs.json -g go -o $(ADMIN_CLIENT_DIR) \
 		--git-user-id functionstream \
-		--git-repo-id functionstream/$(ADMIN_CLIENT_DIR) \
+		--git-repo-id function-stream/$(ADMIN_CLIENT_DIR) \
 		--package-name adminclient \
 		--global-property apiDocs,apis,models,supportingFiles
 	rm -r $(addprefix $(ADMIN_CLIENT_DIR)/, $(FILES_TO_REMOVE))
