@@ -48,6 +48,7 @@ func Register[I any, O any](process func(*I) *O) error {
 		err = json.Unmarshal(payload, input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s", err, payload)
+			return nil
 		}
 		output := process(input)
 		outputPayload, _ := json.Marshal(output)
