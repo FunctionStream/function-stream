@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/functionstream/function-stream/fs/runtime/external"
+
 	"github.com/go-logr/logr"
 
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
@@ -182,6 +184,9 @@ func GetBuiltinRuntimeFactoryBuilder() map[string]func(configMap common.ConfigMa
 		//nolint:unparam
 		common.WASMRuntime: func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
 			return wazero.NewWazeroFunctionRuntimeFactory(), nil
+		},
+		common.ExternalRuntime: func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+			return external.NewFactoryWithConfig(configMap)
 		},
 	}
 }

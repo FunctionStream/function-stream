@@ -20,3 +20,6 @@ queue:
 tube-config:
   pulsar:
     pulsar_url: "pulsar://localhost:6650"
+runtime-config:
+  external:
+    socket-path: /tmp/fs.sock

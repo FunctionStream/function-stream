@@ -12,11 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-version: '3'
-services:
-  pulsar:
-    image: apachepulsar/pulsar:3.1.2
-    command: bin/pulsar standalone
-    ports:
-      - "6650:6650"
-      - "8080:8080"
+name: external-function
+namespace: fs
+runtime:
+  type: "external"
+sources:
+  - config:
+      inputs:
+        - "external-input"
+      subscription-name: "fs"
+    type: "memory"
+sink:
+  config:
+    output: "external-output"
+  type: "memory"
+replicas: 1

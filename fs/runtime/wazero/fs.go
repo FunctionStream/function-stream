@@ -17,8 +17,9 @@
 package wazero
 
 import (
-	"bytes"
 	"io/fs"
+
+	"github.com/functionstream/function-stream/common"
 
 	. "github.com/tetratelabs/wazero/experimental/sys"
 	"github.com/tetratelabs/wazero/sys"
@@ -31,19 +32,12 @@ type memoryFS struct {
 
 func (f *memoryFS) OpenFile(path string, _ Oflag, _ fs.FileMode) (File, Errno) {
 	if path == "." {
-		return &memoryFile{isDir: true}, 0
+		return &oneShotFile{isDir: true}, 0
 	}
 	if file, ok := f.m[path]; ok {
 		return file, 0
 	}
 	return nil, ENOENT
-}
-
-type memoryFile struct {
-	File
-	isDir    bool
-	readBuf  bytes.Buffer
-	writeBuf bytes.Buffer
 }
 
 func newMemoryFS(m map[string]File) FS {
@@ -52,26 +46,43 @@ func newMemoryFS(m map[string]File) FS {
 	}
 }
 
-func (f *memoryFile) Read(p []byte) (n int, errno Errno) {
-	n, _ = f.readBuf.Read(p)
-	errno = 0
-	return
+type oneShotFile struct {
+	File
+	isDir  bool
+	input  []byte
+	output []byte
 }
 
-func (f *memoryFile) Write(buf []byte) (n int, errno Errno) {
-	n, _ = f.writeBuf.Write(buf)
-	errno = 0
-	return
+func (f *oneShotFile) Read(p []byte) (n int, errno Errno) {
+	copy(p, f.input)
+	return len(p), 0
 }
 
-func (f *memoryFile) IsDir() (bool, Errno) {
+func (f *oneShotFile) Write(buf []byte) (n int, errno Errno) {
+	f.output = make([]byte, len(buf))
+	copy(f.output, buf)
+	return len(buf), 0
+}
+
+func (f *oneShotFile) IsDir() (bool, Errno) {
 	return f.isDir, 0
 }
 
-func (f *memoryFile) Close() Errno {
+func (f *oneShotFile) Close() Errno {
 	return 0
 }
 
-func (f *memoryFile) Stat() (sys.Stat_t, Errno) {
-	return sys.Stat_t{}, 0
+func (f *oneShotFile) Stat() (sys.Stat_t, Errno) {
+	return sys.Stat_t{
+		Size: int64(len(f.input)),
+	}, 0
+}
+
+type logWriter struct {
+	log *common.Logger
+}
+
+func (f *logWriter) Write(buf []byte) (n int, err error) {
+	f.log.Info(string(buf))
+	return len(buf), nil
 }

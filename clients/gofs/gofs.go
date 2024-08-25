@@ -1,3 +1,6 @@
+//go:build wasi
+// +build wasi
+
 /*
  * Copyright 2024 Function Stream Org.
  *
@@ -20,29 +23,22 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
-
-	. "github.com/functionstream/function-stream/common/wasm_utils"
 	"github.com/wirelessr/avroschema"
+	"os"
+	"syscall"
 )
 
-var processFile *os.File
+var processFd int
+var registerSchemaFd int
 
 func init() {
-	processFile, _ = os.Open("/process")
+	processFd, _ = syscall.Open("/process", syscall.O_RDWR, 0)
+	registerSchemaFd, _ = syscall.Open("/registerSchema", syscall.O_RDWR, 0)
 }
 
 var processFunc func([]byte) []byte
 
-//go:wasmimport fs registerSchema
-func registerSchema(inputSchemaPtrSize, outputSchemaPtrSize uint64)
-
 func Register[I any, O any](process func(*I) *O) error {
-	inputSchema, err := avroschema.Reflect(new(I))
-	if err != nil {
-		return err
-	}
 	outputSchema, err := avroschema.Reflect(new(O))
 	if err != nil {
 		return err
@@ -52,18 +48,26 @@ func Register[I any, O any](process func(*I) *O) error {
 		err = json.Unmarshal(payload, input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s", err, payload)
+			return nil
 		}
 		output := process(input)
 		outputPayload, _ := json.Marshal(output)
 		return outputPayload
 	}
-	registerSchema(PtrSize(StringToPtr(inputSchema)), PtrSize(StringToPtr(outputSchema)))
+	syscall.Write(registerSchemaFd, []byte(outputSchema))
 	return nil
 }
 
 //export process
 func process() {
-	payload, _ := io.ReadAll(processFile)
+	var stat syscall.Stat_t
+	syscall.Fstat(processFd, &stat)
+	payload := make([]byte, stat.Size)
+	_, _ = syscall.Read(processFd, payload)
 	outputPayload := processFunc(payload)
-	_, _ = processFile.Write(outputPayload)
+	_, _ = syscall.Write(processFd, outputPayload)
+}
+
+func Run() {
+	// Leave it empty
 }

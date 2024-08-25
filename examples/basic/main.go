@@ -17,13 +17,13 @@
 package main
 
 import (
-	"fmt"
 	"github.com/functionstream/function-stream/clients/gofs"
-	"os"
+	"log/slog"
 )
 
 func main() {
-	_, _ = fmt.Fprintln(os.Stderr, "Hello from Go!")
+	slog.Info("Hello from Go wasm!")
+	gofs.Run()
 }
 
 type Person struct {
@@ -33,7 +33,10 @@ type Person struct {
 }
 
 func init() {
-	_ = gofs.Register(myProcess)
+	err := gofs.Register(myProcess)
+	if err != nil {
+		slog.Error(err.Error())
+	}
 }
 
 func myProcess(person *Person) *Person {

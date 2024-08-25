@@ -25,6 +25,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/functionstream/function-stream/common"
+
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/common/model"
@@ -32,6 +34,8 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
+
+var log = common.NewDefaultLogger()
 
 type FunctionStore interface {
 	Load() error
@@ -52,7 +56,7 @@ func (f *FunctionStoreImpl) Load() error {
 	info, err := os.Stat(f.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			slog.Info("the path to the function store does not exist. skip loading functions")
+			log.Info("the path to the function store does not exist. skip loading functions", "path", f.path)
 			return nil
 		}
 		return errors.Wrapf(err, "the path to the function store %s is invalid", f.path)

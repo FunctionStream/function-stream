@@ -123,6 +123,17 @@ func NewRecordImpl(payload []byte, ackFunc func()) *RecordImpl {
 	}
 }
 
+func NewStructRecord(payload any, ackFunc func()) (*RecordImpl, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return &RecordImpl{
+		payload:    data,
+		commitFunc: ackFunc,
+	}, nil
+}
+
 func NewSchemaRecordImpl(payload []byte, schema string, ackFunc func()) *RecordImpl {
 	return &RecordImpl{
 		payload:    payload,

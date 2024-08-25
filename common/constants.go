@@ -21,7 +21,8 @@ const (
 	MemoryTubeType = "memory"
 	HttpTubeType   = "http"
 
-	WASMRuntime = "wasm"
+	WASMRuntime     = "wasm"
+	ExternalRuntime = "external"
 
 	RuntimeArchiveConfigKey = "archive"
 

@@ -30,16 +30,16 @@ import (
 )
 
 type testFunctionManagerImpl struct {
-	functions map[fs.NamespacedName]*model.Function
+	functions map[common.NamespacedName]*model.Function
 }
 
 func (t *testFunctionManagerImpl) StartFunction(f *model.Function) error {
-	t.functions[fs.GetNamespacedName(f.Namespace, f.Name)] = f
+	t.functions[common.GetNamespacedName(f.Namespace, f.Name)] = f
 	return nil
 }
 
 func (t *testFunctionManagerImpl) DeleteFunction(namespace, name string) error {
-	delete(t.functions, fs.GetNamespacedName(namespace, name))
+	delete(t.functions, common.GetNamespacedName(namespace, name))
 	return nil
 }
 
@@ -65,7 +65,7 @@ func (t *testFunctionManagerImpl) Close() error {
 
 func newTestFunctionManagerImpl() fs.FunctionManager {
 	return &testFunctionManagerImpl{
-		functions: make(map[fs.NamespacedName]*model.Function),
+		functions: make(map[common.NamespacedName]*model.Function),
 	}
 }
 
@@ -120,7 +120,7 @@ func TestFunctionStoreLoading(t *testing.T) {
 	assert.Nil(t, functionStore.Load())
 
 	assert.Len(t, fm.(*testFunctionManagerImpl).functions, 1)
-	assert.Equal(t, f1, fm.(*testFunctionManagerImpl).functions[fs.GetNamespacedName("", "f1")])
+	assert.Equal(t, f1, fm.(*testFunctionManagerImpl).functions[common.GetNamespacedName("", "f1")])
 
 	f2 := createTestFunction("f2")
 	_, err = tmpfile.WriteString(yamlSeparator)
@@ -132,8 +132,8 @@ func TestFunctionStoreLoading(t *testing.T) {
 
 	assert.Nil(t, functionStore.Load())
 	assert.Len(t, fm.(*testFunctionManagerImpl).functions, 2)
-	assert.Equal(t, f1, fm.(*testFunctionManagerImpl).functions[fs.GetNamespacedName("", "f1")])
-	assert.Equal(t, f2, fm.(*testFunctionManagerImpl).functions[fs.GetNamespacedName("", "f2")])
+	assert.Equal(t, f1, fm.(*testFunctionManagerImpl).functions[common.GetNamespacedName("", "f1")])
+	assert.Equal(t, f2, fm.(*testFunctionManagerImpl).functions[common.GetNamespacedName("", "f2")])
 
 	assert.Nil(t, tmpfile.Close())
 
@@ -145,5 +145,5 @@ func TestFunctionStoreLoading(t *testing.T) {
 
 	assert.Nil(t, functionStore.Load())
 	assert.Len(t, fm.(*testFunctionManagerImpl).functions, 1)
-	assert.Equal(t, f2, fm.(*testFunctionManagerImpl).functions[fs.GetNamespacedName("", "f2")])
+	assert.Equal(t, f2, fm.(*testFunctionManagerImpl).functions[common.GetNamespacedName("", "f2")])
 }

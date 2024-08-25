@@ -22,7 +22,6 @@ import (
 	"os"
 
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/common/wasm_utils"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/tetratelabs/wazero"
@@ -34,10 +33,42 @@ import (
 )
 
 type WazeroFunctionRuntimeFactory struct {
+	opts *options
+}
+
+type WASMFetcher interface {
+	Fetch(url string) ([]byte, error)
+}
+
+type FileWASMFetcher struct {
+}
+
+func (f *FileWASMFetcher) Fetch(url string) ([]byte, error) {
+	return os.ReadFile(url)
 }
 
 func NewWazeroFunctionRuntimeFactory() api.FunctionRuntimeFactory {
-	return &WazeroFunctionRuntimeFactory{}
+	return NewWazeroFunctionRuntimeFactoryWithOptions(WithWASMFetcher(&FileWASMFetcher{}))
+}
+
+func NewWazeroFunctionRuntimeFactoryWithOptions(opts ...func(*options)) api.FunctionRuntimeFactory {
+	o := &options{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return &WazeroFunctionRuntimeFactory{
+		opts: o,
+	}
+}
+
+type options struct {
+	wasmFetcher WASMFetcher
+}
+
+func WithWASMFetcher(fetcher WASMFetcher) func(*options) {
+	return func(o *options) {
+		o.wasmFetcher = fetcher
+	}
 }
 
 func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
@@ -50,16 +81,19 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	if err != nil {
 		return nil, fmt.Errorf("error instantiating env module: %w", err)
 	}
-	stdin := common.NewChanReader()
-	stdout := common.NewChanWriter()
+	wasmLog := &logWriter{
+		log: log,
+	}
 
-	processFile := &memoryFile{}
+	processFile := &oneShotFile{}
+	registerSchema := &oneShotFile{}
 	fileMap := map[string]exp_sys.File{
-		"process": processFile,
+		"process":        processFile,
+		"registerSchema": registerSchema,
 	}
 	fsConfig := wazero.NewFSConfig().(sysfs.FSConfig).WithSysFSMount(newMemoryFS(fileMap), "")
 	config := wazero.NewModuleConfig().
-		WithStdout(stdout).WithStdin(stdin).WithStderr(os.Stderr).WithFSConfig(fsConfig)
+		WithStdout(wasmLog).WithStderr(wasmLog).WithFSConfig(fsConfig)
 
 	wasi_snapshot_preview1.MustInstantiate(instance.Context(), r)
 
@@ -74,37 +108,10 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	if pathStr == "" {
 		return nil, fmt.Errorf("empty wasm archive found")
 	}
-	wasmBytes, err := os.ReadFile(pathStr)
+	wasmBytes, err := f.opts.wasmFetcher.Fetch(pathStr)
 	if err != nil {
 		return nil, fmt.Errorf("error reading wasm file: %w", err)
 	}
-	var outputSchemaDef string
-	_, err = r.NewHostModuleBuilder("fs").
-		NewFunctionBuilder().
-		WithFunc(func(ctx context.Context, m wazero_api.Module, inputSchema uint64, outputSchema uint64) {
-			inputBuf, ok := m.Memory().Read(wasm_utils.ExtractPtrSize(inputSchema))
-			if !ok {
-				log.Error(fmt.Errorf("failed to read memory"), "failed to read memory")
-				return
-			}
-			if log.DebugEnabled() {
-				log.Info("Register the input schema", "schema", string(inputBuf))
-			}
-			outputBuf, ok := m.Memory().Read(wasm_utils.ExtractPtrSize(outputSchema))
-			if !ok {
-				log.Error(fmt.Errorf("failed to read memory"), "failed to read memory")
-				return
-			}
-			if log.DebugEnabled() {
-				log.Info("Register the output schema", "schema", string(outputBuf))
-			}
-			outputSchemaDef = string(outputBuf)
-		}).Export("registerSchema").
-		Instantiate(instance.Context())
-	if err != nil {
-		return nil, fmt.Errorf("error creating fs module: %w", err)
-	}
-	// Trigger the "_start" function, WASI's "main".
 	mod, err := r.InstantiateWithConfig(instance.Context(), wasmBytes, config)
 	if err != nil {
 		if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
@@ -120,19 +127,20 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	if process == nil {
 		return nil, fmt.Errorf("no process function found")
 	}
+	outputSchemaDef := registerSchema.output
+	var outputSchema string
+	if outputSchemaDef != nil {
+		outputSchema = string(outputSchemaDef)
+		log.Info("Register the output schema", "schema", outputSchema)
+	}
 	return &FunctionRuntime{
 		callFunc: func(e contube.Record) (contube.Record, error) {
-			payload := e.GetPayload()
-			processFile.writeBuf.Reset()
-			_, _ = processFile.readBuf.Write(payload)
+			processFile.input = e.GetPayload()
 			_, err := process.Call(instance.Context())
 			if err != nil {
 				return nil, err
 			}
-			outBuf := processFile.writeBuf.Bytes()
-			outputPayload := make([]byte, len(outBuf))
-			copy(outputPayload, outBuf)
-			return contube.NewSchemaRecordImpl(outputPayload, outputSchemaDef, e.Commit), nil
+			return contube.NewSchemaRecordImpl(processFile.output, outputSchema, e.Commit), nil
 		},
 		stopFunc: func() {
 			err := r.Close(instance.Context())

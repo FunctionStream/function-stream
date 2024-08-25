@@ -14,13 +14,31 @@
  * limitations under the License.
  */
 
-package common
+syntax = "proto3";
+option go_package = "fs/runtime/external/model";
+package fs_external;
 
-// ConfigMap is a custom type that represents a map where keys are strings and values are of any type.
-// Since Viper is not case-sensitive, we use '-' to separate words in all field names in the config map.
-// This convention helps in maintaining consistency across different configurations and makes them easier to read.
-//
-// For example:
-//   - `socket-path` refers to the path of the socket.
-//   - `pulsar-url` refers to the URL of the Pulsar service.
-type ConfigMap map[string]interface{}
+message RegisterSchemaRequest {
+  string schema = 1;
+}
+
+message RegisterSchemaResponse {
+}
+
+message ReadRequest {
+
+}
+
+message Event {
+  bytes payload = 1;
+}
+
+message WriteResponse {
+
+}
+
+service Function {
+  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
+  rpc Read(ReadRequest) returns (Event);
+  rpc Write(Event) returns (WriteResponse);
+}

@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
-package grpc
+package external
 
 import (
 	"context"
+	"encoding/json"
+	"net"
+	"os"
 	"testing"
-	"time"
 
+	"github.com/functionstream/function-stream/clients/gofs"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
@@ -28,42 +31,52 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFMWithGRPCRuntime(t *testing.T) {
-	ctx, closeFSReconcile := context.WithCancel(context.Background())
-	fsService := NewFSReconcile(ctx)
-	addr := "localhost:17401"
-	s, err := StartGRPCServer(fsService, addr)
+type Person struct {
+	Name     string `json:"name"`
+	Money    int    `json:"money"`
+	Expected int    `json:"expected"`
+}
+
+var log = common.NewDefaultLogger()
+
+func runMockClient() {
+	err := gofs.Register(func(i *Person) *Person {
+		i.Money += 1
+		return i
+	})
 	if err != nil {
-		t.Fatal(err)
-		return
+		log.Error(err, "failed to register function")
 	}
-	defer s.Stop()
-	go StartMockGRPCFunc(t, addr)
-	select {
-	case <-fsService.WaitForReady():
-		t.Logf("ready")
-	case <-time.After(1 * time.Second):
-		t.Fatal("timeout waiting for fs service ready")
-		return
-	}
+	gofs.Run()
+}
+
+func TestExternalRuntime(t *testing.T) {
+	socketPath := "/tmp/test.sock"
+	assert.NoError(t, os.RemoveAll(socketPath))
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", socketPath))
+	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
+	lis, err := net.Listen("unix", socketPath)
+	assert.NoError(t, err)
+	defer func(lis net.Listener) {
+		_ = lis.Close()
+	}(lis)
 
 	fm, err := fs.NewFunctionManager(
-		fs.WithRuntimeFactory("grpc", fsService),
-		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(ctx)),
+		fs.WithRuntimeFactory("external", NewFactory(lis)),
+		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	go runMockClient()
 
 	inputTopic := "input"
 	outputTopic := "output"
 	f := &model.Function{
 		Name: "test",
 		Runtime: model.RuntimeConfig{
-			Type: "grpc",
-			Config: map[string]interface{}{
-				"addr": addr,
-			},
+			Type: "external",
 		},
 		Sources: []model.TubeConfig{
 			{
@@ -84,34 +97,23 @@ func TestFMWithGRPCRuntime(t *testing.T) {
 	}
 
 	err = fm.StartFunction(f)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	err = fm.GetStateStore().PutState("counter", []byte("0"))
-	assert.Nil(t, err)
-
-	event := contube.NewRecordImpl([]byte("hello"), func() {})
+	event, err := contube.NewStructRecord(&Person{
+		Name:  "test",
+		Money: 1,
+	}, func() {})
+	assert.NoError(t, err)
 	err = fm.ProduceEvent(inputTopic, event)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 	output, err := fm.ConsumeEvent(outputTopic)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(output.GetPayload()) != "hello!" {
-		t.Fatalf("unexpected result: %v", output)
-	}
+	assert.NoError(t, err)
 
-	counter, err := fm.GetStateStore().GetState("counter")
-	assert.Nil(t, err)
-	assert.Equal(t, "1", string(counter))
+	p := &Person{}
+	err = json.Unmarshal(output.GetPayload(), &p)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, p.Money)
 
 	err = fm.DeleteFunction("", f.Name)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	closeFSReconcile()
+	assert.NoError(t, err)
 }
