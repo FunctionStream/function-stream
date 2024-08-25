@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-listen_addr: ":7300"
-queue:
-  type: "pulsar"
+name: external-function
+namespace: fs
+runtime:
+  type: "external"
+sources:
+  - config:
+      inputs:
+        - "external-input"
+      subscription-name: "fs"
+    type: "memory"
+sink:
   config:
-    pulsar_url: "pulsar://localhost:6650"
-tube-config:
-  pulsar:
-    pulsar_url: "pulsar://localhost:6650"
-runtime-config:
-  external:
-    socket-path: /tmp/fs.sock
+    output: "external-output"
+  type: "memory"
+replicas: 1

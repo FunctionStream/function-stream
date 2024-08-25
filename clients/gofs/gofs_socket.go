@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"os"
+	"time"
 )
 
 var client model.FunctionClient
@@ -76,7 +77,7 @@ func Register[I any, O any](process func(*I) *O) error {
 		input := new(I)
 		err = json.Unmarshal(payload, input)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s", err, payload)
+			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s\n", err, payload)
 		}
 		output := process(input)
 		outputPayload, _ := json.Marshal(output)
@@ -84,7 +85,7 @@ func Register[I any, O any](process func(*I) *O) error {
 	}
 	_, err = client.RegisterSchema(ctx, &model.RegisterSchemaRequest{Schema: outputSchema})
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to register schema: %s", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to register schema: %s\n", err)
 		panic(err)
 	}
 	return nil
@@ -97,13 +98,14 @@ func Run() {
 	for {
 		res, err := client.Read(ctx, &model.ReadRequest{})
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to read: %s", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Failed to read: %s\n", err)
+			time.Sleep(3 * time.Second)
 			continue
 		}
 		outputPayload := processFunc(res.Payload)
 		_, err = client.Write(ctx, &model.Event{Payload: outputPayload})
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to write: %s", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Failed to write: %s\n", err)
 		}
 	}
 }

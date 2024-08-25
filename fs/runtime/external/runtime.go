@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"net"
+	"os"
 	"sync"
 )
 
@@ -114,6 +115,27 @@ func NewFactory(lis net.Listener) api.FunctionRuntimeFactory {
 		server: server,
 		log:    common.NewDefaultLogger().SubLogger("component", "external-runtime-factory"),
 	}
+}
+
+const (
+	DefaultSocketPath = "/tmp/fs.sock"
+)
+
+func NewFactoryWithConfig(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+	socketPath := ""
+	if v, ok := configMap["socket-path"].(string); ok {
+		socketPath = v
+	}
+	if socketPath == "" {
+		common.NewDefaultLogger().Info("socketPath is not set, use the default value: " + DefaultSocketPath)
+		socketPath = DefaultSocketPath
+	}
+	_ = os.Remove(socketPath)
+	lis, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return nil, err
+	}
+	return NewFactory(lis), nil
 }
 
 type runtime struct {

@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/functionstream/function-stream/fs/runtime/external"
 	"net"
 	"net/http"
 	"net/url"
@@ -182,6 +183,9 @@ func GetBuiltinRuntimeFactoryBuilder() map[string]func(configMap common.ConfigMa
 		//nolint:unparam
 		common.WASMRuntime: func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
 			return wazero.NewWazeroFunctionRuntimeFactory(), nil
+		},
+		common.ExternalRuntime: func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+			return external.NewFactoryWithConfig(configMap)
 		},
 	}
 }

@@ -16,6 +16,10 @@ build:
 
 build-example:
 	tinygo build -o bin/example_basic.wasm -target=wasi ./examples/basic
+	go build -o bin/example_external_function ./examples/basic
+
+run-example-external-functions:
+	FS_SOCKET_PATH=/tmp/fs.sock FS_FUNCTION_NAME=fs/external-function ./bin/example_external_function
 
 lint:
 	golangci-lint run
