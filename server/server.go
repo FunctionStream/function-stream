@@ -19,13 +19,14 @@ package server
 import (
 	"context"
 	"fmt"
-	"github.com/functionstream/function-stream/fs/runtime/external"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/functionstream/function-stream/fs/runtime/external"
 
 	"github.com/go-logr/logr"
 

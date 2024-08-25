@@ -18,9 +18,10 @@ package server
 
 import (
 	"fmt"
-	"github.com/go-playground/validator/v10"
 	"os"
 	"strings"
+
+	"github.com/go-playground/validator/v10"
 
 	"github.com/functionstream/function-stream/common"
 	"github.com/spf13/viper"

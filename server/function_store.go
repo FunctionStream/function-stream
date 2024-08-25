@@ -17,7 +17,6 @@
 package server
 
 import (
-	"github.com/functionstream/function-stream/common"
 	"io"
 	"log/slog"
 	"net/http"
@@ -25,6 +24,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/functionstream/function-stream/common"
 
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"

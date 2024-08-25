@@ -17,8 +17,9 @@
 package wazero
 
 import (
-	"github.com/functionstream/function-stream/common"
 	"io/fs"
+
+	"github.com/functionstream/function-stream/common"
 
 	. "github.com/tetratelabs/wazero/experimental/sys"
 	"github.com/tetratelabs/wazero/sys"

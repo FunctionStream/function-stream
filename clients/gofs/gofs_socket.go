@@ -6,13 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/functionstream/function-stream/fs/runtime/external/model"
 	"github.com/wirelessr/avroschema"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	"os"
-	"time"
 )
 
 var client model.FunctionClient
