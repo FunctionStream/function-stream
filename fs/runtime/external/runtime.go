@@ -23,6 +23,9 @@ import (
 	"os"
 	"sync"
 
+	"github.com/functionstream/function-stream/common/config"
+	funcModel "github.com/functionstream/function-stream/common/model"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
@@ -101,7 +104,8 @@ type Factory struct {
 	log *common.Logger
 }
 
-func (f *Factory) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
+func (f *Factory) NewFunctionRuntime(instance api.FunctionInstance,
+	_ *funcModel.RuntimeConfig) (api.FunctionRuntime, error) {
 	def := instance.Definition()
 	r := &runtime{
 		inputCh: make(chan contube.Record),
@@ -139,7 +143,7 @@ const (
 	DefaultSocketPath = "/tmp/fs.sock"
 )
 
-func NewFactoryWithConfig(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+func NewFactoryWithConfig(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error) {
 	socketPath := ""
 	if v, ok := configMap["socket-path"].(string); ok {
 		socketPath = v

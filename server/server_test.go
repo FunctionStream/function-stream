@@ -24,6 +24,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/functionstream/function-stream/common/config"
+
 	adminclient "github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
@@ -73,12 +75,7 @@ func TestStandaloneBasicFunction(t *testing.T) {
 	outputTopic := "test-output-" + strconv.Itoa(rand.Int())
 
 	funcConf := &model.Function{
-		Runtime: model.RuntimeConfig{
-			Type: common.WASMRuntime,
-			Config: map[string]interface{}{
-				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
-			},
-		},
+		Package: "../bin/example_basic.wasm",
 		Sources: []model.TubeConfig{
 			{
 				Type: common.MemoryTubeType,
@@ -140,12 +137,7 @@ func TestHttpTube(t *testing.T) {
 
 	endpoint := "test-endpoint"
 	funcConf := &model.Function{
-		Runtime: model.RuntimeConfig{
-			Type: common.WASMRuntime,
-			Config: map[string]interface{}{
-				common.RuntimeArchiveConfigKey: "../bin/example_basic.wasm",
-			},
-		},
+		Package: "../bin/example_basic.wasm",
 		Sources: []model.TubeConfig{{
 			Type: common.HttpTubeType,
 			Config: map[string]interface{}{
@@ -200,7 +192,8 @@ func TestHttpTube(t *testing.T) {
 type MockRuntimeFactory struct {
 }
 
-func (f *MockRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
+func (f *MockRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance,
+	_ *model.RuntimeConfig) (api.FunctionRuntime, error) {
 	return &MockRuntime{
 		funcCtx: instance.FunctionContext(),
 	}, nil
@@ -238,7 +231,7 @@ func TestStatefulFunction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s, httpAddr := startStandaloneSvr(t, ctx,
-		WithRuntimeFactoryBuilder("mock", func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+		WithRuntimeFactoryBuilder("mock", func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error) {
 			return &MockRuntimeFactory{}, nil
 		}))
 

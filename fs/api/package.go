@@ -16,16 +16,12 @@
 
 package api
 
-import (
-	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs/contube"
-)
+import "github.com/functionstream/function-stream/common/model"
 
-type FunctionRuntime interface {
-	Call(e contube.Record) (contube.Record, error)
-	Stop()
+type Package interface {
+	GetSupportedRuntimeConfig() []model.RuntimeConfig
 }
 
-type FunctionRuntimeFactory interface {
-	NewFunctionRuntime(instance FunctionInstance, rc *model.RuntimeConfig) (FunctionRuntime, error)
+type PackageLoader interface {
+	Load(path string) (Package, error)
 }

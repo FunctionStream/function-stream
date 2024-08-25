@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/functionstream/function-stream/common/config"
+
 	"github.com/functionstream/function-stream/fs/runtime/external"
 
 	"github.com/go-logr/logr"
@@ -68,10 +70,10 @@ type serverOptions struct {
 	enableTls              bool
 	tlsCertFile            string
 	tlsKeyFile             string
-	tubeFactoryBuilders    map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error)
-	tubeConfig             map[string]common.ConfigMap
-	runtimeFactoryBuilders map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error)
-	runtimeConfig          map[string]common.ConfigMap
+	tubeFactoryBuilders    map[string]func(configMap config.ConfigMap) (contube.TubeFactory, error)
+	tubeConfig             map[string]config.ConfigMap
+	runtimeFactoryBuilders map[string]func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error)
+	runtimeConfig          map[string]config.ConfigMap
 	queueConfig            QueueConfig
 	log                    *logr.Logger
 }
@@ -113,7 +115,7 @@ func WithQueueConfig(config QueueConfig) ServerOption {
 
 func WithTubeFactoryBuilder(
 	name string,
-	builder func(configMap common.ConfigMap) (contube.TubeFactory, error),
+	builder func(configMap config.ConfigMap) (contube.TubeFactory, error),
 ) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		o.tubeFactoryBuilders[name] = builder
@@ -122,7 +124,7 @@ func WithTubeFactoryBuilder(
 }
 
 func WithTubeFactoryBuilders(
-	builder map[string]func(configMap common.ConfigMap,
+	builder map[string]func(configMap config.ConfigMap,
 	) (contube.TubeFactory, error)) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		for n, b := range builder {
@@ -134,7 +136,7 @@ func WithTubeFactoryBuilders(
 
 func WithRuntimeFactoryBuilder(
 	name string,
-	builder func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error),
+	builder func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error),
 ) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		o.runtimeFactoryBuilders[name] = builder
@@ -143,7 +145,7 @@ func WithRuntimeFactoryBuilder(
 }
 
 func WithRuntimeFactoryBuilders(
-	builder map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error),
+	builder map[string]func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error),
 ) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
 		for n, b := range builder {
@@ -167,32 +169,32 @@ func WithLogger(log *logr.Logger) ServerOption {
 	})
 }
 
-func GetBuiltinTubeFactoryBuilder() map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error) {
-	return map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error){
-		common.PulsarTubeType: func(configMap common.ConfigMap) (contube.TubeFactory, error) {
+func GetBuiltinTubeFactoryBuilder() map[string]func(configMap config.ConfigMap) (contube.TubeFactory, error) {
+	return map[string]func(configMap config.ConfigMap) (contube.TubeFactory, error){
+		common.PulsarTubeType: func(configMap config.ConfigMap) (contube.TubeFactory, error) {
 			return contube.NewPulsarEventQueueFactory(context.Background(), contube.ConfigMap(configMap))
 		},
 		//nolint:unparam
-		common.MemoryTubeType: func(_ common.ConfigMap) (contube.TubeFactory, error) {
+		common.MemoryTubeType: func(_ config.ConfigMap) (contube.TubeFactory, error) {
 			return contube.NewMemoryQueueFactory(context.Background()), nil
 		},
 	}
 }
 
-func GetBuiltinRuntimeFactoryBuilder() map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
-	return map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error){
+func GetBuiltinRuntimeFactoryBuilder() map[string]func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error) {
+	return map[string]func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error){
 		//nolint:unparam
-		common.WASMRuntime: func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+		common.WASMRuntime: func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error) {
 			return wazero.NewWazeroFunctionRuntimeFactory(), nil
 		},
-		common.ExternalRuntime: func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+		common.ExternalRuntime: func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error) {
 			return external.NewFactoryWithConfig(configMap)
 		},
 	}
 }
 
-func setupFactories[T any](factoryBuilder map[string]func(configMap common.ConfigMap) (T, error),
-	config map[string]common.ConfigMap,
+func setupFactories[T any](factoryBuilder map[string]func(configMap config.ConfigMap) (T, error),
+	config map[string]config.ConfigMap,
 ) (map[string]T, error) {
 	factories := make(map[string]T)
 	for name, builder := range factoryBuilder {
@@ -245,10 +247,10 @@ func WithConfig(config *Config) ServerOption {
 
 func NewServer(opts ...ServerOption) (*Server, error) {
 	options := &serverOptions{}
-	options.tubeFactoryBuilders = make(map[string]func(configMap common.ConfigMap) (contube.TubeFactory, error))
-	options.tubeConfig = make(map[string]common.ConfigMap)
-	options.runtimeFactoryBuilders = make(map[string]func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error))
-	options.runtimeConfig = make(map[string]common.ConfigMap)
+	options.tubeFactoryBuilders = make(map[string]func(configMap config.ConfigMap) (contube.TubeFactory, error))
+	options.tubeConfig = make(map[string]config.ConfigMap)
+	options.runtimeFactoryBuilders = make(map[string]func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error))
+	options.runtimeConfig = make(map[string]config.ConfigMap)
 	options.stateStoreLoader = DefaultStateStoreLoader
 	for _, o := range opts {
 		if o == nil {
@@ -342,14 +344,14 @@ func NewDefaultServer() (*Server, error) {
 		ListenAddr: ":7300",
 		Queue: QueueConfig{
 			Type:   common.MemoryTubeType,
-			Config: common.ConfigMap{},
+			Config: config.ConfigMap{},
 		},
-		TubeConfig: map[string]common.ConfigMap{
+		TubeConfig: map[string]config.ConfigMap{
 			common.PulsarTubeType: {
 				contube.PulsarURLKey: "pulsar://localhost:6650",
 			},
 		},
-		RuntimeConfig: map[string]common.ConfigMap{},
+		RuntimeConfig: map[string]config.ConfigMap{},
 	}
 	return NewServer(
 		WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()),

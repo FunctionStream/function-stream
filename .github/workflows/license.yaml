@@ -27,4 +27,4 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Run license check
-        run: ./license-checker/license-checker.sh
+        run: make license

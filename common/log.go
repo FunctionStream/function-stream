@@ -17,6 +17,8 @@
 package common
 
 import (
+	"context"
+
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
@@ -24,6 +26,8 @@ import (
 
 const (
 	DebugLevel int = 4
+	InfoLevel  int = 3
+	WarnLevel  int = 2
 )
 
 type Logger struct {
@@ -53,7 +57,29 @@ func (l *Logger) Debug(msg string, keysAndValues ...interface{}) {
 	}
 }
 
+func (l *Logger) Warn(msg string, keysAndValues ...interface{}) {
+	l.V(WarnLevel).Info(msg, keysAndValues...)
+}
+
+func (l *Logger) Info(msg string, keysAndValues ...interface{}) {
+	l.V(InfoLevel).Info(msg, keysAndValues...)
+}
+
 func (l *Logger) SubLogger(keysAndValues ...any) *Logger {
 	internalLogger := l.WithValues(keysAndValues...)
 	return &Logger{&internalLogger}
+}
+
+type loggerKey struct{}
+
+func WithLogger(ctx context.Context, logger *Logger) context.Context {
+	return context.WithValue(ctx, loggerKey{}, logger)
+}
+
+func GetLogger(ctx context.Context) *Logger {
+	logger, ok := ctx.Value(loggerKey{}).(*Logger)
+	if !ok {
+		return NewDefaultLogger()
+	}
+	return logger
 }

@@ -24,6 +24,7 @@ type ModelFunction struct {
 	Config    *map[string]string `json:"config,omitempty"`
 	Name      string             `json:"name"`
 	Namespace *string            `json:"namespace,omitempty"`
+	Package   string             `json:"package"`
 	Replicas  int32              `json:"replicas"`
 	Runtime   ModelRuntimeConfig `json:"runtime"`
 	Sink      ModelTubeConfig    `json:"sink"`
@@ -36,9 +37,10 @@ type _ModelFunction ModelFunction
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewModelFunction(name string, replicas int32, runtime ModelRuntimeConfig, sink ModelTubeConfig, source []ModelTubeConfig) *ModelFunction {
+func NewModelFunction(name string, package_ string, replicas int32, runtime ModelRuntimeConfig, sink ModelTubeConfig, source []ModelTubeConfig) *ModelFunction {
 	this := ModelFunction{}
 	this.Name = name
+	this.Package = package_
 	this.Replicas = replicas
 	this.Runtime = runtime
 	this.Sink = sink
@@ -140,6 +142,30 @@ func (o *ModelFunction) HasNamespace() bool {
 // SetNamespace gets a reference to the given string and assigns it to the Namespace field.
 func (o *ModelFunction) SetNamespace(v string) {
 	o.Namespace = &v
+}
+
+// GetPackage returns the Package field value
+func (o *ModelFunction) GetPackage() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.Package
+}
+
+// GetPackageOk returns a tuple with the Package field value
+// and a boolean to check if the value has been set.
+func (o *ModelFunction) GetPackageOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Package, true
+}
+
+// SetPackage sets field value
+func (o *ModelFunction) SetPackage(v string) {
+	o.Package = v
 }
 
 // GetReplicas returns the Replicas field value
@@ -255,6 +281,7 @@ func (o ModelFunction) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Namespace) {
 		toSerialize["namespace"] = o.Namespace
 	}
+	toSerialize["package"] = o.Package
 	toSerialize["replicas"] = o.Replicas
 	toSerialize["runtime"] = o.Runtime
 	toSerialize["sink"] = o.Sink
@@ -268,6 +295,7 @@ func (o *ModelFunction) UnmarshalJSON(data []byte) (err error) {
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
 		"name",
+		"package",
 		"replicas",
 		"runtime",
 		"sink",
