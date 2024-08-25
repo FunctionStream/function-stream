@@ -18,8 +18,11 @@ package wazero
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+
+	"github.com/functionstream/function-stream/common/model"
 
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fs/api"
@@ -71,7 +74,8 @@ func WithWASMFetcher(fetcher WASMFetcher) func(*options) {
 	}
 }
 
-func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance) (api.FunctionRuntime, error) {
+func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionInstance,
+	rc *model.RuntimeConfig) (api.FunctionRuntime, error) {
 	log := instance.Logger()
 	r := wazero.NewRuntime(instance.Context())
 	_, err := r.NewHostModuleBuilder("env").NewFunctionBuilder().WithFunc(func(ctx context.Context,
@@ -97,10 +101,10 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 
 	wasi_snapshot_preview1.MustInstantiate(instance.Context(), r)
 
-	if instance.Definition().Runtime.Config == nil {
+	if rc.Config == nil {
 		return nil, fmt.Errorf("no runtime config found")
 	}
-	path, exist := instance.Definition().Runtime.Config["archive"]
+	path, exist := rc.Config["archive"]
 	if !exist {
 		return nil, fmt.Errorf("no wasm archive found")
 	}
@@ -114,10 +118,9 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	}
 	mod, err := r.InstantiateWithConfig(instance.Context(), wasmBytes, config)
 	if err != nil {
-		if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() != 0 {
+		var exitErr *sys.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() != 0 {
 			return nil, fmt.Errorf("failed to instantiate function, function exit with code %d", exitErr.ExitCode())
-		} else if !ok {
-			return nil, fmt.Errorf("failed to instantiate function: %w", err)
 		}
 	}
 	if err != nil {

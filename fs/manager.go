@@ -23,6 +23,9 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/functionstream/function-stream/common/config"
+	_package "github.com/functionstream/function-stream/fs/package"
+
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/api"
@@ -56,6 +59,7 @@ type managerOptions struct {
 	stateStore               api.StateStore
 	dontUseDefaultStateStore bool
 	queueFactory             contube.TubeFactory
+	packageLoader            api.PackageLoader // TODO: Need to set it
 	log                      *logr.Logger
 }
 
@@ -111,6 +115,13 @@ func WithLogger(log *logr.Logger) ManagerOption {
 	})
 }
 
+func WithPackageLoader(loader api.PackageLoader) ManagerOption {
+	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
+		c.packageLoader = loader
+		return c, nil
+	})
+}
+
 func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 	options := &managerOptions{
 		tubeFactoryMap:    make(map[string]contube.TubeFactory),
@@ -144,6 +155,9 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 	for k := range options.tubeFactoryMap {
 		loadedTubeFact = append(loadedTubeFact, k)
 	}
+	if options.packageLoader == nil {
+		options.packageLoader = _package.NewDefaultPackageLoader()
+	}
 	log.Info("Function manager created", "runtime-factories", loadedRuntimeFact,
 		"tube-factories", loadedTubeFact)
 	return &functionManagerImpl{
@@ -173,6 +187,40 @@ func (fm *functionManagerImpl) createFuncCtx() *funcCtxImpl {
 	return newFuncCtxImpl(fm.options.stateStore)
 }
 
+func generateRuntimeConfig(ctx context.Context, p api.Package, f *model.Function) (*model.RuntimeConfig, error) {
+	log := common.GetLogger(ctx)
+	rc := &model.RuntimeConfig{}
+	if p == _package.EmptyPackage {
+		return &f.Runtime, nil
+	}
+	supportedRuntimeConf := p.GetSupportedRuntimeConfig()
+	rcMap := map[string]*model.RuntimeConfig{}
+	for k, v := range supportedRuntimeConf {
+		if v.Type == "" {
+			log.Warn("Package supported runtime type is empty. Ignore it.", "index", k, "package", f.Package)
+			continue
+		}
+		vCopy := v
+		rcMap[v.Type] = &vCopy
+	}
+	if len(rcMap) == 0 {
+		return nil, common.ErrorPackageNoSupportedRuntime
+	}
+	defaultRC := &supportedRuntimeConf[0]
+	if f.Runtime.Type == "" {
+		rc.Type = defaultRC.Type
+	} else {
+		if r, exist := rcMap[f.Runtime.Type]; exist {
+			defaultRC = r
+		} else {
+			return nil, fmt.Errorf("runtime type '%s' is not supported by package '%s'", f.Runtime.Type, f.Package)
+		}
+		rc.Type = f.Runtime.Type
+	}
+	rc.Config = config.MergeConfig(defaultRC.Config, f.Runtime.Config)
+	return rc, nil
+}
+
 func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO: Shouldn't use pointer here
 	if err := f.Validate(); err != nil {
 		return err
@@ -186,15 +234,22 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 	fm.functionsLock.Unlock()
 
 	for i := int32(0); i < f.Replicas; i++ {
-		runtimeType := f.Runtime.Type
+		p, err := fm.options.packageLoader.Load(f.Package)
+		if err != nil {
+			return err
+		}
+		runtimeConfig, err := generateRuntimeConfig(context.Background(), p, f)
+		if err != nil {
+			return fmt.Errorf("failed to generate runtime config: %v", err)
+		}
 
 		funcCtx := fm.createFuncCtx()
-		instanceLogger := fm.log.SubLogger("functionName", f.Name, "instanceIndex", int(i), "runtimeType", runtimeType)
+		instanceLogger := fm.log.SubLogger("functionName", f.Name, "instanceIndex", int(i), "runtimeType", runtimeConfig.Type)
 		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, i, instanceLogger)
 		fm.functionsLock.Lock()
 		fm.functions[common.GetNamespacedName(f.Namespace, f.Name)][i] = instance
 		fm.functionsLock.Unlock()
-		runtimeFactory, err := fm.getRuntimeFactory(runtimeType)
+		runtimeFactory, err := fm.getRuntimeFactory(runtimeConfig.Type)
 		if err != nil {
 			return err
 		}
@@ -220,7 +275,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		}
 		funcCtx.setSink(sink)
 
-		runtime, err := runtimeFactory.NewFunctionRuntime(instance)
+		runtime, err := runtimeFactory.NewFunctionRuntime(instance, runtimeConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create runtime: %w", err)
 		}

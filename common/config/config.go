@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package common
+package config
 
 // ConfigMap is a custom type that represents a map where keys are strings and values are of any type.
 // Since Viper is not case-sensitive, we use '-' to separate words in all field names in the config map.
@@ -24,3 +24,14 @@ package common
 //   - `socket-path` refers to the path of the socket.
 //   - `pulsar-url` refers to the URL of the Pulsar service.
 type ConfigMap map[string]interface{}
+
+// MergeConfig merges multiple ConfigMap into one
+func MergeConfig(configs ...ConfigMap) ConfigMap {
+	result := ConfigMap{}
+	for _, config := range configs {
+		for k, v := range config {
+			result[k] = v
+		}
+	}
+	return result
+}

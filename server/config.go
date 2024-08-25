@@ -21,9 +21,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/functionstream/function-stream/common/config"
+
 	"github.com/go-playground/validator/v10"
 
-	"github.com/functionstream/function-stream/common"
 	"github.com/spf13/viper"
 )
 
@@ -31,17 +32,17 @@ type FactoryConfig struct {
 	// Deprecate
 	Ref    *string           `mapstructure:"ref"`
 	Type   *string           `mapstructure:"type"`
-	Config *common.ConfigMap `mapstructure:"config"`
+	Config *config.ConfigMap `mapstructure:"config"`
 }
 
 type StateStoreConfig struct {
 	Type   *string           `mapstructure:"type"`
-	Config *common.ConfigMap `mapstructure:"config"`
+	Config *config.ConfigMap `mapstructure:"config"`
 }
 
 type QueueConfig struct {
 	Type   string           `mapstructure:"type"`
-	Config common.ConfigMap `mapstructure:"config"`
+	Config config.ConfigMap `mapstructure:"config"`
 }
 
 type Config struct {
@@ -50,9 +51,9 @@ type Config struct {
 
 	Queue QueueConfig `mapstructure:"queue"`
 
-	TubeConfig map[string]common.ConfigMap `mapstructure:"tube-config"`
+	TubeConfig map[string]config.ConfigMap `mapstructure:"tube-config"`
 
-	RuntimeConfig map[string]common.ConfigMap `mapstructure:"runtime-config"`
+	RuntimeConfig map[string]config.ConfigMap `mapstructure:"runtime-config"`
 
 	// StateStore is the configuration for the state store that the function stream server will use.
 	// Optional

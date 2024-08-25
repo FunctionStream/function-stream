@@ -19,8 +19,10 @@ package common
 import "fmt"
 
 var (
-	ErrorFunctionNotFound       = fmt.Errorf("function not found")
-	ErrorFunctionExists         = fmt.Errorf("function already exists")
-	ErrorRuntimeFactoryNotFound = fmt.Errorf("runtime factory not found")
-	ErrorTubeFactoryNotFound    = fmt.Errorf("tube factory not found")
+	ErrorFunctionNotFound           = fmt.Errorf("function not found")
+	ErrorFunctionExists             = fmt.Errorf("function already exists")
+	ErrorFunctionUnsupportedRuntime = fmt.Errorf("function does not support runtime")
+	ErrorRuntimeFactoryNotFound     = fmt.Errorf("runtime factory not found")
+	ErrorTubeFactoryNotFound        = fmt.Errorf("tube factory not found")
+	ErrorPackageNoSupportedRuntime  = fmt.Errorf("package does not support any runtime")
 )

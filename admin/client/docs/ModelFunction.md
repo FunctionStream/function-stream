@@ -7,6 +7,7 @@ Name | Type | Description | Notes
 **Config** | Pointer to **map[string]string** |  | [optional] 
 **Name** | **string** |  | 
 **Namespace** | Pointer to **string** |  | [optional] 
+**Package** | **string** |  | 
 **Replicas** | **int32** |  | 
 **Runtime** | [**ModelRuntimeConfig**](ModelRuntimeConfig.md) |  | 
 **Sink** | [**ModelTubeConfig**](ModelTubeConfig.md) |  | 
@@ -16,7 +17,7 @@ Name | Type | Description | Notes
 
 ### NewModelFunction
 
-`func NewModelFunction(name string, replicas int32, runtime ModelRuntimeConfig, sink ModelTubeConfig, source []ModelTubeConfig, ) *ModelFunction`
+`func NewModelFunction(name string, package_ string, replicas int32, runtime ModelRuntimeConfig, sink ModelTubeConfig, source []ModelTubeConfig, ) *ModelFunction`
 
 NewModelFunction instantiates a new ModelFunction object
 This constructor will assign default values to properties that have it defined,
@@ -100,6 +101,26 @@ SetNamespace sets Namespace field to given value.
 `func (o *ModelFunction) HasNamespace() bool`
 
 HasNamespace returns a boolean if a field has been set.
+
+### GetPackage
+
+`func (o *ModelFunction) GetPackage() string`
+
+GetPackage returns the Package field if non-nil, zero value otherwise.
+
+### GetPackageOk
+
+`func (o *ModelFunction) GetPackageOk() (*string, bool)`
+
+GetPackageOk returns a tuple with the Package field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetPackage
+
+`func (o *ModelFunction) SetPackage(v string)`
+
+SetPackage sets Package field to given value.
+
 
 ### GetReplicas
 

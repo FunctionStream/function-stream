@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/functionstream/function-stream/common/config"
+
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/runtime/wazero"
 
@@ -117,11 +119,11 @@ func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 
 	s, err := server.NewServer(
 		server.WithRuntimeFactoryBuilder(common.WASMRuntime,
-			func(configMap common.ConfigMap) (api.FunctionRuntimeFactory, error) {
+			func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error) {
 				return wazero.NewWazeroFunctionRuntimeFactory(), nil
 			}),
 		server.WithTubeFactoryBuilder(common.MemoryTubeType,
-			func(configMap common.ConfigMap) (contube.TubeFactory, error) {
+			func(configMap config.ConfigMap) (contube.TubeFactory, error) {
 				return memoryQueueFactory, nil
 			}),
 	)

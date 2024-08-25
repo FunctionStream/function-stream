@@ -19,6 +19,8 @@ package model
 import (
 	"strings"
 
+	"github.com/functionstream/function-stream/common/config"
+
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
 )
@@ -28,16 +30,15 @@ type TubeConfig struct {
 	Config contube.ConfigMap `json:"config,omitempty"`
 }
 
-type ConfigMap map[string]interface{}
-
 type RuntimeConfig struct {
-	Config ConfigMap `json:"config,omitempty"`
-	Type   string    `json:"type"`
+	Config config.ConfigMap `json:"config,omitempty"`
+	Type   string           `json:"type"`
 }
 
 type Function struct {
 	Name      string            `json:"name"`
 	Namespace string            `json:"namespace,omitempty"`
+	Package   string            `json:"package"`
 	Runtime   RuntimeConfig     `json:"runtime"`
 	Sources   []TubeConfig      `json:"source"`
 	Sink      TubeConfig        `json:"sink"`

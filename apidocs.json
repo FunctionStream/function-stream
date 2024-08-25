@@ -336,6 +336,7 @@
   "model.Function": {
    "required": [
     "name",
+    "package",
     "runtime",
     "source",
     "sink",
@@ -352,6 +353,9 @@
      "type": "string"
     },
     "namespace": {
+     "type": "string"
+    },
+    "package": {
      "type": "string"
     },
     "replicas": {
