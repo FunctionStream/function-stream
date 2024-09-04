@@ -18,16 +18,15 @@ package common
 
 import (
 	"context"
-
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 )
 
 const (
-	DebugLevel int = 4
-	InfoLevel  int = 3
-	WarnLevel  int = 2
+	DebugLevel int = -1
+	InfoLevel  int = 0 // Default log level
+	WarnLevel  int = 1
 )
 
 type Logger struct {

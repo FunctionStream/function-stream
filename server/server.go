@@ -66,6 +66,7 @@ type serverOptions struct {
 	managerOpts            []fs.ManagerOption
 	httpTubeFact           *contube.HttpTubeFactory
 	stateStoreLoader       StateStoreLoaderType
+	packageLoader          api.PackageLoader
 	functionStore          string
 	enableTls              bool
 	tlsCertFile            string
@@ -162,6 +163,13 @@ func WithStateStoreLoader(loader func(c *StateStoreConfig) (api.StateStore, erro
 	})
 }
 
+func WithPackageLoader(packageLoader api.PackageLoader) ServerOption {
+	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
+		o.managerOpts = append(o.managerOpts, fs.WithPackageLoader(packageLoader))
+		return o, nil
+	})
+}
+
 func WithLogger(log *logr.Logger) ServerOption {
 	return serverOptionFunc(func(c *serverOptions) (*serverOptions, error) {
 		c.log = log
@@ -252,6 +260,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	options.runtimeFactoryBuilders = make(map[string]func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error))
 	options.runtimeConfig = make(map[string]config.ConfigMap)
 	options.stateStoreLoader = DefaultStateStoreLoader
+	options.managerOpts = []fs.ManagerOption{}
 	for _, o := range opts {
 		if o == nil {
 			continue
@@ -271,11 +280,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		options.httpTubeFact = contube.NewHttpTubeFactory(context.Background())
 		log.Info("Using the default HTTP tube factory")
 	}
-	options.managerOpts = []fs.ManagerOption{
+	options.managerOpts = append(options.managerOpts,
 		fs.WithTubeFactory("http", options.httpTubeFact),
-	}
-
-	options.managerOpts = append(options.managerOpts, fs.WithLogger(log.Logger))
+		fs.WithLogger(log.Logger))
 
 	// Config Tube Factory
 	if tubeFactories, err := setupFactories(options.tubeFactoryBuilders, options.tubeConfig); err == nil {
