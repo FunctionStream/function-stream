@@ -23,4 +23,4 @@ tube-config:
 runtime-config:
   external:
     socket-path: /tmp/fs.sock
-function-store: ./functionsa
+function-store: ./functions
