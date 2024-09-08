@@ -66,7 +66,6 @@ type serverOptions struct {
 	managerOpts            []fs.ManagerOption
 	httpTubeFact           *contube.HttpTubeFactory
 	stateStoreLoader       StateStoreLoaderType
-	packageLoader          api.PackageLoader
 	functionStore          string
 	enableTls              bool
 	tlsCertFile            string
