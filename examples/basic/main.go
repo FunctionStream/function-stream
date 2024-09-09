@@ -33,7 +33,7 @@ type Person struct {
 }
 
 func init() {
-	err := gofs.Register(myProcess)
+	err := gofs.Register(gofs.DefaultModule, myProcess)
 	if err != nil {
 		slog.Error(err.Error())
 	}

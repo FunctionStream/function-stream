@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/functionstream/function-stream/fs/runtime/external/model"
@@ -19,11 +20,14 @@ import (
 var client model.FunctionClient
 var ctx = context.Background()
 
-var processFunc func([]byte) []byte
+var modules = make(map[string]func([]byte) []byte)
+var modulesMu sync.RWMutex
 
 const (
 	FSSocketPath   = "FS_SOCKET_PATH"
 	FSFunctionName = "FS_FUNCTION_NAME"
+	FSModuleName   = "FS_MODULE_NAME"
+	DefaultModule  = "default"
 )
 
 func check() error {
@@ -66,7 +70,7 @@ func check() error {
 	return nil
 }
 
-func Register[I any, O any](process func(*I) *O) error {
+func Register[I any, O any](module string, process func(*I) *O) error {
 	if err := check(); err != nil {
 		return err
 	}
@@ -74,7 +78,7 @@ func Register[I any, O any](process func(*I) *O) error {
 	if err != nil {
 		return err
 	}
-	processFunc = func(payload []byte) []byte {
+	processFunc := func(payload []byte) []byte {
 		input := new(I)
 		err = json.Unmarshal(payload, input)
 		if err != nil {
@@ -84,6 +88,9 @@ func Register[I any, O any](process func(*I) *O) error {
 		outputPayload, _ := json.Marshal(output)
 		return outputPayload
 	}
+	modulesMu.Lock()
+	modules[module] = processFunc
+	modulesMu.Unlock()
 	_, err = client.RegisterSchema(ctx, &model.RegisterSchemaRequest{Schema: outputSchema})
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Failed to register schema: %s\n", err)
@@ -96,6 +103,16 @@ func Run() {
 	if err := check(); err != nil {
 		panic(err)
 	}
+	module := os.Getenv(FSModuleName)
+	if module == "" {
+		module = DefaultModule
+	}
+	modulesMu.RLock()
+	processFunc, ok := modules[module]
+	if !ok {
+		panic(fmt.Sprintf("module %s not found", module))
+	}
+	modulesMu.RUnlock()
 	for {
 		res, err := client.Read(ctx, &model.ReadRequest{})
 		if err != nil {
