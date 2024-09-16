@@ -35,7 +35,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - uses: acifani/setup-tinygo@v2
         with:
-          tinygo-version: '0.30.0'
+          tinygo-version: '0.31.2'
       - run: docker compose -f ./tests/docker-compose.yaml up -d
       - run: make build-all
       - name: Wait for Pulsar service

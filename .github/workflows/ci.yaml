@@ -35,7 +35,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - uses: acifani/setup-tinygo@v2
         with:
-          tinygo-version: '0.33.0'
+          tinygo-version: '0.31.2'
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
