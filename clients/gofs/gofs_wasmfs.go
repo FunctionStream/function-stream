@@ -71,6 +71,9 @@ func (c *fsRPCClient) Read() ([]byte, error) {
 }
 
 func (c *fsRPCClient) loadModule(m *moduleWrapper) {
+	if m.processFunc == nil {
+		panic("only function module is supported for the wasm runtime")
+	}
 	m.executeFunc = func() error {
 		var stat syscall.Stat_t
 		syscall.Fstat(processFd, &stat)
