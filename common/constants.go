@@ -20,6 +20,7 @@ const (
 	PulsarTubeType = "pulsar"
 	MemoryTubeType = "memory"
 	HttpTubeType   = "http"
+	EmptyTubeType  = "empty"
 
 	WASMRuntime     = "wasm"
 	ExternalRuntime = "external"

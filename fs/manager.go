@@ -257,7 +257,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		for _, t := range f.Sources {
 			sourceFactory, err := fm.getTubeFactory(&t)
 			if err != nil {
-				return nil
+				return err
 			}
 			sourceChan, err := sourceFactory.NewSourceTube(instance.Context(), t.Config)
 			if err != nil {
@@ -267,7 +267,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 		}
 		sinkFactory, err := fm.getTubeFactory(&f.Sink)
 		if err != nil {
-			return nil
+			return err
 		}
 		sink, err := sinkFactory.NewSinkTube(instance.Context(), f.Sink.Config)
 		if err != nil {

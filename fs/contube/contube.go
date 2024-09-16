@@ -155,3 +155,34 @@ func (e *RecordImpl) Commit() {
 		e.commitFunc()
 	}
 }
+
+type emptyTubeFactory struct {
+}
+
+func NewEmptyTubeFactory() TubeFactory {
+	return &emptyTubeFactory{}
+}
+
+func (f *emptyTubeFactory) NewSourceTube(ctx context.Context, config ConfigMap) (<-chan Record, error) {
+	ch := make(chan Record)
+	go func() {
+		<-ctx.Done()
+		close(ch)
+	}()
+	return ch, nil
+}
+
+func (f *emptyTubeFactory) NewSinkTube(ctx context.Context, config ConfigMap) (chan<- Record, error) {
+	ch := make(chan Record)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ch:
+				continue
+			}
+		}
+	}()
+	return ch, nil
+}

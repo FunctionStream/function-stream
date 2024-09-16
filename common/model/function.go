@@ -39,6 +39,7 @@ type Function struct {
 	Name      string            `json:"name"`
 	Namespace string            `json:"namespace,omitempty"`
 	Package   string            `json:"package"`
+	Module    string            `json:"module"`
 	Runtime   RuntimeConfig     `json:"runtime"`
 	Sources   []TubeConfig      `json:"source"`
 	Sink      TubeConfig        `json:"sink"`
