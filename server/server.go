@@ -185,6 +185,7 @@ func GetBuiltinTubeFactoryBuilder() map[string]func(configMap config.ConfigMap) 
 		common.MemoryTubeType: func(_ config.ConfigMap) (contube.TubeFactory, error) {
 			return contube.NewMemoryQueueFactory(context.Background()), nil
 		},
+		//nolint:unparam
 		common.EmptyTubeType: func(_ config.ConfigMap) (contube.TubeFactory, error) {
 			return contube.NewEmptyTubeFactory(), nil
 		},

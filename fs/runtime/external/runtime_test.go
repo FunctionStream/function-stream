@@ -19,15 +19,16 @@ package external
 import (
 	"context"
 	"encoding/json"
+	"net"
+	"os"
+	"testing"
+
 	"github.com/functionstream/function-stream/clients/gofs"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/stretchr/testify/assert"
-	"net"
-	"os"
-	"testing"
 )
 
 type Person struct {
@@ -44,6 +45,8 @@ type testRecord struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
+
+const testSocketPath = "/tmp/test.sock"
 
 var log = common.NewDefaultLogger()
 
@@ -80,12 +83,12 @@ func runMockClient() {
 	gofs.Run()
 }
 
+//nolint:goconst
 func TestExternalRuntime(t *testing.T) {
-	socketPath := "/tmp/test.sock"
-	assert.NoError(t, os.RemoveAll(socketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", socketPath))
+	assert.NoError(t, os.RemoveAll(testSocketPath))
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
-	lis, err := net.Listen("unix", socketPath)
+	lis, err := net.Listen("unix", testSocketPath)
 	assert.NoError(t, err)
 	defer func(lis net.Listener) {
 		_ = lis.Close()
@@ -149,12 +152,11 @@ func TestExternalRuntime(t *testing.T) {
 }
 
 func TestNonDefaultModule(t *testing.T) {
-	socketPath := "/tmp/test.sock"
-	assert.NoError(t, os.RemoveAll(socketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", socketPath))
+	assert.NoError(t, os.RemoveAll(testSocketPath))
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "counter"))
-	lis, err := net.Listen("unix", socketPath)
+	lis, err := net.Listen("unix", testSocketPath)
 	assert.NoError(t, err)
 	defer func(lis net.Listener) {
 		_ = lis.Close()
@@ -218,12 +220,11 @@ func TestNonDefaultModule(t *testing.T) {
 }
 
 func TestExternalSourceModule(t *testing.T) {
-	socketPath := "/tmp/test.sock"
-	assert.NoError(t, os.RemoveAll(socketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", socketPath))
+	assert.NoError(t, os.RemoveAll(testSocketPath))
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "test-source"))
-	lis, err := net.Listen("unix", socketPath)
+	lis, err := net.Listen("unix", testSocketPath)
 	assert.NoError(t, err)
 	defer func(lis net.Listener) {
 		_ = lis.Close()
@@ -279,12 +280,11 @@ func TestExternalSourceModule(t *testing.T) {
 }
 
 func TestExternalSinkModule(t *testing.T) {
-	socketPath := "/tmp/test.sock"
-	assert.NoError(t, os.RemoveAll(socketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", socketPath))
+	assert.NoError(t, os.RemoveAll(testSocketPath))
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "test-sink"))
-	lis, err := net.Listen("unix", socketPath)
+	lis, err := net.Listen("unix", testSocketPath)
 	assert.NoError(t, err)
 	defer func(lis net.Listener) {
 		_ = lis.Close()

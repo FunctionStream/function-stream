@@ -179,7 +179,7 @@ func (f *emptyTubeFactory) NewSinkTube(ctx context.Context, config ConfigMap) (c
 			select {
 			case <-ctx.Done():
 				return
-			case _ = <-ch:
+			case <-ch:
 				continue
 			}
 		}
