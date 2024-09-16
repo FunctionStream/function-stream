@@ -31,6 +31,8 @@ import (
 var processFd int
 var registerSchemaFd int
 
+const DefaultModule = "default"
+
 func init() {
 	processFd, _ = syscall.Open("/process", syscall.O_RDWR, 0)
 	registerSchemaFd, _ = syscall.Open("/registerSchema", syscall.O_RDWR, 0)
@@ -38,7 +40,10 @@ func init() {
 
 var processFunc func([]byte) []byte
 
-func Register[I any, O any](process func(*I) *O) error {
+func Register[I any, O any](module string, process func(*I) *O) error {
+	if module != DefaultModule {
+		return fmt.Errorf("only default module is supported")
+	}
 	outputSchema, err := avroschema.Reflect(new(O))
 	if err != nil {
 		return err
