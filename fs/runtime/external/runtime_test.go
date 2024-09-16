@@ -19,6 +19,7 @@ package external
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"testing"
@@ -45,8 +46,6 @@ type testRecord struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
-
-const testSocketPath = "/tmp/test.sock"
 
 var log = common.NewDefaultLogger()
 
@@ -85,6 +84,7 @@ func runMockClient() {
 
 //nolint:goconst
 func TestExternalRuntime(t *testing.T) {
+	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
 	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
@@ -152,6 +152,7 @@ func TestExternalRuntime(t *testing.T) {
 }
 
 func TestNonDefaultModule(t *testing.T) {
+	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
 	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
@@ -220,6 +221,7 @@ func TestNonDefaultModule(t *testing.T) {
 }
 
 func TestExternalSourceModule(t *testing.T) {
+	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
 	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
@@ -280,6 +282,7 @@ func TestExternalSourceModule(t *testing.T) {
 }
 
 func TestExternalSinkModule(t *testing.T) {
+	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
 	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
