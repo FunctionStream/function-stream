@@ -19,16 +19,15 @@ package external
 import (
 	"context"
 	"encoding/json"
-	"net"
-	"os"
-	"testing"
-
 	"github.com/functionstream/function-stream/clients/gofs"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/stretchr/testify/assert"
+	"net"
+	"os"
+	"testing"
 )
 
 type Person struct {
@@ -39,6 +38,11 @@ type Person struct {
 
 type Counter struct {
 	Count int `json:"count"`
+}
+
+type testRecord struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 var log = common.NewDefaultLogger()
@@ -57,6 +61,21 @@ func runMockClient() {
 	})
 	if err != nil {
 		log.Error(err, "failed to register counter function")
+	}
+
+	err = gofs.RegisterSource("test-source", func(emit func(record *testRecord) error) {
+		for i := 0; i < 10; i++ {
+			err := emit(&testRecord{
+				ID:   i,
+				Name: "test",
+			})
+			if err != nil {
+				log.Error(err, "failed to emit record")
+			}
+		}
+	})
+	if err != nil {
+		log.Error(err, "failed to register source")
 	}
 	gofs.Run()
 }
@@ -149,8 +168,6 @@ func TestNonDefaultModule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go runMockClient()
-
 	inputTopic := "input"
 	outputTopic := "output"
 	f := &model.Function{
@@ -180,6 +197,8 @@ func TestNonDefaultModule(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
+	go runMockClient()
+
 	event, err := contube.NewStructRecord(&Counter{
 		Count: 1,
 	}, func() {})
@@ -193,6 +212,136 @@ func TestNonDefaultModule(t *testing.T) {
 	err = json.Unmarshal(output.GetPayload(), &c)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, c.Count)
+
+	err = fm.DeleteFunction("", f.Name)
+	assert.NoError(t, err)
+}
+
+func TestExternalSourceModule(t *testing.T) {
+	socketPath := "/tmp/test.sock"
+	assert.NoError(t, os.RemoveAll(socketPath))
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", socketPath))
+	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
+	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "test-source"))
+	lis, err := net.Listen("unix", socketPath)
+	assert.NoError(t, err)
+	defer func(lis net.Listener) {
+		_ = lis.Close()
+	}(lis)
+
+	fm, err := fs.NewFunctionManager(
+		fs.WithRuntimeFactory("external", NewFactory(lis)),
+		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
+		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	outputTopic := "output"
+	f := &model.Function{
+		Name: "test",
+		Runtime: model.RuntimeConfig{
+			Type: "external",
+		},
+		Module: "test-source",
+		Sources: []model.TubeConfig{
+			{
+				Type: common.EmptyTubeType,
+			},
+		},
+		Sink: model.TubeConfig{
+			Type: common.MemoryTubeType,
+			Config: (&contube.SinkQueueConfig{
+				Topic: outputTopic,
+			}).ToConfigMap(),
+		},
+		Replicas: 1,
+	}
+
+	err = fm.StartFunction(f)
+	assert.NoError(t, err)
+
+	go runMockClient()
+
+	for i := 0; i < 10; i++ {
+		output, err := fm.ConsumeEvent(outputTopic)
+		assert.NoError(t, err)
+
+		r := &testRecord{}
+		err = json.Unmarshal(output.GetPayload(), &r)
+		assert.NoError(t, err)
+		assert.Equal(t, i, r.ID)
+	}
+
+	err = fm.DeleteFunction("", f.Name)
+	assert.NoError(t, err)
+}
+
+func TestExternalSinkModule(t *testing.T) {
+	socketPath := "/tmp/test.sock"
+	assert.NoError(t, os.RemoveAll(socketPath))
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", socketPath))
+	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
+	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "test-sink"))
+	lis, err := net.Listen("unix", socketPath)
+	assert.NoError(t, err)
+	defer func(lis net.Listener) {
+		_ = lis.Close()
+	}(lis)
+
+	fm, err := fs.NewFunctionManager(
+		fs.WithRuntimeFactory("external", NewFactory(lis)),
+		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
+		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inputTopic := "input"
+	f := &model.Function{
+		Name: "test",
+		Runtime: model.RuntimeConfig{
+			Type: "external",
+		},
+		Module: "test-sink",
+		Sources: []model.TubeConfig{
+			{
+				Type: common.MemoryTubeType,
+				Config: (&contube.SourceQueueConfig{
+					Topics:  []string{inputTopic},
+					SubName: "test",
+				}).ToConfigMap(),
+			},
+		},
+		Sink: model.TubeConfig{
+			Type: common.EmptyTubeType,
+		},
+		Replicas: 1,
+	}
+
+	err = fm.StartFunction(f)
+	assert.NoError(t, err)
+
+	sinkCh := make(chan Counter)
+
+	go func() {
+		err = gofs.RegisterSink("test-sink", func(record *Counter) {
+			sinkCh <- *record
+		})
+		gofs.Run()
+	}()
+
+	event, err := contube.NewStructRecord(&Counter{
+		Count: 1,
+	}, func() {})
+	assert.NoError(t, err)
+	err = fm.ProduceEvent(inputTopic, event)
+	assert.NoError(t, err)
+
+	r := <-sinkCh
+	assert.Equal(t, 1, r.Count)
 
 	err = fm.DeleteFunction("", f.Name)
 	assert.NoError(t, err)
