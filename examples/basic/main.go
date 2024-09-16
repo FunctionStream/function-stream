@@ -22,21 +22,19 @@ import (
 )
 
 func main() {
-	slog.Info("Hello from Go wasm!")
-	gofs.Run()
+	slog.Info("Hello from Go function!")
+	err := gofs.NewFSClient().
+		Register(gofs.DefaultModule, gofs.Function(myProcess)).
+		Run()
+	if err != nil {
+		slog.Error(err.Error())
+	}
 }
 
 type Person struct {
 	Name     string `json:"name"`
 	Money    int    `json:"money"`
 	Expected int    `json:"expected"`
-}
-
-func init() {
-	err := gofs.Register(gofs.DefaultModule, myProcess)
-	if err != nil {
-		slog.Error(err.Error())
-	}
 }
 
 func myProcess(person *Person) *Person {

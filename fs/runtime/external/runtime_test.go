@@ -50,36 +50,30 @@ type testRecord struct {
 var log = common.NewDefaultLogger()
 
 func runMockClient() {
-	err := gofs.Register(gofs.DefaultModule, func(i *Person) *Person {
-		i.Money += 1
-		return i
-	})
-	if err != nil {
-		log.Error(err, "failed to register default function")
-	}
-	err = gofs.Register("counter", func(i *Counter) *Counter {
-		i.Count += 1
-		return i
-	})
-	if err != nil {
-		log.Error(err, "failed to register counter function")
-	}
-
-	err = gofs.RegisterSource("test-source", func(emit func(record *testRecord) error) {
-		for i := 0; i < 10; i++ {
-			err := emit(&testRecord{
-				ID:   i,
-				Name: "test",
-			})
-			if err != nil {
-				log.Error(err, "failed to emit record")
+	err := gofs.NewFSClient().
+		Register(gofs.DefaultModule, gofs.Function(func(i *Person) *Person {
+			i.Money += 1
+			return i
+		})).
+		Register("counter", gofs.Function(func(i *Counter) *Counter {
+			i.Count += 1
+			return i
+		})).
+		Register("test-source", gofs.Source(func(emit func(record *testRecord) error) {
+			for i := 0; i < 10; i++ {
+				err := emit(&testRecord{
+					ID:   i,
+					Name: "test",
+				})
+				if err != nil {
+					log.Error(err, "failed to emit record")
+				}
 			}
-		}
-	})
+		})).
+		Run()
 	if err != nil {
-		log.Error(err, "failed to register source")
+		log.Error(err, "failed to run mock client")
 	}
-	gofs.Run()
 }
 
 //nolint:goconst
@@ -330,10 +324,12 @@ func TestExternalSinkModule(t *testing.T) {
 	sinkCh := make(chan Counter)
 
 	go func() {
-		err = gofs.RegisterSink("test-sink", func(record *Counter) {
+		err := gofs.NewFSClient().Register("test-sink", gofs.Sink(func(record *Counter) {
 			sinkCh <- *record
-		})
-		gofs.Run()
+		})).Run()
+		if err != nil {
+			log.Error(err, "failed to run mock client")
+		}
 	}()
 
 	event, err := contube.NewStructRecord(&Counter{

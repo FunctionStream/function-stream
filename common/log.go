@@ -48,7 +48,7 @@ func NewLogger(logger *logr.Logger) *Logger {
 }
 
 func (l *Logger) DebugEnabled() bool {
-	return l.GetV() >= DebugLevel
+	return l.GetV() <= DebugLevel
 }
 
 func (l *Logger) Debug(msg string, keysAndValues ...interface{}) {

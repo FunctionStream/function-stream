@@ -1,55 +1,51 @@
 //go:build !wasi
+// +build !wasi
+
+/*
+ * Copyright 2024 Function Stream Org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package gofs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/functionstream/function-stream/fs/runtime/external/model"
-	"github.com/wirelessr/avroschema"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
-var client model.FunctionClient
-var clientInitMu sync.Mutex
-var ctx = context.Background()
+type fsRPCClient struct {
+	ctx     context.Context
+	grpcCli model.FunctionClient
+}
 
-const (
-	StateInit int32 = iota
-	StateRunning
-)
+func newFSRPCClient() (*fsRPCClient, error) {
+	socketPath := os.Getenv(FSSocketPath)
+	if socketPath == "" {
+		return nil, fmt.Errorf("%s is not set", FSSocketPath)
+	}
+	funcName := os.Getenv(FSFunctionName)
+	if funcName == "" {
+		return nil, fmt.Errorf("%s is not set", FSFunctionName)
+	}
 
-var state = StateInit
-
-const (
-	FSSocketPath   = "FS_SOCKET_PATH"
-	FSFunctionName = "FS_FUNCTION_NAME"
-	FSModuleName   = "FS_MODULE_NAME"
-	DefaultModule  = "default"
-)
-
-func check() error {
-	if client == nil {
-		clientInitMu.Lock()
-		defer clientInitMu.Unlock()
-		socketPath := os.Getenv(FSSocketPath)
-		if socketPath == "" {
-			return fmt.Errorf("%s is not set", FSSocketPath)
-		}
-		funcName := os.Getenv(FSFunctionName)
-		if funcName == "" {
-			return fmt.Errorf("%s is not set", FSFunctionName)
-		}
-
-		serviceConfig := `{
+	serviceConfig := `{
 		   "methodConfig": [{
 		       "name": [{"service": "*"}],
 		       "retryPolicy": {
@@ -61,173 +57,50 @@ func check() error {
 		       }
 		   }]
 		}`
-		conn, err := grpc.NewClient(
-			"unix:"+socketPath,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithDefaultServiceConfig(serviceConfig),
-		)
-		if err != nil {
-			panic(err)
-		}
-		client = model.NewFunctionClient(conn)
-		md := metadata.New(map[string]string{
-			"name": funcName,
-		})
-		ctx = metadata.NewOutgoingContext(ctx, md)
+	conn, err := grpc.NewClient(
+		"unix:"+socketPath,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(serviceConfig),
+	)
+	if err != nil {
+		return nil, err
+	}
+	client := model.NewFunctionClient(conn)
+	md := metadata.New(map[string]string{
+		"name": funcName,
+	})
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+	return &fsRPCClient{grpcCli: client, ctx: ctx}, nil
+}
+
+func (c *fsRPCClient) RegisterSchema(schema string) error {
+	_, err := c.grpcCli.RegisterSchema(c.ctx, &model.RegisterSchemaRequest{Schema: schema})
+	if err != nil {
+		return fmt.Errorf("failed to register schema: %w", err)
 	}
 	return nil
 }
 
-var registerLock sync.Mutex
-var oldmodules = make(map[string]func([]byte) []byte)
-var sources = make(map[string]func())
-var sinks = make(map[string]func([]byte))
-
-func Register[I any, O any](module string, process func(*I) *O) error { // Should panic directly.
-	if atomic.LoadInt32(&state) != StateInit {
-		panic("cannot register module during running")
-	}
-	if err := check(); err != nil {
-		return err // TODO: Should panic here
-	}
-	outputSchema, err := avroschema.Reflect(new(O))
+func (c *fsRPCClient) Write(payload []byte) error {
+	_, err := c.grpcCli.Write(c.ctx, &model.Event{Payload: payload})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to write: %w", err)
 	}
-	processFunc := func(payload []byte) []byte {
-		input := new(I)
-		err = json.Unmarshal(payload, input)
-		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s\n", err, payload)
-		}
-		output := process(input)
-		outputPayload, _ := json.Marshal(output)
-		return outputPayload
-	}
-	_, err = client.RegisterSchema(ctx, &model.RegisterSchemaRequest{Schema: outputSchema})
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to register schema: %s\n", err)
-		panic(err)
-	}
-	registerLock.Lock()
-	defer registerLock.Unlock()
-	oldmodules[module] = processFunc
 	return nil
 }
 
-func RegisterSource[O any](module string, process func(emit func(*O) error)) error {
-	if atomic.LoadInt32(&state) != StateInit {
-		panic("cannot register module during running")
-	}
-	if err := check(); err != nil {
-		return err
-	}
-	outputSchema, err := avroschema.Reflect(new(O))
+func (c *fsRPCClient) Read() ([]byte, error) {
+	res, err := c.grpcCli.Read(c.ctx, &model.ReadRequest{})
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to read: %w", err)
 	}
-	emit := func(event *O) error {
-		outputPayload, _ := json.Marshal(event)
-		_, err := client.Write(ctx, &model.Event{Payload: outputPayload})
-		return err
-	}
-	_, err = client.RegisterSchema(ctx, &model.RegisterSchemaRequest{Schema: outputSchema})
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to register schema: %s\n", err)
-		panic(err)
-	}
-	sources[module] = func() {
-		process(emit)
-	}
-	registerLock.Lock()
-	defer registerLock.Unlock()
-	return nil
+	return res.Payload, nil
 }
 
-func RegisterSink[I any](module string, process func(*I)) error {
-	if atomic.LoadInt32(&state) != StateInit {
-		panic("cannot register module during running")
-	}
-	if err := check(); err != nil {
-		return err
-	}
-	inputSchema, err := avroschema.Reflect(new(I))
-	if err != nil {
-		return err
-	}
-	processFunc := func(payload []byte) {
-		input := new(I)
-		err = json.Unmarshal(payload, input)
-		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s\n", err, payload)
-		}
-		process(input)
-	}
-	_, err = client.RegisterSchema(ctx, &model.RegisterSchemaRequest{Schema: inputSchema})
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to register schema: %s\n", err)
-		panic(err)
-	}
-	registerLock.Lock()
-	defer registerLock.Unlock()
-	sinks[module] = processFunc
-	return nil
+func (c *fsRPCClient) loadModule(_ *moduleWrapper) {
+	// no-op
 }
 
-func runFunction(module string) bool {
-	if processFunc, ok := oldmodules[module]; ok {
-		for {
-			res, err := client.Read(ctx, &model.ReadRequest{})
-			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Failed to read: %s\n", err)
-				time.Sleep(3 * time.Second)
-				continue
-			}
-			outputPayload := processFunc(res.Payload)
-			_, err = client.Write(ctx, &model.Event{Payload: outputPayload})
-			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Failed to write: %s\n", err)
-			}
-		}
-	}
+func (c *fsRPCClient) skipExecuting() bool {
 	return false
-}
-
-func runSources(module string) bool {
-	if processFunc, ok := sources[module]; ok {
-		processFunc()
-		return true
-	}
-	return false
-}
-
-func runSinks(module string) bool {
-	if processFunc, ok := sinks[module]; ok {
-		for {
-			res, err := client.Read(ctx, &model.ReadRequest{})
-			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Failed to read: %s\n", err)
-				time.Sleep(3 * time.Second)
-				continue
-			}
-			processFunc(res.Payload)
-		}
-	}
-	return false
-}
-
-func Run() {
-	if !atomic.CompareAndSwapInt32(&state, StateInit, StateRunning) {
-		panic("the instance is already running")
-	}
-	if err := check(); err != nil {
-		panic(err)
-	}
-	module := os.Getenv(FSModuleName)
-	if module == "" {
-		module = DefaultModule
-	}
-	if !(runFunction(module) || runSources(module) || runSinks(module)) {
-		panic(fmt.Errorf("module %s not found", module))
-	}
 }
