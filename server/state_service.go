@@ -54,7 +54,7 @@ func (s *Server) makeStateService() *restful.WebService {
 				return
 			}
 
-			err = state.PutState(key, content)
+			err = state.PutState(request.Request.Context(), key, content)
 			if err != nil {
 				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return
@@ -75,7 +75,7 @@ func (s *Server) makeStateService() *restful.WebService {
 				return
 			}
 
-			content, err := state.GetState(key)
+			content, err := state.GetState(request.Request.Context(), key)
 			if err != nil {
 				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return

@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/functionstream/function-stream/fs/runtime/external/model"
 	"google.golang.org/grpc"
@@ -31,7 +32,6 @@ import (
 )
 
 type fsRPCClient struct {
-	ctx     context.Context
 	grpcCli model.FunctionClient
 }
 
@@ -39,10 +39,6 @@ func newFSRPCClient() (*fsRPCClient, error) {
 	socketPath := os.Getenv(FSSocketPath)
 	if socketPath == "" {
 		return nil, fmt.Errorf("%s is not set", FSSocketPath)
-	}
-	funcName := os.Getenv(FSFunctionName)
-	if funcName == "" {
-		return nil, fmt.Errorf("%s is not set", FSFunctionName)
 	}
 
 	serviceConfig := `{
@@ -66,35 +62,66 @@ func newFSRPCClient() (*fsRPCClient, error) {
 		return nil, err
 	}
 	client := model.NewFunctionClient(conn)
+	return &fsRPCClient{grpcCli: client}, nil
+}
+
+func (c *fsRPCClient) GetContext(parent context.Context, funcName string) context.Context {
 	md := metadata.New(map[string]string{
 		"name": funcName,
 	})
-	ctx := metadata.NewOutgoingContext(context.Background(), md)
-	return &fsRPCClient{grpcCli: client, ctx: ctx}, nil
+	return metadata.NewOutgoingContext(parent, md)
 }
 
-func (c *fsRPCClient) RegisterSchema(schema string) error {
-	_, err := c.grpcCli.RegisterSchema(c.ctx, &model.RegisterSchemaRequest{Schema: schema})
+func (c *fsRPCClient) RegisterSchema(ctx context.Context, schema string) error {
+	_, err := c.grpcCli.RegisterSchema(ctx, &model.RegisterSchemaRequest{Schema: schema})
 	if err != nil {
 		return fmt.Errorf("failed to register schema: %w", err)
 	}
 	return nil
 }
 
-func (c *fsRPCClient) Write(payload []byte) error {
-	_, err := c.grpcCli.Write(c.ctx, &model.Event{Payload: payload})
+func (c *fsRPCClient) Write(ctx context.Context, payload []byte) error {
+	_, err := c.grpcCli.Write(ctx, &model.Event{Payload: payload})
 	if err != nil {
 		return fmt.Errorf("failed to write: %w", err)
 	}
 	return nil
 }
 
-func (c *fsRPCClient) Read() ([]byte, error) {
-	res, err := c.grpcCli.Read(c.ctx, &model.ReadRequest{})
+func (c *fsRPCClient) Read(ctx context.Context) ([]byte, error) {
+	res, err := c.grpcCli.Read(ctx, &model.ReadRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read: %w", err)
 	}
 	return res.Payload, nil
+}
+
+func (c *fsRPCClient) PutState(ctx context.Context, key string, value []byte) error {
+	_, err := c.grpcCli.PutState(ctx, &model.PutStateRequest{Key: key, Value: value})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *fsRPCClient) GetState(ctx context.Context, key string) ([]byte, error) {
+	res, err := c.grpcCli.GetState(ctx, &model.GetStateRequest{Key: key})
+	if err != nil {
+		return nil, err
+	}
+	return res.Value, nil
+}
+
+func (c *fsRPCClient) ListStates(ctx context.Context, path string) ([]string, error) {
+	path = strings.TrimSuffix(path, "/")
+	startInclusive := path + "/"
+	endExclusive := path + "//"
+	res, err := c.grpcCli.ListStates(ctx, &model.ListStatesRequest{StartInclusive: startInclusive,
+		EndExclusive: endExclusive})
+	if err != nil {
+		return nil, err
+	}
+	return res.Keys, nil
 }
 
 func (c *fsRPCClient) loadModule(_ *moduleWrapper) {

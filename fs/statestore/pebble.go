@@ -17,6 +17,7 @@
 package statestore
 
 import (
+	"context"
 	"log/slog"
 	"os"
 
@@ -60,7 +61,7 @@ func NewPebbleStateStore(config *PebbleStateStoreConfig, logger *slog.Logger) (*
 	}, nil
 }
 
-func (s *PebbleStateStore) PutState(key string, value []byte) error {
+func (s *PebbleStateStore) PutState(ctx context.Context, key string, value []byte) error {
 	s.log.Debug("PutState", slog.String("key", key))
 	if err := s.db.Set([]byte(key), value, pebble.NoSync); err != nil {
 		return err
@@ -68,7 +69,7 @@ func (s *PebbleStateStore) PutState(key string, value []byte) error {
 	return nil
 }
 
-func (s *PebbleStateStore) GetState(key string) ([]byte, error) {
+func (s *PebbleStateStore) GetState(ctx context.Context, key string) ([]byte, error) {
 	s.log.Debug("GetState", slog.String("key", key))
 	value, closer, err := s.db.Get([]byte(key))
 	if err != nil {
@@ -83,6 +84,34 @@ func (s *PebbleStateStore) GetState(key string) ([]byte, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *PebbleStateStore) ListStates(
+	ctx context.Context, startInclusive string, endExclusive string) ([]string, error) {
+	s.log.Debug("ListStates", slog.String("start", startInclusive), slog.String("end", endExclusive))
+	iter, err := s.db.NewIter(&pebble.IterOptions{
+		LowerBound: []byte(startInclusive),
+		UpperBound: []byte(endExclusive),
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func(iter *pebble.Iterator) {
+		_ = iter.Close()
+	}(iter)
+	var keys []string
+	for iter.First(); iter.Valid(); iter.Next() {
+		keys = append(keys, string(iter.Key()))
+	}
+	return keys, nil
+}
+
+func (s *PebbleStateStore) DeleteState(ctx context.Context, key string) error {
+	s.log.Debug("DeleteState", slog.String("key", key))
+	if err := s.db.Delete([]byte(key), pebble.NoSync); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *PebbleStateStore) Close() error {
