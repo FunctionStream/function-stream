@@ -17,6 +17,8 @@
 package fs
 
 import (
+	"context"
+
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
@@ -26,34 +28,47 @@ var ErrStateStoreNotLoaded = errors.New("state store not loaded")
 
 type funcCtxImpl struct {
 	api.FunctionContext
-	store        api.StateStore
-	putStateFunc func(key string, value []byte) error
-	getStateFunc func(key string) ([]byte, error)
-	sink         chan<- contube.Record
+	stateStore api.StateStore
+	sink       chan<- contube.Record
 }
 
 func newFuncCtxImpl(store api.StateStore) *funcCtxImpl {
-	putStateFunc := func(key string, value []byte) error {
+	return &funcCtxImpl{stateStore: store}
+}
+
+func (f *funcCtxImpl) checkStateStore() error {
+	if f.stateStore == nil {
 		return ErrStateStoreNotLoaded
 	}
-	getStateFunc := func(key string) ([]byte, error) {
-		return nil, ErrStateStoreNotLoaded
-	}
-	if store != nil {
-		putStateFunc = store.PutState
-		getStateFunc = store.GetState
-	}
-	return &funcCtxImpl{store: store,
-		putStateFunc: putStateFunc,
-		getStateFunc: getStateFunc}
+	return nil
 }
 
-func (f *funcCtxImpl) PutState(key string, value []byte) error {
-	return f.putStateFunc(key, value)
+func (f *funcCtxImpl) PutState(ctx context.Context, key string, value []byte) error {
+	if err := f.checkStateStore(); err != nil {
+		return err
+	}
+	return f.stateStore.PutState(ctx, key, value)
 }
 
-func (f *funcCtxImpl) GetState(key string) ([]byte, error) {
-	return f.getStateFunc(key)
+func (f *funcCtxImpl) GetState(ctx context.Context, key string) ([]byte, error) {
+	if err := f.checkStateStore(); err != nil {
+		return nil, err
+	}
+	return f.stateStore.GetState(ctx, key)
+}
+
+func (f *funcCtxImpl) ListStates(ctx context.Context, startInclusive string, endExclusive string) ([]string, error) {
+	if err := f.checkStateStore(); err != nil {
+		return nil, err
+	}
+	return f.stateStore.ListStates(ctx, startInclusive, endExclusive)
+}
+
+func (f *funcCtxImpl) DeleteState(ctx context.Context, key string) error {
+	if err := f.checkStateStore(); err != nil {
+		return err
+	}
+	return f.stateStore.DeleteState(ctx, key)
 }
 
 func (f *funcCtxImpl) Write(record contube.Record) error {

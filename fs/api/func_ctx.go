@@ -16,10 +16,16 @@
 
 package api
 
-import "github.com/functionstream/function-stream/fs/contube"
+import (
+	"context"
+
+	"github.com/functionstream/function-stream/fs/contube"
+)
 
 type FunctionContext interface {
-	PutState(key string, value []byte) error
-	GetState(key string) ([]byte, error)
+	PutState(ctx context.Context, key string, value []byte) error
+	GetState(ctx context.Context, key string) ([]byte, error)
+	ListStates(ctx context.Context, startInclusive string, endExclusive string) ([]string, error)
+	DeleteState(ctx context.Context, key string) error
 	Write(record contube.Record) error
 }

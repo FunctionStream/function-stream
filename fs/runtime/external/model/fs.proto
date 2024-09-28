@@ -37,8 +37,54 @@ message WriteResponse {
 
 }
 
+message StateContext {
+
+}
+
+message GetStateRequest {
+  StateContext context = 1;
+  string key = 2;
+}
+
+message GetStateResponse {
+  bytes value = 2;
+}
+
+message PutStateRequest {
+  StateContext context = 1;
+  string key = 2;
+  bytes value = 3;
+}
+
+message PutStateResponse {
+
+}
+
+message ListStatesRequest {
+  StateContext context = 1;
+  string start_inclusive = 2;
+  string end_exclusive = 3;
+}
+
+message ListStatesResponse {
+  repeated string keys = 1;
+}
+
+message DeleteStateRequest {
+  StateContext context = 1;
+  string key = 2;
+}
+
+message DeleteStateResponse {
+
+}
+
 service Function {
   rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
   rpc Read(ReadRequest) returns (Event);
   rpc Write(Event) returns (WriteResponse);
+  rpc PutState(PutStateRequest) returns (PutStateResponse);
+  rpc GetState(GetStateRequest) returns (GetStateResponse);
+  rpc ListStates(ListStatesRequest) returns (ListStatesResponse);
+  rpc DeleteState(DeleteStateRequest) returns (DeleteStateResponse);
 }

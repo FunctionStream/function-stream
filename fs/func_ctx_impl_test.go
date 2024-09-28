@@ -17,6 +17,7 @@
 package fs
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,7 +25,7 @@ import (
 
 func TestFuncCtx_NilStore(t *testing.T) {
 	f := newFuncCtxImpl(nil)
-	assert.ErrorIs(t, f.PutState("key", []byte("value")), ErrStateStoreNotLoaded)
-	_, err := f.GetState("key")
+	assert.ErrorIs(t, f.PutState(context.Background(), "key", []byte("value")), ErrStateStoreNotLoaded)
+	_, err := f.GetState(context.Background(), "key")
 	assert.ErrorIs(t, err, ErrStateStoreNotLoaded)
 }

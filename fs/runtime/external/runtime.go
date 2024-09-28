@@ -96,6 +96,60 @@ func (f *functionServerImpl) Write(ctx context.Context, event *model.Event) (*mo
 	return &model.WriteResponse{}, nil
 }
 
+func (f *functionServerImpl) PutState(
+	ctx context.Context, request *model.PutStateRequest) (*model.PutStateResponse, error) {
+	r, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.funcCtx.PutState(ctx, request.Key, request.Value); err != nil {
+		return nil, err
+	}
+	return &model.PutStateResponse{}, nil
+}
+
+func (f *functionServerImpl) GetState(
+	ctx context.Context, request *model.GetStateRequest) (*model.GetStateResponse, error) {
+	r, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	value, err := r.funcCtx.GetState(ctx, request.Key)
+	if err != nil {
+		return nil, err
+	}
+	return &model.GetStateResponse{
+		Value: value,
+	}, nil
+}
+
+func (f *functionServerImpl) ListStates(
+	ctx context.Context, request *model.ListStatesRequest) (*model.ListStatesResponse, error) {
+	r, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := r.funcCtx.ListStates(ctx, request.StartInclusive, request.EndExclusive)
+	if err != nil {
+		return nil, err
+	}
+	return &model.ListStatesResponse{
+		Keys: keys,
+	}, nil
+}
+
+func (f *functionServerImpl) DeleteState(
+	ctx context.Context, request *model.DeleteStateRequest) (*model.DeleteStateResponse, error) {
+	r, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.funcCtx.DeleteState(ctx, request.Key); err != nil {
+		return nil, err
+	}
+	return &model.DeleteStateResponse{}, nil
+}
+
 var _ model.FunctionServer = &functionServerImpl{}
 
 type Factory struct {
