@@ -18,6 +18,7 @@ package config
 
 import (
 	"encoding/json"
+
 	"github.com/go-playground/validator/v10"
 )
 

@@ -19,9 +19,10 @@ package statestore
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"github.com/functionstream/function-stream/common/config"
 	"github.com/functionstream/function-stream/common/model"
-	"os"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/functionstream/function-stream/fs/api"

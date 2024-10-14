@@ -19,10 +19,11 @@ package fs
 import (
 	"context"
 	"fmt"
-	"github.com/functionstream/function-stream/fs/statestore"
 	"math/rand"
 	"strconv"
 	"sync"
+
+	"github.com/functionstream/function-stream/fs/statestore"
 
 	"github.com/functionstream/function-stream/common/config"
 	_package "github.com/functionstream/function-stream/fs/package"
