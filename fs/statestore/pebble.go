@@ -18,7 +18,9 @@ package statestore
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
+	"github.com/functionstream/function-stream/common/config"
+	"github.com/functionstream/function-stream/common/model"
 	"os"
 
 	"github.com/cockroachdb/pebble"
@@ -26,52 +28,83 @@ import (
 	"github.com/pkg/errors"
 )
 
-type PebbleStateStore struct {
-	api.StateStore
-	log *slog.Logger
-	db  *pebble.DB
+type PebbleStateStoreFactory struct {
+	db *pebble.DB
+}
+
+type PebbleStateStoreFactoryConfig struct {
+	DirName string `json:"dir_name" validate:"required"`
 }
 
 type PebbleStateStoreConfig struct {
-	DirName string
+	KeyPrefix string `json:"key_prefix,omitempty"`
 }
 
-func NewTmpPebbleStateStore() (api.StateStore, error) {
+func NewPebbleStateStoreFactory(config config.ConfigMap) (api.StateStoreFactory, error) {
+	c := &PebbleStateStoreFactoryConfig{}
+	err := config.ToConfigStruct(c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+	db, err := pebble.Open(c.DirName, &pebble.Options{})
+	if err != nil {
+		return nil, err
+	}
+	return &PebbleStateStoreFactory{db: db}, nil
+}
+
+func NewDefaultPebbleStateStoreFactory() (api.StateStoreFactory, error) {
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, err
 	}
-	store, err := NewPebbleStateStore(&PebbleStateStoreConfig{DirName: dir}, slog.Default())
+	db, err := pebble.Open(dir, &pebble.Options{})
 	if err != nil {
 		return nil, err
 	}
-	return store, nil
+	return &PebbleStateStoreFactory{db: db}, nil
 }
 
-func NewPebbleStateStore(config *PebbleStateStoreConfig, logger *slog.Logger) (*PebbleStateStore, error) {
-	log := logger.With(slog.String("component", "pebble-state-store"))
-	log.Info("Creating pebble state store", slog.String("dir", config.DirName))
-	db, err := pebble.Open(config.DirName, &pebble.Options{})
+func (fact *PebbleStateStoreFactory) NewStateStore(f *model.Function) (api.StateStore, error) {
+	if f == nil {
+		return &PebbleStateStore{
+			db:        fact.db,
+			keyPrefix: "",
+		}, nil
+	}
+	c := &PebbleStateStoreConfig{}
+	err := f.State.ToConfigStruct(c)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 	return &PebbleStateStore{
-		log: log,
-		db:  db,
+		db:        fact.db,
+		keyPrefix: c.KeyPrefix,
 	}, nil
 }
 
+func (fact *PebbleStateStoreFactory) Close() error {
+	return fact.db.Close()
+}
+
+type PebbleStateStore struct {
+	db        *pebble.DB
+	keyPrefix string
+}
+
+func (s *PebbleStateStore) getKey(key string) string {
+	return s.keyPrefix + key
+}
+
 func (s *PebbleStateStore) PutState(ctx context.Context, key string, value []byte) error {
-	s.log.Debug("PutState", slog.String("key", key))
-	if err := s.db.Set([]byte(key), value, pebble.NoSync); err != nil {
+	if err := s.db.Set([]byte(s.getKey(key)), value, pebble.NoSync); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (s *PebbleStateStore) GetState(ctx context.Context, key string) ([]byte, error) {
-	s.log.Debug("GetState", slog.String("key", key))
-	value, closer, err := s.db.Get([]byte(key))
+	value, closer, err := s.db.Get([]byte(s.getKey(key)))
 	if err != nil {
 		if errors.Is(err, pebble.ErrNotFound) {
 			return nil, api.ErrNotFound
@@ -88,10 +121,9 @@ func (s *PebbleStateStore) GetState(ctx context.Context, key string) ([]byte, er
 
 func (s *PebbleStateStore) ListStates(
 	ctx context.Context, startInclusive string, endExclusive string) ([]string, error) {
-	s.log.Debug("ListStates", slog.String("start", startInclusive), slog.String("end", endExclusive))
 	iter, err := s.db.NewIter(&pebble.IterOptions{
-		LowerBound: []byte(startInclusive),
-		UpperBound: []byte(endExclusive),
+		LowerBound: []byte(s.getKey(startInclusive)),
+		UpperBound: []byte(s.getKey(endExclusive)),
 	})
 	if err != nil {
 		return nil, err
@@ -107,13 +139,12 @@ func (s *PebbleStateStore) ListStates(
 }
 
 func (s *PebbleStateStore) DeleteState(ctx context.Context, key string) error {
-	s.log.Debug("DeleteState", slog.String("key", key))
-	if err := s.db.Delete([]byte(key), pebble.NoSync); err != nil {
+	if err := s.db.Delete([]byte(s.getKey(key)), pebble.NoSync); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (s *PebbleStateStore) Close() error {
-	return s.db.Close()
+	return nil
 }

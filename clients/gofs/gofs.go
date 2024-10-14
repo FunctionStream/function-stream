@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -226,6 +228,9 @@ func GetFunctionContext(ctx context.Context) *FunctionContext {
 }
 
 func (c *fsClient) Run() error {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6061", nil))
+	}()
 	if c.err != nil {
 		return c.err
 	}

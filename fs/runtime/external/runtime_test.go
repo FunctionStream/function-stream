@@ -361,14 +361,14 @@ func TestExternalStatefulModule(t *testing.T) {
 		_ = lis.Close()
 	}(lis)
 
-	store, err := statestore.NewTmpPebbleStateStore()
+	storeFactory, err := statestore.NewDefaultPebbleStateStoreFactory()
 	assert.NoError(t, err)
 
 	fm, err := fs.NewFunctionManager(
 		fs.WithRuntimeFactory("external", NewFactory(lis)),
 		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
 		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
-		fs.WithStateStore(store),
+		fs.WithStateStoreFactory(storeFactory),
 	)
 	assert.NoError(t, err)
 
@@ -412,6 +412,9 @@ func TestExternalStatefulModule(t *testing.T) {
 	}()
 
 	<-readyCh
+
+	store, err := storeFactory.NewStateStore(nil)
+	assert.NoError(t, err)
 
 	value, err := store.GetState(context.Background(), "test-key")
 	assert.NoError(t, err)

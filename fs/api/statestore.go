@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"github.com/functionstream/function-stream/common/model"
 
 	"github.com/pkg/errors"
 )
@@ -29,5 +30,10 @@ type StateStore interface {
 	GetState(ctx context.Context, key string) (value []byte, err error)
 	ListStates(ctx context.Context, startInclusive string, endExclusive string) (keys []string, err error)
 	DeleteState(ctx context.Context, key string) error
+	Close() error
+}
+
+type StateStoreFactory interface {
+	NewStateStore(f *model.Function) (StateStore, error)
 	Close() error
 }

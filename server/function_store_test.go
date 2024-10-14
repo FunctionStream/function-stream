@@ -55,8 +55,8 @@ func (t *testFunctionManagerImpl) ConsumeEvent(_ string) (contube.Record, error)
 	return nil, nil
 }
 
-func (t *testFunctionManagerImpl) GetStateStore() api.StateStore {
-	return nil
+func (t *testFunctionManagerImpl) GetStateStore() (api.StateStore, error) {
+	return nil, nil
 }
 
 func (t *testFunctionManagerImpl) Close() error {
@@ -92,6 +92,7 @@ func createTestFunction(name string) *model.Function {
 				Topic: "output",
 			}).ToConfigMap(),
 		},
+		State:    map[string]interface{}{},
 		Name:     name,
 		Replicas: 1,
 		Config:   map[string]string{},

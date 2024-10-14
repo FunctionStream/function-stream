@@ -43,6 +43,7 @@ type Function struct {
 	Runtime   RuntimeConfig     `json:"runtime"`
 	Sources   []TubeConfig      `json:"source"`
 	Sink      TubeConfig        `json:"sink"`
+	State     config.ConfigMap  `json:"state,omitempty"`
 	Config    map[string]string `json:"config,omitempty"`
 	Replicas  int32             `json:"replicas"`
 }

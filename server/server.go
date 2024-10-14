@@ -59,13 +59,13 @@ type Server struct {
 
 type TubeLoaderType func(c *FactoryConfig) (contube.TubeFactory, error)
 type RuntimeLoaderType func(c *FactoryConfig) (api.FunctionRuntimeFactory, error)
-type StateStoreLoaderType func(c *StateStoreConfig) (api.StateStore, error)
+type StateStoreProviderType func(c *StateStoreConfig) (api.StateStoreFactory, error)
 
 type serverOptions struct {
 	httpListener           net.Listener
 	managerOpts            []fs.ManagerOption
 	httpTubeFact           *contube.HttpTubeFactory
-	stateStoreLoader       StateStoreLoaderType
+	stateStoreProvider     StateStoreProviderType
 	functionStore          string
 	enableTls              bool
 	tlsCertFile            string
@@ -155,9 +155,9 @@ func WithRuntimeFactoryBuilders(
 	})
 }
 
-func WithStateStoreLoader(loader func(c *StateStoreConfig) (api.StateStore, error)) ServerOption {
+func WithStateStoreLoader(loader func(c *StateStoreConfig) (api.StateStoreFactory, error)) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
-		o.stateStoreLoader = loader
+		o.stateStoreProvider = loader
 		return o, nil
 	})
 }
@@ -218,12 +218,12 @@ func setupFactories[T any](factoryBuilder map[string]func(configMap config.Confi
 	return factories, nil
 }
 
-func DefaultStateStoreLoader(c *StateStoreConfig) (api.StateStore, error) {
+func DefaultStateStoreProvider(c *StateStoreConfig) (api.StateStoreFactory, error) {
 	switch strings.ToLower(*c.Type) {
 	case common.StateStorePebble:
-		return statestore.NewTmpPebbleStateStore()
+		return statestore.NewPebbleStateStoreFactory(c.Config)
 	}
-	return nil, fmt.Errorf("unsupported state store type [%s] %w", *c.Type, ErrUnsupportedStateStore)
+	return statestore.NewDefaultPebbleStateStoreFactory()
 }
 
 func WithConfig(config *Config) ServerOption {
@@ -245,11 +245,11 @@ func WithConfig(config *Config) ServerOption {
 		o.queueConfig = config.Queue
 		o.runtimeConfig = config.RuntimeConfig
 		if config.StateStore != nil {
-			stateStore, err := o.stateStoreLoader(config.StateStore)
+			stateStoreFactory, err := o.stateStoreProvider(config.StateStore)
 			if err != nil {
 				return nil, err
 			}
-			o.managerOpts = append(o.managerOpts, fs.WithStateStore(stateStore))
+			o.managerOpts = append(o.managerOpts, fs.WithStateStoreFactory(stateStoreFactory))
 		}
 		o.functionStore = config.FunctionStore
 		return o, nil
@@ -262,7 +262,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	options.tubeConfig = make(map[string]config.ConfigMap)
 	options.runtimeFactoryBuilders = make(map[string]func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error))
 	options.runtimeConfig = make(map[string]config.ConfigMap)
-	options.stateStoreLoader = DefaultStateStoreLoader
+	options.stateStoreProvider = DefaultStateStoreProvider
 	options.managerOpts = []fs.ManagerOption{}
 	for _, o := range opts {
 		if o == nil {

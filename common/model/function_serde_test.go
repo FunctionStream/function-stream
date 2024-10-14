@@ -31,6 +31,7 @@ func TestFunctionSerde(t *testing.T) {
 		Runtime:  RuntimeConfig{Type: "runtime", Config: map[string]interface{}{"key": "value"}},
 		Sources:  []TubeConfig{{Type: "source", Config: map[string]interface{}{"key": "value"}}},
 		Sink:     TubeConfig{Type: "sink", Config: map[string]interface{}{"key": "value"}},
+		State:    map[string]interface{}{"key": "value"},
 		Config:   map[string]string{"key": "value"},
 		Replicas: 2,
 	}
@@ -79,6 +80,7 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 		Runtime:  RuntimeConfig{Config: map[string]interface{}{}},
 		Sources:  []TubeConfig{},
 		Sink:     TubeConfig{Config: map[string]interface{}{}},
+		State:    map[string]interface{}{},
 		Config:   map[string]string{"key": "value"},
 		Replicas: 2,
 	}
@@ -101,6 +103,7 @@ func TestFunctionSerdeWithNil(t *testing.T) {
 	// TODO: We should override the MarshalJson for the Function
 	f2.Sink.Config = map[string]interface{}{}
 	f2.Runtime.Config = map[string]interface{}{}
+	f2.State = map[string]interface{}{}
 
 	if !reflect.DeepEqual(f, f2) {
 		t.Error("JSON Deserialization does not match original")

@@ -27,7 +27,9 @@ import (
 
 func TestPebbleStateStore(t *testing.T) {
 	ctx := context.Background()
-	store, err := statestore.NewTmpPebbleStateStore()
+	storeFact, err := statestore.NewDefaultPebbleStateStoreFactory()
+	assert.Nil(t, err)
+	store, err := storeFact.NewStateStore(nil)
 	assert.Nil(t, err)
 
 	_, err = store.GetState(ctx, "key")
