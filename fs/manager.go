@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/functionstream/function-stream/fs/statestore"
+
 	"github.com/functionstream/function-stream/common/config"
 	_package "github.com/functionstream/function-stream/fs/package"
 
@@ -30,7 +32,6 @@ import (
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/fs/statestore"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 )
@@ -41,7 +42,7 @@ type FunctionManager interface {
 	ListFunctions() []string
 	ProduceEvent(name string, event contube.Record) error
 	ConsumeEvent(name string) (contube.Record, error)
-	GetStateStore() api.StateStore
+	GetStateStore() (api.StateStore, error)
 	Close() error
 }
 
@@ -53,14 +54,13 @@ type functionManagerImpl struct {
 }
 
 type managerOptions struct {
-	tubeFactoryMap           map[string]contube.TubeFactory
-	runtimeFactoryMap        map[string]api.FunctionRuntimeFactory
-	instanceFactory          api.FunctionInstanceFactory
-	stateStore               api.StateStore
-	dontUseDefaultStateStore bool
-	queueFactory             contube.TubeFactory
-	packageLoader            api.PackageLoader // TODO: Need to set it
-	log                      *logr.Logger
+	tubeFactoryMap    map[string]contube.TubeFactory
+	runtimeFactoryMap map[string]api.FunctionRuntimeFactory
+	instanceFactory   api.FunctionInstanceFactory
+	stateStoreFactory api.StateStoreFactory
+	queueFactory      contube.TubeFactory
+	packageLoader     api.PackageLoader // TODO: Need to set it
+	log               *logr.Logger
 }
 
 type ManagerOption interface {
@@ -100,10 +100,9 @@ func WithInstanceFactory(factory api.FunctionInstanceFactory) ManagerOption {
 	})
 }
 
-func WithStateStore(store api.StateStore) ManagerOption {
+func WithStateStoreFactory(storeFactory api.StateStoreFactory) ManagerOption {
 	return managerOptionFunc(func(c *managerOptions) (*managerOptions, error) {
-		c.dontUseDefaultStateStore = true
-		c.stateStore = store
+		c.stateStoreFactory = storeFactory
 		return c, nil
 	})
 }
@@ -140,13 +139,6 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 	} else {
 		log = common.NewLogger(options.log)
 	}
-	if !options.dontUseDefaultStateStore {
-		var err error
-		options.stateStore, err = statestore.NewTmpPebbleStateStore()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create default state store: %w", err)
-		}
-	}
 	loadedRuntimeFact := make([]string, 0, len(options.runtimeFactoryMap))
 	for k := range options.runtimeFactoryMap {
 		loadedRuntimeFact = append(loadedRuntimeFact, k)
@@ -157,6 +149,13 @@ func NewFunctionManager(opts ...ManagerOption) (FunctionManager, error) {
 	}
 	if options.packageLoader == nil {
 		options.packageLoader = _package.NewDefaultPackageLoader()
+	}
+	if options.stateStoreFactory == nil {
+		if fact, err := statestore.NewDefaultPebbleStateStoreFactory(); err != nil {
+			return nil, err
+		} else {
+			options.stateStoreFactory = fact
+		}
 	}
 	log.Info("Function manager created", "runtime-factories", loadedRuntimeFact,
 		"tube-factories", loadedTubeFact)
@@ -181,10 +180,6 @@ func (fm *functionManagerImpl) getRuntimeFactory(t string) (api.FunctionRuntimeF
 		return nil, fmt.Errorf("failed to get runtime factory: %w, type: %s", common.ErrorRuntimeFactoryNotFound, t)
 	}
 	return factory, nil
-}
-
-func (fm *functionManagerImpl) createFuncCtx() *funcCtxImpl {
-	return newFuncCtxImpl(fm.options.stateStore)
 }
 
 func generateRuntimeConfig(ctx context.Context, p api.Package, f *model.Function) (*model.RuntimeConfig, error) {
@@ -243,7 +238,12 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 			return fmt.Errorf("failed to generate runtime config: %v", err)
 		}
 
-		funcCtx := fm.createFuncCtx()
+		store, err := fm.options.stateStoreFactory.NewStateStore(f)
+		if err != nil {
+			return fmt.Errorf("failed to create state store: %w", err)
+		}
+
+		funcCtx := newFuncCtxImpl(store)
 		instanceLogger := fm.log.SubLogger("functionName", f.Name, "instanceIndex", int(i), "runtimeType", runtimeConfig.Type)
 		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, i, instanceLogger)
 		fm.functionsLock.Lock()
@@ -344,21 +344,23 @@ func (fm *functionManagerImpl) ConsumeEvent(name string) (contube.Record, error)
 
 // GetStateStore returns the state store used by the function manager
 // Return nil if no state store is configured
-func (fm *functionManagerImpl) GetStateStore() api.StateStore {
-	return fm.options.stateStore
+func (fm *functionManagerImpl) GetStateStore() (api.StateStore, error) {
+	return fm.options.stateStoreFactory.NewStateStore(nil)
 }
 
 func (fm *functionManagerImpl) Close() error {
 	fm.functionsLock.Lock()
 	defer fm.functionsLock.Unlock()
+	log := common.NewDefaultLogger()
 	for _, instances := range fm.functions {
 		for _, instance := range instances {
 			instance.Stop()
 		}
 	}
-	err := fm.options.stateStore.Close()
-	if err != nil {
-		return err
+	if fm.options.stateStoreFactory != nil {
+		if err := fm.options.stateStoreFactory.Close(); err != nil {
+			log.Error(err, "failed to close state store")
+		}
 	}
 	return nil
 }

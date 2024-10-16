@@ -37,9 +37,9 @@ func (s *Server) makeStateService() *restful.WebService {
 		To(func(request *restful.Request, response *restful.Response) {
 			key := request.PathParameter("key")
 
-			state := s.Manager.GetStateStore()
-			if state == nil {
-				s.handleRestError(response.WriteErrorString(http.StatusBadRequest, "No state store configured"))
+			state, err := s.Manager.GetStateStore()
+			if err != nil {
+				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return
 			}
 
@@ -54,7 +54,7 @@ func (s *Server) makeStateService() *restful.WebService {
 				return
 			}
 
-			err = state.PutState(key, content)
+			err = state.PutState(request.Request.Context(), key, content)
 			if err != nil {
 				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return
@@ -69,13 +69,13 @@ func (s *Server) makeStateService() *restful.WebService {
 	ws.Route(ws.GET("/{key}").
 		To(func(request *restful.Request, response *restful.Response) {
 			key := request.PathParameter("key")
-			state := s.Manager.GetStateStore()
-			if state == nil {
-				s.handleRestError(response.WriteErrorString(http.StatusBadRequest, "No state store configured"))
+			state, err := s.Manager.GetStateStore()
+			if err != nil {
+				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return
 			}
 
-			content, err := state.GetState(key)
+			content, err := state.GetState(request.Request.Context(), key)
 			if err != nil {
 				s.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 				return

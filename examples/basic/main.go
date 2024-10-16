@@ -17,6 +17,7 @@
 package main
 
 import (
+	"context"
 	"github.com/functionstream/function-stream/clients/gofs"
 	"log/slog"
 )
@@ -37,7 +38,7 @@ type Person struct {
 	Expected int    `json:"expected"`
 }
 
-func myProcess(person *Person) *Person {
+func myProcess(ctx context.Context, person *Person) *Person {
 	person.Money += 1
 	return person
 }

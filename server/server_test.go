@@ -210,12 +210,12 @@ func (r *MockRuntime) WaitForReady() <-chan error {
 }
 
 func (r *MockRuntime) Call(e contube.Record) (contube.Record, error) {
-	v, err := r.funcCtx.GetState("key")
+	v, err := r.funcCtx.GetState(context.Background(), "key")
 	if err != nil {
 		return nil, err
 	}
 	str := string(v)
-	err = r.funcCtx.PutState("key", []byte(str+"!"))
+	err = r.funcCtx.PutState(context.Background(), "key", []byte(str+"!"))
 	if err != nil {
 		return nil, err
 	}

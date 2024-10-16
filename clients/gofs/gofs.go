@@ -17,6 +17,7 @@
 package gofs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -66,9 +67,9 @@ func NewFSClient() FSClient {
 
 type moduleWrapper struct {
 	*fsClient
-	processFunc func([]byte) []byte // Only for Function
-	executeFunc func() error
-	initFunc    func() error
+	processFunc func(context.Context, []byte) []byte // Only for Function
+	executeFunc func(context.Context) error
+	initFunc    func(context.Context) error
 	registerErr error
 }
 
@@ -90,39 +91,39 @@ func (c *fsClient) Register(module string, wrapper *moduleWrapper) FSClient {
 	return c
 }
 
-func Function[I any, O any](process func(*I) *O) *moduleWrapper {
-	processFunc := func(payload []byte) []byte {
+func Function[I any, O any](process func(context.Context, *I) *O) *moduleWrapper {
+	processFunc := func(ctx context.Context, payload []byte) []byte {
 		input := new(I)
 		err := json.Unmarshal(payload, input)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s\n", err, payload)
 		}
-		output := process(input)
+		output := process(ctx, input)
 		outputPayload, _ := json.Marshal(output)
 		return outputPayload
 	}
 	m := &moduleWrapper{}
-	m.initFunc = func() error {
+	m.initFunc = func(ctx context.Context) error {
 		outputSchema, err := avroschema.Reflect(new(O))
 		if err != nil {
 			return err
 		}
-		err = m.rpc.RegisterSchema(outputSchema)
+		err = m.rpc.RegisterSchema(ctx, outputSchema)
 		if err != nil {
 			return fmt.Errorf("failed to register schema: %w", err)
 		}
 		return nil
 	}
-	m.executeFunc = func() error {
+	m.executeFunc = func(ctx context.Context) error {
 		for {
-			inputPayload, err := m.rpc.Read()
+			inputPayload, err := m.rpc.Read(ctx)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Failed to read: %s\n", err)
 				time.Sleep(3 * time.Second)
 				continue
 			}
-			outputPayload := processFunc(inputPayload)
-			err = m.rpc.Write(outputPayload)
+			outputPayload := processFunc(ctx, inputPayload)
+			err = m.rpc.Write(ctx, outputPayload)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Failed to write: %s\n", err)
 			}
@@ -132,63 +133,96 @@ func Function[I any, O any](process func(*I) *O) *moduleWrapper {
 	return m
 }
 
-func Source[O any](process func(emit func(*O) error)) *moduleWrapper {
+func Source[O any](process func(ctx context.Context, emit func(context.Context, *O) error)) *moduleWrapper {
 	m := &moduleWrapper{}
-	emit := func(event *O) error {
+	emit := func(ctx context.Context, event *O) error {
 		outputPayload, _ := json.Marshal(event)
-		return m.rpc.Write(outputPayload)
+		return m.rpc.Write(ctx, outputPayload)
 	}
-	m.initFunc = func() error {
+	m.initFunc = func(ctx context.Context) error {
 		outputSchema, err := avroschema.Reflect(new(O))
 		if err != nil {
 			return err
 		}
-		err = m.rpc.RegisterSchema(outputSchema)
+		err = m.rpc.RegisterSchema(ctx, outputSchema)
 		if err != nil {
 			return fmt.Errorf("failed to register schema: %w", err)
 		}
 		return nil
 	}
-	m.executeFunc = func() error {
-		process(emit)
+	m.executeFunc = func(ctx context.Context) error {
+		process(ctx, emit)
 		return nil
 	}
 	return m
 }
 
-func Sink[I any](process func(*I)) *moduleWrapper {
-	processFunc := func(payload []byte) {
+func Sink[I any](process func(context.Context, *I)) *moduleWrapper {
+	processFunc := func(ctx context.Context, payload []byte) {
 		input := new(I)
 		err := json.Unmarshal(payload, input)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s\n", err, payload)
 		}
-		process(input)
+		process(ctx, input)
 	}
 	m := &moduleWrapper{}
-	m.initFunc = func() error {
+	m.initFunc = func(ctx context.Context) error {
 		inputSchema, err := avroschema.Reflect(new(I))
 		if err != nil {
 			return err
 		}
-		err = m.rpc.RegisterSchema(inputSchema)
+		err = m.rpc.RegisterSchema(ctx, inputSchema)
 		if err != nil {
 			return fmt.Errorf("failed to register schema: %w", err)
 		}
 		return nil
 	}
-	m.executeFunc = func() error {
+	m.executeFunc = func(ctx context.Context) error {
 		for {
-			inputPayload, err := m.rpc.Read()
+			inputPayload, err := m.rpc.Read(ctx)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Failed to read: %s\n", err)
 				time.Sleep(3 * time.Second)
 				continue
 			}
-			processFunc(inputPayload)
+			processFunc(ctx, inputPayload)
 		}
 	}
 	return m
+}
+
+func Custom(init func(ctx context.Context) error, execute func(ctx context.Context) error) *moduleWrapper {
+	return &moduleWrapper{
+		initFunc:    init,
+		executeFunc: execute,
+	}
+}
+
+type FunctionContext struct {
+	c *fsClient
+}
+
+func (c *FunctionContext) GetState(ctx context.Context, key string) ([]byte, error) {
+	return c.c.rpc.GetState(ctx, key)
+}
+
+func (c *FunctionContext) PutState(ctx context.Context, key string, value []byte) error {
+	return c.c.rpc.PutState(ctx, key, value)
+}
+
+func (c *FunctionContext) Write(ctx context.Context, payload []byte) error {
+	return c.c.rpc.Write(ctx, payload)
+}
+
+func (c *FunctionContext) Read(ctx context.Context) ([]byte, error) {
+	return c.c.rpc.Read(ctx)
+}
+
+type funcCtxKey struct{}
+
+func GetFunctionContext(ctx context.Context) *FunctionContext {
+	return ctx.Value(funcCtxKey{}).(*FunctionContext)
 }
 
 func (c *fsClient) Run() error {
@@ -203,6 +237,11 @@ func (c *fsClient) Run() error {
 	c.state = StateRunning
 	c.registerMu.Unlock()
 
+	funcName := os.Getenv(FSFunctionName)
+	if funcName == "" {
+		return fmt.Errorf("%s is not set", FSFunctionName)
+	}
+	funcCtx := &FunctionContext{c: c}
 	if c.rpc == nil {
 		rpc, err := newFSRPCClient()
 		if err != nil {
@@ -210,6 +249,7 @@ func (c *fsClient) Run() error {
 		}
 		c.rpc = rpc
 	}
+	ctx := c.rpc.GetContext(context.WithValue(context.Background(), funcCtxKey{}, funcCtx), funcName)
 	module := os.Getenv(FSModuleName)
 	if module == "" {
 		module = DefaultModule
@@ -219,7 +259,7 @@ func (c *fsClient) Run() error {
 		return fmt.Errorf("module %s not found", module)
 	}
 	m.fsClient = c
-	err := m.initFunc()
+	err := m.initFunc(ctx)
 	if err != nil {
 		return err
 	}
@@ -227,7 +267,7 @@ func (c *fsClient) Run() error {
 	if c.rpc.skipExecuting() {
 		return nil
 	}
-	return m.executeFunc()
+	return m.executeFunc(ctx)
 }
 
 func (c *fsClient) Error() string {

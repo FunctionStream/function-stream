@@ -17,6 +17,7 @@
 package statestore_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/functionstream/function-stream/fs/api"
@@ -25,16 +26,19 @@ import (
 )
 
 func TestPebbleStateStore(t *testing.T) {
-	store, err := statestore.NewTmpPebbleStateStore()
+	ctx := context.Background()
+	storeFact, err := statestore.NewDefaultPebbleStateStoreFactory()
+	assert.Nil(t, err)
+	store, err := storeFact.NewStateStore(nil)
 	assert.Nil(t, err)
 
-	_, err = store.GetState("key")
+	_, err = store.GetState(ctx, "key")
 	assert.ErrorIs(t, err, api.ErrNotFound)
 
-	err = store.PutState("key", []byte("value"))
+	err = store.PutState(ctx, "key", []byte("value"))
 	assert.Nil(t, err)
 
-	value, err := store.GetState("key")
+	value, err := store.GetState(ctx, "key")
 	assert.Nil(t, err)
 	assert.Equal(t, "value", string(value))
 }

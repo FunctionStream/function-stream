@@ -16,12 +16,25 @@
 
 package api
 
-import "github.com/pkg/errors"
+import (
+	"context"
+
+	"github.com/functionstream/function-stream/common/model"
+
+	"github.com/pkg/errors"
+)
 
 var ErrNotFound = errors.New("key not found")
 
 type StateStore interface {
-	PutState(key string, value []byte) error
-	GetState(key string) ([]byte, error)
+	PutState(ctx context.Context, key string, value []byte) error
+	GetState(ctx context.Context, key string) (value []byte, err error)
+	ListStates(ctx context.Context, startInclusive string, endExclusive string) (keys []string, err error)
+	DeleteState(ctx context.Context, key string) error
+	Close() error
+}
+
+type StateStoreFactory interface {
+	NewStateStore(f *model.Function) (StateStore, error)
 	Close() error
 }

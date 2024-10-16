@@ -21,6 +21,7 @@ package gofs
 
 import "C"
 import (
+	"context"
 	"fmt"
 	"os"
 	"syscall"
@@ -41,7 +42,7 @@ func process() {
 	if runningModule == nil {
 		panic("no module loaded")
 	}
-	err := runningModule.executeFunc()
+	err := runningModule.executeFunc(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 	}
@@ -54,7 +55,11 @@ func newFSRPCClient() (*fsRPCClient, error) {
 	return &fsRPCClient{}, nil
 }
 
-func (c *fsRPCClient) RegisterSchema(schema string) error {
+func (c *fsRPCClient) GetContext(parent context.Context, funcName string) context.Context {
+	return context.Background()
+}
+
+func (c *fsRPCClient) RegisterSchema(ctx context.Context, schema string) error {
 	_, err := syscall.Write(registerSchemaFd, []byte(schema))
 	if err != nil {
 		return fmt.Errorf("failed to register schema: %w", err)
@@ -62,19 +67,27 @@ func (c *fsRPCClient) RegisterSchema(schema string) error {
 	return nil
 }
 
-func (c *fsRPCClient) Write(payload []byte) error {
+func (c *fsRPCClient) Write(ctx context.Context, payload []byte) error {
 	panic("rpc write not implemented")
 }
 
-func (c *fsRPCClient) Read() ([]byte, error) {
+func (c *fsRPCClient) Read(ctx context.Context) ([]byte, error) {
 	panic("rpc read not implemented")
+}
+
+func (c *fsRPCClient) GetState(ctx context.Context, key string) ([]byte, error) {
+	panic("rpc get state not implemented")
+}
+
+func (c *fsRPCClient) PutState(ctx context.Context, key string, value []byte) error {
+	panic("rpc put state not implemented")
 }
 
 func (c *fsRPCClient) loadModule(m *moduleWrapper) {
 	if m.processFunc == nil {
 		panic("only function module is supported for the wasm runtime")
 	}
-	m.executeFunc = func() error {
+	m.executeFunc = func(ctx context.Context) error {
 		var stat syscall.Stat_t
 		syscall.Fstat(processFd, &stat)
 		payload := make([]byte, stat.Size)
@@ -82,7 +95,7 @@ func (c *fsRPCClient) loadModule(m *moduleWrapper) {
 		if err != nil {
 			return fmt.Errorf("failed to read: %w", err)
 		}
-		outputPayload := m.processFunc(payload)
+		outputPayload := m.processFunc(ctx, payload)
 		_, err = syscall.Write(processFd, outputPayload)
 		if err != nil {
 			return fmt.Errorf("failed to write: %w", err)

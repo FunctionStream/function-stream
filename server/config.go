@@ -36,8 +36,8 @@ type FactoryConfig struct {
 }
 
 type StateStoreConfig struct {
-	Type   *string           `mapstructure:"type"`
-	Config *config.ConfigMap `mapstructure:"config"`
+	Type   *string          `mapstructure:"type"`
+	Config config.ConfigMap `mapstructure:"config"`
 }
 
 type QueueConfig struct {

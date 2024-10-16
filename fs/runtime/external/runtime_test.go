@@ -24,6 +24,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/functionstream/function-stream/fs/statestore"
+
 	"github.com/functionstream/function-stream/clients/gofs"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
@@ -51,25 +53,26 @@ var log = common.NewDefaultLogger()
 
 func runMockClient() {
 	err := gofs.NewFSClient().
-		Register(gofs.DefaultModule, gofs.Function(func(i *Person) *Person {
+		Register(gofs.DefaultModule, gofs.Function(func(ctx context.Context, i *Person) *Person {
 			i.Money += 1
 			return i
 		})).
-		Register("counter", gofs.Function(func(i *Counter) *Counter {
+		Register("counter", gofs.Function(func(ctx context.Context, i *Counter) *Counter {
 			i.Count += 1
 			return i
 		})).
-		Register("test-source", gofs.Source(func(emit func(record *testRecord) error) {
-			for i := 0; i < 10; i++ {
-				err := emit(&testRecord{
-					ID:   i,
-					Name: "test",
-				})
-				if err != nil {
-					log.Error(err, "failed to emit record")
+		Register("test-source", gofs.Source(
+			func(ctx context.Context, emit func(ctx context.Context, record *testRecord) error) {
+				for i := 0; i < 10; i++ {
+					err := emit(ctx, &testRecord{
+						ID:   i,
+						Name: "test",
+					})
+					if err != nil {
+						log.Error(err, "failed to emit record")
+					}
 				}
-			}
-		})).
+			})).
 		Run()
 	if err != nil {
 		log.Error(err, "failed to run mock client")
@@ -324,7 +327,7 @@ func TestExternalSinkModule(t *testing.T) {
 	sinkCh := make(chan Counter)
 
 	go func() {
-		err := gofs.NewFSClient().Register("test-sink", gofs.Sink(func(record *Counter) {
+		err := gofs.NewFSClient().Register("test-sink", gofs.Sink(func(ctx context.Context, record *Counter) {
 			sinkCh <- *record
 		})).Run()
 		if err != nil {
@@ -344,4 +347,76 @@ func TestExternalSinkModule(t *testing.T) {
 
 	err = fm.DeleteFunction("", f.Name)
 	assert.NoError(t, err)
+}
+
+func TestExternalStatefulModule(t *testing.T) {
+	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
+	assert.NoError(t, os.RemoveAll(testSocketPath))
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
+	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
+	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "test-stateful"))
+	lis, err := net.Listen("unix", testSocketPath)
+	assert.NoError(t, err)
+	defer func(lis net.Listener) {
+		_ = lis.Close()
+	}(lis)
+
+	storeFactory, err := statestore.NewDefaultPebbleStateStoreFactory()
+	assert.NoError(t, err)
+
+	fm, err := fs.NewFunctionManager(
+		fs.WithRuntimeFactory("external", NewFactory(lis)),
+		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
+		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
+		fs.WithStateStoreFactory(storeFactory),
+	)
+	assert.NoError(t, err)
+
+	f := &model.Function{
+		Name: "test",
+		Runtime: model.RuntimeConfig{
+			Type: "external",
+		},
+		Module: "test-stateful",
+		Sources: []model.TubeConfig{
+			{
+				Type: common.EmptyTubeType,
+			},
+		},
+		Sink: model.TubeConfig{
+			Type: common.EmptyTubeType,
+		},
+		Replicas: 1,
+	}
+
+	err = fm.StartFunction(f)
+	assert.NoError(t, err)
+
+	readyCh := make(chan struct{})
+
+	go func() {
+		err := gofs.NewFSClient().Register("test-stateful", gofs.Custom(func(ctx context.Context) error { return nil },
+			func(ctx context.Context) error {
+				funcCtx := gofs.GetFunctionContext(ctx)
+				err = funcCtx.PutState(ctx, "test-key", []byte("test-value"))
+				if err != nil {
+					log.Error(err, "failed to put state")
+				}
+				close(readyCh)
+				return nil
+			},
+		)).Run()
+		if err != nil {
+			log.Error(err, "failed to run mock client")
+		}
+	}()
+
+	<-readyCh
+
+	store, err := storeFactory.NewStateStore(nil)
+	assert.NoError(t, err)
+
+	value, err := store.GetState(context.Background(), "test-key")
+	assert.NoError(t, err)
+	assert.Equal(t, "test-value", string(value))
 }
