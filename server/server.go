@@ -189,6 +189,10 @@ func GetBuiltinTubeFactoryBuilder() map[string]func(configMap config.ConfigMap) 
 		common.EmptyTubeType: func(_ config.ConfigMap) (contube.TubeFactory, error) {
 			return contube.NewEmptyTubeFactory(), nil
 		},
+		//nolint:unparam
+		common.NatsTubeType: func(configMap config.ConfigMap) (contube.TubeFactory, error) {
+			return contube.NewNatsEventQueueFactory(context.Background(), contube.ConfigMap(configMap))
+		},
 	}
 }
 

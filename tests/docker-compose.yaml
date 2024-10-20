@@ -20,3 +20,11 @@ services:
     ports:
       - "6650:6650"
       - "8080:8080"
+  nats:
+    image: nats:latest
+    container_name: nats-server
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    environment:
+      - NATS_ALLOW_NEW_USERS=true

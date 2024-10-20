@@ -23,6 +23,9 @@ import (
 	"net"
 	"strconv"
 	"testing"
+	"time"
+
+	"github.com/nats-io/nats.go"
 
 	"github.com/functionstream/function-stream/common/config"
 
@@ -47,6 +50,13 @@ func getListener(t *testing.T) net.Listener {
 func startStandaloneSvr(t *testing.T, ctx context.Context, opts ...ServerOption) (*Server, string) {
 	ln := getListener(t)
 	defaultOpts := []ServerOption{
+		WithConfig(&Config{
+			TubeConfig: map[string]config.ConfigMap{
+				common.NatsTubeType: {
+					"nats_url": "nats://localhost:4222",
+				},
+			},
+		}),
 		WithHttpListener(ln),
 		WithTubeFactoryBuilders(GetBuiltinTubeFactoryBuilder()),
 		WithRuntimeFactoryBuilders(GetBuiltinRuntimeFactoryBuilder()),
@@ -179,6 +189,66 @@ func TestHttpTube(t *testing.T) {
 	}
 	var out tests.Person
 	err = json.Unmarshal(event.GetPayload(), &out)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if out.Money != 1 {
+		t.Errorf("expected 1, got %d", out.Money)
+		return
+	}
+}
+
+func TestNatsTube(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, _ := startStandaloneSvr(t, ctx, nil, nil)
+
+	funcConf := &model.Function{
+		Package: "../bin/example_basic.wasm",
+		Sources: []model.TubeConfig{{
+			Type: common.NatsTubeType,
+			Config: map[string]interface{}{
+				"subject": "input",
+			},
+		}},
+		Sink: model.TubeConfig{
+			Type: common.NatsTubeType,
+			Config: map[string]interface{}{
+				"subject": "output",
+			},
+		},
+		Name:     "test-func",
+		Replicas: 1,
+	}
+
+	err := s.Manager.StartFunction(funcConf)
+	assert.Nil(t, err)
+
+	p := &tests.Person{
+		Name:  "rbt",
+		Money: 0,
+	}
+	jsonBytes, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nc, err := nats.Connect("nats://localhost:4222")
+	assert.NoError(t, err)
+
+	sub, err := nc.SubscribeSync("output")
+	assert.NoError(t, err)
+
+	assert.NoError(t, nc.Publish("input", jsonBytes))
+
+	event, err := sub.NextMsg(3 * time.Second)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	var out tests.Person
+	err = json.Unmarshal(event.Data, &out)
 	if err != nil {
 		t.Error(err)
 		return
