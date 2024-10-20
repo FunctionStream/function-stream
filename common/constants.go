@@ -21,6 +21,7 @@ const (
 	MemoryTubeType = "memory"
 	HttpTubeType   = "http"
 	EmptyTubeType  = "empty"
+	NatsTubeType   = "nats"
 
 	WASMRuntime     = "wasm"
 	ExternalRuntime = "external"
