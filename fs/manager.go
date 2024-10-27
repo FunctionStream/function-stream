@@ -243,7 +243,7 @@ func (fm *functionManagerImpl) StartFunction(f *model.Function) error { // TODO:
 			return fmt.Errorf("failed to create state store: %w", err)
 		}
 
-		funcCtx := newFuncCtxImpl(store)
+		funcCtx := newFuncCtxImpl(f, store)
 		instanceLogger := fm.log.SubLogger("functionName", f.Name, "instanceIndex", int(i), "runtimeType", runtimeConfig.Type)
 		instance := fm.options.instanceFactory.NewFunctionInstance(f, funcCtx, i, instanceLogger)
 		fm.functionsLock.Lock()

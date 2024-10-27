@@ -420,3 +420,79 @@ func TestExternalStatefulModule(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "test-value", string(value))
 }
+
+func TestFunctionConfig(t *testing.T) {
+	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
+	assert.NoError(t, os.RemoveAll(testSocketPath))
+	module := "test-function-config"
+	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
+	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
+	assert.NoError(t, os.Setenv("FS_MODULE_NAME", module))
+	lis, err := net.Listen("unix", testSocketPath)
+	assert.NoError(t, err)
+	defer func(lis net.Listener) {
+		_ = lis.Close()
+	}(lis)
+
+	storeFactory, err := statestore.NewDefaultPebbleStateStoreFactory()
+	assert.NoError(t, err)
+
+	fm, err := fs.NewFunctionManager(
+		fs.WithRuntimeFactory("external", NewFactory(lis)),
+		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
+		fs.WithStateStoreFactory(storeFactory),
+	)
+	assert.NoError(t, err)
+
+	f := &model.Function{
+		Name: "test",
+		Runtime: model.RuntimeConfig{
+			Type: "external",
+		},
+		Module: module,
+		Sources: []model.TubeConfig{
+			{
+				Type: common.EmptyTubeType,
+			},
+		},
+		Sink: model.TubeConfig{
+			Type: common.EmptyTubeType,
+		},
+		Replicas: 1,
+		Config: map[string]string{
+			"key1": "value1",
+			"key2": "value2",
+		},
+	}
+
+	err = fm.StartFunction(f)
+	assert.NoError(t, err)
+
+	readyCh := make(chan struct{})
+
+	go func() {
+		err := gofs.NewFSClient().Register(module, gofs.Custom(func(ctx context.Context) error { return nil },
+			func(ctx context.Context) error {
+				funcCtx := gofs.GetFunctionContext(ctx)
+				err = funcCtx.PutState(ctx, "test-key", []byte("test-value"))
+				if err != nil {
+					log.Error(err, "failed to put state")
+				}
+				close(readyCh)
+				return nil
+			},
+		)).Run()
+		if err != nil {
+			log.Error(err, "failed to run mock client")
+		}
+	}()
+
+	<-readyCh
+
+	store, err := storeFactory.NewStateStore(nil)
+	assert.NoError(t, err)
+
+	value, err := store.GetState(context.Background(), "test-key")
+	assert.NoError(t, err)
+	assert.Equal(t, "test-value", string(value))
+}

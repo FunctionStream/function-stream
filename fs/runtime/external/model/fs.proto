@@ -79,6 +79,14 @@ message DeleteStateResponse {
 
 }
 
+message GetConfigRequest {
+
+}
+
+message GetConfigResponse {
+  map<string, string> config = 1;
+}
+
 service Function {
   rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
   rpc Read(ReadRequest) returns (Event);
@@ -87,4 +95,5 @@ service Function {
   rpc GetState(GetStateRequest) returns (GetStateResponse);
   rpc ListStates(ListStatesRequest) returns (ListStatesResponse);
   rpc DeleteState(DeleteStateRequest) returns (DeleteStateResponse);
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
 }

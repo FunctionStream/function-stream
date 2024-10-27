@@ -25,11 +25,18 @@ import (
 	"os"
 	"strings"
 
+	"google.golang.org/grpc/metadata"
+
 	"github.com/functionstream/function-stream/fs/runtime/external/model"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 )
+
+func (c *FunctionContext) warpContext(parent context.Context) context.Context {
+	return metadata.NewOutgoingContext(parent, metadata.New(map[string]string{
+		"name": c.name,
+	}))
+}
 
 type fsRPCClient struct {
 	grpcCli model.FunctionClient
@@ -63,13 +70,6 @@ func newFSRPCClient() (*fsRPCClient, error) {
 	}
 	client := model.NewFunctionClient(conn)
 	return &fsRPCClient{grpcCli: client}, nil
-}
-
-func (c *fsRPCClient) GetContext(parent context.Context, funcName string) context.Context {
-	md := metadata.New(map[string]string{
-		"name": funcName,
-	})
-	return metadata.NewOutgoingContext(parent, md)
 }
 
 func (c *fsRPCClient) RegisterSchema(ctx context.Context, schema string) error {
@@ -122,6 +122,14 @@ func (c *fsRPCClient) ListStates(ctx context.Context, path string) ([]string, er
 		return nil, err
 	}
 	return res.Keys, nil
+}
+
+func (c *fsRPCClient) GetConfig(ctx context.Context) (map[string]string, error) {
+	res, err := c.grpcCli.GetConfig(ctx, &model.GetConfigRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return res.Config, nil
 }
 
 func (c *fsRPCClient) loadModule(_ *moduleWrapper) {

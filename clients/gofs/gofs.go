@@ -73,6 +73,22 @@ type moduleWrapper struct {
 	registerErr error
 }
 
+func (m *moduleWrapper) AddInitFunc(initFunc func(context.Context) error) *moduleWrapper {
+	parentInit := m.initFunc
+	if parentInit != nil {
+		m.initFunc = func(ctx context.Context) error {
+			err := parentInit(ctx)
+			if err != nil {
+				return err
+			}
+			return initFunc(ctx)
+		}
+	} else {
+		m.initFunc = initFunc
+	}
+	return m
+}
+
 func (c *fsClient) Register(module string, wrapper *moduleWrapper) FSClient {
 	if c.err != nil {
 		return c
@@ -200,23 +216,29 @@ func Custom(init func(ctx context.Context) error, execute func(ctx context.Conte
 }
 
 type FunctionContext struct {
-	c *fsClient
+	c      *fsClient
+	name   string
+	module string
 }
 
 func (c *FunctionContext) GetState(ctx context.Context, key string) ([]byte, error) {
-	return c.c.rpc.GetState(ctx, key)
+	return c.c.rpc.GetState(c.warpContext(ctx), key)
 }
 
 func (c *FunctionContext) PutState(ctx context.Context, key string, value []byte) error {
-	return c.c.rpc.PutState(ctx, key, value)
+	return c.c.rpc.PutState(c.warpContext(ctx), key, value)
 }
 
 func (c *FunctionContext) Write(ctx context.Context, payload []byte) error {
-	return c.c.rpc.Write(ctx, payload)
+	return c.c.rpc.Write(c.warpContext(ctx), payload)
 }
 
 func (c *FunctionContext) Read(ctx context.Context) ([]byte, error) {
-	return c.c.rpc.Read(ctx)
+	return c.c.rpc.Read(c.warpContext(ctx))
+}
+
+func (c *FunctionContext) GetConfig(ctx context.Context) (map[string]string, error) {
+	return c.c.rpc.GetConfig(c.warpContext(ctx))
 }
 
 type funcCtxKey struct{}
@@ -241,15 +263,6 @@ func (c *fsClient) Run() error {
 	if funcName == "" {
 		return fmt.Errorf("%s is not set", FSFunctionName)
 	}
-	funcCtx := &FunctionContext{c: c}
-	if c.rpc == nil {
-		rpc, err := newFSRPCClient()
-		if err != nil {
-			return err
-		}
-		c.rpc = rpc
-	}
-	ctx := c.rpc.GetContext(context.WithValue(context.Background(), funcCtxKey{}, funcCtx), funcName)
 	module := os.Getenv(FSModuleName)
 	if module == "" {
 		module = DefaultModule
@@ -258,6 +271,15 @@ func (c *fsClient) Run() error {
 	if !ok {
 		return fmt.Errorf("module %s not found", module)
 	}
+	funcCtx := &FunctionContext{c: c, name: funcName, module: module}
+	if c.rpc == nil {
+		rpc, err := newFSRPCClient()
+		if err != nil {
+			return err
+		}
+		c.rpc = rpc
+	}
+	ctx := funcCtx.warpContext(context.WithValue(context.Background(), funcCtxKey{}, funcCtx))
 	m.fsClient = c
 	err := m.initFunc(ctx)
 	if err != nil {

@@ -19,6 +19,8 @@ package fs
 import (
 	"context"
 
+	"github.com/functionstream/function-stream/common/model"
+
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/contube"
 	"github.com/pkg/errors"
@@ -28,12 +30,13 @@ var ErrStateStoreNotLoaded = errors.New("state store not loaded")
 
 type funcCtxImpl struct {
 	api.FunctionContext
+	function   *model.Function
 	stateStore api.StateStore
 	sink       chan<- contube.Record
 }
 
-func newFuncCtxImpl(store api.StateStore) *funcCtxImpl {
-	return &funcCtxImpl{stateStore: store}
+func newFuncCtxImpl(function *model.Function, store api.StateStore) *funcCtxImpl {
+	return &funcCtxImpl{function: function, stateStore: store}
 }
 
 func (f *funcCtxImpl) checkStateStore() error {
@@ -77,6 +80,10 @@ func (f *funcCtxImpl) Write(record contube.Record) error {
 	}
 	f.sink <- record
 	return nil
+}
+
+func (f *funcCtxImpl) GetConfig() map[string]string {
+	return f.function.Config
 }
 
 func (f *funcCtxImpl) setSink(sink chan<- contube.Record) {

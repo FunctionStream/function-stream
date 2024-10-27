@@ -150,6 +150,17 @@ func (f *functionServerImpl) DeleteState(
 	return &model.DeleteStateResponse{}, nil
 }
 
+func (f *functionServerImpl) GetConfig(
+	ctx context.Context, _ *model.GetConfigRequest) (*model.GetConfigResponse, error) {
+	r, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &model.GetConfigResponse{
+		Config: r.funcCtx.GetConfig(),
+	}, nil
+}
+
 var _ model.FunctionServer = &functionServerImpl{}
 
 type Factory struct {

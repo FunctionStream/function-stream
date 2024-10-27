@@ -48,15 +48,15 @@ func process() {
 	}
 }
 
+func (c *FunctionContext) warpContext(parent context.Context) context.Context {
+	return parent
+}
+
 type fsRPCClient struct {
 }
 
 func newFSRPCClient() (*fsRPCClient, error) {
 	return &fsRPCClient{}, nil
-}
-
-func (c *fsRPCClient) GetContext(parent context.Context, funcName string) context.Context {
-	return context.Background()
 }
 
 func (c *fsRPCClient) RegisterSchema(ctx context.Context, schema string) error {
@@ -68,19 +68,23 @@ func (c *fsRPCClient) RegisterSchema(ctx context.Context, schema string) error {
 }
 
 func (c *fsRPCClient) Write(ctx context.Context, payload []byte) error {
-	panic("rpc write not implemented")
+	panic("rpc write not supported")
 }
 
 func (c *fsRPCClient) Read(ctx context.Context) ([]byte, error) {
-	panic("rpc read not implemented")
+	panic("rpc read not supported")
 }
 
 func (c *fsRPCClient) GetState(ctx context.Context, key string) ([]byte, error) {
-	panic("rpc get state not implemented")
+	panic("rpc get state not supported")
 }
 
 func (c *fsRPCClient) PutState(ctx context.Context, key string, value []byte) error {
-	panic("rpc put state not implemented")
+	panic("rpc put state not supported")
+}
+
+func (c *fsRPCClient) GetConfig(ctx context.Context) (map[string]string, error) {
+	panic("rpc get config not supported")
 }
 
 func (c *fsRPCClient) loadModule(m *moduleWrapper) {
