@@ -202,7 +202,9 @@ func TestHttpTube(t *testing.T) {
 func TestNatsTube(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s, _ := startStandaloneSvr(t, ctx, nil, nil)
+	s, _ := startStandaloneSvr(t, ctx, WithTubeFactoryBuilder(common.NatsTubeType, func(configMap config.ConfigMap) (contube.TubeFactory, error) {
+		return contube.NewNatsEventQueueFactory(context.Background(), contube.ConfigMap(configMap))
+	}), nil)
 
 	funcConf := &model.Function{
 		Package: "../bin/example_basic.wasm",

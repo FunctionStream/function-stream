@@ -28,4 +28,5 @@ type FunctionContext interface {
 	ListStates(ctx context.Context, startInclusive string, endExclusive string) ([]string, error)
 	DeleteState(ctx context.Context, key string) error
 	Write(record contube.Record) error
+	GetConfig() map[string]string
 }
