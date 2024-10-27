@@ -24,7 +24,7 @@ import (
 )
 
 func TestFuncCtx_NilStore(t *testing.T) {
-	f := newFuncCtxImpl(nil)
+	f := newFuncCtxImpl(nil, nil)
 	assert.ErrorIs(t, f.PutState(context.Background(), "key", []byte("value")), ErrStateStoreNotLoaded)
 	_, err := f.GetState(context.Background(), "key")
 	assert.ErrorIs(t, err, ErrStateStoreNotLoaded)

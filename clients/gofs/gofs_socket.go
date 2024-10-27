@@ -22,9 +22,10 @@ package gofs
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc/metadata"
 	"os"
 	"strings"
+
+	"google.golang.org/grpc/metadata"
 
 	"github.com/functionstream/function-stream/fs/runtime/external/model"
 	"google.golang.org/grpc"
