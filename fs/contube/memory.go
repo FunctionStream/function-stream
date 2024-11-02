@@ -45,7 +45,7 @@ func (f *MemoryQueueFactory) getOrCreateChan(name string) chan Record {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	defer func() {
-		slog.InfoContext(f.ctx, "Get memory queue chan",
+		slog.DebugContext(f.ctx, "Get memory queue chan",
 			"current_use_count", atomic.LoadInt32(&f.queues[name].refCnt),
 			"name", name)
 	}()
@@ -72,7 +72,7 @@ func (f *MemoryQueueFactory) release(name string) {
 		close(q.c)
 		delete(f.queues, name)
 	}
-	slog.InfoContext(f.ctx, "Released memory queue",
+	slog.DebugContext(f.ctx, "Released memory queue",
 		"current_use_count", atomic.LoadInt32(&q.refCnt),
 		"name", name)
 }
