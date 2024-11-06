@@ -24,7 +24,7 @@ import (
 func main() {
 	slog.Info("Hello from Go function!")
 	err := gofs.NewFSClient().
-		Register(gofs.DefaultModule, gofs.RegisterFunction(gofs.NewSimpleFunction(myProcess))).
+		Register(gofs.DefaultModule, gofs.WithFunction(gofs.NewSimpleFunction(myProcess))).
 		Run()
 	if err != nil {
 		slog.Error(err.Error())

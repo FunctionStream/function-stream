@@ -99,9 +99,9 @@ func (f *TestSource) Handle(_ gofs.FunctionContext, emit func(context.Context, g
 
 func runMockClient() {
 	err := gofs.NewFSClient().
-		Register(gofs.DefaultModule, gofs.RegisterFunction(&TestFunction{})).
-		Register("counter", gofs.RegisterFunction(&TestCounterFunction{})).
-		Register("test-source", gofs.RegisterSource(&TestSource{})).
+		Register(gofs.DefaultModule, gofs.WithFunction(&TestFunction{})).
+		Register("counter", gofs.WithFunction(&TestCounterFunction{})).
+		Register("test-source", gofs.WithSource(&TestSource{})).
 		Run()
 	if err != nil {
 		log.Error(err, "failed to run mock client")
@@ -375,7 +375,7 @@ func TestExternalSinkModule(t *testing.T) {
 	sinkMod := newTestSink()
 
 	go func() {
-		err := gofs.NewFSClient().Register("test-sink", gofs.RegisterSink(sinkMod)).Run()
+		err := gofs.NewFSClient().Register("test-sink", gofs.WithSink(sinkMod)).Run()
 		if err != nil {
 			log.Error(err, "failed to run mock client")
 		}
@@ -441,7 +441,7 @@ func TestExternalStatefulModule(t *testing.T) {
 	readyCh := make(chan struct{})
 
 	go func() {
-		err := gofs.NewFSClient().Register("test-stateful", gofs.RegisterCustom(gofs.NewSimpleCustom(
+		err := gofs.NewFSClient().Register("test-stateful", gofs.WithCustom(gofs.NewSimpleCustom(
 			func(ctx gofs.FunctionContext) error {
 				err = ctx.PutState(context.Background(), "test-key", []byte("test-value"))
 				if err != nil {
@@ -516,7 +516,7 @@ func TestFunctionConfig(t *testing.T) {
 	readyCh := make(chan struct{})
 
 	go func() {
-		err := gofs.NewFSClient().Register(module, gofs.RegisterCustom(gofs.NewSimpleCustom(
+		err := gofs.NewFSClient().Register(module, gofs.WithCustom(gofs.NewSimpleCustom(
 			func(ctx gofs.FunctionContext) error {
 				err = ctx.PutState(context.Background(), "test-key", []byte("test-value"))
 				if err != nil {

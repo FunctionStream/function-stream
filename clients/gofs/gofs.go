@@ -108,7 +108,7 @@ func (c *fsClient) Register(module string, wrapper *moduleWrapper) FSClient {
 	return c
 }
 
-func RegisterFunction[I any, O any](function Function[I, O]) *moduleWrapper {
+func WithFunction[I any, O any](function Function[I, O]) *moduleWrapper {
 	m := &moduleWrapper{}
 	processFunc := func(ctx FunctionContext, payload []byte) ([]byte, error) {
 		input := new(I)
@@ -159,7 +159,7 @@ func RegisterFunction[I any, O any](function Function[I, O]) *moduleWrapper {
 	return m
 }
 
-func RegisterSource[O any](source Source[O]) *moduleWrapper {
+func WithSource[O any](source Source[O]) *moduleWrapper {
 	m := &moduleWrapper{}
 	emit := func(ctx context.Context, event Event[O]) error {
 		outputPayload, _ := json.Marshal(event.Data())
@@ -182,7 +182,7 @@ func RegisterSource[O any](source Source[O]) *moduleWrapper {
 	return m
 }
 
-func RegisterSink[I any](sink Sink[I]) *moduleWrapper {
+func WithSink[I any](sink Sink[I]) *moduleWrapper {
 	m := &moduleWrapper{}
 	processFunc := func(ctx FunctionContext, payload []byte) error {
 		input := new(I)
@@ -219,7 +219,7 @@ func RegisterSink[I any](sink Sink[I]) *moduleWrapper {
 	return m
 }
 
-func RegisterCustom(custom Custom) *moduleWrapper {
+func WithCustom(custom Custom) *moduleWrapper {
 	m := &moduleWrapper{}
 	initFunc := func(ctx FunctionContext) error {
 		return custom.Init(ctx)
