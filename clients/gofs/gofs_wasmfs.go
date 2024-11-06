@@ -42,13 +42,13 @@ func process() {
 	if runningModule == nil {
 		panic("no module loaded")
 	}
-	err := runningModule.executeFunc(context.Background())
+	err := runningModule.executeFunc(runningModule.ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 	}
 }
 
-func (c *FunctionContext) warpContext(parent context.Context) context.Context {
+func (c *functionContextImpl) warpContext(parent context.Context) context.Context {
 	return parent
 }
 
@@ -91,7 +91,7 @@ func (c *fsRPCClient) loadModule(m *moduleWrapper) {
 	if m.processFunc == nil {
 		panic("only function module is supported for the wasm runtime")
 	}
-	m.executeFunc = func(ctx context.Context) error {
+	m.executeFunc = func(ctx FunctionContext) error {
 		var stat syscall.Stat_t
 		syscall.Fstat(processFd, &stat)
 		payload := make([]byte, stat.Size)

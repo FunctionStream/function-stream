@@ -54,11 +54,11 @@ var log = common.NewDefaultLogger()
 type TestFunction struct {
 }
 
-func (f *TestFunction) Init(_ *gofs.FunctionContext) error {
+func (f *TestFunction) Init(_ gofs.FunctionContext) error {
 	return nil
 }
 
-func (f *TestFunction) Handle(_ *gofs.FunctionContext, event gofs.Event[Person]) (gofs.Event[Person], error) {
+func (f *TestFunction) Handle(_ gofs.FunctionContext, event gofs.Event[Person]) (gofs.Event[Person], error) {
 	p := event.Data()
 	p.Money += 1
 	return gofs.NewEvent(p), nil
@@ -67,11 +67,11 @@ func (f *TestFunction) Handle(_ *gofs.FunctionContext, event gofs.Event[Person])
 type TestCounterFunction struct {
 }
 
-func (f *TestCounterFunction) Init(ctx *gofs.FunctionContext) error {
+func (f *TestCounterFunction) Init(ctx gofs.FunctionContext) error {
 	return nil
 }
 
-func (f *TestCounterFunction) Handle(_ *gofs.FunctionContext, event gofs.Event[Counter]) (gofs.Event[Counter], error) {
+func (f *TestCounterFunction) Handle(_ gofs.FunctionContext, event gofs.Event[Counter]) (gofs.Event[Counter], error) {
 	c := event.Data()
 	c.Count += 1
 	return gofs.NewEvent(c), nil
@@ -80,11 +80,11 @@ func (f *TestCounterFunction) Handle(_ *gofs.FunctionContext, event gofs.Event[C
 type TestSource struct {
 }
 
-func (f *TestSource) Init(_ *gofs.FunctionContext) error {
+func (f *TestSource) Init(_ gofs.FunctionContext) error {
 	return nil
 }
 
-func (f *TestSource) Handle(_ *gofs.FunctionContext, emit func(context.Context, gofs.Event[testRecord]) error) error {
+func (f *TestSource) Handle(_ gofs.FunctionContext, emit func(context.Context, gofs.Event[testRecord]) error) error {
 	for i := 0; i < 10; i++ {
 		err := emit(context.Background(), gofs.NewEvent(&testRecord{
 			ID:   i,
@@ -311,11 +311,11 @@ type TestSink struct {
 	sinkCh chan Counter
 }
 
-func (f *TestSink) Init(_ *gofs.FunctionContext) error {
+func (f *TestSink) Init(_ gofs.FunctionContext) error {
 	return nil
 }
 
-func (f *TestSink) Handle(_ *gofs.FunctionContext, event gofs.Event[Counter]) error {
+func (f *TestSink) Handle(_ gofs.FunctionContext, event gofs.Event[Counter]) error {
 	f.sinkCh <- *event.Data()
 	return nil
 }
@@ -442,7 +442,7 @@ func TestExternalStatefulModule(t *testing.T) {
 
 	go func() {
 		err := gofs.NewFSClient().Register("test-stateful", gofs.RegisterCustom(gofs.NewSimpleCustom(
-			func(ctx *gofs.FunctionContext) error {
+			func(ctx gofs.FunctionContext) error {
 				err = ctx.PutState(context.Background(), "test-key", []byte("test-value"))
 				if err != nil {
 					log.Error(err, "failed to put state")
@@ -517,7 +517,7 @@ func TestFunctionConfig(t *testing.T) {
 
 	go func() {
 		err := gofs.NewFSClient().Register(module, gofs.RegisterCustom(gofs.NewSimpleCustom(
-			func(ctx *gofs.FunctionContext) error {
+			func(ctx gofs.FunctionContext) error {
 				err = ctx.PutState(context.Background(), "test-key", []byte("test-value"))
 				if err != nil {
 					log.Error(err, "failed to put state")

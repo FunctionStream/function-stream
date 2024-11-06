@@ -32,7 +32,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func (c *FunctionContext) warpContext(parent context.Context) context.Context {
+func (c *functionContextImpl) warpContext(parent context.Context) context.Context {
 	return metadata.NewOutgoingContext(parent, metadata.New(map[string]string{
 		"name": c.name,
 	}))
