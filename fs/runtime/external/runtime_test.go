@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/functionstream/function-stream/fs/statestore"
@@ -158,10 +159,14 @@ func TestExternalRuntime(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
+	var acked atomic.Bool
+
 	event, err := contube.NewStructRecord(&Person{
 		Name:  "test",
 		Money: 1,
-	}, func() {})
+	}, func() {
+		acked.Store(true)
+	})
 	assert.NoError(t, err)
 	err = fm.ProduceEvent(inputTopic, event)
 	assert.NoError(t, err)
@@ -172,6 +177,8 @@ func TestExternalRuntime(t *testing.T) {
 	err = json.Unmarshal(output.GetPayload(), &p)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, p.Money)
+
+	assert.True(t, acked.Load())
 
 	err = fm.DeleteFunction("", f.Name)
 	assert.NoError(t, err)

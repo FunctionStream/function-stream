@@ -19,6 +19,7 @@ package gofs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -110,7 +111,7 @@ func (c *fsClient) Register(module string, wrapper *moduleWrapper) FSClient {
 
 func WithFunction[I any, O any](function Function[I, O]) *moduleWrapper {
 	m := &moduleWrapper{}
-	processFunc := func(ctx FunctionContext, payload []byte) ([]byte, error) {
+	processFunc := func(ctx FunctionContext, payload []byte) ([]byte, error) { // This is only for the wasm function
 		input := new(I)
 		err := json.Unmarshal(payload, input)
 		if err != nil {
@@ -145,11 +146,22 @@ func WithFunction[I any, O any](function Function[I, O]) *moduleWrapper {
 				time.Sleep(3 * time.Second)
 				continue
 			}
-			outputPayload, err := processFunc(ctx, inputPayload)
+			input := new(I)
+			err = json.Unmarshal(*inputPayload.Data(), input)
+			if err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+			output, err := function.Handle(ctx, NewEventWithAck(input, inputPayload.Ack))
 			if err != nil {
 				return err
 			}
-			err = ctx.Write(ctx, outputPayload)
+			outputPayload, err := json.Marshal(output.Data())
+			if err != nil {
+				return fmt.Errorf("failed to marshal JSON: %w", err)
+			}
+			err = ctx.Write(ctx, NewEventWithAck(&outputPayload, func(ctx context.Context) error {
+				return errors.Join(inputPayload.Ack(ctx), output.Ack(ctx))
+			}))
 			if err != nil {
 				return err
 			}
@@ -163,7 +175,7 @@ func WithSource[O any](source Source[O]) *moduleWrapper {
 	m := &moduleWrapper{}
 	emit := func(ctx context.Context, event Event[O]) error {
 		outputPayload, _ := json.Marshal(event.Data())
-		return m.ctx.Write(ctx, outputPayload)
+		return m.ctx.Write(ctx, NewEventWithAck(&outputPayload, event.Ack))
 	}
 	m.initFunc = func(ctx FunctionContext) error {
 		outputSchema, err := avroschema.Reflect(new(O))
@@ -184,14 +196,6 @@ func WithSource[O any](source Source[O]) *moduleWrapper {
 
 func WithSink[I any](sink Sink[I]) *moduleWrapper {
 	m := &moduleWrapper{}
-	processFunc := func(ctx FunctionContext, payload []byte) error {
-		input := new(I)
-		err := json.Unmarshal(payload, input)
-		if err != nil {
-			return fmt.Errorf("failed to parse JSON: %w", err)
-		}
-		return sink.Handle(ctx, NewEvent(input))
-	}
 	m.initFunc = func(ctx FunctionContext) error {
 		inputSchema, err := avroschema.Reflect(new(I))
 		if err != nil {
@@ -211,7 +215,12 @@ func WithSink[I any](sink Sink[I]) *moduleWrapper {
 				time.Sleep(3 * time.Second)
 				continue
 			}
-			if err = processFunc(ctx, inputPayload); err != nil {
+			input := new(I)
+			err = json.Unmarshal(*inputPayload.Data(), input)
+			if err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+			if err = sink.Handle(ctx, NewEventWithAck(input, inputPayload.Ack)); err != nil {
 				return err
 			}
 		}
@@ -220,18 +229,14 @@ func WithSink[I any](sink Sink[I]) *moduleWrapper {
 }
 
 func WithCustom(custom Custom) *moduleWrapper {
-	m := &moduleWrapper{}
-	initFunc := func(ctx FunctionContext) error {
-		return custom.Init(ctx)
+	return &moduleWrapper{
+		initFunc: func(ctx FunctionContext) error {
+			return custom.Init(ctx)
+		},
+		executeFunc: func(ctx FunctionContext) error {
+			return custom.Handle(ctx)
+		},
 	}
-	executeFunc := func(ctx FunctionContext) error {
-		return custom.Handle(ctx)
-	}
-	m.initFunc = initFunc
-	m.executeFunc = executeFunc
-
-	// TODO: Simplify this
-	return m
 }
 
 type functionContextImpl struct {
@@ -249,11 +254,11 @@ func (c *functionContextImpl) PutState(ctx context.Context, key string, value []
 	return c.c.rpc.PutState(c.warpContext(ctx), key, value)
 }
 
-func (c *functionContextImpl) Write(ctx context.Context, payload []byte) error {
-	return c.c.rpc.Write(c.warpContext(ctx), payload)
+func (c *functionContextImpl) Write(ctx context.Context, rawEvent Event[[]byte]) error {
+	return c.c.rpc.Write(c.warpContext(ctx), rawEvent)
 }
 
-func (c *functionContextImpl) Read(ctx context.Context) ([]byte, error) {
+func (c *functionContextImpl) Read(ctx context.Context) (Event[[]byte], error) {
 	return c.c.rpc.Read(c.warpContext(ctx))
 }
 
@@ -262,10 +267,6 @@ func (c *functionContextImpl) GetConfig(ctx context.Context) (map[string]string,
 }
 
 type funcCtxKey struct{}
-
-func GetFunctionContext(ctx context.Context) *FunctionContext {
-	return ctx.Value(funcCtxKey{}).(*FunctionContext)
-}
 
 func (c *fsClient) Run() error {
 	if c.err != nil {

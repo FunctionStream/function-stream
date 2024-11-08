@@ -96,6 +96,15 @@ func (f *functionServerImpl) Write(ctx context.Context, event *model.Event) (*mo
 	return &model.WriteResponse{}, nil
 }
 
+func (f *functionServerImpl) Ack(ctx context.Context, request *model.AckRequest) (*model.AckResponse, error) {
+	r, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.Ack(request.Id)
+	return &model.AckResponse{}, nil
+}
+
 func (f *functionServerImpl) PutState(
 	ctx context.Context, request *model.PutStateRequest) (*model.PutStateResponse, error) {
 	r, err := f.getFunctionRuntime(ctx)
@@ -229,6 +238,9 @@ type runtime struct {
 	inputCh chan contube.Record
 	funcCtx api.FunctionContext
 	log     *common.Logger
+
+	recordsMapMu sync.Mutex
+	recordsMap   map[int64]contube.Record
 }
 
 func (r *runtime) Call(e contube.Record) (contube.Record, error) {
@@ -237,4 +249,15 @@ func (r *runtime) Call(e contube.Record) (contube.Record, error) {
 }
 
 func (r *runtime) Stop() {
+}
+
+// Ack acknowledges the processing of a record
+// This is an idempotent operation
+func (r *runtime) Ack(id int64) {
+	r.recordsMapMu.Lock()
+	defer r.recordsMapMu.Unlock()
+	if record, ok := r.recordsMap[id]; ok {
+		record.Commit()
+		delete(r.recordsMap, id)
+	}
 }

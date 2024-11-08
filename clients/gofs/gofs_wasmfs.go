@@ -67,11 +67,11 @@ func (c *fsRPCClient) RegisterSchema(ctx context.Context, schema string) error {
 	return nil
 }
 
-func (c *fsRPCClient) Write(ctx context.Context, payload []byte) error {
+func (c *fsRPCClient) Write(ctx context.Context, event Event[[]byte]) error {
 	panic("rpc write not supported")
 }
 
-func (c *fsRPCClient) Read(ctx context.Context) ([]byte, error) {
+func (c *fsRPCClient) Read(ctx context.Context) (Event[[]byte], error) {
 	panic("rpc read not supported")
 }
 
@@ -99,7 +99,10 @@ func (c *fsRPCClient) loadModule(m *moduleWrapper) {
 		if err != nil {
 			return fmt.Errorf("failed to read: %w", err)
 		}
-		outputPayload := m.processFunc(ctx, payload)
+		outputPayload, err := m.processFunc(ctx, payload)
+		if err != nil {
+			return fmt.Errorf("failed to process: %w", err)
+		}
 		_, err = syscall.Write(processFd, outputPayload)
 		if err != nil {
 			return fmt.Errorf("failed to write: %w", err)

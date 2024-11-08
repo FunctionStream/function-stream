@@ -22,14 +22,14 @@ type FunctionContext interface {
 	context.Context
 	GetState(ctx context.Context, key string) ([]byte, error)
 	PutState(ctx context.Context, key string, value []byte) error
-	Write(ctx context.Context, payload []byte) error
-	Read(ctx context.Context) ([]byte, error)
+	Write(ctx context.Context, rawEvent Event[[]byte]) error
+	Read(ctx context.Context) (Event[[]byte], error)
 	GetConfig(ctx context.Context) (map[string]string, error)
 }
 
 type Event[T any] interface {
 	Data() *T
-	Ack() error // TODO: Handle Ack
+	Ack(ctx context.Context) error
 }
 
 type BaseModule interface {
@@ -57,12 +57,18 @@ type Custom interface {
 }
 
 type eventImpl[T any] struct {
-	data *T
+	data    *T
+	ackFunc func(context.Context) error
 }
 
 func NewEvent[T any](data *T) Event[T] {
+	return NewEventWithAck(data, nil)
+}
+
+func NewEventWithAck[T any](data *T, ack func(ctx context.Context) error) Event[T] {
 	return &eventImpl[T]{
-		data: data,
+		data:    data,
+		ackFunc: ack,
 	}
 }
 
@@ -70,8 +76,10 @@ func (e *eventImpl[T]) Data() *T {
 	return e.data
 }
 
-func (e *eventImpl[T]) Ack() error {
-	// TODO: Implement this
+func (e *eventImpl[T]) Ack(ctx context.Context) error {
+	if e.ackFunc != nil {
+		return e.ackFunc(ctx)
+	}
 	return nil
 }
 
