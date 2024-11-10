@@ -131,7 +131,6 @@ func (f *MemoryQueueFactory) NewSinkTube(ctx context.Context, configMap ConfigMa
 				if !ok {
 					return
 				}
-				event.Commit()
 				c <- event
 			}
 		}

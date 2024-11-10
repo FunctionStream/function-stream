@@ -21,6 +21,7 @@ type FunctionClient interface {
 	RegisterSchema(ctx context.Context, in *RegisterSchemaRequest, opts ...grpc.CallOption) (*RegisterSchemaResponse, error)
 	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*Event, error)
 	Write(ctx context.Context, in *Event, opts ...grpc.CallOption) (*WriteResponse, error)
+	Ack(ctx context.Context, in *AckRequest, opts ...grpc.CallOption) (*AckResponse, error)
 	PutState(ctx context.Context, in *PutStateRequest, opts ...grpc.CallOption) (*PutStateResponse, error)
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 	ListStates(ctx context.Context, in *ListStatesRequest, opts ...grpc.CallOption) (*ListStatesResponse, error)
@@ -57,6 +58,15 @@ func (c *functionClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc
 func (c *functionClient) Write(ctx context.Context, in *Event, opts ...grpc.CallOption) (*WriteResponse, error) {
 	out := new(WriteResponse)
 	err := c.cc.Invoke(ctx, "/fs_external.Function/Write", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *functionClient) Ack(ctx context.Context, in *AckRequest, opts ...grpc.CallOption) (*AckResponse, error) {
+	out := new(AckResponse)
+	err := c.cc.Invoke(ctx, "/fs_external.Function/Ack", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +125,7 @@ type FunctionServer interface {
 	RegisterSchema(context.Context, *RegisterSchemaRequest) (*RegisterSchemaResponse, error)
 	Read(context.Context, *ReadRequest) (*Event, error)
 	Write(context.Context, *Event) (*WriteResponse, error)
+	Ack(context.Context, *AckRequest) (*AckResponse, error)
 	PutState(context.Context, *PutStateRequest) (*PutStateResponse, error)
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	ListStates(context.Context, *ListStatesRequest) (*ListStatesResponse, error)
@@ -135,6 +146,9 @@ func (UnimplementedFunctionServer) Read(context.Context, *ReadRequest) (*Event, 
 }
 func (UnimplementedFunctionServer) Write(context.Context, *Event) (*WriteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Write not implemented")
+}
+func (UnimplementedFunctionServer) Ack(context.Context, *AckRequest) (*AckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Ack not implemented")
 }
 func (UnimplementedFunctionServer) PutState(context.Context, *PutStateRequest) (*PutStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PutState not implemented")
@@ -214,6 +228,24 @@ func _Function_Write_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(FunctionServer).Write(ctx, req.(*Event))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Function_Ack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AckRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionServer).Ack(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fs_external.Function/Ack",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionServer).Ack(ctx, req.(*AckRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -326,6 +358,10 @@ var Function_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Write",
 			Handler:    _Function_Write_Handler,
+		},
+		{
+			MethodName: "Ack",
+			Handler:    _Function_Ack_Handler,
 		},
 		{
 			MethodName: "PutState",

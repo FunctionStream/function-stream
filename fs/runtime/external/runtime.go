@@ -70,19 +70,12 @@ func (f *functionServerImpl) RegisterSchema(ctx context.Context,
 	return &model.RegisterSchemaResponse{}, nil
 }
 
-func (f *functionServerImpl) Read(ctx context.Context, request *model.ReadRequest) (*model.Event, error) {
+func (f *functionServerImpl) Read(ctx context.Context, _ *model.ReadRequest) (*model.Event, error) {
 	r, err := f.getFunctionRuntime(ctx)
 	if err != nil {
 		return nil, err
 	}
-	select {
-	case e := <-r.inputCh:
-		return &model.Event{
-			Payload: e.GetPayload(),
-		}, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+	return r.ReadRecord(ctx)
 }
 
 func (f *functionServerImpl) Write(ctx context.Context, event *model.Event) (*model.WriteResponse, error) {
@@ -94,6 +87,15 @@ func (f *functionServerImpl) Write(ctx context.Context, event *model.Event) (*mo
 		return nil, err
 	}
 	return &model.WriteResponse{}, nil
+}
+
+func (f *functionServerImpl) Ack(ctx context.Context, request *model.AckRequest) (*model.AckResponse, error) {
+	r, err := f.getFunctionRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.Ack(request.Id)
+	return &model.AckResponse{}, nil
 }
 
 func (f *functionServerImpl) PutState(
@@ -173,9 +175,10 @@ func (f *Factory) NewFunctionRuntime(instance api.FunctionInstance,
 	_ *funcModel.RuntimeConfig) (api.FunctionRuntime, error) {
 	def := instance.Definition()
 	r := &runtime{
-		inputCh: make(chan contube.Record),
-		funcCtx: instance.FunctionContext(),
-		log:     instance.Logger(),
+		inputCh:    make(chan contube.Record),
+		funcCtx:    instance.FunctionContext(),
+		log:        instance.Logger(),
+		recordsMap: make(map[int64]contube.Record),
 	}
 	f.server.runtimeMaps.Store(common.GetNamespacedName(def.Namespace, def.Name).String(), r)
 	f.log.Info("Creating new function runtime", "function", common.GetNamespacedName(def.Namespace, def.Name))
@@ -229,6 +232,10 @@ type runtime struct {
 	inputCh chan contube.Record
 	funcCtx api.FunctionContext
 	log     *common.Logger
+
+	recordsMapMu sync.Mutex
+	recordIndex  int64
+	recordsMap   map[int64]contube.Record
 }
 
 func (r *runtime) Call(e contube.Record) (contube.Record, error) {
@@ -237,4 +244,32 @@ func (r *runtime) Call(e contube.Record) (contube.Record, error) {
 }
 
 func (r *runtime) Stop() {
+}
+
+func (r *runtime) ReadRecord(ctx context.Context) (*model.Event, error) {
+	select {
+	case e := <-r.inputCh:
+		r.recordsMapMu.Lock()
+		defer r.recordsMapMu.Unlock()
+		eventId := r.recordIndex
+		r.recordIndex++
+		r.recordsMap[eventId] = e
+		return &model.Event{
+			Id:      eventId,
+			Payload: e.GetPayload(),
+		}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// Ack acknowledges the processing of a record
+// This is an idempotent operation
+func (r *runtime) Ack(id int64) {
+	r.recordsMapMu.Lock()
+	defer r.recordsMapMu.Unlock()
+	if record, ok := r.recordsMap[id]; ok {
+		record.Commit()
+		delete(r.recordsMap, id)
+	}
 }

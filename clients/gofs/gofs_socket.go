@@ -32,10 +32,18 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func (c *FunctionContext) warpContext(parent context.Context) context.Context {
+func (c *functionContextImpl) warpContext(parent context.Context) context.Context {
 	return metadata.NewOutgoingContext(parent, metadata.New(map[string]string{
 		"name": c.name,
 	}))
+}
+
+func passMetadataContext(from context.Context, to context.Context) context.Context {
+	md, ok := metadata.FromOutgoingContext(from)
+	if ok {
+		return metadata.NewOutgoingContext(to, md)
+	}
+	return to
 }
 
 type fsRPCClient struct {
@@ -80,20 +88,27 @@ func (c *fsRPCClient) RegisterSchema(ctx context.Context, schema string) error {
 	return nil
 }
 
-func (c *fsRPCClient) Write(ctx context.Context, payload []byte) error {
-	_, err := c.grpcCli.Write(ctx, &model.Event{Payload: payload})
+func (c *fsRPCClient) Write(ctx context.Context, event Event[[]byte]) error {
+	_, err := c.grpcCli.Write(ctx, &model.Event{Payload: *event.Data()})
 	if err != nil {
 		return fmt.Errorf("failed to write: %w", err)
 	}
-	return nil
+	return event.Ack(ctx)
 }
 
-func (c *fsRPCClient) Read(ctx context.Context) ([]byte, error) {
+func (c *fsRPCClient) Read(ctx context.Context) (Event[[]byte], error) {
 	res, err := c.grpcCli.Read(ctx, &model.ReadRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read: %w", err)
 	}
-	return res.Payload, nil
+	return NewEventWithAck(&res.Payload, func(ackCtx context.Context) error {
+		if _, err := c.grpcCli.Ack(passMetadataContext(ctx, ackCtx), &model.AckRequest{
+			Id: res.Id,
+		}); err != nil {
+			return err
+		}
+		return nil
+	}), nil
 }
 
 func (c *fsRPCClient) PutState(ctx context.Context, key string, value []byte) error {

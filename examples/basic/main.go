@@ -17,7 +17,6 @@
 package main
 
 import (
-	"context"
 	"github.com/functionstream/function-stream/clients/gofs"
 	"log/slog"
 )
@@ -25,7 +24,7 @@ import (
 func main() {
 	slog.Info("Hello from Go function!")
 	err := gofs.NewFSClient().
-		Register(gofs.DefaultModule, gofs.Function(myProcess)).
+		Register(gofs.DefaultModule, gofs.WithFunction(gofs.NewSimpleFunction(myProcess))).
 		Run()
 	if err != nil {
 		slog.Error(err.Error())
@@ -38,7 +37,8 @@ type Person struct {
 	Expected int    `json:"expected"`
 }
 
-func myProcess(ctx context.Context, person *Person) *Person {
+func myProcess(ctx gofs.FunctionContext, e gofs.Event[Person]) (gofs.Event[Person], error) {
+	person := e.Data()
 	person.Money += 1
-	return person
+	return gofs.NewEvent(person), nil
 }

@@ -30,7 +30,8 @@ message ReadRequest {
 }
 
 message Event {
-  bytes payload = 1;
+  int64 id = 1;
+  bytes payload = 2;
 }
 
 message WriteResponse {
@@ -87,10 +88,19 @@ message GetConfigResponse {
   map<string, string> config = 1;
 }
 
+message AckRequest {
+  int64 id = 1;
+}
+
+message AckResponse {
+
+}
+
 service Function {
   rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
   rpc Read(ReadRequest) returns (Event);
   rpc Write(Event) returns (WriteResponse);
+  rpc Ack(AckRequest) returns (AckResponse);
   rpc PutState(PutStateRequest) returns (PutStateResponse);
   rpc GetState(GetStateRequest) returns (GetStateResponse);
   rpc ListStates(ListStatesRequest) returns (ListStatesResponse);

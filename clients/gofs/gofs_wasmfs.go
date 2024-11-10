@@ -42,13 +42,13 @@ func process() {
 	if runningModule == nil {
 		panic("no module loaded")
 	}
-	err := runningModule.executeFunc(context.Background())
+	err := runningModule.executeFunc(runningModule.ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 	}
 }
 
-func (c *FunctionContext) warpContext(parent context.Context) context.Context {
+func (c *functionContextImpl) warpContext(parent context.Context) context.Context {
 	return parent
 }
 
@@ -67,11 +67,11 @@ func (c *fsRPCClient) RegisterSchema(ctx context.Context, schema string) error {
 	return nil
 }
 
-func (c *fsRPCClient) Write(ctx context.Context, payload []byte) error {
+func (c *fsRPCClient) Write(ctx context.Context, event Event[[]byte]) error {
 	panic("rpc write not supported")
 }
 
-func (c *fsRPCClient) Read(ctx context.Context) ([]byte, error) {
+func (c *fsRPCClient) Read(ctx context.Context) (Event[[]byte], error) {
 	panic("rpc read not supported")
 }
 
@@ -91,7 +91,7 @@ func (c *fsRPCClient) loadModule(m *moduleWrapper) {
 	if m.processFunc == nil {
 		panic("only function module is supported for the wasm runtime")
 	}
-	m.executeFunc = func(ctx context.Context) error {
+	m.executeFunc = func(ctx FunctionContext) error {
 		var stat syscall.Stat_t
 		syscall.Fstat(processFd, &stat)
 		payload := make([]byte, stat.Size)
@@ -99,7 +99,10 @@ func (c *fsRPCClient) loadModule(m *moduleWrapper) {
 		if err != nil {
 			return fmt.Errorf("failed to read: %w", err)
 		}
-		outputPayload := m.processFunc(ctx, payload)
+		outputPayload, err := m.processFunc(ctx, payload)
+		if err != nil {
+			return fmt.Errorf("failed to process: %w", err)
+		}
 		_, err = syscall.Write(processFd, outputPayload)
 		if err != nil {
 			return fmt.Errorf("failed to write: %w", err)

@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/functionstream/function-stream/fs/statestore"
 
@@ -51,28 +52,76 @@ type testRecord struct {
 
 var log = common.NewDefaultLogger()
 
-func runMockClient() {
+type TestFunction struct {
+}
+
+func (f *TestFunction) Init(_ gofs.FunctionContext) error {
+	return nil
+}
+
+func (f *TestFunction) Handle(_ gofs.FunctionContext, event gofs.Event[Person]) (gofs.Event[Person], error) {
+	p := event.Data()
+	p.Money += 1
+	return gofs.NewEvent(p), nil
+}
+
+type TestCounterFunction struct {
+}
+
+func (f *TestCounterFunction) Init(ctx gofs.FunctionContext) error {
+	return nil
+}
+
+func (f *TestCounterFunction) Handle(_ gofs.FunctionContext, event gofs.Event[Counter]) (gofs.Event[Counter], error) {
+	c := event.Data()
+	c.Count += 1
+	return gofs.NewEvent(c), nil
+}
+
+type TestSource struct {
+}
+
+func (f *TestSource) Init(_ gofs.FunctionContext) error {
+	return nil
+}
+
+func (f *TestSource) Handle(_ gofs.FunctionContext, emit func(context.Context, gofs.Event[testRecord]) error) error {
+	for i := 0; i < 10; i++ {
+		err := emit(context.Background(), gofs.NewEvent(&testRecord{
+			ID:   i,
+			Name: "test",
+		}))
+		if err != nil {
+			log.Error(err, "failed to emit record")
+		}
+	}
+	return nil
+}
+
+type TestModules struct {
+	testFunction *TestFunction
+	testCounter  *TestCounterFunction
+	testSource   *TestSource
+	testSink     *TestSink
+}
+
+func NewTestModules() *TestModules {
+	return &TestModules{
+		testFunction: &TestFunction{},
+		testCounter:  &TestCounterFunction{},
+		testSource:   &TestSource{},
+		testSink: &TestSink{
+			sinkCh: make(chan Counter),
+		},
+	}
+}
+
+func (t *TestModules) Run() {
 	err := gofs.NewFSClient().
-		Register(gofs.DefaultModule, gofs.Function(func(ctx context.Context, i *Person) *Person {
-			i.Money += 1
-			return i
-		})).
-		Register("counter", gofs.Function(func(ctx context.Context, i *Counter) *Counter {
-			i.Count += 1
-			return i
-		})).
-		Register("test-source", gofs.Source(
-			func(ctx context.Context, emit func(ctx context.Context, record *testRecord) error) {
-				for i := 0; i < 10; i++ {
-					err := emit(ctx, &testRecord{
-						ID:   i,
-						Name: "test",
-					})
-					if err != nil {
-						log.Error(err, "failed to emit record")
-					}
-				}
-			})).
+		Register(gofs.DefaultModule, gofs.WithFunction(t.testFunction)).
+		Register("counter", gofs.WithFunction(t.testCounter)).
+		Register("test-source", gofs.WithSource(t.testSource)).
+		Register("test-sink", gofs.WithSink(t.testSink)).
 		Run()
 	if err != nil {
 		log.Error(err, "failed to run mock client")
@@ -99,7 +148,7 @@ func TestExternalRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go runMockClient()
+	go NewTestModules().Run()
 
 	inputTopic := "input"
 	outputTopic := "output"
@@ -129,10 +178,14 @@ func TestExternalRuntime(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
+	acked := make(chan struct{})
+
 	event, err := contube.NewStructRecord(&Person{
 		Name:  "test",
 		Money: 1,
-	}, func() {})
+	}, func() {
+		acked <- struct{}{}
+	})
 	assert.NoError(t, err)
 	err = fm.ProduceEvent(inputTopic, event)
 	assert.NoError(t, err)
@@ -143,6 +196,12 @@ func TestExternalRuntime(t *testing.T) {
 	err = json.Unmarshal(output.GetPayload(), &p)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, p.Money)
+
+	select {
+	case <-acked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("failed to ack event")
+	}
 
 	err = fm.DeleteFunction("", f.Name)
 	assert.NoError(t, err)
@@ -197,7 +256,7 @@ func TestNonDefaultModule(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
-	go runMockClient()
+	go NewTestModules().Run()
 
 	event, err := contube.NewStructRecord(&Counter{
 		Count: 1,
@@ -262,7 +321,7 @@ func TestExternalSourceModule(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
-	go runMockClient()
+	go NewTestModules().Run()
 
 	for i := 0; i < 10; i++ {
 		output, err := fm.ConsumeEvent(outputTopic)
@@ -276,6 +335,19 @@ func TestExternalSourceModule(t *testing.T) {
 
 	err = fm.DeleteFunction("", f.Name)
 	assert.NoError(t, err)
+}
+
+type TestSink struct {
+	sinkCh chan Counter
+}
+
+func (f *TestSink) Init(_ gofs.FunctionContext) error {
+	return nil
+}
+
+func (f *TestSink) Handle(ctx gofs.FunctionContext, event gofs.Event[Counter]) error {
+	f.sinkCh <- *event.Data()
+	return event.Ack(ctx)
 }
 
 func TestExternalSinkModule(t *testing.T) {
@@ -324,26 +396,30 @@ func TestExternalSinkModule(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
-	sinkCh := make(chan Counter)
+	testMods := NewTestModules()
+	sinkMod := testMods.testSink
 
-	go func() {
-		err := gofs.NewFSClient().Register("test-sink", gofs.Sink(func(ctx context.Context, record *Counter) {
-			sinkCh <- *record
-		})).Run()
-		if err != nil {
-			log.Error(err, "failed to run mock client")
-		}
-	}()
+	go testMods.Run()
+
+	ackCh := make(chan struct{}, 100)
 
 	event, err := contube.NewStructRecord(&Counter{
 		Count: 1,
-	}, func() {})
+	}, func() {
+		ackCh <- struct{}{}
+	})
 	assert.NoError(t, err)
 	err = fm.ProduceEvent(inputTopic, event)
 	assert.NoError(t, err)
 
-	r := <-sinkCh
+	r := <-sinkMod.sinkCh
 	assert.Equal(t, 1, r.Count)
+
+	select {
+	case <-ackCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("failed to ack event")
+	}
 
 	err = fm.DeleteFunction("", f.Name)
 	assert.NoError(t, err)
@@ -395,17 +471,16 @@ func TestExternalStatefulModule(t *testing.T) {
 	readyCh := make(chan struct{})
 
 	go func() {
-		err := gofs.NewFSClient().Register("test-stateful", gofs.Custom(func(ctx context.Context) error { return nil },
-			func(ctx context.Context) error {
-				funcCtx := gofs.GetFunctionContext(ctx)
-				err = funcCtx.PutState(ctx, "test-key", []byte("test-value"))
+		err := gofs.NewFSClient().Register("test-stateful", gofs.WithCustom(gofs.NewSimpleCustom(
+			func(ctx gofs.FunctionContext) error {
+				err = ctx.PutState(context.Background(), "test-key", []byte("test-value"))
 				if err != nil {
 					log.Error(err, "failed to put state")
 				}
 				close(readyCh)
 				return nil
 			},
-		)).Run()
+		))).Run()
 		if err != nil {
 			log.Error(err, "failed to run mock client")
 		}
@@ -471,17 +546,16 @@ func TestFunctionConfig(t *testing.T) {
 	readyCh := make(chan struct{})
 
 	go func() {
-		err := gofs.NewFSClient().Register(module, gofs.Custom(func(ctx context.Context) error { return nil },
-			func(ctx context.Context) error {
-				funcCtx := gofs.GetFunctionContext(ctx)
-				err = funcCtx.PutState(ctx, "test-key", []byte("test-value"))
+		err := gofs.NewFSClient().Register(module, gofs.WithCustom(gofs.NewSimpleCustom(
+			func(ctx gofs.FunctionContext) error {
+				err = ctx.PutState(context.Background(), "test-key", []byte("test-value"))
 				if err != nil {
 					log.Error(err, "failed to put state")
 				}
 				close(readyCh)
 				return nil
 			},
-		)).Run()
+		))).Run()
 		if err != nil {
 			log.Error(err, "failed to run mock client")
 		}

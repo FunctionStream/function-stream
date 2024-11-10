@@ -19,6 +19,7 @@ package gofs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -67,16 +68,17 @@ func NewFSClient() FSClient {
 
 type moduleWrapper struct {
 	*fsClient
-	processFunc func(context.Context, []byte) []byte // Only for Function
-	executeFunc func(context.Context) error
-	initFunc    func(context.Context) error
+	ctx         *functionContextImpl
+	processFunc func(FunctionContext, []byte) ([]byte, error) // Only for Wasm Function
+	executeFunc func(FunctionContext) error
+	initFunc    func(FunctionContext) error
 	registerErr error
 }
 
-func (m *moduleWrapper) AddInitFunc(initFunc func(context.Context) error) *moduleWrapper {
+func (m *moduleWrapper) AddInitFunc(initFunc func(FunctionContext) error) *moduleWrapper {
 	parentInit := m.initFunc
 	if parentInit != nil {
-		m.initFunc = func(ctx context.Context) error {
+		m.initFunc = func(ctx FunctionContext) error {
 			err := parentInit(ctx)
 			if err != nil {
 				return err
@@ -107,19 +109,25 @@ func (c *fsClient) Register(module string, wrapper *moduleWrapper) FSClient {
 	return c
 }
 
-func Function[I any, O any](process func(context.Context, *I) *O) *moduleWrapper {
-	processFunc := func(ctx context.Context, payload []byte) []byte {
+func WithFunction[I any, O any](function Function[I, O]) *moduleWrapper {
+	m := &moduleWrapper{}
+	processFunc := func(ctx FunctionContext, payload []byte) ([]byte, error) { // This is only for the wasm function
 		input := new(I)
 		err := json.Unmarshal(payload, input)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s\n", err, payload)
+			return nil, fmt.Errorf("failed to parse JSON: %w", err)
 		}
-		output := process(ctx, input)
-		outputPayload, _ := json.Marshal(output)
-		return outputPayload
+		output, err := function.Handle(ctx, NewEvent(input))
+		if err != nil {
+			return nil, err
+		}
+		outputPayload, err := json.Marshal(output.Data())
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal JSON: %w", err)
+		}
+		return outputPayload, nil
 	}
-	m := &moduleWrapper{}
-	m.initFunc = func(ctx context.Context) error {
+	m.initFunc = func(ctx FunctionContext) error {
 		outputSchema, err := avroschema.Reflect(new(O))
 		if err != nil {
 			return err
@@ -128,20 +136,34 @@ func Function[I any, O any](process func(context.Context, *I) *O) *moduleWrapper
 		if err != nil {
 			return fmt.Errorf("failed to register schema: %w", err)
 		}
-		return nil
+		return function.Init(ctx)
 	}
-	m.executeFunc = func(ctx context.Context) error {
+	m.executeFunc = func(ctx FunctionContext) error {
 		for {
-			inputPayload, err := m.rpc.Read(ctx)
+			inputPayload, err := ctx.Read(ctx)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Failed to read: %s\n", err)
 				time.Sleep(3 * time.Second)
 				continue
 			}
-			outputPayload := processFunc(ctx, inputPayload)
-			err = m.rpc.Write(ctx, outputPayload)
+			input := new(I)
+			err = json.Unmarshal(*inputPayload.Data(), input)
 			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Failed to write: %s\n", err)
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+			output, err := function.Handle(ctx, NewEventWithAck(input, inputPayload.Ack))
+			if err != nil {
+				return err
+			}
+			outputPayload, err := json.Marshal(output.Data())
+			if err != nil {
+				return fmt.Errorf("failed to marshal JSON: %w", err)
+			}
+			err = ctx.Write(ctx, NewEventWithAck(&outputPayload, func(ctx context.Context) error {
+				return errors.Join(inputPayload.Ack(ctx), output.Ack(ctx))
+			}))
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -149,13 +171,13 @@ func Function[I any, O any](process func(context.Context, *I) *O) *moduleWrapper
 	return m
 }
 
-func Source[O any](process func(ctx context.Context, emit func(context.Context, *O) error)) *moduleWrapper {
+func WithSource[O any](source Source[O]) *moduleWrapper {
 	m := &moduleWrapper{}
-	emit := func(ctx context.Context, event *O) error {
-		outputPayload, _ := json.Marshal(event)
-		return m.rpc.Write(ctx, outputPayload)
+	emit := func(ctx context.Context, event Event[O]) error {
+		outputPayload, _ := json.Marshal(event.Data())
+		return m.ctx.Write(ctx, NewEventWithAck(&outputPayload, event.Ack))
 	}
-	m.initFunc = func(ctx context.Context) error {
+	m.initFunc = func(ctx FunctionContext) error {
 		outputSchema, err := avroschema.Reflect(new(O))
 		if err != nil {
 			return err
@@ -164,26 +186,17 @@ func Source[O any](process func(ctx context.Context, emit func(context.Context, 
 		if err != nil {
 			return fmt.Errorf("failed to register schema: %w", err)
 		}
-		return nil
+		return source.Init(ctx)
 	}
-	m.executeFunc = func(ctx context.Context) error {
-		process(ctx, emit)
-		return nil
+	m.executeFunc = func(ctx FunctionContext) error {
+		return source.Handle(ctx, emit)
 	}
 	return m
 }
 
-func Sink[I any](process func(context.Context, *I)) *moduleWrapper {
-	processFunc := func(ctx context.Context, payload []byte) {
-		input := new(I)
-		err := json.Unmarshal(payload, input)
-		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse JSON: %s %s\n", err, payload)
-		}
-		process(ctx, input)
-	}
+func WithSink[I any](sink Sink[I]) *moduleWrapper {
 	m := &moduleWrapper{}
-	m.initFunc = func(ctx context.Context) error {
+	m.initFunc = func(ctx FunctionContext) error {
 		inputSchema, err := avroschema.Reflect(new(I))
 		if err != nil {
 			return err
@@ -192,60 +205,68 @@ func Sink[I any](process func(context.Context, *I)) *moduleWrapper {
 		if err != nil {
 			return fmt.Errorf("failed to register schema: %w", err)
 		}
-		return nil
+		return sink.Init(ctx)
 	}
-	m.executeFunc = func(ctx context.Context) error {
+	m.executeFunc = func(ctx FunctionContext) error {
 		for {
-			inputPayload, err := m.rpc.Read(ctx)
+			inputPayload, err := ctx.Read(ctx)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Failed to read: %s\n", err)
 				time.Sleep(3 * time.Second)
 				continue
 			}
-			processFunc(ctx, inputPayload)
+			input := new(I)
+			err = json.Unmarshal(*inputPayload.Data(), input)
+			if err != nil {
+				return fmt.Errorf("failed to parse JSON: %w", err)
+			}
+			if err = sink.Handle(ctx, NewEventWithAck(input, inputPayload.Ack)); err != nil {
+				return err
+			}
 		}
 	}
 	return m
 }
 
-func Custom(init func(ctx context.Context) error, execute func(ctx context.Context) error) *moduleWrapper {
+func WithCustom(custom Custom) *moduleWrapper {
 	return &moduleWrapper{
-		initFunc:    init,
-		executeFunc: execute,
+		initFunc: func(ctx FunctionContext) error {
+			return custom.Init(ctx)
+		},
+		executeFunc: func(ctx FunctionContext) error {
+			return custom.Handle(ctx)
+		},
 	}
 }
 
-type FunctionContext struct {
+type functionContextImpl struct {
+	context.Context
 	c      *fsClient
 	name   string
 	module string
 }
 
-func (c *FunctionContext) GetState(ctx context.Context, key string) ([]byte, error) {
+func (c *functionContextImpl) GetState(ctx context.Context, key string) ([]byte, error) {
 	return c.c.rpc.GetState(c.warpContext(ctx), key)
 }
 
-func (c *FunctionContext) PutState(ctx context.Context, key string, value []byte) error {
+func (c *functionContextImpl) PutState(ctx context.Context, key string, value []byte) error {
 	return c.c.rpc.PutState(c.warpContext(ctx), key, value)
 }
 
-func (c *FunctionContext) Write(ctx context.Context, payload []byte) error {
-	return c.c.rpc.Write(c.warpContext(ctx), payload)
+func (c *functionContextImpl) Write(ctx context.Context, rawEvent Event[[]byte]) error {
+	return c.c.rpc.Write(c.warpContext(ctx), rawEvent)
 }
 
-func (c *FunctionContext) Read(ctx context.Context) ([]byte, error) {
+func (c *functionContextImpl) Read(ctx context.Context) (Event[[]byte], error) {
 	return c.c.rpc.Read(c.warpContext(ctx))
 }
 
-func (c *FunctionContext) GetConfig(ctx context.Context) (map[string]string, error) {
+func (c *functionContextImpl) GetConfig(ctx context.Context) (map[string]string, error) {
 	return c.c.rpc.GetConfig(c.warpContext(ctx))
 }
 
 type funcCtxKey struct{}
-
-func GetFunctionContext(ctx context.Context) *FunctionContext {
-	return ctx.Value(funcCtxKey{}).(*FunctionContext)
-}
 
 func (c *fsClient) Run() error {
 	if c.err != nil {
@@ -271,7 +292,7 @@ func (c *fsClient) Run() error {
 	if !ok {
 		return fmt.Errorf("module %s not found", module)
 	}
-	funcCtx := &FunctionContext{c: c, name: funcName, module: module}
+	funcCtx := &functionContextImpl{c: c, name: funcName, module: module}
 	if c.rpc == nil {
 		rpc, err := newFSRPCClient()
 		if err != nil {
@@ -280,8 +301,10 @@ func (c *fsClient) Run() error {
 		c.rpc = rpc
 	}
 	ctx := funcCtx.warpContext(context.WithValue(context.Background(), funcCtxKey{}, funcCtx))
+	funcCtx.Context = ctx
 	m.fsClient = c
-	err := m.initFunc(ctx)
+	m.ctx = funcCtx
+	err := m.initFunc(funcCtx)
 	if err != nil {
 		return err
 	}
@@ -289,7 +312,7 @@ func (c *fsClient) Run() error {
 	if c.rpc.skipExecuting() {
 		return nil
 	}
-	return m.executeFunc(ctx)
+	return m.executeFunc(funcCtx)
 }
 
 func (c *fsClient) Error() string {
