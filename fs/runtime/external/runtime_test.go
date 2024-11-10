@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/functionstream/function-stream/fs/statestore"
 
@@ -98,11 +98,30 @@ func (f *TestSource) Handle(_ gofs.FunctionContext, emit func(context.Context, g
 	return nil
 }
 
-func runMockClient() {
+type TestModules struct {
+	testFunction *TestFunction
+	testCounter  *TestCounterFunction
+	testSource   *TestSource
+	testSink     *TestSink
+}
+
+func NewTestModules() *TestModules {
+	return &TestModules{
+		testFunction: &TestFunction{},
+		testCounter:  &TestCounterFunction{},
+		testSource:   &TestSource{},
+		testSink: &TestSink{
+			sinkCh: make(chan Counter),
+		},
+	}
+}
+
+func (t *TestModules) Run() {
 	err := gofs.NewFSClient().
-		Register(gofs.DefaultModule, gofs.WithFunction(&TestFunction{})).
-		Register("counter", gofs.WithFunction(&TestCounterFunction{})).
-		Register("test-source", gofs.WithSource(&TestSource{})).
+		Register(gofs.DefaultModule, gofs.WithFunction(t.testFunction)).
+		Register("counter", gofs.WithFunction(t.testCounter)).
+		Register("test-source", gofs.WithSource(t.testSource)).
+		Register("test-sink", gofs.WithSink(t.testSink)).
 		Run()
 	if err != nil {
 		log.Error(err, "failed to run mock client")
@@ -129,7 +148,7 @@ func TestExternalRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go runMockClient()
+	go NewTestModules().Run()
 
 	inputTopic := "input"
 	outputTopic := "output"
@@ -159,13 +178,13 @@ func TestExternalRuntime(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
-	var acked atomic.Bool
+	acked := make(chan struct{})
 
 	event, err := contube.NewStructRecord(&Person{
 		Name:  "test",
 		Money: 1,
 	}, func() {
-		acked.Store(true)
+		acked <- struct{}{}
 	})
 	assert.NoError(t, err)
 	err = fm.ProduceEvent(inputTopic, event)
@@ -178,7 +197,11 @@ func TestExternalRuntime(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 2, p.Money)
 
-	assert.True(t, acked.Load())
+	select {
+	case <-acked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("failed to ack event")
+	}
 
 	err = fm.DeleteFunction("", f.Name)
 	assert.NoError(t, err)
@@ -233,7 +256,7 @@ func TestNonDefaultModule(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
-	go runMockClient()
+	go NewTestModules().Run()
 
 	event, err := contube.NewStructRecord(&Counter{
 		Count: 1,
@@ -298,7 +321,7 @@ func TestExternalSourceModule(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
-	go runMockClient()
+	go NewTestModules().Run()
 
 	for i := 0; i < 10; i++ {
 		output, err := fm.ConsumeEvent(outputTopic)
@@ -322,15 +345,9 @@ func (f *TestSink) Init(_ gofs.FunctionContext) error {
 	return nil
 }
 
-func (f *TestSink) Handle(_ gofs.FunctionContext, event gofs.Event[Counter]) error {
+func (f *TestSink) Handle(ctx gofs.FunctionContext, event gofs.Event[Counter]) error {
 	f.sinkCh <- *event.Data()
-	return nil
-}
-
-func newTestSink() *TestSink {
-	return &TestSink{
-		sinkCh: make(chan Counter),
-	}
+	return event.Ack(ctx)
 }
 
 func TestExternalSinkModule(t *testing.T) {
@@ -379,24 +396,30 @@ func TestExternalSinkModule(t *testing.T) {
 	err = fm.StartFunction(f)
 	assert.NoError(t, err)
 
-	sinkMod := newTestSink()
+	testMods := NewTestModules()
+	sinkMod := testMods.testSink
 
-	go func() {
-		err := gofs.NewFSClient().Register("test-sink", gofs.WithSink(sinkMod)).Run()
-		if err != nil {
-			log.Error(err, "failed to run mock client")
-		}
-	}()
+	go testMods.Run()
+
+	ackCh := make(chan struct{}, 100)
 
 	event, err := contube.NewStructRecord(&Counter{
 		Count: 1,
-	}, func() {})
+	}, func() {
+		ackCh <- struct{}{}
+	})
 	assert.NoError(t, err)
 	err = fm.ProduceEvent(inputTopic, event)
 	assert.NoError(t, err)
 
 	r := <-sinkMod.sinkCh
 	assert.Equal(t, 1, r.Count)
+
+	select {
+	case <-ackCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("failed to ack event")
+	}
 
 	err = fm.DeleteFunction("", f.Name)
 	assert.NoError(t, err)
