@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package fs
+package fsold
 
 import (
 	"context"
@@ -22,8 +22,8 @@ import (
 
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs/api"
-	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fsold/api"
+	"github.com/functionstream/function-stream/fsold/contube"
 	"github.com/pkg/errors"
 )
 

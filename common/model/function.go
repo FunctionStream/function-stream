@@ -21,7 +21,7 @@ import (
 
 	"github.com/functionstream/function-stream/common/config"
 
-	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fsold/contube"
 	"github.com/pkg/errors"
 )
 

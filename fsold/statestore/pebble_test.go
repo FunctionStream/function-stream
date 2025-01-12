@@ -14,18 +14,31 @@
  * limitations under the License.
  */
 
-package fs
+package statestore_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/functionstream/function-stream/fsold/api"
+	"github.com/functionstream/function-stream/fsold/statestore"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFuncCtx_NilStore(t *testing.T) {
-	f := newFuncCtxImpl(nil, nil)
-	assert.ErrorIs(t, f.PutState(context.Background(), "key", []byte("value")), ErrStateStoreNotLoaded)
-	_, err := f.GetState(context.Background(), "key")
-	assert.ErrorIs(t, err, ErrStateStoreNotLoaded)
+func TestPebbleStateStore(t *testing.T) {
+	ctx := context.Background()
+	storeFact, err := statestore.NewDefaultPebbleStateStoreFactory()
+	assert.Nil(t, err)
+	store, err := storeFact.NewStateStore(nil)
+	assert.Nil(t, err)
+
+	_, err = store.GetState(ctx, "key")
+	assert.ErrorIs(t, err, api.ErrNotFound)
+
+	err = store.PutState(ctx, "key", []byte("value"))
+	assert.Nil(t, err)
+
+	value, err := store.GetState(ctx, "key")
+	assert.Nil(t, err)
+	assert.Equal(t, "value", string(value))
 }

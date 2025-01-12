@@ -22,9 +22,9 @@ import (
 
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs"
-	"github.com/functionstream/function-stream/fs/api"
-	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fsold"
+	"github.com/functionstream/function-stream/fsold/api"
+	"github.com/functionstream/function-stream/fsold/contube"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 )
@@ -63,7 +63,7 @@ func (t *testFunctionManagerImpl) Close() error {
 	return nil
 }
 
-func newTestFunctionManagerImpl() fs.FunctionManager {
+func newTestFunctionManagerImpl() fsold.FunctionManager {
 	return &testFunctionManagerImpl{
 		functions: make(map[common.NamespacedName]*model.Function),
 	}

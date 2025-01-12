@@ -1,0 +1,109 @@
+/*
+ * Copyright 2024 Function Stream Org.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+option go_package = "fs/runtime/external/model";
+package fs_external;
+
+message RegisterSchemaRequest {
+  string schema = 1;
+}
+
+message RegisterSchemaResponse {
+}
+
+message ReadRequest {
+
+}
+
+message Event {
+  int64 id = 1;
+  bytes payload = 2;
+}
+
+message WriteResponse {
+
+}
+
+message StateContext {
+
+}
+
+message GetStateRequest {
+  StateContext context = 1;
+  string key = 2;
+}
+
+message GetStateResponse {
+  bytes value = 2;
+}
+
+message PutStateRequest {
+  StateContext context = 1;
+  string key = 2;
+  bytes value = 3;
+}
+
+message PutStateResponse {
+
+}
+
+message ListStatesRequest {
+  StateContext context = 1;
+  string start_inclusive = 2;
+  string end_exclusive = 3;
+}
+
+message ListStatesResponse {
+  repeated string keys = 1;
+}
+
+message DeleteStateRequest {
+  StateContext context = 1;
+  string key = 2;
+}
+
+message DeleteStateResponse {
+
+}
+
+message GetConfigRequest {
+
+}
+
+message GetConfigResponse {
+  map<string, string> config = 1;
+}
+
+message AckRequest {
+  int64 id = 1;
+}
+
+message AckResponse {
+
+}
+
+service Function {
+  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
+  rpc Read(ReadRequest) returns (Event);
+  rpc Write(Event) returns (WriteResponse);
+  rpc Ack(AckRequest) returns (AckResponse);
+  rpc PutState(PutStateRequest) returns (PutStateResponse);
+  rpc GetState(GetStateRequest) returns (GetStateResponse);
+  rpc ListStates(ListStatesRequest) returns (ListStatesResponse);
+  rpc DeleteState(DeleteStateRequest) returns (DeleteStateResponse);
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+}

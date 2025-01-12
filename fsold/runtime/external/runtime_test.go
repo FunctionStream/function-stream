@@ -25,13 +25,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/functionstream/function-stream/fs/statestore"
+	"github.com/functionstream/function-stream/fsold/statestore"
 
 	"github.com/functionstream/function-stream/clients/gofs"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs"
-	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fsold"
+	"github.com/functionstream/function-stream/fsold/contube"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -140,9 +140,9 @@ func TestExternalRuntime(t *testing.T) {
 		_ = lis.Close()
 	}(lis)
 
-	fm, err := fs.NewFunctionManager(
-		fs.WithRuntimeFactory("external", NewFactory(lis)),
-		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
+	fm, err := fsold.NewFunctionManager(
+		fsold.WithRuntimeFactory("external", NewFactory(lis)),
+		fsold.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -219,9 +219,9 @@ func TestNonDefaultModule(t *testing.T) {
 		_ = lis.Close()
 	}(lis)
 
-	fm, err := fs.NewFunctionManager(
-		fs.WithRuntimeFactory("external", NewFactory(lis)),
-		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
+	fm, err := fsold.NewFunctionManager(
+		fsold.WithRuntimeFactory("external", NewFactory(lis)),
+		fsold.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -288,10 +288,10 @@ func TestExternalSourceModule(t *testing.T) {
 		_ = lis.Close()
 	}(lis)
 
-	fm, err := fs.NewFunctionManager(
-		fs.WithRuntimeFactory("external", NewFactory(lis)),
-		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
-		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
+	fm, err := fsold.NewFunctionManager(
+		fsold.WithRuntimeFactory("external", NewFactory(lis)),
+		fsold.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
+		fsold.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -362,10 +362,10 @@ func TestExternalSinkModule(t *testing.T) {
 		_ = lis.Close()
 	}(lis)
 
-	fm, err := fs.NewFunctionManager(
-		fs.WithRuntimeFactory("external", NewFactory(lis)),
-		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
-		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
+	fm, err := fsold.NewFunctionManager(
+		fsold.WithRuntimeFactory("external", NewFactory(lis)),
+		fsold.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
+		fsold.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -440,11 +440,11 @@ func TestExternalStatefulModule(t *testing.T) {
 	storeFactory, err := statestore.NewDefaultPebbleStateStoreFactory()
 	assert.NoError(t, err)
 
-	fm, err := fs.NewFunctionManager(
-		fs.WithRuntimeFactory("external", NewFactory(lis)),
-		fs.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
-		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
-		fs.WithStateStoreFactory(storeFactory),
+	fm, err := fsold.NewFunctionManager(
+		fsold.WithRuntimeFactory("external", NewFactory(lis)),
+		fsold.WithTubeFactory("memory", contube.NewMemoryQueueFactory(context.Background())),
+		fsold.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
+		fsold.WithStateStoreFactory(storeFactory),
 	)
 	assert.NoError(t, err)
 
@@ -512,10 +512,10 @@ func TestFunctionConfig(t *testing.T) {
 	storeFactory, err := statestore.NewDefaultPebbleStateStoreFactory()
 	assert.NoError(t, err)
 
-	fm, err := fs.NewFunctionManager(
-		fs.WithRuntimeFactory("external", NewFactory(lis)),
-		fs.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
-		fs.WithStateStoreFactory(storeFactory),
+	fm, err := fsold.NewFunctionManager(
+		fsold.WithRuntimeFactory("external", NewFactory(lis)),
+		fsold.WithTubeFactory("empty", contube.NewEmptyTubeFactory()),
+		fsold.WithStateStoreFactory(storeFactory),
 	)
 	assert.NoError(t, err)
 

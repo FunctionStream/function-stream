@@ -32,7 +32,7 @@ import (
 	adminclient "github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/admin/utils"
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fsold/contube"
 	"golang.org/x/time/rate"
 )
 

@@ -27,9 +27,9 @@ import (
 	funcModel "github.com/functionstream/function-stream/common/model"
 
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/fs/api"
-	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/fs/runtime/external/model"
+	"github.com/functionstream/function-stream/fsold/api"
+	"github.com/functionstream/function-stream/fsold/contube"
+	"github.com/functionstream/function-stream/fsold/runtime/external/model"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"

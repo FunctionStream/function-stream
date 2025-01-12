@@ -22,7 +22,7 @@ import (
 
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
-	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fsold/contube"
 )
 
 // Due to this issue: https://github.com/emicklei/go-restful-openapi/issues/115,

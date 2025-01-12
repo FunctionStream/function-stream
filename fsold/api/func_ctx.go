@@ -19,7 +19,7 @@ package api
 import (
 	"context"
 
-	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fsold/contube"
 )
 
 type FunctionContext interface {

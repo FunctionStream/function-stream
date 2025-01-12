@@ -17,22 +17,15 @@
 package api
 
 import (
-	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs/contube"
-	"golang.org/x/net/context"
+	"github.com/functionstream/function-stream/fsold/contube"
 )
 
-type FunctionInstance interface {
-	Context() context.Context
-	FunctionContext() FunctionContext
-	Definition() *model.Function
-	Index() int32
+type FunctionRuntime interface {
+	Call(e contube.Record) (contube.Record, error)
 	Stop()
-	Run(runtime FunctionRuntime, sources []<-chan contube.Record, sink chan<- contube.Record)
-	Logger() *common.Logger
 }
 
-type FunctionInstanceFactory interface {
-	NewFunctionInstance(f *model.Function, funcCtx FunctionContext, i int32, logger *common.Logger) FunctionInstance
+type FunctionRuntimeFactory interface {
+	NewFunctionRuntime(instance FunctionInstance, rc *model.RuntimeConfig) (FunctionRuntime, error)
 }

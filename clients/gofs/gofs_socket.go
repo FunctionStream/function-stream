@@ -27,7 +27,7 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
-	"github.com/functionstream/function-stream/fs/runtime/external/model"
+	"github.com/functionstream/function-stream/fsold/runtime/external/model"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

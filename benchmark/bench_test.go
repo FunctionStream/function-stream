@@ -27,15 +27,15 @@ import (
 
 	"github.com/functionstream/function-stream/common/config"
 
-	"github.com/functionstream/function-stream/fs/api"
-	"github.com/functionstream/function-stream/fs/runtime/wazero"
+	"github.com/functionstream/function-stream/fsold/api"
+	"github.com/functionstream/function-stream/fsold/runtime/wazero"
 
 	"github.com/apache/pulsar-client-go/pulsaradmin"
 	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
 	adminclient "github.com/functionstream/function-stream/admin/client"
 	adminutils "github.com/functionstream/function-stream/admin/utils"
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/fs/contube"
+	"github.com/functionstream/function-stream/fsold/contube"
 	"github.com/functionstream/function-stream/perf"
 	"github.com/functionstream/function-stream/server"
 )

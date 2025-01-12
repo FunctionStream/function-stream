@@ -28,18 +28,18 @@ import (
 
 	"github.com/functionstream/function-stream/common/config"
 
-	"github.com/functionstream/function-stream/fs/runtime/external"
+	"github.com/functionstream/function-stream/fsold/runtime/external"
 
 	"github.com/go-logr/logr"
 
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/fs"
-	"github.com/functionstream/function-stream/fs/api"
-	"github.com/functionstream/function-stream/fs/contube"
-	"github.com/functionstream/function-stream/fs/runtime/wazero"
-	"github.com/functionstream/function-stream/fs/statestore"
+	"github.com/functionstream/function-stream/fsold"
+	"github.com/functionstream/function-stream/fsold/api"
+	"github.com/functionstream/function-stream/fsold/contube"
+	"github.com/functionstream/function-stream/fsold/runtime/wazero"
+	"github.com/functionstream/function-stream/fsold/statestore"
 	"github.com/go-openapi/spec"
 	"github.com/pkg/errors"
 )
@@ -53,7 +53,7 @@ type Server struct {
 	options       *serverOptions
 	httpSvr       atomic.Pointer[http.Server]
 	log           *common.Logger
-	Manager       fs.FunctionManager
+	Manager       fsold.FunctionManager
 	FunctionStore FunctionStore
 }
 
@@ -63,7 +63,7 @@ type StateStoreProviderType func(c *StateStoreConfig) (api.StateStoreFactory, er
 
 type serverOptions struct {
 	httpListener           net.Listener
-	managerOpts            []fs.ManagerOption
+	managerOpts            []fsold.ManagerOption
 	httpTubeFact           *contube.HttpTubeFactory
 	stateStoreProvider     StateStoreProviderType
 	functionStore          string
@@ -164,7 +164,7 @@ func WithStateStoreLoader(loader func(c *StateStoreConfig) (api.StateStoreFactor
 
 func WithPackageLoader(packageLoader api.PackageLoader) ServerOption {
 	return serverOptionFunc(func(o *serverOptions) (*serverOptions, error) {
-		o.managerOpts = append(o.managerOpts, fs.WithPackageLoader(packageLoader))
+		o.managerOpts = append(o.managerOpts, fsold.WithPackageLoader(packageLoader))
 		return o, nil
 	})
 }
@@ -249,7 +249,7 @@ func WithConfig(config *Config) ServerOption {
 			if err != nil {
 				return nil, err
 			}
-			o.managerOpts = append(o.managerOpts, fs.WithStateStoreFactory(stateStoreFactory))
+			o.managerOpts = append(o.managerOpts, fsold.WithStateStoreFactory(stateStoreFactory))
 		}
 		o.functionStore = config.FunctionStore
 		return o, nil
@@ -263,7 +263,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	options.runtimeFactoryBuilders = make(map[string]func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error))
 	options.runtimeConfig = make(map[string]config.ConfigMap)
 	options.stateStoreProvider = DefaultStateStoreProvider
-	options.managerOpts = []fs.ManagerOption{}
+	options.managerOpts = []fsold.ManagerOption{}
 	for _, o := range opts {
 		if o == nil {
 			continue
@@ -284,13 +284,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		log.Info("Using the default HTTP tube factory")
 	}
 	options.managerOpts = append(options.managerOpts,
-		fs.WithTubeFactory("http", options.httpTubeFact),
-		fs.WithLogger(log.Logger))
+		fsold.WithTubeFactory("http", options.httpTubeFact),
+		fsold.WithLogger(log.Logger))
 
 	// Config Tube Factory
 	if tubeFactories, err := setupFactories(options.tubeFactoryBuilders, options.tubeConfig); err == nil {
 		for name, f := range tubeFactories {
-			options.managerOpts = append(options.managerOpts, fs.WithTubeFactory(name, f))
+			options.managerOpts = append(options.managerOpts, fsold.WithTubeFactory(name, f))
 		}
 	} else {
 		return nil, err
@@ -299,7 +299,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	// Config Runtime Factory
 	if runtimeFactories, err := setupFactories(options.runtimeFactoryBuilders, options.runtimeConfig); err == nil {
 		for name, f := range runtimeFactories {
-			options.managerOpts = append(options.managerOpts, fs.WithRuntimeFactory(name, f))
+			options.managerOpts = append(options.managerOpts, fsold.WithRuntimeFactory(name, f))
 		}
 	} else {
 		return nil, err
@@ -315,10 +315,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error creating queue factory %w", err)
 		}
-		options.managerOpts = append(options.managerOpts, fs.WithQueueFactory(queueFactory))
+		options.managerOpts = append(options.managerOpts, fsold.WithQueueFactory(queueFactory))
 	}
 
-	manager, err := fs.NewFunctionManager(options.managerOpts...)
+	manager, err := fsold.NewFunctionManager(options.managerOpts...)
 	if err != nil {
 		return nil, err
 	}

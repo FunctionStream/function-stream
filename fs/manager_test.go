@@ -1,97 +1,104 @@
-/*
- * Copyright 2024 Function Stream Org.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package fs
 
 import (
 	"context"
+	"fmt"
+	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/model"
+	"github.com/stretchr/testify/require"
 	"testing"
-
-	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/common/model"
-	"github.com/stretchr/testify/assert"
 )
 
-// Mock implementations of the interfaces and structs
-type MockPackage struct {
-	runtimeConfigs []model.RuntimeConfig
+type MockRuntimeAdapter struct {
+	instances map[string]api.Instance
 }
 
-func (m *MockPackage) GetSupportedRuntimeConfig() []model.RuntimeConfig {
-	return m.runtimeConfigs
+func NewMockRuntimeAdapter() *MockRuntimeAdapter {
+	return &MockRuntimeAdapter{
+		instances: make(map[string]api.Instance),
+	}
 }
 
-func TestGenerateRuntimeConfig_EmptySupportedRuntimeConfig(t *testing.T) {
-	ctx := context.Background()
-	p := &MockPackage{runtimeConfigs: []model.RuntimeConfig{}}
-	f := &model.Function{}
-
-	_, err := generateRuntimeConfig(ctx, p, f)
-	assert.NotNil(t, err)
-	assert.Equal(t, common.ErrorPackageNoSupportedRuntime, err)
+type MockPackageLoader struct {
+	pkgs map[string]model.Package
 }
 
-func TestGenerateRuntimeConfig_EmptyFunctionRuntimeType(t *testing.T) {
-	ctx := context.Background()
-	p := &MockPackage{
-		runtimeConfigs: []model.RuntimeConfig{
-			{Type: "runtime1", Config: map[string]interface{}{"key1": "value1"}},
+func (m *MockPackageLoader) LoadPackage(ctx context.Context, name string) (*model.Package, error) {
+	if pkg, ok := m.pkgs[name]; ok {
+		return &pkg, nil
+	}
+	return nil, fmt.Errorf("package %s not found", name)
+}
+
+func (m *MockRuntimeAdapter) DeployFunction(ctx context.Context, instance api.Instance) error {
+	m.instances[instance.Function().Name] = instance
+	return nil
+}
+
+func (m *MockRuntimeAdapter) DeleteFunction(ctx context.Context, name string) error {
+	if _, ok := m.instances[name]; !ok {
+		return fmt.Errorf("function %s not found", name)
+	}
+	delete(m.instances, name)
+	return nil
+}
+
+func TestManagerImpl(t *testing.T) {
+	pkgLoader := &MockPackageLoader{
+		pkgs: map[string]model.Package{
+			"test-pkg": {
+				Name: "test-pkg",
+				Type: "test-runtime",
+				Modules: map[string]model.ModuleConfig{
+					"test-module": {
+						"test-config": {
+							Type:     "string",
+							Required: "true",
+						},
+					},
+				},
+			},
 		},
 	}
+
+	mockRuntimeAdapter := NewMockRuntimeAdapter()
+
+	m, err := NewManager(ManagerConfig{
+		RuntimeMap: map[string]api.RuntimeAdapter{
+			"test-runtime": mockRuntimeAdapter,
+		},
+		PackageLoader: pkgLoader,
+	})
+
+	require.NoError(t, err)
+
 	f := &model.Function{
-		Runtime: model.RuntimeConfig{},
-	}
-
-	rc, err := generateRuntimeConfig(ctx, p, f)
-	assert.Nil(t, err)
-	assert.Equal(t, "runtime1", rc.Type)
-	assert.Equal(t, "value1", rc.Config["key1"])
-}
-
-func TestGenerateRuntimeConfig_UnsupportedFunctionRuntimeType(t *testing.T) {
-	ctx := context.Background()
-	p := &MockPackage{
-		runtimeConfigs: []model.RuntimeConfig{
-			{Type: "runtime1", Config: map[string]interface{}{"key1": "value1"}},
+		Name:    "test-func",
+		Package: "test-pkg",
+		Module:  "test-module",
+		Config: map[string]string{
+			"test-config": "test-value",
 		},
 	}
-	f := &model.Function{
-		Runtime: model.RuntimeConfig{Type: "unsupported_runtime"},
-	}
 
-	_, err := generateRuntimeConfig(ctx, p, f)
-	assert.NotNil(t, err)
-	assert.Equal(t, "runtime type 'unsupported_runtime' is not supported by package ''", err.Error())
-}
+	t.Run("Deploy", func(t *testing.T) {
+		err = m.Deploy(context.Background(), f)
+		require.NoError(t, err)
+		ins, ok := mockRuntimeAdapter.instances[f.Name]
+		require.True(t, ok)
+		insF := ins.Function()
+		require.Equal(t, f, insF)
+	})
 
-func TestGenerateRuntimeConfig_SupportedFunctionRuntimeType(t *testing.T) {
-	ctx := context.Background()
-	p := &MockPackage{
-		runtimeConfigs: []model.RuntimeConfig{
-			{Type: "runtime1", Config: map[string]interface{}{"key1": "value1"}},
-			{Type: "runtime2", Config: map[string]interface{}{"key2": "value2"}},
-		},
-	}
-	f := &model.Function{
-		Runtime: model.RuntimeConfig{Type: "runtime2", Config: map[string]interface{}{"key3": "value3"}},
-	}
+	t.Run("Delete", func(t *testing.T) {
+		err = m.Delete(context.Background(), f.Name)
+		require.NoError(t, err)
+		_, ok := mockRuntimeAdapter.instances[f.Name]
+		require.False(t, ok)
+	})
 
-	rc, err := generateRuntimeConfig(ctx, p, f)
-	assert.Nil(t, err)
-	assert.Equal(t, "runtime2", rc.Type)
-	assert.Equal(t, "value2", rc.Config["key2"])
-	assert.Equal(t, "value3", rc.Config["key3"])
+	t.Run("Deploy with invalid function", func(t *testing.T) {
+		err = m.Deploy(context.Background(), &model.Function{})
+		require.Error(t, err)
+	})
 }

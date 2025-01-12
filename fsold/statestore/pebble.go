@@ -25,7 +25,7 @@ import (
 	"github.com/functionstream/function-stream/common/model"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fsold/api"
 	"github.com/pkg/errors"
 )
 

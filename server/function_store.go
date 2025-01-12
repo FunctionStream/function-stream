@@ -30,7 +30,7 @@ import (
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs"
+	"github.com/functionstream/function-stream/fsold"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -43,7 +43,7 @@ type FunctionStore interface {
 
 type FunctionStoreImpl struct {
 	mu               sync.Mutex
-	fm               fs.FunctionManager
+	fm               fsold.FunctionManager
 	path             string
 	loadedFunctions  map[string]*model.Function
 	loadingFunctions map[string]*model.Function
@@ -134,7 +134,7 @@ func (f *FunctionStoreImpl) loadFile(path string) error {
 	return nil
 }
 
-func NewFunctionStoreImpl(fm fs.FunctionManager, path string) (FunctionStore, error) {
+func NewFunctionStoreImpl(fm fsold.FunctionManager, path string) (FunctionStore, error) {
 	return &FunctionStoreImpl{
 		fm:   fm,
 		path: path,

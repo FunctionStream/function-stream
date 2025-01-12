@@ -19,7 +19,7 @@ package _package
 import (
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
-	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fsold/api"
 )
 
 type WasmPackage struct {
