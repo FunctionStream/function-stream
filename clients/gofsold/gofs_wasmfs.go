@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-package gofs
+package gofsold
 
 import "C"
 import (

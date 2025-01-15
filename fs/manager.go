@@ -13,15 +13,17 @@ type ManagerImpl struct {
 	runtimeMap  map[string]api.RuntimeAdapter
 	instanceMap map[string]api.Instance
 	pkgLoader   api.PackageLoader
+	es          api.EventStorage
 	validate    *validator.Validate
 }
 
 type ManagerConfig struct {
 	RuntimeMap    map[string]api.RuntimeAdapter
 	PackageLoader api.PackageLoader
+	EventStorage  api.EventStorage
 }
 
-func NewManager(opts ManagerConfig) (api.Manager, error) {
+func NewManager(cfg ManagerConfig) (api.Manager, error) {
 	validate := validator.New()
 	err := validate.RegisterValidation("alphanumdash", func(fl validator.FieldLevel) bool {
 		value := fl.Field().String()
@@ -33,8 +35,9 @@ func NewManager(opts ManagerConfig) (api.Manager, error) {
 		return nil, err
 	}
 	return &ManagerImpl{
-		runtimeMap:  opts.RuntimeMap,
-		pkgLoader:   opts.PackageLoader,
+		runtimeMap:  cfg.RuntimeMap,
+		pkgLoader:   cfg.PackageLoader,
+		es:          cfg.EventStorage,
 		instanceMap: make(map[string]api.Instance),
 		validate:    validate,
 	}, nil
@@ -65,6 +68,12 @@ type instance struct {
 	ctx context.Context
 	f   *model.Function
 	p   *model.Package
+	es  api.EventStorage
+}
+
+func (i *instance) EventStorage() api.EventStorage {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (i *instance) Context() context.Context {
@@ -103,6 +112,7 @@ func (m *ManagerImpl) Deploy(ctx context.Context, f *model.Function) error {
 		ctx: ctx,
 		f:   f,
 		p:   p,
+		es:  m.es,
 	}
 	m.instanceMap[f.Name] = ins
 

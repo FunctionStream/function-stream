@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/functionstream/function-stream/clients/gofs"
+	"github.com/functionstream/function-stream/clients/gofsold"
 
 	"github.com/functionstream/function-stream/common/model"
 
@@ -99,7 +99,7 @@ func (f *WazeroFunctionRuntimeFactory) NewFunctionRuntime(instance api.FunctionI
 	}
 	fsConfig := wazero.NewFSConfig().(sysfs.FSConfig).WithSysFSMount(newMemoryFS(fileMap), "")
 	config := wazero.NewModuleConfig().
-		WithEnv(gofs.FSFunctionName, common.GetNamespacedName(instance.Definition().Namespace,
+		WithEnv(gofsold.FSFunctionName, common.GetNamespacedName(instance.Definition().Namespace,
 			instance.Definition().Name).String()).
 		WithStdout(wasmLog).WithStderr(wasmLog).WithFSConfig(fsConfig)
 

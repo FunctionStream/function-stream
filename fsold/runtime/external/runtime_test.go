@@ -27,7 +27,7 @@ import (
 
 	"github.com/functionstream/function-stream/fsold/statestore"
 
-	"github.com/functionstream/function-stream/clients/gofs"
+	"github.com/functionstream/function-stream/clients/gofsold"
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/common/model"
 	"github.com/functionstream/function-stream/fsold"
@@ -55,39 +55,39 @@ var log = common.NewDefaultLogger()
 type TestFunction struct {
 }
 
-func (f *TestFunction) Init(_ gofs.FunctionContext) error {
+func (f *TestFunction) Init(_ gofsold.FunctionContext) error {
 	return nil
 }
 
-func (f *TestFunction) Handle(_ gofs.FunctionContext, event gofs.Event[Person]) (gofs.Event[Person], error) {
+func (f *TestFunction) Handle(_ gofsold.FunctionContext, event gofsold.Event[Person]) (gofsold.Event[Person], error) {
 	p := event.Data()
 	p.Money += 1
-	return gofs.NewEvent(p), nil
+	return gofsold.NewEvent(p), nil
 }
 
 type TestCounterFunction struct {
 }
 
-func (f *TestCounterFunction) Init(ctx gofs.FunctionContext) error {
+func (f *TestCounterFunction) Init(ctx gofsold.FunctionContext) error {
 	return nil
 }
 
-func (f *TestCounterFunction) Handle(_ gofs.FunctionContext, event gofs.Event[Counter]) (gofs.Event[Counter], error) {
+func (f *TestCounterFunction) Handle(_ gofsold.FunctionContext, event gofsold.Event[Counter]) (gofsold.Event[Counter], error) {
 	c := event.Data()
 	c.Count += 1
-	return gofs.NewEvent(c), nil
+	return gofsold.NewEvent(c), nil
 }
 
 type TestSource struct {
 }
 
-func (f *TestSource) Init(_ gofs.FunctionContext) error {
+func (f *TestSource) Init(_ gofsold.FunctionContext) error {
 	return nil
 }
 
-func (f *TestSource) Handle(_ gofs.FunctionContext, emit func(context.Context, gofs.Event[testRecord]) error) error {
+func (f *TestSource) Handle(_ gofsold.FunctionContext, emit func(context.Context, gofsold.Event[testRecord]) error) error {
 	for i := 0; i < 10; i++ {
-		err := emit(context.Background(), gofs.NewEvent(&testRecord{
+		err := emit(context.Background(), gofsold.NewEvent(&testRecord{
 			ID:   i,
 			Name: "test",
 		}))
@@ -117,11 +117,11 @@ func NewTestModules() *TestModules {
 }
 
 func (t *TestModules) Run() {
-	err := gofs.NewFSClient().
-		Register(gofs.DefaultModule, gofs.WithFunction(t.testFunction)).
-		Register("counter", gofs.WithFunction(t.testCounter)).
-		Register("test-source", gofs.WithSource(t.testSource)).
-		Register("test-sink", gofs.WithSink(t.testSink)).
+	err := gofsold.NewFSClient().
+		Register(gofsold.DefaultModule, gofsold.WithFunction(t.testFunction)).
+		Register("counter", gofsold.WithFunction(t.testCounter)).
+		Register("test-source", gofsold.WithSource(t.testSource)).
+		Register("test-sink", gofsold.WithSink(t.testSink)).
 		Run()
 	if err != nil {
 		log.Error(err, "failed to run mock client")
@@ -341,11 +341,11 @@ type TestSink struct {
 	sinkCh chan Counter
 }
 
-func (f *TestSink) Init(_ gofs.FunctionContext) error {
+func (f *TestSink) Init(_ gofsold.FunctionContext) error {
 	return nil
 }
 
-func (f *TestSink) Handle(ctx gofs.FunctionContext, event gofs.Event[Counter]) error {
+func (f *TestSink) Handle(ctx gofsold.FunctionContext, event gofsold.Event[Counter]) error {
 	f.sinkCh <- *event.Data()
 	return event.Ack(ctx)
 }
@@ -471,8 +471,8 @@ func TestExternalStatefulModule(t *testing.T) {
 	readyCh := make(chan struct{})
 
 	go func() {
-		err := gofs.NewFSClient().Register("test-stateful", gofs.WithCustom(gofs.NewSimpleCustom(
-			func(ctx gofs.FunctionContext) error {
+		err := gofsold.NewFSClient().Register("test-stateful", gofsold.WithCustom(gofsold.NewSimpleCustom(
+			func(ctx gofsold.FunctionContext) error {
 				err = ctx.PutState(context.Background(), "test-key", []byte("test-value"))
 				if err != nil {
 					log.Error(err, "failed to put state")
@@ -546,8 +546,8 @@ func TestFunctionConfig(t *testing.T) {
 	readyCh := make(chan struct{})
 
 	go func() {
-		err := gofs.NewFSClient().Register(module, gofs.WithCustom(gofs.NewSimpleCustom(
-			func(ctx gofs.FunctionContext) error {
+		err := gofsold.NewFSClient().Register(module, gofsold.WithCustom(gofsold.NewSimpleCustom(
+			func(ctx gofsold.FunctionContext) error {
 				err = ctx.PutState(context.Background(), "test-key", []byte("test-value"))
 				if err != nil {
 					log.Error(err, "failed to put state")

@@ -13,7 +13,7 @@ type Function struct {
 	Package string        `json:"package" validate:"required,alphanumdash"`
 	Module  string        `json:"module" validate:"required,alphanumdash"`
 	Sources []TopicConfig `json:"sources"`
-	Sink    []TopicConfig `json:"sink"`
+	Sink    TopicConfig   `json:"sink"`
 	Config  ConfigMap     `json:"config"`
 }
 

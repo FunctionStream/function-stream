@@ -18,19 +18,27 @@ syntax = "proto3";
 option go_package = "fs/runtime/external/model";
 package fs_external;
 
-message RegisterSchemaRequest {
-  string schema = 1;
+message Event {
+  string id = 1;
+  int64 schemaId = 2;
+  bytes payload = 3;
+  map<string, string> properties = 4;
 }
 
-message RegisterSchemaResponse {
+message Context {
+  string functionName = 1;
 }
 
 message ReadRequest {
-
+  Context context = 1;
 }
 
-message Event {
-  int64 id = 1;
+message ReadResponse {
+  Event event = 1;
+}
+
+message WriteRequest {
+  Context context = 1;
   bytes payload = 2;
 }
 
@@ -38,8 +46,17 @@ message WriteResponse {
 
 }
 
-message StateContext {
+message CommitRequest {
+  Context context = 1;
+  string eventId = 2;
+}
 
+message CommitResponse {
+
+}
+
+message StateContext {
+  Context context = 1;
 }
 
 message GetStateRequest {
@@ -80,30 +97,41 @@ message DeleteStateResponse {
 
 }
 
-message GetConfigRequest {
-
-}
-
-message GetConfigResponse {
-  map<string, string> config = 1;
-}
-
-message AckRequest {
-  int64 id = 1;
-}
-
-message AckResponse {
-
-}
-
-service Function {
-  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
-  rpc Read(ReadRequest) returns (Event);
-  rpc Write(Event) returns (WriteResponse);
-  rpc Ack(AckRequest) returns (AckResponse);
+service FunctionService {
+  rpc Read(ReadRequest) returns (stream Event);
+  rpc Write(WriteRequest) returns (WriteResponse);
+  rpc Commit(CommitRequest) returns (CommitResponse);
   rpc PutState(PutStateRequest) returns (PutStateResponse);
   rpc GetState(GetStateRequest) returns (GetStateResponse);
   rpc ListStates(ListStatesRequest) returns (ListStatesResponse);
   rpc DeleteState(DeleteStateRequest) returns (DeleteStateResponse);
-  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+}
+
+enum FunctionEventType {
+  DEPLOY = 0;
+  DELETE = 1;
+}
+
+message FunctionEvent {
+  FunctionEventType type = 1;
+  oneof payload {
+    Function function = 2;
+    string functionName = 3;
+  }
+}
+
+message Function {
+  string name = 1;
+  string package = 2;
+  string module = 3;
+  map<string, string> config = 4;
+}
+
+message OnDeployRequest {
+  string serviceId = 1;
+  repeated string modules = 2;
+}
+
+service RuntimeService {
+  rpc OnEvent(OnDeployRequest) returns (stream FunctionEvent);
 }
