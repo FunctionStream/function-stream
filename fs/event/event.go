@@ -23,7 +23,7 @@ func NewRawEvent(id string, payload []byte) *RawEvent {
 }
 
 func (e *RawEvent) ID() string {
-	return ""
+	return e.id
 }
 
 func (e *RawEvent) SchemaID() int64 {
