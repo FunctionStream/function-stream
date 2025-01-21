@@ -34,9 +34,17 @@ type Instance interface {
 	Function() *model.Function
 	Package() *model.Package
 	EventStorage() EventStorage
+	StateStore() StateStore
 }
 
 type RuntimeAdapter interface {
 	DeployFunction(ctx context.Context, instance Instance) error
 	DeleteFunction(ctx context.Context, name string) error
+}
+
+type StateStore interface {
+	Get(ctx context.Context, key string) ([]byte, error)
+	Put(ctx context.Context, key string, value []byte) error
+	List(ctx context.Context, startInclusive string, endExclusive string) ([]string, error)
+	Delete(ctx context.Context, key string) error
 }

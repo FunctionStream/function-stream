@@ -101,6 +101,7 @@ service FunctionService {
   rpc Read(ReadRequest) returns (stream Event);
   rpc Write(WriteRequest) returns (WriteResponse);
   rpc Commit(CommitRequest) returns (CommitResponse);
+
   rpc PutState(PutStateRequest) returns (PutStateResponse);
   rpc GetState(GetStateRequest) returns (GetStateResponse);
   rpc ListStates(ListStatesRequest) returns (ListStatesResponse);

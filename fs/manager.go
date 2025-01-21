@@ -14,6 +14,7 @@ type ManagerImpl struct {
 	instanceMap map[string]api.Instance
 	pkgLoader   api.PackageLoader
 	es          api.EventStorage
+	stateStore  api.StateStore
 	validate    *validator.Validate
 }
 
@@ -21,6 +22,7 @@ type ManagerConfig struct {
 	RuntimeMap    map[string]api.RuntimeAdapter
 	PackageLoader api.PackageLoader
 	EventStorage  api.EventStorage
+	StateStore    api.StateStore
 }
 
 func NewManager(cfg ManagerConfig) (api.Manager, error) {
@@ -38,6 +40,7 @@ func NewManager(cfg ManagerConfig) (api.Manager, error) {
 		runtimeMap:  cfg.RuntimeMap,
 		pkgLoader:   cfg.PackageLoader,
 		es:          cfg.EventStorage,
+		stateStore:  cfg.StateStore,
 		instanceMap: make(map[string]api.Instance),
 		validate:    validate,
 	}, nil
@@ -69,6 +72,7 @@ type instance struct {
 	f   *model.Function
 	p   *model.Package
 	es  api.EventStorage
+	ss  api.StateStore
 }
 
 func (i *instance) EventStorage() api.EventStorage {
@@ -86,6 +90,10 @@ func (i *instance) Function() *model.Function {
 
 func (i *instance) Package() *model.Package {
 	return i.p
+}
+
+func (i *instance) StateStore() api.StateStore {
+	return i.ss
 }
 
 func (m *ManagerImpl) Deploy(ctx context.Context, f *model.Function) error {
@@ -113,6 +121,7 @@ func (m *ManagerImpl) Deploy(ctx context.Context, f *model.Function) error {
 		f:   f,
 		p:   p,
 		es:  m.es,
+		ss:  m.stateStore,
 	}
 	m.instanceMap[f.Name] = ins
 

@@ -155,6 +155,10 @@ func (m *MockInstance) EventStorage() api.EventStorage {
 	return m.es
 }
 
+func (m *MockInstance) StateStore() api.StateStore {
+	return nil
+}
+
 func NewMockInstance(ctx context.Context, f *model.Function, es api.EventStorage, p *model.Package) api.Instance {
 	return &MockInstance{
 		ctx: ctx,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/model"
+	"github.com/functionstream/function-stream/fs/statestore/memory"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -68,6 +69,7 @@ func TestManagerImpl(t *testing.T) {
 			"test-runtime": mockRuntimeAdapter,
 		},
 		PackageLoader: pkgLoader,
+		StateStore:    memory.NewMemoryStateStore(),
 	})
 
 	require.NoError(t, err)
@@ -88,6 +90,8 @@ func TestManagerImpl(t *testing.T) {
 		require.True(t, ok)
 		insF := ins.Function()
 		require.Equal(t, f, insF)
+		ss := ins.StateStore()
+		require.IsType(t, &memory.Store{}, ss)
 	})
 
 	t.Run("Delete", func(t *testing.T) {
