@@ -17,10 +17,15 @@ type Event interface {
 type Manager interface {
 	Deploy(ctx context.Context, f *model.Function) error
 	Delete(ctx context.Context, name string) error
+	List() []*model.Function
 }
 
-type PackageLoader interface {
-	LoadPackage(ctx context.Context, name string) (*model.Package, error)
+type PackageStorage interface {
+	Create(ctx context.Context, pkg *model.Package) error
+	Read(ctx context.Context, name string) (*model.Package, error)
+	List(ctx context.Context) ([]*model.Package, error)
+	Update(ctx context.Context, pkg *model.Package) error
+	Delete(ctx context.Context, name string) error
 }
 
 type EventStorage interface {

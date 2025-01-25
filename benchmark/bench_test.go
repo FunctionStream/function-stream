@@ -37,11 +37,11 @@ import (
 	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/fsold/contube"
 	"github.com/functionstream/function-stream/perf"
-	"github.com/functionstream/function-stream/server"
+	"github.com/functionstream/function-stream/serverold"
 )
 
 func BenchmarkStressForBasicFunc(b *testing.B) {
-	s, err := server.NewDefaultServer()
+	s, err := serverold.NewDefaultServer()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -117,12 +117,12 @@ func BenchmarkStressForBasicFunc(b *testing.B) {
 func BenchmarkStressForBasicFuncWithMemoryQueue(b *testing.B) {
 	memoryQueueFactory := contube.NewMemoryQueueFactory(context.Background())
 
-	s, err := server.NewServer(
-		server.WithRuntimeFactoryBuilder(common.WASMRuntime,
+	s, err := serverold.NewServer(
+		serverold.WithRuntimeFactoryBuilder(common.WASMRuntime,
 			func(configMap config.ConfigMap) (api.FunctionRuntimeFactory, error) {
 				return wazero.NewWazeroFunctionRuntimeFactory(), nil
 			}),
-		server.WithTubeFactoryBuilder(common.MemoryTubeType,
+		serverold.WithTubeFactoryBuilder(common.MemoryTubeType,
 			func(configMap config.ConfigMap) (contube.TubeFactory, error) {
 				return memoryQueueFactory, nil
 			}),

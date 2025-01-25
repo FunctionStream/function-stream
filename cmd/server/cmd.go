@@ -21,7 +21,7 @@ import (
 	"io"
 
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/server"
+	"github.com/functionstream/function-stream/serverold"
 	"github.com/spf13/cobra"
 )
 
@@ -52,23 +52,23 @@ func init() {
 
 func exec(*cobra.Command, []string) {
 	common.RunProcess(func() (io.Closer, error) {
-		var c *server.Config
+		var c *serverold.Config
 		var err error
 		if config.loadConfigFromEnv {
-			c, err = server.LoadConfigFromEnv()
+			c, err = serverold.LoadConfigFromEnv()
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			c, err = server.LoadConfigFromFile(config.configFile)
+			c, err = serverold.LoadConfigFromFile(config.configFile)
 			if err != nil {
 				return nil, err
 			}
 		}
-		s, err := server.NewServer(
-			server.WithTubeFactoryBuilders(server.GetBuiltinTubeFactoryBuilder()),
-			server.WithRuntimeFactoryBuilders(server.GetBuiltinRuntimeFactoryBuilder()),
-			server.WithConfig(c))
+		s, err := serverold.NewServer(
+			serverold.WithTubeFactoryBuilders(serverold.GetBuiltinTubeFactoryBuilder()),
+			serverold.WithRuntimeFactoryBuilders(serverold.GetBuiltinRuntimeFactoryBuilder()),
+			serverold.WithConfig(c))
 		if err != nil {
 			return nil, err
 		}

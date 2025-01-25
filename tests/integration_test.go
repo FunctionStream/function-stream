@@ -28,12 +28,12 @@ import (
 	adminclient "github.com/functionstream/function-stream/admin/client"
 	"github.com/functionstream/function-stream/admin/utils"
 	"github.com/functionstream/function-stream/common"
-	"github.com/functionstream/function-stream/server"
+	"github.com/functionstream/function-stream/serverold"
 )
 
 func startServer() {
 	common.RunProcess(func() (io.Closer, error) {
-		s, err := server.NewDefaultServer()
+		s, err := serverold.NewDefaultServer()
 		if err != nil {
 			return nil, err
 		}

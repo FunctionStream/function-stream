@@ -7,12 +7,14 @@ import (
 	"github.com/functionstream/function-stream/fs/model"
 	"github.com/go-playground/validator/v10"
 	"regexp"
+	"sync"
 )
 
 type ManagerImpl struct {
 	runtimeMap  map[string]api.RuntimeAdapter
+	mu          sync.Mutex
 	instanceMap map[string]api.Instance
-	pkgLoader   api.PackageLoader
+	pkgLoader   api.PackageStorage
 	es          api.EventStorage
 	stateStore  api.StateStore
 	validate    *validator.Validate
@@ -20,7 +22,7 @@ type ManagerImpl struct {
 
 type ManagerConfig struct {
 	RuntimeMap    map[string]api.RuntimeAdapter
-	PackageLoader api.PackageLoader
+	PackageLoader api.PackageStorage
 	EventStorage  api.EventStorage
 	StateStore    api.StateStore
 }
@@ -97,17 +99,27 @@ func (i *instance) StateStore() api.StateStore {
 }
 
 func (m *ManagerImpl) Deploy(ctx context.Context, f *model.Function) error {
+	m.mu.Lock()
+	_, ok := m.instanceMap[f.Name]
+	if ok {
+		m.mu.Unlock()
+		return api.ErrFunctionAlreadyExists
+	}
+
 	err := m.validateFunctionModel(f)
 	if err != nil {
+		m.mu.Unlock()
 		return err
 	}
-	p, err := m.pkgLoader.LoadPackage(ctx, f.Package)
+	p, err := m.pkgLoader.Read(ctx, f.Package)
 	if err != nil {
+		m.mu.Unlock()
 		return err
 	}
 
 	err = validateFunctionPackage(f, p)
 	if err != nil {
+		m.mu.Unlock()
 		return err
 	}
 
@@ -124,14 +136,17 @@ func (m *ManagerImpl) Deploy(ctx context.Context, f *model.Function) error {
 		ss:  m.stateStore,
 	}
 	m.instanceMap[f.Name] = ins
+	m.mu.Unlock()
 
 	return runtime.DeployFunction(ctx, ins)
 }
 
 func (m *ManagerImpl) Delete(ctx context.Context, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	ins, ok := m.instanceMap[name]
 	if !ok {
-		return fmt.Errorf("function %s not found", name)
+		return api.ErrFunctionNotFound
 	}
 
 	runtime, ok := m.runtimeMap[ins.Package().Type]
@@ -145,4 +160,14 @@ func (m *ManagerImpl) Delete(ctx context.Context, name string) error {
 
 	delete(m.instanceMap, name)
 	return nil
+}
+
+func (m *ManagerImpl) List() []*model.Function {
+	var functions []*model.Function
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, ins := range m.instanceMap {
+		functions = append(functions, ins.Function())
+	}
+	return functions
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package server
+package serverold
 
 import (
 	"net/http"

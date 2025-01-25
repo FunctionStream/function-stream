@@ -39,13 +39,6 @@ func (es *MemEventStorage) release(name string) {
 func (es *MemEventStorage) getOrCreateChan(name string) chan api.Event {
 	es.mu.Lock()
 	defer es.mu.Unlock()
-	//defer func() {
-	//	if es.log.Core().Enabled(zap.DebugLevel) {
-	//		es.log.Debug("Get memory queue chan",
-	//			zap.Int32("current_use_count", atomic.LoadInt32(&es.queues[name].refCnt)),
-	//			zap.String("name", name))
-	//	}
-	//}()
 	if q, ok := es.queues[name]; ok {
 		atomic.AddInt32(&q.refCnt, 1)
 		return q.c

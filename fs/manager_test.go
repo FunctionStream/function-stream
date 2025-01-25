@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/model"
+	memory2 "github.com/functionstream/function-stream/fs/packagestorage/memory"
 	"github.com/functionstream/function-stream/fs/statestore/memory"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -18,17 +19,6 @@ func NewMockRuntimeAdapter() *MockRuntimeAdapter {
 	return &MockRuntimeAdapter{
 		instances: make(map[string]api.Instance),
 	}
-}
-
-type MockPackageLoader struct {
-	pkgs map[string]model.Package
-}
-
-func (m *MockPackageLoader) LoadPackage(ctx context.Context, name string) (*model.Package, error) {
-	if pkg, ok := m.pkgs[name]; ok {
-		return &pkg, nil
-	}
-	return nil, fmt.Errorf("package %s not found", name)
 }
 
 func (m *MockRuntimeAdapter) DeployFunction(ctx context.Context, instance api.Instance) error {
@@ -45,22 +35,20 @@ func (m *MockRuntimeAdapter) DeleteFunction(ctx context.Context, name string) er
 }
 
 func TestManagerImpl(t *testing.T) {
-	pkgLoader := &MockPackageLoader{
-		pkgs: map[string]model.Package{
-			"test-pkg": {
-				Name: "test-pkg",
-				Type: "test-runtime",
-				Modules: map[string]model.ModuleConfig{
-					"test-module": {
-						"test-config": {
-							Type:     "string",
-							Required: "true",
-						},
-					},
+	pkgStorage := memory2.NewMemoryPackageStorage()
+	err := pkgStorage.Create(context.Background(), &model.Package{
+		Name: "test-pkg",
+		Type: "test-runtime",
+		Modules: map[string]model.ModuleConfig{
+			"test-module": {
+				"test-config": {
+					Type:     "string",
+					Required: "true",
 				},
 			},
 		},
-	}
+	})
+	require.NoError(t, err)
 
 	mockRuntimeAdapter := NewMockRuntimeAdapter()
 
@@ -68,7 +56,7 @@ func TestManagerImpl(t *testing.T) {
 		RuntimeMap: map[string]api.RuntimeAdapter{
 			"test-runtime": mockRuntimeAdapter,
 		},
-		PackageLoader: pkgLoader,
+		PackageLoader: pkgStorage,
 		StateStore:    memory.NewMemoryStateStore(),
 	})
 
