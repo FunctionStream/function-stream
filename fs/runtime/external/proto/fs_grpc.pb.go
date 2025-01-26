@@ -17,7 +17,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.2
-// source: proto/fs.proto
+// source: fs/runtime/external/proto/fs.proto
 
 package model
 
@@ -364,7 +364,7 @@ var FunctionService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "proto/fs.proto",
+	Metadata: "fs/runtime/external/proto/fs.proto",
 }
 
 const (
@@ -469,5 +469,5 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "proto/fs.proto",
+	Metadata: "fs/runtime/external/proto/fs.proto",
 }

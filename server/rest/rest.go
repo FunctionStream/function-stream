@@ -15,12 +15,14 @@ import (
 )
 
 type Handler struct {
-	HttpListener net.Listener
-	EnableTls    bool
-	TlsCertFile  string
-	TlsKeyFile   string
-	Manager      api.Manager
-	Log          *zap.Logger
+	HttpListener   net.Listener
+	EnableTls      bool
+	TlsCertFile    string
+	TlsKeyFile     string
+	Manager        api.Manager
+	PackageStorage api.PackageStorage
+	EventStorage   api.EventStorage
+	Log            *zap.Logger
 
 	httpSvr atomic.Pointer[http.Server]
 }
@@ -42,7 +44,7 @@ func enrichSwaggerObject(swo *spec.Swagger) {
 					URL:  "http://www.apache.org/licenses/",
 				},
 			},
-			Version: "1.0.0",
+			Version: "1.0.0", // TODO: Version control
 		},
 	}
 	swo.Host = "localhost:7300"
@@ -50,28 +52,18 @@ func enrichSwaggerObject(swo *spec.Swagger) {
 	swo.Tags = []spec.Tag{
 		{
 			TagProps: spec.TagProps{
-				Name:        "function",
+				Name:        "functions",
 				Description: "Managing functions"},
 		},
 		{
 			TagProps: spec.TagProps{
-				Name:        "tube",
-				Description: "Managing tubes"},
+				Name:        "packages",
+				Description: "Managing packages"},
 		},
 		{
 			TagProps: spec.TagProps{
-				Name:        "state",
-				Description: "Managing state"},
-		},
-		{
-			TagProps: spec.TagProps{
-				Name:        "http-tube",
-				Description: "Managing HTTP tubes"},
-		},
-		{
-			TagProps: spec.TagProps{
-				Name:        "function-store",
-				Description: "Managing function store"},
+				Name:        "events",
+				Description: "Producing and consuming events"},
 		},
 	}
 }
@@ -101,7 +93,9 @@ func (h *Handler) Run() error {
 		APIPath:                       "/apidocs",
 		PostBuildSwaggerObjectHandler: enrichSwaggerObject}
 	container.Add(restfulspec.NewOpenAPIService(config))
-	container.Add(h.makeFunctionService())
+	container.Add(h.makeFunctionsService())
+	container.Add(h.makePackagesService())
+	container.Add(h.makeEventsService())
 
 	httpSvr := &http.Server{
 		Handler: container.ServeMux,

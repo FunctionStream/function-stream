@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"net"
 	"os"
 	"testing"
@@ -128,11 +129,15 @@ func (t *TestModules) Run() {
 	}
 }
 
+func setupFSTarget(t *testing.T, socketPath string) {
+	require.NoError(t, os.Setenv("FS_TARGET", "unix:"+socketPath))
+}
+
 //nolint:goconst
 func TestExternalRuntime(t *testing.T) {
 	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
+	setupFSTarget(t, testSocketPath)
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	lis, err := net.Listen("unix", testSocketPath)
 	assert.NoError(t, err)
@@ -210,7 +215,7 @@ func TestExternalRuntime(t *testing.T) {
 func TestNonDefaultModule(t *testing.T) {
 	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
+	setupFSTarget(t, testSocketPath)
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "counter"))
 	lis, err := net.Listen("unix", testSocketPath)
@@ -279,7 +284,7 @@ func TestNonDefaultModule(t *testing.T) {
 func TestExternalSourceModule(t *testing.T) {
 	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
+	setupFSTarget(t, testSocketPath)
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "test-source"))
 	lis, err := net.Listen("unix", testSocketPath)
@@ -353,7 +358,7 @@ func (f *TestSink) Handle(ctx gofsold.FunctionContext, event gofsold.Event[Count
 func TestExternalSinkModule(t *testing.T) {
 	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
+	setupFSTarget(t, testSocketPath)
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "test-sink"))
 	lis, err := net.Listen("unix", testSocketPath)
@@ -428,7 +433,7 @@ func TestExternalSinkModule(t *testing.T) {
 func TestExternalStatefulModule(t *testing.T) {
 	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
+	setupFSTarget(t, testSocketPath)
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	assert.NoError(t, os.Setenv("FS_MODULE_NAME", "test-stateful"))
 	lis, err := net.Listen("unix", testSocketPath)
@@ -500,7 +505,7 @@ func TestFunctionConfig(t *testing.T) {
 	testSocketPath := fmt.Sprintf("/tmp/%s.sock", t.Name())
 	assert.NoError(t, os.RemoveAll(testSocketPath))
 	module := "test-function-config"
-	assert.NoError(t, os.Setenv("FS_SOCKET_PATH", testSocketPath))
+	setupFSTarget(t, testSocketPath)
 	assert.NoError(t, os.Setenv("FS_FUNCTION_NAME", "test"))
 	assert.NoError(t, os.Setenv("FS_MODULE_NAME", module))
 	lis, err := net.Listen("unix", testSocketPath)

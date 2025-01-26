@@ -78,8 +78,7 @@ type instance struct {
 }
 
 func (i *instance) EventStorage() api.EventStorage {
-	//TODO implement me
-	panic("implement me")
+	return i.es
 }
 
 func (i *instance) Context() context.Context {

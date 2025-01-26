@@ -17,7 +17,7 @@
 package server
 
 import (
-	"os"
+	"github.com/functionstream/function-stream/pkg/testutil"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -75,7 +75,7 @@ runtimes:
     config:
       my-config: xxx
 `
-				return createTempFile(t, content, "*.yaml")
+				return testutil.CreateTempFile(t, content, "*.yaml")
 			},
 		},
 		{
@@ -120,7 +120,7 @@ runtimes:
     }
   ]
 }`
-				return createTempFile(t, content, "*.json")
+				return testutil.CreateTempFile(t, content, "*.json")
 			},
 		},
 		{
@@ -129,7 +129,7 @@ runtimes:
 			setup: func() (string, func()) {
 				content := `listen-address: ":17300
 		enable-tls: true`
-				return createTempFile(t, content, "*.yaml")
+				return testutil.CreateTempFile(t, content, "*.yaml")
 			},
 			wantErr:     true,
 			errContains: "unexpected end of stream",
@@ -139,7 +139,7 @@ runtimes:
 			filePath: "invalid.json",
 			setup: func() (string, func()) {
 				content := `{"listen-address": ":17300,}`
-				return createTempFile(t, content, "*.json")
+				return testutil.CreateTempFile(t, content, "*.json")
 			},
 			wantErr:     true,
 			errContains: "unexpected end of JSON input",
@@ -149,7 +149,7 @@ runtimes:
 			filePath: "missing_fields.yaml",
 			setup: func() (string, func()) {
 				content := `enable-tls: false`
-				return createTempFile(t, content, "*.yaml")
+				return testutil.CreateTempFile(t, content, "*.yaml")
 			},
 			wantErr:     true,
 			errContains: "listen-address",
@@ -179,22 +179,6 @@ runtimes:
 			require.NoError(t, err, "Config loading failed")
 			assertConfig(t, cfg)
 		})
-	}
-}
-
-// createTempFile creates a temporary test file with cleanup
-func createTempFile(t *testing.T, content, pattern string) (string, func()) {
-	tmpFile, err := os.CreateTemp("", pattern)
-	require.NoError(t, err, "Failed to create temp file")
-
-	_, err = tmpFile.WriteString(content)
-	require.NoError(t, err, "Failed to write test content")
-
-	err = tmpFile.Close()
-	require.NoError(t, err, "Failed to close temp file")
-
-	return tmpFile.Name(), func() {
-		os.Remove(tmpFile.Name())
 	}
 }
 

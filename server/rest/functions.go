@@ -9,13 +9,13 @@ import (
 	"net/http"
 )
 
-func (s *Handler) makeFunctionService() *restful.WebService {
+func (s *Handler) makeFunctionsService() *restful.WebService {
 	ws := new(restful.WebService)
-	ws.Path("/apis/v1/function").
+	ws.Path("/apis/v1/functions").
 		Consumes(restful.MIME_JSON).
 		Produces(restful.MIME_JSON)
 
-	tags := []string{"function"}
+	tags := []string{"functions"}
 
 	ws.Route(ws.GET("/").
 		To(func(request *restful.Request, response *restful.Response) {

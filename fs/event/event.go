@@ -10,15 +10,15 @@ import (
 
 type RawEvent struct {
 	id       string
-	payload  []byte
+	payload  io.Reader
 	commitCh chan struct{}
 }
 
-func NewRawEvent(id string, payload []byte) *RawEvent {
+func NewRawEvent(id string, payload io.Reader) *RawEvent {
 	return &RawEvent{
 		id:       id,
 		payload:  payload,
-		commitCh: make(chan struct{}, 1), // Don't block the sender
+		commitCh: make(chan struct{}, 2), // Don't block the sender
 	}
 }
 
@@ -31,7 +31,7 @@ func (e *RawEvent) SchemaID() int64 {
 }
 
 func (e *RawEvent) Payload() io.Reader {
-	return bytes.NewReader(e.payload)
+	return e.payload
 }
 
 func (e *RawEvent) Properties() map[string]string {
@@ -52,5 +52,5 @@ func NewStructEvent(id string, payload any) (api.Event, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewRawEvent(id, data), nil
+	return NewRawEvent(id, bytes.NewReader(data)), nil
 }

@@ -14,16 +14,16 @@ import (
 	"net"
 )
 
-type NewServerOption struct {
+type ServerOption struct {
 	PackageStorageFactory func(ctx context.Context, config *ComponentConfig) (api.PackageStorage, error)
 	EventStorageFactory   func(ctx context.Context, config *ComponentConfig) (api.EventStorage, error)
 	StateStoreFactory     func(ctx context.Context, config *ComponentConfig) (api.StateStore, error)
 	RuntimeFactory        func(ctx context.Context, config *ComponentConfig) (api.RuntimeAdapter, error)
 
-	log *zap.Logger
+	Logger *zap.Logger
 }
 
-func (o *NewServerOption) BuiltinPackageLoaderFactory(_ context.Context, config *ComponentConfig) (api.PackageStorage, error) {
+func (o *ServerOption) BuiltinPackageLoaderFactory(_ context.Context, config *ComponentConfig) (api.PackageStorage, error) {
 	switch config.Type {
 	case "":
 	case "memory":
@@ -32,30 +32,30 @@ func (o *NewServerOption) BuiltinPackageLoaderFactory(_ context.Context, config 
 	return nil, fmt.Errorf("unknown package loader type: %s", config.Type)
 }
 
-func (o *NewServerOption) GetPackageStorageFactory() func(ctx context.Context, config *ComponentConfig) (api.PackageStorage, error) {
+func (o *ServerOption) GetPackageStorageFactory() func(ctx context.Context, config *ComponentConfig) (api.PackageStorage, error) {
 	if o.PackageStorageFactory != nil {
 		return o.PackageStorageFactory
 	}
 	return o.BuiltinPackageLoaderFactory
 }
 
-func (o *NewServerOption) BuiltinEventStorageFactory(_ context.Context, config *ComponentConfig) (api.EventStorage, error) {
+func (o *ServerOption) BuiltinEventStorageFactory(_ context.Context, config *ComponentConfig) (api.EventStorage, error) {
 	switch config.Type {
 	case "":
 	case "memory":
-		return memory2.NewMemoryEventStorage(o.log), nil
+		return memory2.NewMemoryEventStorage(o.Logger), nil
 	}
 	return nil, fmt.Errorf("unknown event storage type: %s", config.Type)
 }
 
-func (o *NewServerOption) GetEventStorageFactory() func(ctx context.Context, config *ComponentConfig) (api.EventStorage, error) {
+func (o *ServerOption) GetEventStorageFactory() func(ctx context.Context, config *ComponentConfig) (api.EventStorage, error) {
 	if o.EventStorageFactory != nil {
 		return o.EventStorageFactory
 	}
 	return o.BuiltinEventStorageFactory
 }
 
-func (o *NewServerOption) BuiltinStateStoreFactory(_ context.Context, config *ComponentConfig) (api.StateStore, error) {
+func (o *ServerOption) BuiltinStateStoreFactory(_ context.Context, config *ComponentConfig) (api.StateStore, error) {
 	switch config.Type {
 	case "":
 	case "memory":
@@ -64,97 +64,127 @@ func (o *NewServerOption) BuiltinStateStoreFactory(_ context.Context, config *Co
 	return nil, fmt.Errorf("unknown state store type: %s", config.Type)
 }
 
-func (o *NewServerOption) GetStateStoreFactory() func(ctx context.Context, config *ComponentConfig) (api.StateStore, error) {
+func (o *ServerOption) GetStateStoreFactory() func(ctx context.Context, config *ComponentConfig) (api.StateStore, error) {
 	if o.StateStoreFactory != nil {
 		return o.StateStoreFactory
 	}
 	return o.BuiltinStateStoreFactory
 }
 
-func (o *NewServerOption) BuiltinRuntimeFactory(ctx context.Context, config *ComponentConfig) (api.RuntimeAdapter, error) {
+func (o *ServerOption) BuiltinRuntimeFactory(ctx context.Context, config *ComponentConfig) (api.RuntimeAdapter, error) {
 	switch config.Type {
 	case "":
 	case "external":
-		c := &external.Config{}
+
+		c := &struct {
+			ListenAddress string `json:"address"`
+		}{}
 		if err := config.Config.ToConfigStruct(c); err != nil {
 			return nil, err
 		}
-		return external.NewExternalAdapter(ctx, config.Type, c)
+		ln, err := net.Listen("tcp", c.ListenAddress)
+		if err != nil {
+			return nil, fmt.Errorf("failed to listen: %w", err)
+		}
+		eaCfg := &external.Config{
+			Listener: ln,
+			Logger:   o.Logger,
+		}
+		return external.NewExternalAdapter(ctx, config.Type, eaCfg)
 	}
 	return nil, fmt.Errorf("unknown runtime type: %s", config.Type)
 }
 
-func (o *NewServerOption) GetRuntimeFactory() func(ctx context.Context, config *ComponentConfig) (api.RuntimeAdapter, error) {
+func (o *ServerOption) GetRuntimeFactory() func(ctx context.Context, config *ComponentConfig) (api.RuntimeAdapter, error) {
 	if o.RuntimeFactory != nil {
 		return o.RuntimeFactory
 	}
 	return o.BuiltinRuntimeFactory
 }
 
-func RunServer(ctx context.Context, config *Config, opt *NewServerOption) error {
+type Server struct {
+	handler *rest.Handler
+	log     *zap.Logger
+}
+
+func NewServer(svrCtx context.Context, config *Config, opt *ServerOption) (*Server, error) {
+	log := opt.Logger
 	mgrCfg := &fs.ManagerConfig{}
 
-	if opt.log == nil {
-		opt.log = zap.NewNop()
+	if opt.Logger == nil {
+		opt.Logger = zap.NewNop()
 	}
 
 	ln, err := net.Listen("tcp", config.ListenAddress)
 	if err != nil {
-		return fmt.Errorf("failed to listen: %w", err)
+		return nil, fmt.Errorf("failed to listen: %w", err)
 	}
 
-	pkgStorage, err := opt.GetPackageStorageFactory()(ctx, &config.PackageLoader)
+	pkgStorage, err := opt.GetPackageStorageFactory()(svrCtx, &config.PackageLoader)
 	if err != nil {
-		return fmt.Errorf("failed to create package storage: %w", err)
+		return nil, fmt.Errorf("failed to create package storage: %w", err)
 	}
 	mgrCfg.PackageLoader = pkgStorage
+	log.Info("Package storage loaded", zap.String("type", config.PackageLoader.Type))
 
-	eventStorage, err := opt.GetEventStorageFactory()(ctx, &config.EventStorage)
+	eventStorage, err := opt.GetEventStorageFactory()(svrCtx, &config.EventStorage)
 	if err != nil {
-		return fmt.Errorf("failed to create event storage: %w", err)
+		return nil, fmt.Errorf("failed to create event storage: %w", err)
 	}
 	mgrCfg.EventStorage = eventStorage
+	log.Info("Event storage loaded", zap.String("type", config.EventStorage.Type))
 
-	stateStore, err := opt.GetStateStoreFactory()(ctx, &config.StateStore)
+	stateStore, err := opt.GetStateStoreFactory()(svrCtx, &config.StateStore)
 	if err != nil {
-		return fmt.Errorf("failed to create state store: %w", err)
+		return nil, fmt.Errorf("failed to create state store: %w", err)
 	}
 	mgrCfg.StateStore = stateStore
+	log.Info("State store loaded", zap.String("type", config.StateStore.Type))
 
 	runtimeMap := make(map[string]api.RuntimeAdapter)
 	for _, rtCfg := range config.Runtimes {
-		runtime, err := opt.GetRuntimeFactory()(ctx, &rtCfg)
+		runtime, err := opt.GetRuntimeFactory()(svrCtx, &rtCfg)
 		if err != nil {
-			return fmt.Errorf("failed to create runtime: %w", err)
+			return nil, fmt.Errorf("failed to create runtime: %w", err)
 		}
 		runtimeMap[rtCfg.Type] = runtime
+		log.Info("Runtime loaded", zap.String("type", rtCfg.Type))
 	}
+	mgrCfg.RuntimeMap = runtimeMap
 
 	mgr, err := fs.NewManager(*mgrCfg)
 	if err != nil {
-		return fmt.Errorf("failed to create manager: %w", err)
+		return nil, fmt.Errorf("failed to create manager: %w", err)
 	}
 
 	handler := &rest.Handler{
-		Manager:      mgr,
-		EnableTls:    config.EnableTLS,
-		TlsCertFile:  config.TLSCertFile,
-		TlsKeyFile:   config.TLSKeyFile,
-		HttpListener: ln,
-		Log:          opt.log,
+		Manager:        mgr,
+		PackageStorage: pkgStorage,
+		EventStorage:   eventStorage,
+		EnableTls:      config.EnableTLS,
+		TlsCertFile:    config.TLSCertFile,
+		TlsKeyFile:     config.TLSKeyFile,
+		HttpListener:   ln,
+		Log:            opt.Logger,
 	}
 
-	go func() {
-		if err := handler.Run(); err != nil {
-			opt.log.Error("Failed to run REST handler", zap.Error(err))
-		}
-	}()
+	return &Server{
+		handler: handler,
+		log:     opt.Logger,
+	}, nil
+}
 
+func (s *Server) Run(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
-		if err := handler.Stop(); err != nil {
-			opt.log.Error("Failed to stop REST handler", zap.Error(err))
+		if err := s.handler.Stop(); err != nil {
+			s.log.Error("Failed to stop REST handler", zap.Error(err))
 		}
+
 	}()
-	return nil
+	return s.handler.Run()
+}
+
+func (s *Server) WaitForReady(ctx context.Context) <-chan struct{} {
+	return s.handler.WaitForReady(ctx)
 }

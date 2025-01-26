@@ -1,6 +1,7 @@
 package external
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/functionstream/function-stream/fs/api"
@@ -174,7 +175,7 @@ func (a *adapterImpl) Write(ctx context.Context, request *proto.WriteRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	e := event.NewRawEvent("", request.GetPayload())
+	e := event.NewRawEvent("", bytes.NewReader(request.GetPayload()))
 	err = ins.EventStorage().Write(ctx, e, ins.Function().Sink)
 	if err != nil {
 		return nil, err

@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	FSSocketPath  = "FS_SOCKET_PATH"
+	FSTarget      = "FS_TARGET"
 	DefaultModule = "default"
 )
 
@@ -22,9 +22,9 @@ type grpcRPCClient struct {
 }
 
 func NewRPCClient() (FSRPCClient, error) {
-	socketPath := os.Getenv(FSSocketPath) // TODO: Support TCP port
-	if socketPath == "" {
-		return nil, fmt.Errorf("%s is not set", FSSocketPath)
+	target := os.Getenv(FSTarget) // TODO: Support TCP port
+	if target == "" {
+		return nil, fmt.Errorf("%s is not set", FSTarget)
 	}
 
 	serviceConfig := `{
@@ -40,7 +40,7 @@ func NewRPCClient() (FSRPCClient, error) {
 		   }]
 		}`
 	conn, err := grpc.NewClient(
-		"unix:"+socketPath,
+		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(serviceConfig),
 	)

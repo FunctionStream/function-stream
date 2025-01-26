@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/functionstream/function-stream/fs/event"
@@ -47,7 +48,7 @@ func TestMemoryEventStorage(t *testing.T) {
 	go func() {
 		for _, v := range topics {
 			for i := 0; i < numMsgsPerTopic; i++ {
-				require.NoError(t, es.Write(ctx, event.NewRawEvent(strconv.Itoa(i), []byte(fmt.Sprintf("%s-%d", v.Name, i))), v))
+				require.NoError(t, es.Write(ctx, event.NewRawEvent(strconv.Itoa(i), bytes.NewReader([]byte(fmt.Sprintf("%s-%d", v.Name, i)))), v))
 			}
 		}
 	}()

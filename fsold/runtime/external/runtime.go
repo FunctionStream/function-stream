@@ -193,7 +193,7 @@ func NewFactory(lis net.Listener) api.FunctionRuntimeFactory {
 	// Register the health check service
 	healthServer := health.NewServer()
 	grpc_health_v1.RegisterHealthServer(s, healthServer)
-	healthServer.SetServingStatus("fs_external.Function", grpc_health_v1.HealthCheckResponse_SERVING)
+	healthServer.SetServingStatus("fs-external.Function", grpc_health_v1.HealthCheckResponse_SERVING)
 
 	go func() {
 		log.Info("Starting external runtime server")

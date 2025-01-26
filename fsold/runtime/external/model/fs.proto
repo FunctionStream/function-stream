@@ -16,7 +16,7 @@
 
 syntax = "proto3";
 option go_package = "fs/runtime/external/model";
-package fs_external;
+package functionstream_external;
 
 message RegisterSchemaRequest {
   string schema = 1;

@@ -96,12 +96,16 @@ func (es *MemEventStorage) Write(ctx context.Context, event api.Event, topic mod
 	if es.log.Core().Enabled(zap.DebugLevel) {
 		es.log.Debug("Writing event", zap.Any("eventId", event.ID()), zap.Any("topic", topic.Name))
 	}
-	c <- event
-	es.release(topic.Name)
-	return nil
+	defer es.release(topic.Name)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case c <- event:
+		return nil
+	}
 }
 
-func (es *MemEventStorage) Commit(ctx context.Context, eventId string) error {
+func (es *MemEventStorage) Commit(_ context.Context, _ string) error {
 	return nil
 }
 
