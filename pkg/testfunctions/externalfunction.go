@@ -71,7 +71,7 @@ func (f *TestSource) Handle(_ gofsapi.FunctionContext, emit func(context.Context
 }
 
 type TestSink struct {
-	sinkCh chan Counter
+	SinkCh chan Counter
 }
 
 func (f *TestSink) Init(_ gofsapi.FunctionContext) error {
@@ -79,7 +79,7 @@ func (f *TestSink) Init(_ gofsapi.FunctionContext) error {
 }
 
 func (f *TestSink) Handle(ctx gofsapi.FunctionContext, event gofsapi.Event[Counter]) error {
-	f.sinkCh <- *event.Data()
+	f.SinkCh <- *event.Data()
 	return event.Commit(ctx)
 }
 
@@ -87,7 +87,7 @@ type TestModules struct {
 	testFunction *TestFunction
 	testCounter  *TestCounterFunction
 	testSource   *TestSource
-	testSink     *TestSink
+	TestSink     *TestSink
 }
 
 func NewTestModules() *TestModules {
@@ -95,8 +95,8 @@ func NewTestModules() *TestModules {
 		testFunction: &TestFunction{},
 		testCounter:  &TestCounterFunction{},
 		testSource:   &TestSource{},
-		testSink: &TestSink{
-			sinkCh: make(chan Counter),
+		TestSink: &TestSink{
+			SinkCh: make(chan Counter),
 		},
 	}
 }
@@ -113,7 +113,7 @@ func (t *TestModules) Run(ctx context.Context) {
 			return t.testSource
 		})).
 		Register("test-sink", gofs.WithSink(func() gofsapi.Sink[Counter] {
-			return t.testSink
+			return t.TestSink
 		})).
 		Run(ctx)
 	if err != nil {

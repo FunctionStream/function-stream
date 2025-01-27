@@ -298,7 +298,7 @@ func (c *fsClient) Run(ctx context.Context) error {
 						return
 					}
 					err = m.executeFunc(funcCtx)
-					if err != nil {
+					if err != nil && !errors.Is(err, context.Canceled) {
 						slog.Error("failed to execute function", zap.Error(err)) // TODO: We need to figure out how to print log in the function
 						return
 					}
@@ -306,10 +306,11 @@ func (c *fsClient) Run(ctx context.Context) error {
 			case rpc.FunctionEventType_DELETE:
 				m, ok := c.instances[*e.FunctionName]
 				if !ok {
-					slog.Warn("function not found", slog.String("name", *e.FunctionName))
+					slog.Warn("delete failed. function not found", slog.String("name", *e.FunctionName))
+				} else {
+					m.ctx.Close()
+					delete(c.instances, *e.FunctionName)
 				}
-				m.ctx.Close()
-				delete(c.instances, *e.FunctionName)
 			}
 		}
 	}

@@ -71,24 +71,35 @@ func (h *Handler) makeEventsService() *restful.WebService {
 				return
 			}
 
-			select {
-			case <-request.Request.Context().Done():
-				h.handleRestError(response.WriteError(http.StatusRequestTimeout, request.Request.Context().Err()))
-				return
-			case e := <-eCh:
-				data, err := io.ReadAll(e.Payload())
-				if err != nil {
-					h.handleRestError(response.WriteError(http.StatusInternalServerError, err))
+			response.AddHeader("Transfer-Encoding", "chunked")
+			for {
+				select {
+				case <-request.Request.Context().Done():
+					h.handleRestError(response.WriteError(http.StatusRequestTimeout, request.Request.Context().Err()))
 					return
+				case e, ok := <-eCh:
+					if !ok {
+						return
+					}
+					data, err := io.ReadAll(e.Payload())
+					if err != nil {
+						h.handleRestError(response.WriteError(http.StatusInternalServerError, err))
+						return
+					}
+					entity := make(map[string]any)
+					if err := json.Unmarshal(data, &entity); err != nil {
+						h.handleRestError(response.WriteError(http.StatusInternalServerError, err))
+						return
+					}
+					if _, err := response.Write(data); err != nil {
+						h.handleRestError(response.WriteError(http.StatusInternalServerError, err))
+						return
+					}
+					response.Write([]byte("\n"))
+					response.Flush()
 				}
-				entity := make(map[string]any)
-				if err := json.Unmarshal(data, &entity); err != nil {
-					h.handleRestError(response.WriteError(http.StatusInternalServerError, err))
-					return
-				}
-				h.handleRestError(response.WriteEntity(entity))
-				return
 			}
+
 		}).
 		Doc("consume a message").
 		Metadata(restfulspec.KeyOpenAPITags, tags).

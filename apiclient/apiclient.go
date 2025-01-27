@@ -1,6 +1,7 @@
 package apiclient
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -503,19 +504,55 @@ func parameterValueToString(obj interface{}, key string) string {
 	return fmt.Sprintf("%v", dataMap[key])
 }
 
-func (es *EventsService) Consume(ctx context.Context, topic string) (string, error) {
+func (es *EventsService) Consume(ctx context.Context, topic string) (<-chan string, <-chan error) {
 	localVarPath := "/api/v1/events/consume/{name}"
 	localVarPath = strings.Replace(localVarPath, "{"+"name"+"}", url.PathEscape(parameterValueToString(topic, "name")), -1)
 
-	req, err := es.client.prepareRequest(ctx, localVarPath, http.MethodGet, nil, nil, nil, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := es.client.HandleResponse(es.client.callAPI(req))
-	if err != nil {
-		return "", err
-	}
-	return string(resp), nil
+	dataCh := make(chan string)
+	errCh := make(chan error, 1000)
+
+	go func() {
+		defer close(dataCh)
+		defer close(errCh)
+
+		req, err := es.client.prepareRequest(ctx, localVarPath, http.MethodGet, nil, nil, nil, nil, nil)
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		if es.client.cfg.Debug {
+			dump, err := httputil.DumpRequestOut(req, true)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			fmt.Printf("\n%s\n", string(dump))
+		}
+
+		resp, err := es.client.cfg.HTTPClient.Do(req)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer resp.Body.Close()
+
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				errCh <- ctx.Err()
+				return
+			case dataCh <- scanner.Text():
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			errCh <- err
+		}
+	}()
+
+	return dataCh, errCh
 }
 
 func (es *EventsService) Produce(ctx context.Context, topic string, event any) error {

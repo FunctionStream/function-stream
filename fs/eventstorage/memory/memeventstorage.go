@@ -101,7 +101,7 @@ func (es *MemEventStorage) Write(ctx context.Context, event api.Event, topic mod
 	case <-ctx.Done():
 		return ctx.Err()
 	case c <- event:
-		return nil
+		return event.Commit(ctx)
 	}
 }
 

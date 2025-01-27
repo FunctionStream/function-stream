@@ -92,7 +92,8 @@ func TestExternalRuntime(t *testing.T) {
 		Logger:   log,
 	})
 	require.NoError(t, err)
-	go testfunctions.NewTestModules().Run(context.Background())
+	testMods := testfunctions.NewTestModules()
+	go testMods.Run(context.Background())
 	time.Sleep(1 * time.Second)
 
 	t.Run("Default Module", func(t *testing.T) {
@@ -151,6 +152,26 @@ func TestExternalRuntime(t *testing.T) {
 			require.NoError(t, json.NewDecoder(out.Payload()).Decode(r))
 			require.NoError(t, out.Commit(context.Background()))
 			require.Equal(t, i, r.ID)
+			require.Equal(t, "test", r.Name)
+		}
+	})
+
+	t.Run("Sink Module", func(t *testing.T) {
+		es := NewMockEventStorage()
+		instance := NewMockInstance(context.Background(), &model.Function{
+			Name:    "test",
+			Package: "test",
+			Module:  "test-sink",
+		}, es, nil)
+		require.NoError(t, adapter.DeployFunction(context.Background(), instance))
+		for i := 0; i < 10; i++ {
+			e, err := event.NewStructEvent("", &testfunctions.Counter{
+				Count: i,
+			})
+			require.NoError(t, err)
+			es.ReadCh <- e
+			output := <-testMods.TestSink.SinkCh
+			require.Equal(t, i, output.Count)
 		}
 	})
 }
