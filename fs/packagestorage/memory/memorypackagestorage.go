@@ -4,21 +4,24 @@ import (
 	"context"
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/model"
+	"go.uber.org/zap"
 	"sync"
 )
 
 type MemoryPackageStorage struct {
-	mu sync.RWMutex
-	m  map[string]*model.Package
+	mu  sync.RWMutex
+	m   map[string]*model.Package
+	log *zap.Logger
 }
 
 func (m *MemoryPackageStorage) Create(_ context.Context, pkg *model.Package) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.m[pkg.Name]; ok {
-		return api.ErrPackageAlreadyExists
+		return api.ErrResourceAlreadyExists
 	}
 	m.m[pkg.Name] = pkg
+	m.log.Info("created package", zap.String("name", pkg.Name))
 	return nil
 }
 
@@ -28,7 +31,7 @@ func (m *MemoryPackageStorage) Read(ctx context.Context, name string) (*model.Pa
 	if pkg, ok := m.m[name]; ok {
 		return pkg, nil
 	}
-	return nil, api.ErrPackageNotFound
+	return nil, api.ErrResourceNotFound
 }
 
 func (m *MemoryPackageStorage) List(ctx context.Context) ([]*model.Package, error) {
@@ -41,13 +44,14 @@ func (m *MemoryPackageStorage) List(ctx context.Context) ([]*model.Package, erro
 	return pkgs, nil
 }
 
-func (m *MemoryPackageStorage) Update(ctx context.Context, pkg *model.Package) error {
+func (m *MemoryPackageStorage) Upsert(ctx context.Context, pkg *model.Package) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.m[pkg.Name]; !ok {
-		return api.ErrPackageNotFound
+		return api.ErrResourceNotFound
 	}
 	m.m[pkg.Name] = pkg
+	m.log.Info("updated package", zap.String("name", pkg.Name))
 	return nil
 }
 
@@ -55,14 +59,15 @@ func (m *MemoryPackageStorage) Delete(ctx context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.m[name]; !ok {
-		return api.ErrPackageNotFound
+		return api.ErrResourceNotFound
 	}
 	delete(m.m, name)
 	return nil
 }
 
-func NewMemoryPackageStorage() api.PackageStorage {
+func NewMemoryPackageStorage(log *zap.Logger) api.PackageStorage {
 	return &MemoryPackageStorage{
-		m: make(map[string]*model.Package),
+		m:   make(map[string]*model.Package),
+		log: log,
 	}
 }

@@ -30,7 +30,7 @@ type MockManager struct {
 
 func (m *MockManager) Deploy(ctx context.Context, f *model.Function) error {
 	if _, ok := m.functions.Load(f.Name); ok {
-		return api.ErrFunctionAlreadyExists
+		return api.ErrResourceAlreadyExists
 	}
 	m.functions.Store(f.Name, f)
 	return nil
@@ -38,7 +38,7 @@ func (m *MockManager) Deploy(ctx context.Context, f *model.Function) error {
 
 func (m *MockManager) Delete(ctx context.Context, name string) error {
 	if _, ok := m.functions.Load(name); !ok {
-		return api.ErrFunctionNotFound
+		return api.ErrResourceNotFound
 	}
 	m.functions.Delete(name)
 	return nil

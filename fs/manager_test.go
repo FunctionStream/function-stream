@@ -7,6 +7,7 @@ import (
 	"github.com/functionstream/function-stream/fs/model"
 	memory2 "github.com/functionstream/function-stream/fs/packagestorage/memory"
 	"github.com/functionstream/function-stream/fs/statestore/memory"
+	"github.com/functionstream/function-stream/pkg/testutil"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -35,7 +36,7 @@ func (m *MockRuntimeAdapter) DeleteFunction(ctx context.Context, name string) er
 }
 
 func TestManagerImpl(t *testing.T) {
-	pkgStorage := memory2.NewMemoryPackageStorage()
+	pkgStorage := memory2.NewMemoryPackageStorage(testutil.GetTestLogger(t))
 	err := pkgStorage.Create(context.Background(), &model.Package{
 		Name: "test-pkg",
 		Type: "test-runtime",
@@ -58,7 +59,7 @@ func TestManagerImpl(t *testing.T) {
 		},
 		PackageLoader: pkgStorage,
 		StateStore:    memory.NewMemoryStateStore(),
-	})
+	}, testutil.GetTestLogger(t))
 
 	require.NoError(t, err)
 

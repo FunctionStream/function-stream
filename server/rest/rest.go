@@ -5,6 +5,7 @@ import (
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/functionstream/function-stream/fs/api"
+	"github.com/functionstream/function-stream/fs/model"
 	"github.com/go-openapi/spec"
 	"go.uber.org/zap"
 	"net"
@@ -93,9 +94,16 @@ func (h *Handler) Run() error {
 		APIPath:                       "/apidocs",
 		PostBuildSwaggerObjectHandler: enrichSwaggerObject}
 	container.Add(restfulspec.NewOpenAPIService(config))
-	container.Add(h.makeFunctionsService())
-	container.Add(h.makePackagesService())
 	container.Add(h.makeEventsService())
+	basePath := "/apis/v1/"
+	container.Add(new(ResourceServiceBuilder[model.Package]).
+		Name("package").
+		ResourceProvider(h.PackageStorage).
+		Build(basePath, h.Log))
+	container.Add(new(ResourceServiceBuilder[model.Function]).
+		Name("function").
+		ResourceProvider(h.Manager).
+		Build(basePath, h.Log))
 
 	httpSvr := &http.Server{
 		Handler: container.ServeMux,

@@ -95,7 +95,7 @@ runtimes:
 				Name: "output",
 			},
 		}
-		err = apiCli.FunctionService().Deploy(ctx, &f)
+		err = apiCli.FunctionService().Create(ctx, &f)
 		require.NoError(t, err)
 
 		recvCh, cancel := consume("output")
@@ -127,7 +127,7 @@ runtimes:
 				Name: "output",
 			},
 		}
-		err = apiCli.FunctionService().Deploy(ctx, &f)
+		err = apiCli.FunctionService().Create(ctx, &f)
 		require.NoError(t, err)
 		time.Sleep(1 * time.Second)
 
@@ -158,9 +158,9 @@ runtimes:
 				Name: "output",
 			},
 		}
-		err = apiCli.FunctionService().Deploy(ctx, &f)
-		require.NoError(t, err)
 		recvCh, cancel := consume("output")
+		err = apiCli.FunctionService().Create(ctx, &f)
+		require.NoError(t, err)
 		defer cancel()
 		time.Sleep(1 * time.Second)
 
@@ -188,7 +188,7 @@ runtimes:
 				Name: "output",
 			},
 		}
-		err = apiCli.FunctionService().Deploy(ctx, &f)
+		err = apiCli.FunctionService().Create(ctx, &f)
 		require.NoError(t, err)
 		sinkCh := make(chan testfunctions.Counter)
 		go func() {

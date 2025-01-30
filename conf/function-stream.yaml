@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-listen_addr: ":7300"
-queue:
-  type: "pulsar"
-  config:
-    pulsar_url: "pulsar://localhost:6650"
-tube-config:
-  pulsar:
-    pulsar_url: "pulsar://localhost:6650"
-runtime-config:
-  external:
-    socket-path: /tmp/fs.sock
-function-store: ./functions
+listen-address: ":7300"
+package-loader:
+  type: memory
+event-storage:
+  type: memory
+state-store:
+  type: memory
+runtimes:
+  - type: external
+    config:
+      address: ":7400"

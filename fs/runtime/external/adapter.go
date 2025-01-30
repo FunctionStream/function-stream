@@ -148,7 +148,10 @@ func (a *adapterImpl) Read(request *proto.ReadRequest, g grpc.ServerStreamingSer
 		select {
 		case <-g.Context().Done():
 			return nil
-		case e := <-readCh:
+		case e, ok := <-readCh:
+			if !ok {
+				return nil
+			}
 			p, err := io.ReadAll(e.Payload())
 			if err != nil {
 				return fmt.Errorf("failed to read event payload: %w", err)

@@ -5,113 +5,105 @@ import (
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/model"
 	"go.uber.org/zap"
-	"sync"
-	"sync/atomic"
 )
 
-type queue struct {
-	c      chan api.Event
-	refCnt int32
-}
-
-type MemEventStorage struct {
-	mu     sync.Mutex
-	queues map[string]*queue
+type MemES struct {
+	eventLoop chan op
+	readCh    map[string]chan api.Event
 
 	log *zap.Logger
 }
 
-func (es *MemEventStorage) release(name string) {
-	es.mu.Lock()
-	defer es.mu.Unlock()
-	q, ok := es.queues[name]
-	if !ok {
-		panic("release non-exist queue: " + name)
+type op struct {
+	registerRead *struct {
+		topic string
+		c     chan api.Event
 	}
-	if atomic.AddInt32(&q.refCnt, -1) == 0 {
-		close(q.c)
-		delete(es.queues, name)
+	unregisterRead *struct {
+		topic string
 	}
-
-	es.log.Info("Released memory queue", zap.String("name", name), zap.Int32("current_use_count", atomic.LoadInt32(&q.refCnt)))
+	write *struct {
+		topic string
+		event api.Event
+	}
 }
 
-func (es *MemEventStorage) getOrCreateChan(name string) chan api.Event {
-	es.mu.Lock()
-	defer es.mu.Unlock()
-	if q, ok := es.queues[name]; ok {
-		atomic.AddInt32(&q.refCnt, 1)
-		return q.c
+func (m *MemES) Read(ctx context.Context, topics []model.TopicConfig) (<-chan api.Event, error) {
+	m.log.Debug("Reading events", zap.Any("topics", topics))
+	c := make(chan api.Event, 10)
+	for _, t := range topics {
+		m.eventLoop <- op{
+			registerRead: &struct {
+				topic string
+				c     chan api.Event
+			}{topic: t.Name, c: c},
+		}
 	}
-	es.log.Info("Creating memory queue", zap.String("name", name))
-	c := make(chan api.Event, 100)
-	es.queues[name] = &queue{
-		c:      c,
-		refCnt: 1,
-	}
-	return c
-}
-
-func (es *MemEventStorage) Read(ctx context.Context, topics []model.TopicConfig) (<-chan api.Event, error) {
-	result := make(chan api.Event)
-	if es.log.Core().Enabled(zap.DebugLevel) {
-		es.log.Debug("Reading events", zap.Any("topics", topics))
-	}
-
-	var wg sync.WaitGroup
-	for _, topic := range topics {
-		t := topic.Name
-		wg.Add(1)
-		go func() {
-			<-ctx.Done()
-			es.release(t)
-		}()
-		c := es.getOrCreateChan(t)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case event := <-c:
-					if es.log.Core().Enabled(zap.DebugLevel) {
-						es.log.Debug("Receive event", zap.Any("eventId", event.ID()), zap.Any("topic", t))
-					}
-					result <- event
-				}
-			}
-		}()
-	}
-
 	go func() {
-		wg.Wait()
-		close(result)
+		<-ctx.Done()
+		for _, t := range topics {
+			m.eventLoop <- op{
+				unregisterRead: &struct {
+					topic string
+				}{topic: t.Name},
+			}
+		}
 	}()
-
-	return result, nil
+	return c, nil
 }
 
-func (es *MemEventStorage) Write(ctx context.Context, event api.Event, topic model.TopicConfig) error {
-	c := es.getOrCreateChan(topic.Name)
-	if es.log.Core().Enabled(zap.DebugLevel) {
-		es.log.Debug("Writing event", zap.Any("eventId", event.ID()), zap.Any("topic", topic.Name))
-	}
-	defer es.release(topic.Name)
+func (m *MemES) Write(ctx context.Context, event api.Event, topic model.TopicConfig) error {
+	m.log.Debug("Writing event", zap.Any("eventId", event.ID()), zap.Any("topic", topic.Name))
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case c <- event:
-		return event.Commit(ctx)
+	case m.eventLoop <- op{
+		write: &struct {
+			topic string
+			event api.Event
+		}{topic: topic.Name, event: event},
+	}:
 	}
-}
-
-func (es *MemEventStorage) Commit(_ context.Context, _ string) error {
 	return nil
 }
 
-func NewMemoryEventStorage(log *zap.Logger) api.EventStorage {
-	return &MemEventStorage{
-		queues: make(map[string]*queue),
-		log:    log,
+func (m *MemES) Commit(_ context.Context, eventId string) error {
+	m.log.Debug("Committing event", zap.Any("eventId", eventId))
+	return nil
+}
+
+func NewMemEs(ctx context.Context, log *zap.Logger) api.EventStorage {
+	m := &MemES{
+		eventLoop: make(chan op, 1000),
+		readCh:    make(map[string]chan api.Event),
+		log:       log,
 	}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				for _, c := range m.readCh {
+					close(c)
+				}
+				return
+			case op := <-m.eventLoop:
+				if op.registerRead != nil {
+					m.readCh[op.registerRead.topic] = op.registerRead.c
+				}
+				if op.unregisterRead != nil {
+					c := m.readCh[op.unregisterRead.topic]
+					delete(m.readCh, op.unregisterRead.topic)
+					close(c)
+				}
+				if op.write != nil {
+					c := m.readCh[op.write.topic]
+					if c != nil {
+						c <- op.write.event
+					}
+					_ = op.write.event.Commit(ctx)
+				}
+			}
+		}
+	}()
+	return m
 }

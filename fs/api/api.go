@@ -15,17 +15,19 @@ type Event interface {
 }
 
 type Manager interface {
-	Deploy(ctx context.Context, f *model.Function) error
-	Delete(ctx context.Context, name string) error
-	List() []*model.Function
+	ResourceProvider[model.Function]
 }
 
 type PackageStorage interface {
-	Create(ctx context.Context, pkg *model.Package) error
-	Read(ctx context.Context, name string) (*model.Package, error)
-	List(ctx context.Context) ([]*model.Package, error)
-	Update(ctx context.Context, pkg *model.Package) error
+	ResourceProvider[model.Package]
+}
+
+type ResourceProvider[T any] interface {
+	Create(ctx context.Context, r *T) error
+	Read(ctx context.Context, name string) (*T, error)
+	Upsert(ctx context.Context, r *T) error
 	Delete(ctx context.Context, name string) error
+	List(ctx context.Context) ([]*T, error)
 }
 
 type EventStorage interface {

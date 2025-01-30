@@ -16,8 +16,17 @@
 
 package common
 
+import "github.com/functionstream/function-stream/apiclient"
+
 type ClientConfig struct {
 	ServiceAddr string
 }
 
 var Config ClientConfig
+
+func GetApiClient() *apiclient.APIClient {
+	apiCliCfg := apiclient.NewConfiguration()
+	apiCliCfg.Debug = true // TODO: support configuring debug
+	apiCliCfg.Host = Config.ServiceAddr
+	return apiclient.NewAPIClient(apiCliCfg)
+}

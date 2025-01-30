@@ -12,7 +12,7 @@
 
 .PHONY: license
 build:
-	go build -v -o bin/function-stream ./cmd
+	go build -v -o bin/fs ./cmd
 
 build-example:
 	tinygo build -o bin/example_basic.wasm -target=wasi ./examples/basic

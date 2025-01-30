@@ -18,9 +18,9 @@ package perf
 
 import (
 	"context"
+	"github.com/functionstream/function-stream/pkg/process"
 	"io"
 
-	"github.com/functionstream/function-stream/common"
 	"github.com/functionstream/function-stream/perf"
 	"github.com/spf13/cobra"
 )
@@ -42,7 +42,7 @@ func init() {
 }
 
 func exec(*cobra.Command, []string) {
-	common.RunProcess(runPerf)
+	process.RunProcess(runPerf)
 }
 
 type closer struct {

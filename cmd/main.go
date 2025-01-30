@@ -18,29 +18,21 @@ package main
 
 import (
 	"fmt"
+	"github.com/functionstream/function-stream/cmd/client"
+	"github.com/functionstream/function-stream/cmd/server"
 	"os"
 
-	"github.com/functionstream/function-stream/cmd/client"
-	"github.com/functionstream/function-stream/cmd/perf"
-	"github.com/functionstream/function-stream/cmd/server"
 	"github.com/spf13/cobra"
 )
 
-var (
-	rootCmd = &cobra.Command{
-		Use:   "function-stream",
-		Short: "function-stream root command",
-		Long:  `function-stream root command`,
-	}
-)
-
-func init() {
-	rootCmd.AddCommand(server.Cmd)
-	rootCmd.AddCommand(client.Cmd)
-	rootCmd.AddCommand(perf.Cmd)
-}
-
 func main() {
+	rootCmd := &cobra.Command{
+		Use:   "function-stream",
+		Short: "Manage Function Stream",
+	}
+	rootCmd.AddCommand(server.NewServerCmd())
+	rootCmd.AddCommand(client.NewClientCmd())
+	rootCmd.SilenceErrors = true
 	if err := rootCmd.Execute(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

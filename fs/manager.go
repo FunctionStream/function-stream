@@ -6,6 +6,7 @@ import (
 	"github.com/functionstream/function-stream/fs/api"
 	"github.com/functionstream/function-stream/fs/model"
 	"github.com/go-playground/validator/v10"
+	"go.uber.org/zap"
 	"regexp"
 	"sync"
 )
@@ -18,6 +19,48 @@ type ManagerImpl struct {
 	es          api.EventStorage
 	stateStore  api.StateStore
 	validate    *validator.Validate
+	log         *zap.Logger
+}
+
+func (m *ManagerImpl) Create(ctx context.Context, r *model.Function) error {
+	if err := m.Deploy(ctx, r); err != nil {
+		return err
+	}
+	m.log.Info("created function", zap.String("name", r.Name))
+	return nil
+}
+
+func (m *ManagerImpl) Read(ctx context.Context, name string) (*model.Function, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ins, ok := m.instanceMap[name]
+	if !ok {
+		return nil, api.ErrResourceNotFound
+	}
+	return ins.Function(), nil
+}
+
+func (m *ManagerImpl) Upsert(ctx context.Context, r *model.Function) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.instanceMap[r.Name]
+	if ok {
+		if err := m.Delete(ctx, r.Name); err != nil {
+			return fmt.Errorf("failed to restart function %s: %w", r.Name, err)
+		}
+	}
+	m.log.Info("updated function", zap.String("name", r.Name))
+	return m.Deploy(ctx, r)
+}
+
+func (m *ManagerImpl) List(ctx context.Context) ([]*model.Function, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var functions []*model.Function
+	for _, ins := range m.instanceMap {
+		functions = append(functions, ins.Function())
+	}
+	return functions, nil
 }
 
 type ManagerConfig struct {
@@ -27,7 +70,7 @@ type ManagerConfig struct {
 	StateStore    api.StateStore
 }
 
-func NewManager(cfg ManagerConfig) (api.Manager, error) {
+func NewManager(cfg ManagerConfig, log *zap.Logger) (api.Manager, error) {
 	validate := validator.New()
 	err := validate.RegisterValidation("alphanumdash", func(fl validator.FieldLevel) bool {
 		value := fl.Field().String()
@@ -45,6 +88,7 @@ func NewManager(cfg ManagerConfig) (api.Manager, error) {
 		stateStore:  cfg.StateStore,
 		instanceMap: make(map[string]api.Instance),
 		validate:    validate,
+		log:         log,
 	}, nil
 }
 
@@ -102,7 +146,7 @@ func (m *ManagerImpl) Deploy(ctx context.Context, f *model.Function) error {
 	_, ok := m.instanceMap[f.Name]
 	if ok {
 		m.mu.Unlock()
-		return api.ErrFunctionAlreadyExists
+		return api.ErrResourceAlreadyExists
 	}
 
 	err := m.validateFunctionModel(f)
@@ -145,7 +189,7 @@ func (m *ManagerImpl) Delete(ctx context.Context, name string) error {
 	defer m.mu.Unlock()
 	ins, ok := m.instanceMap[name]
 	if !ok {
-		return api.ErrFunctionNotFound
+		return api.ErrResourceNotFound
 	}
 
 	runtime, ok := m.runtimeMap[ins.Package().Type]
@@ -159,14 +203,4 @@ func (m *ManagerImpl) Delete(ctx context.Context, name string) error {
 
 	delete(m.instanceMap, name)
 	return nil
-}
-
-func (m *ManagerImpl) List() []*model.Function {
-	var functions []*model.Function
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, ins := range m.instanceMap {
-		functions = append(functions, ins.Function())
-	}
-	return functions
 }

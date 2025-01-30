@@ -1,0 +1,5 @@
+kind: Package
+metadata:
+  name: test-pkg
+spec:
+  type: "external"

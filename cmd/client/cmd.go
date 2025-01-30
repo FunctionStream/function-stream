@@ -18,12 +18,6 @@ package client
 
 import (
 	c "github.com/functionstream/function-stream/cmd/client/common"
-	"github.com/functionstream/function-stream/cmd/client/consume"
-	"github.com/functionstream/function-stream/cmd/client/create"
-	del "github.com/functionstream/function-stream/cmd/client/delete"
-	"github.com/functionstream/function-stream/cmd/client/list"
-	"github.com/functionstream/function-stream/cmd/client/produce"
-	"github.com/functionstream/function-stream/cmd/client/reload"
 	"github.com/spf13/cobra"
 )
 
@@ -35,14 +29,18 @@ var (
 	}
 )
 
-func init() {
-	Cmd.PersistentFlags().StringVarP(&c.Config.ServiceAddr, "service-address", "s",
-		"http://localhost:7300", "Service address")
-
-	Cmd.AddCommand(create.Cmd)
-	Cmd.AddCommand(list.Cmd)
-	Cmd.AddCommand(del.Cmd)
-	Cmd.AddCommand(produce.Cmd)
-	Cmd.AddCommand(consume.Cmd)
-	Cmd.AddCommand(reload.Cmd)
+func NewClientCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "client",
+		Short: "Function Stream Client Tool",
+		Long:  `Operations to manage functions in a function stream server`,
+	}
+	cmd.PersistentFlags().StringVarP(&c.Config.ServiceAddr, "service-address", "s",
+		"localhost:7300", "Service address")
+	cmd.AddCommand(NewCreateCmd())
+	cmd.AddCommand(NewGetCommand())
+	cmd.AddCommand(NewListCommand())
+	cmd.AddCommand(NewDeleteCommand())
+	cmd.AddCommand(NewApplyCmd())
+	return cmd
 }

@@ -95,7 +95,10 @@ func (h *Handler) makeEventsService() *restful.WebService {
 						h.handleRestError(response.WriteError(http.StatusInternalServerError, err))
 						return
 					}
-					response.Write([]byte("\n"))
+					if _, err = response.Write([]byte("\n")); err != nil {
+						h.handleRestError(response.WriteError(http.StatusInternalServerError, err))
+						return
+					}
 					response.Flush()
 				}
 			}

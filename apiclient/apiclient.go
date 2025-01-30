@@ -359,119 +359,90 @@ type Response struct {
 	HttpResponse *http.Response
 }
 
-func (c *APIClient) FunctionService() *FunctionService {
-	return &FunctionService{
-		client: c,
+func (c *APIClient) FunctionService() *ResourceService[model.Function] {
+	return &ResourceService[model.Function]{
+		Client:   c,
+		BasePath: "/apis/v1/function",
 	}
 }
 
-type FunctionService struct {
-	client *APIClient
+func (c *APIClient) PackageService() *ResourceService[model.Package] {
+	return &ResourceService[model.Package]{
+		Client:   c,
+		BasePath: "/apis/v1/package",
+	}
 }
 
-func (fs *FunctionService) Deploy(ctx context.Context, f *model.Function) error {
-	req, err := fs.client.prepareRequest(ctx, "/apis/v1/functions", http.MethodPost, f, nil, nil, nil, nil)
+func (c *APIClient) GenericService(resourceName string) *ResourceService[map[string]any] {
+	return &ResourceService[map[string]any]{
+		Client:   c,
+		BasePath: "/apis/v1/" + resourceName,
+	}
+}
+
+type ResourceService[T any] struct {
+	BasePath string
+	Client   *APIClient
+}
+
+func (rs *ResourceService[T]) Create(ctx context.Context, resource *T) error {
+	req, err := rs.Client.prepareRequest(ctx, rs.BasePath, http.MethodPost, resource, nil, nil, nil, nil)
 	if err != nil {
 		return err
 	}
-	_, err = fs.client.HandleResponse(fs.client.callAPI(req))
+	_, err = rs.Client.HandleResponse(rs.Client.callAPI(req))
 	return err
 }
 
-func (fs *FunctionService) List(ctx context.Context) ([]*model.Function, error) {
-	req, err := fs.client.prepareRequest(ctx, "/apis/v1/functions", http.MethodGet, nil, nil, nil, nil, nil)
+func (rs *ResourceService[T]) List(ctx context.Context) ([]*T, error) {
+	req, err := rs.Client.prepareRequest(ctx, rs.BasePath, http.MethodGet, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := fs.client.HandleResponse(fs.client.callAPI(req))
+	resp, err := rs.Client.HandleResponse(rs.Client.callAPI(req))
 	if err != nil {
 		return nil, err
 	}
-	var functions []*model.Function
-	err = json.Unmarshal(resp, &functions)
+	var resources []*T
+	err = json.Unmarshal(resp, &resources)
 	if err != nil {
 		return nil, err
 	}
-	return functions, nil
+	return resources, nil
 }
 
-func (fs *FunctionService) Delete(ctx context.Context, name string) error {
-	req, err := fs.client.prepareRequest(ctx, "/apis/v1/functions/"+name, http.MethodDelete, nil, nil, nil, nil, nil)
+func (rs *ResourceService[T]) Read(ctx context.Context, name string) (*T, error) {
+	req, err := rs.Client.prepareRequest(ctx, rs.BasePath+"/"+name, http.MethodGet, nil, nil, nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := rs.Client.HandleResponse(rs.Client.callAPI(req))
+	if err != nil {
+		return nil, err
+	}
+	var resource T
+	err = json.Unmarshal(resp, &resource)
+	if err != nil {
+		return nil, err
+	}
+	return &resource, nil
+}
+
+func (rs *ResourceService[T]) Upsert(ctx context.Context, resource *T) error {
+	req, err := rs.Client.prepareRequest(ctx, rs.BasePath, http.MethodPut, resource, nil, nil, nil, nil)
 	if err != nil {
 		return err
 	}
-	_, err = fs.client.HandleResponse(fs.client.callAPI(req))
+	_, err = rs.Client.HandleResponse(rs.Client.callAPI(req))
 	return err
 }
 
-type PackageService struct {
-	client *APIClient
-}
-
-func (c *APIClient) PackageService() *PackageService {
-	return &PackageService{
-		client: c,
-	}
-}
-
-func (ps *PackageService) Create(ctx context.Context, pkg *model.Package) error {
-	req, err := ps.client.prepareRequest(ctx, "/apis/v1/packages", http.MethodPost, pkg, nil, nil, nil, nil)
+func (rs *ResourceService[T]) Delete(ctx context.Context, name string) error {
+	req, err := rs.Client.prepareRequest(ctx, rs.BasePath+"/"+name, http.MethodDelete, nil, nil, nil, nil, nil)
 	if err != nil {
 		return err
 	}
-	_, err = ps.client.HandleResponse(ps.client.callAPI(req))
-	return err
-}
-
-func (ps *PackageService) List(ctx context.Context) ([]*model.Package, error) {
-	req, err := ps.client.prepareRequest(ctx, "/apis/v1/packages", http.MethodGet, nil, nil, nil, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := ps.client.HandleResponse(ps.client.callAPI(req))
-	if err != nil {
-		return nil, err
-	}
-	var packages []*model.Package
-	err = json.Unmarshal(resp, &packages)
-	if err != nil {
-		return nil, err
-	}
-	return packages, nil
-}
-
-func (ps *PackageService) Read(ctx context.Context, name string) (*model.Package, error) {
-	req, err := ps.client.prepareRequest(ctx, "/apis/v1/packages/"+name, http.MethodGet, nil, nil, nil, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := ps.client.HandleResponse(ps.client.callAPI(req))
-	if err != nil {
-		return nil, err
-	}
-	var pkg model.Package
-	err = json.Unmarshal(resp, &pkg)
-	if err != nil {
-		return nil, err
-	}
-	return &pkg, nil
-}
-
-func (ps *PackageService) Update(ctx context.Context, pkg *model.Package) error {
-	req, err := ps.client.prepareRequest(ctx, "/apis/v1/packages/"+pkg.Name, http.MethodPut, pkg, nil, nil, nil, nil)
-	if err != nil {
-		return err
-	}
-	_, err = ps.client.HandleResponse(ps.client.callAPI(req))
-	return err
-}
-
-func (ps *PackageService) Delete(ctx context.Context, name string) error {
-	req, err := ps.client.prepareRequest(ctx, "/apis/v1/packages/"+name, http.MethodDelete, nil, nil, nil, nil, nil)
-	if err != nil {
-		return err
-	}
-	_, err = ps.client.HandleResponse(ps.client.callAPI(req))
+	_, err = rs.Client.HandleResponse(rs.Client.callAPI(req))
 	return err
 }
 

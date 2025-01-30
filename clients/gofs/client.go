@@ -272,7 +272,10 @@ func (c *fsClient) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case e := <-eventChan:
+		case e, ok := <-eventChan:
+			if !ok {
+				return nil
+			}
 			switch e.Type {
 			case rpc.FunctionEventType_DEPLOY:
 				mf, ok := c.modules[e.Function.Module]

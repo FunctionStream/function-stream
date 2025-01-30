@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestMemoryEventStorage(t *testing.T) {
@@ -22,8 +21,7 @@ func TestMemoryEventStorage(t *testing.T) {
 	log, err := config.Build()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	es := NewMemoryEventStorage(log)
-	memEs := es.(*MemEventStorage)
+	es := NewMemEs(ctx, log)
 
 	topics := []model.TopicConfig{
 		{
@@ -74,10 +72,4 @@ func TestMemoryEventStorage(t *testing.T) {
 
 	require.ElementsMatch(t, maps.Keys(events), []string{"topic1", "topic2", "topic3"})
 	cancel()
-
-	// Give enough time to ensure that the goroutine execution within NewSource Tube and NewSinkTube is complete and
-	// the released queue is successful.
-	time.Sleep(100 * time.Millisecond)
-
-	require.Empty(t, memEs.queues)
 }

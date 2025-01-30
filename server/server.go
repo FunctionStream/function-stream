@@ -27,7 +27,7 @@ func (o *ServerOption) BuiltinPackageLoaderFactory(_ context.Context, config *Co
 	switch config.Type {
 	case "":
 	case "memory":
-		return memory.NewMemoryPackageStorage(), nil
+		return memory.NewMemoryPackageStorage(o.Logger), nil
 	}
 	return nil, fmt.Errorf("unknown package loader type: %s", config.Type)
 }
@@ -39,11 +39,11 @@ func (o *ServerOption) GetPackageStorageFactory() func(ctx context.Context, conf
 	return o.BuiltinPackageLoaderFactory
 }
 
-func (o *ServerOption) BuiltinEventStorageFactory(_ context.Context, config *ComponentConfig) (api.EventStorage, error) {
+func (o *ServerOption) BuiltinEventStorageFactory(ctx context.Context, config *ComponentConfig) (api.EventStorage, error) {
 	switch config.Type {
 	case "":
 	case "memory":
-		return memory2.NewMemoryEventStorage(o.Logger), nil
+		return memory2.NewMemEs(ctx, o.Logger), nil
 	}
 	return nil, fmt.Errorf("unknown event storage type: %s", config.Type)
 }
@@ -152,7 +152,7 @@ func NewServer(svrCtx context.Context, config *Config, opt *ServerOption) (*Serv
 	}
 	mgrCfg.RuntimeMap = runtimeMap
 
-	mgr, err := fs.NewManager(*mgrCfg)
+	mgr, err := fs.NewManager(*mgrCfg, log.Named("manager"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager: %w", err)
 	}
