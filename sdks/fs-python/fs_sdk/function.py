@@ -5,7 +5,7 @@ import pulsar
 import time
 import functools
 import signal
-from typing import Callable, Any, Dict, Optional, Set, List
+from typing import Callable, Any, Dict, Optional, Set, List, Union, Awaitable
 from pulsar import Client, Consumer, Producer
 from .config import Config
 from .metrics import Metrics, MetricsServer
@@ -45,14 +45,15 @@ class FSFunction:
 
     def __init__(
         self,
-        process_funcs: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]],
+        process_funcs: Dict[str, Callable[[Dict[str, Any]], Union[Dict[str, Any], Awaitable[Dict[str, Any]]]]],
         config_path: str = "config.yaml"
     ):
         """
         Initialize the FS Function.
 
         Args:
-            process_funcs (Dict[str, Callable]): Dictionary mapping module names to their process functions
+            process_funcs (Dict[str, Callable]): Dictionary mapping module names to their process functions.
+                Functions can be either synchronous or asynchronous.
             config_path (str): Path to the configuration file
         """
         self.config = Config(config_path)
@@ -211,7 +212,12 @@ class FSFunction:
                     module = self.config.module
                     process_func = self.process_funcs[module]
 
-                    response_data = await process_func(self.context, request_data)
+                    # Call the function and handle both sync and async results
+                    result = process_func(request_data)
+                    if isinstance(result, Awaitable):
+                        response_data = await result
+                    else:
+                        response_data = result
 
                     if self._shutdown_event.is_set():
                         logger.info("Skipping response sending due to shutdown")
