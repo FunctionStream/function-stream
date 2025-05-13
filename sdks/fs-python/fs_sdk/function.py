@@ -1,3 +1,10 @@
+"""
+FunctionStream SDK - A Python SDK for building and deploying serverless functions.
+
+This module provides the core functionality for creating and managing FunctionStream
+functions. It handles message processing, request/response flow, and resource management.
+"""
+
 import json
 import asyncio
 import logging
@@ -9,38 +16,28 @@ from typing import Callable, Any, Dict, Optional, Set, List, Union, Awaitable
 from pulsar import Client, Consumer, Producer
 from .config import Config
 from .metrics import Metrics, MetricsServer
+from .context import FSContext
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class FSContext:
-    """
-    Context class that provides access to configuration values.
-    """
-    def __init__(self, config: Config):
-        self.config = config
-
-    def get_config(self, config_name: str) -> str:
-        """
-        Get a configuration value by name.
-
-        Args:
-            config_name (str): The name of the configuration to retrieve
-
-        Returns:
-            str: The configuration value, or empty string if not found
-        """
-        try:
-            return str(self.config.get_config_value(config_name))
-        except Exception as e:
-            logger.error(f"Error getting config {config_name}: {str(e)}")
-            return ""
-
 class FSFunction:
     """
-    FS SDK - A simple RPC service handler that allows users to focus on their core business logic.
-    Supports multiple modules with a single active module at runtime.
+    FunctionStream Function - A serverless function handler for processing messages.
+
+    This class provides a framework for building serverless functions that can process
+    messages from multiple Pulsar topics. It handles message consumption, processing,
+    and response generation, while managing resources and providing metrics.
+
+    Attributes:
+        config (Config): Configuration object containing function settings
+        process_funcs (Dict[str, Callable]): Dictionary of process functions by module
+        client (Client): Pulsar client instance
+        semaphore (asyncio.Semaphore): Semaphore for controlling concurrent requests
+        metrics (Metrics): Metrics collection object
+        metrics_server (MetricsServer): Server for exposing metrics
+        context (FSContext): Context object for accessing configuration
     """
 
     def __init__(
@@ -54,7 +51,11 @@ class FSFunction:
         Args:
             process_funcs (Dict[str, Callable]): Dictionary mapping module names to their process functions.
                 Functions can be either synchronous or asynchronous.
-            config_path (str): Path to the configuration file
+            config_path (str): Path to the configuration file. Defaults to "config.yaml".
+
+        Raises:
+            ValueError: If no module is specified in config or if the specified module
+                      doesn't have a corresponding process function.
         """
         self.config = Config(config_path)
         self.process_funcs = process_funcs
@@ -92,7 +93,16 @@ class FSFunction:
         self._setup_consumer()
 
     def _setup_consumer(self):
-        """Set up a multi-topics consumer for all sources and request sources."""
+        """
+        Set up a multi-topics consumer for all sources and request sources.
+
+        This method creates a Pulsar consumer that subscribes to multiple topics
+        specified in the configuration. It collects topics from both regular sources
+        and request sources.
+
+        Raises:
+            ValueError: If no subscription name is set or if no valid sources are found.
+        """
         topics = []
         subscription_name = self.config.subscription_name
 
@@ -129,17 +139,33 @@ class FSFunction:
         logger.info(f"Created multi-topics consumer for topics: {topics} with subscription: {subscription_name}")
 
     def _signal_handler(self, signum, frame):
-        """Handle termination signals"""
+        """
+        Handle termination signals.
+
+        Args:
+            signum: Signal number
+            frame: Current stack frame
+        """
         logger.info(f"Received signal {signum}, initiating graceful shutdown...")
         asyncio.create_task(self._graceful_shutdown())
 
     async def _add_task(self, task: asyncio.Task):
-        """Thread-safe method to add a task to the tracking set"""
+        """
+        Thread-safe method to add a task to the tracking set.
+
+        Args:
+            task (asyncio.Task): The task to add to tracking.
+        """
         async with self._tasks_lock:
             self._current_tasks.add(task)
 
     async def _remove_task(self, task: asyncio.Task):
-        """Thread-safe method to remove a task from the tracking set"""
+        """
+        Thread-safe method to remove a task from the tracking set.
+
+        Args:
+            task (asyncio.Task): The task to remove from tracking.
+        """
         async with self._tasks_lock:
             try:
                 self._current_tasks.discard(task)
@@ -147,12 +173,24 @@ class FSFunction:
                 logger.error(f"Error removing task: {str(e)}")
 
     async def _get_tasks(self) -> Set[asyncio.Task]:
-        """Thread-safe method to get a copy of current tasks"""
+        """
+        Thread-safe method to get a copy of current tasks.
+
+        Returns:
+            Set[asyncio.Task]: A copy of the current tasks set.
+        """
         async with self._tasks_lock:
             return set(self._current_tasks)
 
     async def _graceful_shutdown(self):
-        """Perform graceful shutdown of the service"""
+        """
+        Perform graceful shutdown of the service.
+
+        This method:
+        1. Sets the shutdown event
+        2. Cancels all ongoing tasks
+        3. Closes all resources
+        """
         logger.info("Starting graceful shutdown...")
         self._shutdown_event.set()
         
@@ -175,11 +213,30 @@ class FSFunction:
 
     @functools.lru_cache(maxsize=100)
     def _get_producer(self, topic: str) -> Producer:
-        """Get a producer for the specified topic."""
+        """
+        Get a producer for the specified topic.
+
+        Args:
+            topic (str): The topic to create a producer for.
+
+        Returns:
+            Producer: A Pulsar producer for the specified topic.
+        """
         return self.client.create_producer(topic)
 
     async def process_request(self, message):
-        """Process an incoming request and send a response."""
+        """
+        Process an incoming request and send a response.
+
+        This method:
+        1. Records metrics for the request
+        2. Processes the request using the configured module
+        3. Sends the response back to the appropriate topic
+        4. Handles any errors that occur during processing
+
+        Args:
+            message: The incoming Pulsar message to process.
+        """
         start_time = time.time()
         self.metrics.record_request_start()
         
@@ -252,7 +309,17 @@ class FSFunction:
             await self._remove_task(task)
 
     async def _send_response(self, response_topic: str, request_id: str, response_data: dict):
-        """Send a response message using cached producer."""
+        """
+        Send a response message using cached producer.
+
+        Args:
+            response_topic (str): The topic to send the response to
+            request_id (str): The ID of the request being responded to
+            response_data (dict): The response data to send
+
+        Raises:
+            Exception: If there's an error sending the response
+        """
         try:
             producer = self._get_producer(response_topic)
             message_data = json.dumps(response_data).encode('utf-8')
@@ -265,7 +332,14 @@ class FSFunction:
             raise
 
     async def start(self):
-        """Start processing requests from all consumers."""
+        """
+        Start processing requests from all consumers.
+
+        This method:
+        1. Starts the metrics server
+        2. Enters a loop to process incoming messages
+        3. Handles graceful shutdown when requested
+        """
         module = self.config.module
         logger.info(f"Starting FS Function with module: {module}")
         
@@ -298,7 +372,15 @@ class FSFunction:
             await self.close()
 
     async def close(self):
-        """Close the service and clean up resources."""
+        """
+        Close the service and clean up resources.
+
+        This method:
+        1. Stops the metrics server
+        2. Closes the consumer
+        3. Clears the producer cache
+        4. Closes the Pulsar client
+        """
         logger.info("Closing FS Function resources...")
         
         await self.metrics_server.stop()
@@ -326,7 +408,12 @@ class FSFunction:
                 logger.error(f"Error closing Pulsar client: {str(e)}")
 
     def __del__(self):
-        """Ensure resources are cleaned up when the object is destroyed."""
+        """
+        Ensure resources are cleaned up when the object is destroyed.
+        
+        This destructor ensures that all resources are properly closed when the
+        object is garbage collected.
+        """
         if self._consumer is not None:
             try:
                 self._consumer.close()
@@ -343,5 +430,10 @@ class FSFunction:
                 pass
 
     def get_metrics(self) -> Dict[str, Any]:
-        """Get current metrics for monitoring."""
+        """
+        Get current metrics for monitoring.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the current metrics.
+        """
         return self.metrics.get_metrics() 

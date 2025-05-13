@@ -1,6 +1,17 @@
-# FS SDK
+# FunctionStream Python SDK
 
-A simple RPC service SDK that allows users to focus on their core business logic.
+FunctionStream SDK is a powerful Python library for building and deploying serverless functions that process messages from Apache Pulsar. It provides a simple yet flexible framework for creating event-driven applications with robust error handling, metrics collection, and resource management.
+
+## Features
+
+- **Easy Function Development**: Simple API for creating serverless functions
+- **Message Processing**: Built-in support for Apache Pulsar message processing
+- **Metrics Collection**: Automatic collection of performance metrics
+- **Resource Management**: Efficient handling of connections and resources
+- **Graceful Shutdown**: Proper cleanup of resources during shutdown
+- **Configuration Management**: Flexible configuration through YAML files
+- **Schema Validation**: Input and output schema validation
+- **Error Handling**: Comprehensive error handling and logging
 
 ## Installation
 
@@ -10,115 +21,170 @@ pip install fs-sdk
 
 ## Quick Start
 
-Here's a simple example of how to use the FS SDK:
+1. Create a function that processes messages:
 
 ```python
-import asyncio
-from fs_sdk import FSService
+from fs_sdk import FSFunction
 
 async def my_process_function(request_data: dict) -> dict:
-    """
-    Process the incoming request data.
-    
-    Args:
-        request_data (dict): The request data containing:
-            - action (str): The action to perform
-            - message (str, optional): A message to process
-            - data (dict, optional): Additional data to process
-            
-    Returns:
-        dict: The response containing:
-            - status (str): The status of the operation
-            - message (str): A response message
-    """
-    # Your business logic here
-    return {
-        'status': 'success',
-        'message': 'Hello from my service!'
+    # Process the request data
+    result = process_data(request_data)
+    return {"result": result}
+
+# Initialize and run the function
+function = FSFunction(
+    process_funcs={
+        'my_module': my_process_function
     }
+)
 
-async def main():
-    # Initialize the service with your process function
-    service = FSService(
-        service_url='pulsar://localhost:6650',
-        request_topic='request-topic',
-        process_func=my_process_function
-    )
-    
-    # Get the JSON Schema for your process function
-    schema = service.get_schema_json()
-    print("Function Schema:", schema)
-    
-    try:
-        # Start processing requests
-        await service.start()
-    except KeyboardInterrupt:
-        print("Shutting down...")
-    finally:
-        await service.close()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+await function.start()
 ```
 
-## Features
+2. Create a configuration file (`config.yaml`):
 
-- Simple and intuitive API
-- Focus on your business logic
-- Automatic request/response handling
-- Built-in error handling
-- Asynchronous processing
-- Automatic JSON Schema generation from function docstrings and type hints
+```yaml
+pulsar:
+  service_url: "pulsar://localhost:6650"
+  authPlugin: ""  # Optional
+  authParams: ""  # Optional
 
-## JSON Schema Generation
+module: "my_module"
+subscriptionName: "my-subscription"
 
-The FS SDK can automatically generate JSON Schema from your process function's docstring and type hints. This is useful for:
+requestSource:
+  - pulsar:
+      topic: "input-topic"
 
-- Documentation
-- API validation
-- Client code generation
-- OpenAPI/Swagger integration
-
-To use this feature, simply add type hints and docstrings to your process function:
-
-```python
-async def my_process_function(request_data: dict) -> dict:
-    """
-    Process the incoming request data.
-    
-    Args:
-        request_data (dict): The request data containing:
-            - action (str): The action to perform
-            - message (str, optional): A message to process
-            - data (dict, optional): Additional data to process
-            
-    Returns:
-        dict: The response containing:
-            - status (str): The status of the operation
-            - message (str): A response message
-    """
-    # Your business logic here
-    return {
-        'status': 'success',
-        'message': 'Hello from my service!'
-    }
+sink:
+  pulsar:
+    topic: "output-topic"
 ```
 
-The SDK will automatically generate a JSON Schema that describes both the input and output of your function. You can access this schema using:
+3. Define your function package (`package.yaml`):
 
-```python
-# Get schema as a dictionary
-schema = service.get_schema()
-
-# Get schema as a JSON string
-schema_json = service.get_schema_json()
+```yaml
+name: my_function
+type: pulsar
+modules:
+  my_module:
+    name: my_process
+    description: "Process incoming messages"
+    inputSchema:
+      type: object
+      properties:
+        data:
+          type: string
+      required:
+        - data
+    outputSchema:
+      type: object
+      properties:
+        result:
+          type: string
 ```
 
-## Requirements
+## Core Components
+
+### FSFunction
+
+The main class for creating serverless functions. It handles:
+- Message consumption and processing
+- Response generation
+- Resource management
+- Metrics collection
+- Error handling
+
+### Configuration
+
+The SDK uses YAML configuration files to define:
+- Pulsar connection settings
+- Module selection
+- Topic subscriptions
+- Input/output topics
+- Custom configuration parameters
+
+### Metrics
+
+Built-in metrics collection for:
+- Request processing time
+- Success/failure rates
+- Message throughput
+- Resource utilization
+
+## Examples
+
+Check out the `examples` directory for complete examples:
+
+- `string_function.py`: A simple string processing function
+- `test_string_function.py`: Test client for the string function
+- `config.yaml`: Example configuration
+- `package.yaml`: Example package definition
+
+## Best Practices
+
+1. **Error Handling**
+   - Always handle exceptions in your process functions
+   - Use proper logging for debugging
+   - Implement graceful shutdown
+
+2. **Resource Management**
+   - Close resources properly
+   - Use context managers when possible
+   - Monitor resource usage
+
+3. **Configuration**
+   - Use environment variables for sensitive data
+   - Validate configuration values
+   - Document configuration options
+
+4. **Testing**
+   - Write unit tests for your functions
+   - Test error scenarios
+   - Validate input/output schemas
+
+## Development
+
+### Prerequisites
 
 - Python 3.7+
 - Apache Pulsar
+- pip
+
+### Setup Development Environment
+
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or
+.\venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install the package in development mode
+pip install -e .
+```
+
+### Running Tests
+
+```bash
+pytest
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-MIT License 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For support, please open an issue in the GitHub repository or contact the maintainers. 

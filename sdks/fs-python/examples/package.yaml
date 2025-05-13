@@ -1,18 +1,28 @@
-name: my_function
-type: pulsar
+# FunctionStream Package Configuration
+# This file defines the package metadata and function specifications for deployment.
+
+# Package name and type
+name: my_function  # Name of the function package
+type: pulsar      # Type of message broker to use
+
+# Module definitions
 modules:
-  string:
-    name: string_process
-    description: 在字符串后面添加感叹号
+  string:  # Module name
+    name: string_process  # Function name
+    description: "Appends an exclamation mark to the input string"  # Function description
+    
+    # Input schema definition
     inputSchema:
       type: object
       properties:
-        text:
-          type: string
+        text:  # Input parameter
+          type: string  # Parameter type
       required:
-        - text
+        - text  # Required parameter
+    
+    # Output schema definition
     outputSchema:
       type: object
       properties:
-        result:
-          type: string
+        result:  # Output parameter
+          type: string  # Parameter type

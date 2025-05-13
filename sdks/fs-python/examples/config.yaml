@@ -1,18 +1,33 @@
+# FunctionStream Configuration File
+# This configuration file defines the settings for the string processing function example.
+
 pulsar:
-  service_url: "pulsar://localhost:6650" # Required
-  authPlugin: "" # Optional
-  authParams: "" # Optional
-module: "string" # Required
-sources: # Optional，但是sources和requestSource不能同时为空
-  - pulsar: # 这里你定义成SourceSpec结构，SourceSpec下有一个pulsar的字段，这是为了后面拓展到其他消息队列准备的
-      topic: "topic-a"
+  service_url: "pulsar://localhost:6650"  # Required: URL of the Pulsar broker
+  authPlugin: ""  # Optional: Authentication plugin class name
+  authParams: ""  # Optional: Authentication parameters
+
+module: "string"  # Required: Name of the module to use for processing
+
+# Optional: List of source topics to consume from
+# Note: Either sources or requestSource must be specified
+sources:
+  - pulsar:  # SourceSpec structure with pulsar configuration
+      topic: "topic-a"  # Topic name for regular message consumption
+
+# Required: Name of the subscription for the consumer
 subscriptionName: "test-sub"
+
+# Optional: List of request source topics
 requestSource:
-  - pulsar: # 这里定义成SourceSpec结构，SourceSpec下有一个pulsar的字段，这是为了后面拓展到其他消息队列准备的
-      topic: "string-topic"
-sink: # Optional
-  pulsar: # 这里定义成SinkSpec结构，SinkSpec下有一个pulsar的字段，这是为了后面拓展到其他消息队列准备的
-    topic: "output"
-config: # Optional
-  - test: "Hello from config"
-  - test2: "Another config value"
+  - pulsar:  # SourceSpec structure with pulsar configuration
+      topic: "string-topic"  # Topic name for request messages
+
+# Optional: Output sink configuration
+sink:
+  pulsar:  # SinkSpec structure with pulsar configuration
+    topic: "output"  # Topic name for output messages
+
+# Optional: Additional configuration parameters
+config:
+  - test: "Hello from config"  # Example configuration value
+  - test2: "Another config value"  # Another example configuration value

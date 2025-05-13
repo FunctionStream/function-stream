@@ -51,21 +51,21 @@ class Metrics:
         """Get current metrics in Prometheus format"""
         return {
             # Request metrics
-            'fs_sdk_total_requests': self.total_requests,
-            'fs_sdk_active_requests': self.active_requests,
-            'fs_sdk_successful_requests': self.successful_requests,
-            'fs_sdk_failed_requests': self.failed_requests,
-            'fs_sdk_request_latency_seconds': self.request_latency,
-            'fs_sdk_last_request_timestamp': self.last_request_time,
+            'fs_total_requests': self.total_requests,
+            'fs_active_requests': self.active_requests,
+            'fs_successful_requests': self.successful_requests,
+            'fs_failed_requests': self.failed_requests,
+            'fs_request_latency_seconds': self.request_latency,
+            'fs_last_request_timestamp': self.last_request_time,
             
             # Event metrics
-            'fs_sdk_total_events': self.total_events,
-            'fs_sdk_successful_events': self.successful_events,
-            'fs_sdk_failed_events': self.failed_events,
+            'fs_total_events': self.total_events,
+            'fs_successful_events': self.successful_events,
+            'fs_failed_events': self.failed_events,
             
             # Derived metrics
-            'fs_sdk_request_success_rate': (self.successful_requests / self.total_requests) if self.total_requests > 0 else 0,
-            'fs_sdk_event_success_rate': (self.successful_events / self.total_events) if self.total_events > 0 else 0
+            'fs_request_success_rate': (self.successful_requests / self.total_requests) if self.total_requests > 0 else 0,
+            'fs_event_success_rate': (self.successful_events / self.total_events) if self.total_events > 0 else 0
         }
 
 class MetricsServer:

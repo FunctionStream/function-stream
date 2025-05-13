@@ -1,3 +1,22 @@
+"""
+String Processing Function Example
+
+This module demonstrates a simple string processing function that appends an exclamation mark
+to the input text. It serves as a basic example of how to create and run a FunctionStream
+serverless function.
+
+The function:
+1. Receives a request containing a text field
+2. Appends an exclamation mark to the text
+3. Returns the modified text in a response
+
+This example shows the basic structure of a FunctionStream function, including:
+- Function definition and implementation
+- FSFunction initialization
+- Service startup and graceful shutdown
+- Error handling
+"""
+
 import asyncio
 import sys
 import os
@@ -6,26 +25,42 @@ from fs_sdk import FSFunction
 
 async def string_process_function(request_data: dict) -> dict:
     """
-    处理字符串的函数，在字符串后面添加感叹号
+    Process a string by appending an exclamation mark.
+    
+    This function demonstrates a simple string transformation that can be used
+    as a building block for more complex text processing pipelines.
     
     Args:
-        request_data (dict): 请求数据，需要包含 'text' 字段
+        request_data (dict): Request data containing a 'text' field with the input string
         
     Returns:
-        dict: 处理后的字符串
+        dict: Response containing the processed string with an exclamation mark appended
+        
+    Example:
+        Input:  {"text": "Hello"}
+        Output: {"result": "Hello!"}
     """
-    # 获取输入文本
+    # Extract the input text from the request data
     text = request_data.get('text', '')
     
-    # 在文本后面添加感叹号
+    # Append an exclamation mark to the text
     result = f"{text}!"
 
+    # Log the result for debugging purposes
     print(f"Result: {result}")
     
     return {"result": result}
 
 async def main():
-    # 初始化函数
+    """
+    Main function to initialize and run the string processing service.
+    
+    This function:
+    1. Creates an FSFunction instance with the string processing function
+    2. Starts the service
+    3. Handles graceful shutdown and error cases
+    """
+    # Initialize the FunctionStream function with our string processor
     function = FSFunction(
         process_funcs={
             'string': string_process_function
@@ -33,17 +68,18 @@ async def main():
     )
 
     try:
-        print("启动字符串处理函数服务...")
+        print("Starting string processing function service...")
         await function.start()
     except asyncio.CancelledError:
-        print("\n正在优雅地关闭服务...")
+        print("\nInitiating graceful shutdown...")
     except Exception as e:
-        print(f"\n发生错误: {e}")
+        print(f"\nAn error occurred: {e}")
     finally:
         await function.close()
 
 if __name__ == "__main__":
     try:
+        # Run the main function in an asyncio event loop
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n服务已停止") 
+        print("\nService stopped") 
