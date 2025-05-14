@@ -4,9 +4,9 @@ from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 
 class PulsarConfig(BaseModel):
-    service_url: str = "pulsar://localhost:6650"
-    auth_plugin: str = ""
-    auth_params: str = ""
+    serviceUrl: str = "pulsar://localhost:6650"
+    authPlugin: str = ""
+    authParams: str = ""
     max_concurrent_requests: int = 10
     max_producer_cache_size: int = 100
 
@@ -26,7 +26,7 @@ class Config(BaseModel):
     sources: List[SourceSpec] = Field(default_factory=list)
     requestSource: Optional[SourceSpec] = None
     sink: Optional[SinkSpec] = None
-    subscription_name: str = "fs-sdk-subscription"
+    subscriptionName: str = "fs-sdk-subscription"
     name: Optional[str] = None
     description: Optional[str] = None
     modules: ModuleConfig = Field(default_factory=ModuleConfig)

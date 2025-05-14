@@ -18,11 +18,11 @@ class TestFSFunction:
         """Create a mock Config object for testing."""
         config = Mock(spec=Config)
         config.module = "test_module"
-        config.subscription_name = "test_subscription"
+        config.subscriptionName = "test_subscription"
         config.pulsar = PulsarConfig(
-            service_url="pulsar://localhost:6650",
-            auth_plugin="",
-            auth_params="",
+            serviceUrl="pulsar://localhost:6650",
+            authPlugin="",
+            authParams="",
             max_concurrent_requests=10,
             max_producer_cache_size=100
         )

@@ -62,14 +62,14 @@ class FSFunction:
         
         # Create authentication if specified
         auth = None
-        if self.config.pulsar.auth_plugin:
+        if self.config.pulsar.authPlugin:
             auth = pulsar.Authentication(
-                self.config.pulsar.auth_plugin,
-                self.config.pulsar.auth_params
+                self.config.pulsar.authPlugin,
+                self.config.pulsar.authParams
             )
             
         self.client = Client(
-            self.config.pulsar.service_url,
+            self.config.pulsar.serviceUrl,
             authentication=auth,
             operation_timeout_seconds=30
         )
@@ -104,10 +104,10 @@ class FSFunction:
             ValueError: If no subscription name is set or if no valid sources are found.
         """
         topics = []
-        subscription_name = self.config.subscription_name
+        subscription_name = self.config.subscriptionName
 
         if not subscription_name:
-            raise ValueError("subscription_name is not set in config.yaml")
+            raise ValueError("subscriptionName is not set in config.yaml")
 
         # Collect topics from sources
         for source in self.config.sources:
