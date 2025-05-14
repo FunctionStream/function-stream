@@ -16,7 +16,7 @@
 # This configuration file defines the settings for the string processing function example.
 
 pulsar:
-  service_url: "pulsar://localhost:6650"  # Required: URL of the Pulsar broker
+  serviceUrl: "pulsar://localhost:6650"  # Required: URL of the Pulsar broker
   authPlugin: ""  # Optional: Authentication plugin class name
   authParams: ""  # Optional: Authentication parameters
 
@@ -33,8 +33,8 @@ subscriptionName: "test-sub"
 
 # Optional: List of request source topics
 requestSource:
-  - pulsar:  # SourceSpec structure with pulsar configuration
-      topic: "string-topic"  # Topic name for request messages
+  pulsar:  # SourceSpec structure with pulsar configuration
+    topic: "string-topic"  # Topic name for request messages
 
 # Optional: Output sink configuration
 sink:

@@ -57,23 +57,23 @@ class FSFunction:
             ValueError: If no module is specified in config or if the specified module
                       doesn't have a corresponding process function.
         """
-        self.config = Config(config_path)
+        self.config = Config.from_yaml(config_path)
         self.process_funcs = process_funcs
         
         # Create authentication if specified
         auth = None
-        if self.config.auth_plugin:
+        if self.config.pulsar.auth_plugin:
             auth = pulsar.Authentication(
-                self.config.auth_plugin,
-                self.config.auth_params
+                self.config.pulsar.auth_plugin,
+                self.config.pulsar.auth_params
             )
             
         self.client = Client(
-            self.config.service_url,
+            self.config.pulsar.service_url,
             authentication=auth,
             operation_timeout_seconds=30
         )
-        self.semaphore = asyncio.Semaphore(10)  # Default max concurrent requests
+        self.semaphore = asyncio.Semaphore(self.config.pulsar.max_concurrent_requests)
         self.metrics = Metrics()
         self.metrics_server = MetricsServer(self.metrics)
         self._shutdown_event = asyncio.Event()
@@ -111,21 +111,18 @@ class FSFunction:
 
         # Collect topics from sources
         for source in self.config.sources:
-            pulsar_config = self.config.get_pulsar_source_config(source)
-            if pulsar_config:
-                topic = pulsar_config.get('topic')
+            if 'pulsar' in source:
+                topic = source['pulsar'].get('topic')
                 if topic:
                     topics.append(topic)
                     logger.info(f"Added source topic: {topic}")
 
         # Collect topics from request sources
-        for source in self.config.request_sources:
-            pulsar_config = self.config.get_pulsar_source_config(source)
-            if pulsar_config:
-                topic = pulsar_config.get('topic')
-                if topic:
-                    topics.append(topic)
-                    logger.info(f"Added request source topic: {topic}")
+        if self.config.requestSource and self.config.requestSource.pulsar:
+            topic = self.config.requestSource.pulsar.get('topic')
+            if topic:
+                topics.append(topic)
+                logger.info(f"Added request source topic: {topic}")
 
         if not topics:
             raise ValueError("No valid sources or request sources found in config")
@@ -255,10 +252,9 @@ class FSFunction:
                     response_topic = message.properties().get('response_topic')
 
                     # If no response_topic is provided, use the sink topic as default
-                    if not response_topic and self.config.sinks:
-                        sink_config = self.config.get_pulsar_sink_config(self.config.sinks[0])
-                        if sink_config and 'topic' in sink_config:
-                            response_topic = sink_config['topic']
+                    if not response_topic and self.config.sink:
+                        if self.config.sink.pulsar and 'topic' in self.config.sink.pulsar:
+                            response_topic = self.config.sink.pulsar['topic']
                             logger.info(f"Using sink topic as default response topic: {response_topic}")
 
                     if not response_topic:

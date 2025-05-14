@@ -7,7 +7,7 @@ import json
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from fs_sdk.function import FSFunction
-from fs_sdk.config import Config
+from fs_sdk.config import Config, PulsarConfig, ModuleConfig, SinkSpec, SourceSpec
 from fs_sdk.metrics import Metrics, MetricsServer
 
 class TestFSFunction:
@@ -19,28 +19,17 @@ class TestFSFunction:
         config = Mock(spec=Config)
         config.module = "test_module"
         config.subscription_name = "test_subscription"
-        config.service_url = "pulsar://localhost:6650"
-        config.auth_plugin = None
-        config.auth_params = None
-        config.sources = ["source1"]
-        config.request_sources = ["request_source1"]
-        config.sinks = ["sink1"]
-        # Add the .config dict so property methods work
-        config.config = {
-            "pulsar": {
-                "authPlugin": "",
-                "authParams": "",
-                "serviceUrl": "pulsar://localhost:6650"
-            },
-            "module": "test_module",
-            "subscriptionName": "test_subscription",
-            "sources": [],
-            "requestSources": [],
-            "sinks": []
-        }
-        # Mock Pulsar config methods
-        config.get_pulsar_source_config.return_value = {"topic": "test_topic"}
-        config.get_pulsar_sink_config.return_value = {"topic": "response_topic"}
+        config.pulsar = PulsarConfig(
+            service_url="pulsar://localhost:6650",
+            auth_plugin="",
+            auth_params="",
+            max_concurrent_requests=10,
+            max_producer_cache_size=100
+        )
+        config.sources = [SourceSpec(pulsar={"topic": "test_topic"})]
+        config.requestSource = SourceSpec(pulsar={"topic": "request_topic"})
+        config.sink = SinkSpec(pulsar={"topic": "response_topic"})
+        config.modules = ModuleConfig(active_module="test_module")
         return config
 
     @pytest.fixture
@@ -86,7 +75,7 @@ class TestFSFunction:
     def function(self, mock_config, mock_process_func, mock_client, mock_consumer, 
                 mock_producer, mock_metrics, mock_metrics_server):
         """Create a FSFunction instance with mocks, patching Config to avoid file IO."""
-        with patch('fs_sdk.function.Config', return_value=mock_config), \
+        with patch('fs_sdk.function.Config.from_yaml', return_value=mock_config), \
              patch('fs_sdk.function.Client', return_value=mock_client), \
              patch('fs_sdk.function.Metrics', return_value=mock_metrics), \
              patch('fs_sdk.function.MetricsServer', return_value=mock_metrics_server):
@@ -103,7 +92,7 @@ class TestFSFunction:
     @pytest.mark.asyncio
     async def test_init(self, mock_config, mock_process_func):
         """Test FSFunction initialization."""
-        with patch('fs_sdk.function.Config', return_value=mock_config), \
+        with patch('fs_sdk.function.Config.from_yaml', return_value=mock_config), \
              patch('fs_sdk.function.Client'), \
              patch('fs_sdk.function.Metrics'), \
              patch('fs_sdk.function.MetricsServer'):
@@ -153,7 +142,7 @@ class TestFSFunction:
         message = Mock()
         message.data.return_value = json.dumps({"test": "data"}).encode('utf-8')
         message.properties.return_value = {"request_id": "test_id"}
-        function.config.sinks = []
+        function.config.sink = None
         
         # Execute
         await function.process_request(message)
