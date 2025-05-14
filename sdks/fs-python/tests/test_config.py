@@ -18,8 +18,7 @@ class TestConfig:
                 "serviceUrl": "pulsar://localhost:6650",
                 "authPlugin": "",
                 "authParams": "",
-                "max_concurrent_requests": 10,
-                "max_producer_cache_size": 100
+                "max_concurrent_requests": 10
             },
             "module": "test_module",
             "sources": [
@@ -69,20 +68,19 @@ class TestConfig:
         assert config.pulsar.authPlugin == ""
         assert config.pulsar.authParams == ""
         assert config.pulsar.max_concurrent_requests == 10
-        assert config.pulsar.max_producer_cache_size == 100
         
         # Test module config
         assert config.module == "test_module"
         
         # Test sources
         assert len(config.sources) == 1
-        assert config.sources[0].pulsar["topic"] == "test_topic"
+        assert config.sources[0].pulsar.topic == "test_topic"
         
         # Test request source
-        assert config.requestSource.pulsar["topic"] == "request_topic"
+        assert config.requestSource.pulsar.topic == "request_topic"
         
         # Test sink
-        assert config.sink.pulsar["topic"] == "response_topic"
+        assert config.sink.pulsar.topic == "response_topic"
         
         # Test subscription name
         assert config.subscriptionName == "test_subscription"
@@ -107,12 +105,3 @@ class TestConfig:
         """Test getting non-existent config value."""
         config = Config.from_yaml(sample_config_yaml)
         assert config.get_config_value("non_existent_key") is None
-
-    def test_get_module_config(self, sample_config_yaml):
-        """Test getting module configuration."""
-        config = Config.from_yaml(sample_config_yaml)
-        module_config = config.get_module_config("test_module")
-        assert module_config["key"] == "value"
-        
-        # Test non-existent module
-        assert config.get_module_config("non_existent_module") == {} 

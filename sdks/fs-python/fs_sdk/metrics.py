@@ -11,7 +11,10 @@ logger = logging.getLogger(__name__)
 
 class Metrics:
     """
-    Prometheus-style metrics for monitoring system performance
+    Prometheus-style metrics for monitoring system performance.
+    
+    This class tracks various metrics including request counts, latencies, and event statistics.
+    All metrics are exposed in Prometheus-compatible format.
     """
     def __init__(self):
         self.total_requests = 0
@@ -25,13 +28,24 @@ class Metrics:
         self.failed_events = 0
 
     def record_request_start(self):
-        """Record the start of a new request"""
+        """
+        Record the start of a new request.
+        
+        This method increments the total request counter and active request counter,
+        and updates the last request timestamp.
+        """
         self.total_requests += 1
         self.active_requests += 1
         self.last_request_time = time.time()
 
     def record_request_end(self, success: bool, latency: float):
-        """Record the end of a request"""
+        """
+        Record the end of a request.
+        
+        Args:
+            success (bool): Whether the request was successful.
+            latency (float): The request latency in seconds.
+        """
         self.active_requests -= 1
         if success:
             self.successful_requests += 1
@@ -40,7 +54,12 @@ class Metrics:
         self.request_latency = latency
 
     def record_event(self, success: bool):
-        """Record an event (success or failure)"""
+        """
+        Record an event (success or failure).
+        
+        Args:
+            success (bool): Whether the event was successful.
+        """
         self.total_events += 1
         if success:
             self.successful_events += 1
@@ -48,7 +67,14 @@ class Metrics:
             self.failed_events += 1
 
     def get_metrics(self) -> Dict[str, Any]:
-        """Get current metrics in Prometheus format"""
+        """
+        Get current metrics in Prometheus format.
+        
+        Returns:
+            Dict[str, Any]: A dictionary containing all metrics in Prometheus-compatible format.
+                           Includes request counts, latencies, event statistics, and derived metrics
+                           like success rates.
+        """
         return {
             # Request metrics
             'fs_total_requests': self.total_requests,

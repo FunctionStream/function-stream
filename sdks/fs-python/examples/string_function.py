@@ -18,12 +18,12 @@ This example shows the basic structure of a FunctionStream function, including:
 """
 
 import asyncio
-import sys
-import os
+from typing import Dict, Any
 
 from fs_sdk import FSFunction
+from fs_sdk.context import FSContext
 
-async def string_process_function(request_data: dict) -> dict:
+async def string_process_function(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Process a string by appending an exclamation mark.
     
@@ -31,23 +31,24 @@ async def string_process_function(request_data: dict) -> dict:
     as a building block for more complex text processing pipelines.
     
     Args:
-        request_data (dict): Request data containing a 'text' field with the input string
+        data (Dict[str, Any]): Request data containing a 'text' field with the input string
         
     Returns:
-        dict: Response containing the processed string with an exclamation mark appended
+        Dict[str, Any]: Response containing the processed string with an exclamation mark appended
         
     Example:
         Input:  {"text": "Hello"}
         Output: {"result": "Hello!"}
     """
     # Extract the input text from the request data
-    text = request_data.get('text', '')
+    text = data.get('text', '')
     
     # Append an exclamation mark to the text
     result = f"{text}!"
 
     # Log the result for debugging purposes
     print(f"Result: {result}")
+    print(f"Config: {context.get_config('test')}")
     
     return {"result": result}
 

@@ -8,17 +8,22 @@ class PulsarConfig(BaseModel):
     authPlugin: str = ""
     authParams: str = ""
     max_concurrent_requests: int = 10
-    max_producer_cache_size: int = 100
 
 class ModuleConfig(BaseModel):
     active_module: Optional[str] = None
     module_configs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
+class PulsarSourceConfig(BaseModel):
+    topic: str
+    serviceUrl: Optional[str] = None
+    authPlugin: Optional[str] = None
+    authParams: Optional[str] = None
+
 class SourceSpec(BaseModel):
-    pulsar: Dict[str, Any] = Field(default_factory=dict)
+    pulsar: Optional[PulsarSourceConfig] = None
 
 class SinkSpec(BaseModel):
-    pulsar: Dict[str, Any] = Field(default_factory=dict)
+    pulsar: Optional[PulsarSourceConfig] = None
 
 class Config(BaseModel):
     pulsar: PulsarConfig = Field(default_factory=PulsarConfig)
@@ -64,7 +69,3 @@ class Config(BaseModel):
             if config_name in item:
                 return item[config_name]
         return None
-
-    def get_module_config(self, module_name: str) -> Dict[str, Any]:
-        """Get configuration for a specific module."""
-        return self.modules.module_configs.get(module_name, {}) 

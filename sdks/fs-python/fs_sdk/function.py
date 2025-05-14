@@ -12,11 +12,13 @@ import pulsar
 import time
 import functools
 import signal
-from typing import Callable, Any, Dict, Optional, Set, List, Union, Awaitable
+import inspect
+from typing import Callable, Any, Dict, Optional, Set, List, Union, Awaitable, get_type_hints
 from pulsar import Client, Consumer, Producer
 from .config import Config
 from .metrics import Metrics, MetricsServer
 from .context import FSContext
+import typing
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,9 +42,73 @@ class FSFunction:
         context (FSContext): Context object for accessing configuration
     """
 
+    def _validate_process_func(self, func: Callable, module_name: str):
+        """
+        Validate the structure of a process function.
+
+        Args:
+            func (Callable): The function to validate
+            module_name (str): Name of the module for error messages
+
+        Raises:
+            ValueError: If the function structure is invalid
+        """
+        # Get function signature
+        sig = inspect.signature(func)
+        params = list(sig.parameters.values())
+        
+        # Check number of parameters
+        if len(params) != 2:
+            raise ValueError(
+                f"Process function for module '{module_name}' must have exactly 2 parameters, "
+                f"got {len(params)}"
+            )
+        
+        # Check parameter types using type hints
+        type_hints = get_type_hints(func)
+        logging.warning(f"DEBUG: type_hints for {module_name}: {type_hints}")
+        if not ("context" in type_hints and "data" in type_hints and "return" in type_hints):
+            raise ValueError(
+                f"Process function for module '{module_name}' must have type hints for both parameters named 'context', 'data', and a return type"
+            )
+        def unwrap_annotated(annotation):
+            origin = typing.get_origin(annotation)
+            if origin is typing.Annotated:
+                return unwrap_annotated(typing.get_args(annotation)[0])
+            return annotation
+        def is_dict_str_any(annotation):
+            ann = unwrap_annotated(annotation)
+            origin = typing.get_origin(ann)
+            args = typing.get_args(ann)
+            return (origin in (dict, typing.Dict)) and args == (str, Any)
+        if not (type_hints["context"] == FSContext):
+            raise ValueError(
+                f"Process function for module '{module_name}' must have FSContext as first parameter"
+            )
+        if not is_dict_str_any(type_hints["data"]):
+            raise ValueError(
+                f"Process function for module '{module_name}' must have Dict[str, Any] or dict[str, Any] as second parameter"
+            )
+        # Check return type
+        return_type = type_hints.get('return')
+        def is_dict_return(annotation):
+            ann = unwrap_annotated(annotation)
+            origin = typing.get_origin(ann)
+            args = typing.get_args(ann)
+            return (origin in (dict, typing.Dict)) and args == (str, Any)
+        def is_awaitable_dict(annotation):
+            ann = unwrap_annotated(annotation)
+            origin = typing.get_origin(ann)
+            args = typing.get_args(ann)
+            return origin in (typing.Awaitable,) and len(args) == 1 and is_dict_return(args[0])
+        if not (is_dict_return(return_type) or is_awaitable_dict(return_type)):
+            raise ValueError(
+                f"Process function for module '{module_name}' must return Dict[str, Any], dict[str, Any], or Awaitable thereof, got {return_type}"
+            )
+
     def __init__(
         self,
-        process_funcs: Dict[str, Callable[[Dict[str, Any]], Union[Dict[str, Any], Awaitable[Dict[str, Any]]]]],
+        process_funcs: Dict[str, Callable[["FSContext", Dict[str, Any]], Union[Dict[str, Any], Awaitable[Dict[str, Any]]]]],
         config_path: str = "config.yaml"
     ):
         """
@@ -50,15 +116,27 @@ class FSFunction:
 
         Args:
             process_funcs (Dict[str, Callable]): Dictionary mapping module names to their process functions.
-                Functions can be either synchronous or asynchronous.
+                Each function must accept two parameters: (context: FSContext, data: Dict[str, Any])
+                and return either a Dict[str, Any] or an Awaitable[Dict[str, Any]].
             config_path (str): Path to the configuration file. Defaults to "config.yaml".
 
         Raises:
             ValueError: If no module is specified in config or if the specified module
-                      doesn't have a corresponding process function.
+                      doesn't have a corresponding process function, or if the function
+                      structure is invalid.
         """
         self.config = Config.from_yaml(config_path)
         self.process_funcs = process_funcs
+        
+        # Validate module
+        module = self.config.module
+        if not module:
+            raise ValueError("No module specified in config")
+        if module not in process_funcs:
+            raise ValueError(f"Process function not found for module: {module}")
+            
+        # Validate function structure
+        self._validate_process_func(process_funcs[module], module)
         
         # Create authentication if specified
         auth = None
@@ -82,13 +160,6 @@ class FSFunction:
         self._consumer = None
         self.context = FSContext(self.config)
         
-        # Validate module
-        module = self.config.module
-        if not module:
-            raise ValueError("No module specified in config")
-        if module not in process_funcs:
-            raise ValueError(f"Process function not found for module: {module}")
-        
         # Create multi-topics consumer
         self._setup_consumer()
 
@@ -111,18 +182,14 @@ class FSFunction:
 
         # Collect topics from sources
         for source in self.config.sources:
-            if 'pulsar' in source:
-                topic = source['pulsar'].get('topic')
-                if topic:
-                    topics.append(topic)
-                    logger.info(f"Added source topic: {topic}")
+            if source.pulsar and source.pulsar.topic:
+                topics.append(source.pulsar.topic)
+                logger.info(f"Added source topic: {source.pulsar.topic}")
 
         # Collect topics from request sources
-        if self.config.requestSource and self.config.requestSource.pulsar:
-            topic = self.config.requestSource.pulsar.get('topic')
-            if topic:
-                topics.append(topic)
-                logger.info(f"Added request source topic: {topic}")
+        if self.config.requestSource and self.config.requestSource.pulsar and self.config.requestSource.pulsar.topic:
+            topics.append(self.config.requestSource.pulsar.topic)
+            logger.info(f"Added request source topic: {self.config.requestSource.pulsar.topic}")
 
         if not topics:
             raise ValueError("No valid sources or request sources found in config")
@@ -252,10 +319,9 @@ class FSFunction:
                     response_topic = message.properties().get('response_topic')
 
                     # If no response_topic is provided, use the sink topic as default
-                    if not response_topic and self.config.sink:
-                        if self.config.sink.pulsar and 'topic' in self.config.sink.pulsar:
-                            response_topic = self.config.sink.pulsar['topic']
-                            logger.info(f"Using sink topic as default response topic: {response_topic}")
+                    if not response_topic and self.config.sink and self.config.sink.pulsar and self.config.sink.pulsar.topic:
+                        response_topic = self.config.sink.pulsar.topic
+                        logger.info(f"Using sink topic as default response topic: {response_topic}")
 
                     if not response_topic:
                         logger.error("No response_topic provided and no sink topic available")
@@ -265,16 +331,12 @@ class FSFunction:
                     module = self.config.module
                     process_func = self.process_funcs[module]
 
-                    # Call the function and handle both sync and async results
-                    result = process_func(request_data)
+                    # Call the function with context as first argument and handle both sync and async results
+                    result = process_func(self.context, request_data)
                     if isinstance(result, Awaitable):
                         response_data = await result
                     else:
                         response_data = result
-
-                    if self._shutdown_event.is_set():
-                        logger.info("Skipping response sending due to shutdown")
-                        return
 
                     await self._send_response(response_topic, request_id, response_data)
                     
@@ -432,4 +494,13 @@ class FSFunction:
         Returns:
             Dict[str, Any]: A dictionary containing the current metrics.
         """
-        return self.metrics.get_metrics() 
+        return self.metrics.get_metrics()
+
+    def get_context(self) -> FSContext:
+        """
+        Get the FSContext instance associated with this function.
+
+        Returns:
+            FSContext: The context object containing configuration and runtime information.
+        """
+        return self.context 
