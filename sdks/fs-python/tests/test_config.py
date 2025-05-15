@@ -3,9 +3,8 @@ Unit tests for the Config class.
 """
 
 import pytest
-import os
 import yaml
-from fs_sdk.config import Config, PulsarConfig, ModuleConfig, SourceSpec, SinkSpec
+from fs_sdk.config import Config
 
 class TestConfig:
     """Test suite for Config class."""
@@ -41,14 +40,6 @@ class TestConfig:
             "subscriptionName": "test_subscription",
             "name": "test_function",
             "description": "Test function",
-            "modules": {
-                "active_module": "test_module",
-                "module_configs": {
-                    "test_module": {
-                        "key": "value"
-                    }
-                }
-            },
             "config": [
                 {"test_key": "test_value"}
             ]
@@ -88,10 +79,6 @@ class TestConfig:
         # Test name and description
         assert config.name == "test_function"
         assert config.description == "Test function"
-        
-        # Test modules config
-        assert config.modules.active_module == "test_module"
-        assert config.modules.module_configs["test_module"]["key"] == "value"
         
         # Test config values
         assert config.get_config_value("test_key") == "test_value"

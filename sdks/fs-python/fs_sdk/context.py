@@ -3,7 +3,6 @@ FSContext module provides a context object that manages configuration access for
 """
 
 import logging
-from typing import Optional
 from .config import Config
 
 # Configure logging

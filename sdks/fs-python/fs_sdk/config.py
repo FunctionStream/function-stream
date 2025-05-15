@@ -9,10 +9,6 @@ class PulsarConfig(BaseModel):
     authParams: str = ""
     max_concurrent_requests: int = 10
 
-class ModuleConfig(BaseModel):
-    active_module: Optional[str] = None
-    module_configs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-
 class PulsarSourceConfig(BaseModel):
     topic: str
     serviceUrl: Optional[str] = None
@@ -26,15 +22,14 @@ class SinkSpec(BaseModel):
     pulsar: Optional[PulsarSourceConfig] = None
 
 class Config(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
     pulsar: PulsarConfig = Field(default_factory=PulsarConfig)
-    module: Optional[str] = None
+    module: str = "default"
     sources: List[SourceSpec] = Field(default_factory=list)
     requestSource: Optional[SourceSpec] = None
     sink: Optional[SinkSpec] = None
     subscriptionName: str = "fs-sdk-subscription"
-    name: Optional[str] = None
-    description: Optional[str] = None
-    modules: ModuleConfig = Field(default_factory=ModuleConfig)
     config: List[Dict[str, Any]] = Field(default_factory=list)
 
     @classmethod

@@ -7,7 +7,7 @@ import json
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from fs_sdk.function import FSFunction
-from fs_sdk.config import Config, PulsarConfig, ModuleConfig, SinkSpec, SourceSpec, PulsarSourceConfig
+from fs_sdk.config import Config, PulsarConfig, SinkSpec, SourceSpec, PulsarSourceConfig
 from fs_sdk.metrics import Metrics, MetricsServer
 
 class TestFSFunction:
@@ -28,7 +28,6 @@ class TestFSFunction:
         config.sources = [SourceSpec(pulsar=PulsarSourceConfig(topic="test_topic"))]
         config.requestSource = SourceSpec(pulsar=PulsarSourceConfig(topic="request_topic"))
         config.sink = SinkSpec(pulsar=PulsarSourceConfig(topic="response_topic"))
-        config.modules = ModuleConfig(active_module="test_module")
         return config
 
     @pytest.fixture

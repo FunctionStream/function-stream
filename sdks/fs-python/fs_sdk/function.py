@@ -11,10 +11,9 @@ import logging
 import pulsar
 import time
 import functools
-import signal
 import inspect
-from typing import Callable, Any, Dict, Optional, Set, List, Union, Awaitable, get_type_hints
-from pulsar import Client, Consumer, Producer
+from typing import Callable, Any, Dict, Set, Union, Awaitable, get_type_hints
+from pulsar import Client, Producer
 from .config import Config
 from .metrics import Metrics, MetricsServer
 from .context import FSContext
@@ -23,6 +22,71 @@ import typing
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _validate_process_func(func: Callable, module_name: str):
+    """
+    Validate the structure of a process function.
+
+    Args:
+        func (Callable): The function to validate
+        module_name (str): Name of the module for error messages
+
+    Raises:
+        ValueError: If the function structure is invalid
+    """
+    # Get function signature
+    sig = inspect.signature(func)
+    params = list(sig.parameters.values())
+
+    # Check number of parameters
+    if len(params) != 2:
+        raise ValueError(
+            f"Process function for module '{module_name}' must have exactly 2 parameters, "
+            f"got {len(params)}"
+        )
+
+    # Check parameter types using type hints
+    type_hints = get_type_hints(func)
+    if not ("context" in type_hints and "data" in type_hints and "return" in type_hints):
+        raise ValueError(
+            f"Process function for module '{module_name}' must have type hints for both parameters named 'context', 'data', and a return type"
+        )
+    def unwrap_annotated(annotation):
+        origin = typing.get_origin(annotation)
+        if origin is typing.Annotated:
+            return unwrap_annotated(typing.get_args(annotation)[0])
+        return annotation
+    def is_dict_str_any(annotation):
+        ann = unwrap_annotated(annotation)
+        origin = typing.get_origin(ann)
+        args = typing.get_args(ann)
+        return (origin in (dict, typing.Dict)) and args == (str, Any)
+    if not (type_hints["context"] == FSContext):
+        raise ValueError(
+            f"Process function for module '{module_name}' must have FSContext as first parameter"
+        )
+    if not is_dict_str_any(type_hints["data"]):
+        raise ValueError(
+            f"Process function for module '{module_name}' must have Dict[str, Any] or dict[str, Any] as second parameter"
+        )
+    # Check return type
+    return_type = type_hints.get('return')
+    def is_dict_return(annotation):
+        ann = unwrap_annotated(annotation)
+        origin = typing.get_origin(ann)
+        args = typing.get_args(ann)
+        return (origin in (dict, typing.Dict)) and args == (str, Any)
+    def is_awaitable_dict(annotation):
+        ann = unwrap_annotated(annotation)
+        origin = typing.get_origin(ann)
+        args = typing.get_args(ann)
+        return origin in (typing.Awaitable,) and len(args) == 1 and is_dict_return(args[0])
+    if not (is_dict_return(return_type) or is_awaitable_dict(return_type)):
+        raise ValueError(
+            f"Process function for module '{module_name}' must return Dict[str, Any], dict[str, Any], or Awaitable thereof, got {return_type}"
+        )
+
 
 class FSFunction:
     """
@@ -41,70 +105,6 @@ class FSFunction:
         metrics_server (MetricsServer): Server for exposing metrics
         context (FSContext): Context object for accessing configuration
     """
-
-    def _validate_process_func(self, func: Callable, module_name: str):
-        """
-        Validate the structure of a process function.
-
-        Args:
-            func (Callable): The function to validate
-            module_name (str): Name of the module for error messages
-
-        Raises:
-            ValueError: If the function structure is invalid
-        """
-        # Get function signature
-        sig = inspect.signature(func)
-        params = list(sig.parameters.values())
-        
-        # Check number of parameters
-        if len(params) != 2:
-            raise ValueError(
-                f"Process function for module '{module_name}' must have exactly 2 parameters, "
-                f"got {len(params)}"
-            )
-        
-        # Check parameter types using type hints
-        type_hints = get_type_hints(func)
-        logging.warning(f"DEBUG: type_hints for {module_name}: {type_hints}")
-        if not ("context" in type_hints and "data" in type_hints and "return" in type_hints):
-            raise ValueError(
-                f"Process function for module '{module_name}' must have type hints for both parameters named 'context', 'data', and a return type"
-            )
-        def unwrap_annotated(annotation):
-            origin = typing.get_origin(annotation)
-            if origin is typing.Annotated:
-                return unwrap_annotated(typing.get_args(annotation)[0])
-            return annotation
-        def is_dict_str_any(annotation):
-            ann = unwrap_annotated(annotation)
-            origin = typing.get_origin(ann)
-            args = typing.get_args(ann)
-            return (origin in (dict, typing.Dict)) and args == (str, Any)
-        if not (type_hints["context"] == FSContext):
-            raise ValueError(
-                f"Process function for module '{module_name}' must have FSContext as first parameter"
-            )
-        if not is_dict_str_any(type_hints["data"]):
-            raise ValueError(
-                f"Process function for module '{module_name}' must have Dict[str, Any] or dict[str, Any] as second parameter"
-            )
-        # Check return type
-        return_type = type_hints.get('return')
-        def is_dict_return(annotation):
-            ann = unwrap_annotated(annotation)
-            origin = typing.get_origin(ann)
-            args = typing.get_args(ann)
-            return (origin in (dict, typing.Dict)) and args == (str, Any)
-        def is_awaitable_dict(annotation):
-            ann = unwrap_annotated(annotation)
-            origin = typing.get_origin(ann)
-            args = typing.get_args(ann)
-            return origin in (typing.Awaitable,) and len(args) == 1 and is_dict_return(args[0])
-        if not (is_dict_return(return_type) or is_awaitable_dict(return_type)):
-            raise ValueError(
-                f"Process function for module '{module_name}' must return Dict[str, Any], dict[str, Any], or Awaitable thereof, got {return_type}"
-            )
 
     def __init__(
         self,
@@ -136,7 +136,7 @@ class FSFunction:
             raise ValueError(f"Process function not found for module: {module}")
             
         # Validate function structure
-        self._validate_process_func(process_funcs[module], module)
+        _validate_process_func(process_funcs[module], module)
         
         # Create authentication if specified
         auth = None
@@ -165,11 +165,11 @@ class FSFunction:
 
     def _setup_consumer(self):
         """
-        Set up a multi-topics consumer for all sources and request sources.
+        Set up a multi-topics consumer for all sources and the request source.
 
         This method creates a Pulsar consumer that subscribes to multiple topics
         specified in the configuration. It collects topics from both regular sources
-        and request sources.
+        and the request source.
 
         Raises:
             ValueError: If no subscription name is set or if no valid sources are found.
@@ -321,7 +321,6 @@ class FSFunction:
                     # If no response_topic is provided, use the sink topic as default
                     if not response_topic and self.config.sink and self.config.sink.pulsar and self.config.sink.pulsar.topic:
                         response_topic = self.config.sink.pulsar.topic
-                        logger.info(f"Using sink topic as default response topic: {response_topic}")
 
                     if not response_topic:
                         logger.error("No response_topic provided and no sink topic available")
@@ -356,11 +355,12 @@ class FSFunction:
                 except Exception as e:
                     logger.error(f"Error processing request: {str(e)}")
                     if not self._shutdown_event.is_set():
-                        await self._send_response(
-                            response_topic,
-                            request_id,
-                            {'error': str(e)}
-                        )
+                        if request_id: # Only send the response back if the request_id exists
+                            await self._send_response(
+                                response_topic,
+                                request_id,
+                                {'error': str(e)}
+                            )
                     self.metrics.record_request_end(False, time.time() - start_time)
                     self.metrics.record_event(False)
         finally:
@@ -481,7 +481,7 @@ class FSFunction:
             self._get_producer.cache_clear()
         except:
             pass
-        if hasattr(self, 'client'):
+        if self.client is not None:
             try:
                 self.client.close()
             except:

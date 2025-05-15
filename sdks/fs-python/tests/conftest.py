@@ -3,7 +3,6 @@ Shared test configurations and fixtures.
 """
 
 import pytest
-import asyncio
 from unittest.mock import Mock
 
 @pytest.fixture
