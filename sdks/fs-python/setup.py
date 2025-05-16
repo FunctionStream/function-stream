@@ -8,17 +8,18 @@ setup(
         "pulsar-client>=3.0.0",
         "pyyaml>=6.0",
         "aiohttp>=3.8.0",
+        "pydantic>=2.0.0"
     ],
-    author="FuncionStream Org",
-    author_email="your.email@example.com",
-    description="A simple RPC service SDK that allows users to focus on their core business logic",
+    author="FunctionStream Org",
+    author_email="",
+    description="FunctionStream SDK is a powerful Python library for building and deploying serverless functions that process messages from Apache Pulsar.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/fs-sdk",
+    url="https://github.com/functionstream/function-stream/sdks/fs-python",
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.7",
-) 
+    python_requires=">=3.9",
+)

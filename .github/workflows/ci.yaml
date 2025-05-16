@@ -62,14 +62,14 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
+        working-directory: sdks/fs-python
         run: |
-          cd sdks/fs-python
           pip install .
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest
       - name: Run Python SDK tests
+        working-directory: sdks/fs-python
         run: |
-          cd sdks/fs-python
-          pytest
+          make test
 
