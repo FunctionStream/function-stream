@@ -53,3 +53,23 @@ jobs:
       - name: Collect nohup logs
         if: failure()
         run: cat nohup.out || true
+
+  test-python-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        working-directory: sdks/fs-python
+        run: |
+          pip install .
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Run Python SDK tests
+        working-directory: sdks/fs-python
+        run: |
+          make test
+
