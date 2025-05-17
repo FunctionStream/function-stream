@@ -1,0 +1,28 @@
+apiVersion: fs.functionstream.github.io/v1alpha1
+kind: Package
+metadata:
+  name: my-function
+spec:
+  displayName: My sample function
+  logo: ""
+  description: "A function package for string processing."
+  functionType:
+    cloud:
+      image: "my-function:latest"
+  modules:
+    string:
+      displayName: String Manipulation Function
+      description: "Appends an exclamation mark to the input string"
+      sourceSchema: |
+        type: object
+        properties:
+          text:
+            type: string
+        required:
+          - text
+      sinkSchema: |
+        type: object
+        properties:
+          result:
+            type: string
+      config: []

@@ -1,0 +1,51 @@
+{{- if .Values.rbac.create }}
+# ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "functionstream-operator.fullname" . }}
+  labels:
+    app.kubernetes.io/name: operator
+rules:
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - package
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - package/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - package/status
+  verbs:
+  - get
+  - patch
+  - update
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "functionstream-operator.fullname" . }}
+  labels:
+    app.kubernetes.io/name: operator
+subjects:
+- kind: ServiceAccount
+  name: {{ include "functionstream-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "functionstream-operator.fullname" . }}
+{{- end }} 

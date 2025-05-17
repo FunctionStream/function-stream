@@ -1,0 +1,135 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: packages.fs.functionstream.github.io
+spec:
+  group: fs.functionstream.github.io
+  names:
+    kind: Package
+    listKind: PackageList
+    plural: packages
+    shortNames:
+    - pkg
+    singular: package
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Package is the Schema for the packages API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PackageSpec defines the desired state of Package
+            properties:
+              description:
+                description: Description provides additional information about the
+                  package
+                type: string
+              displayName:
+                description: DisplayName is the human-readable name of the package
+                type: string
+              functionType:
+                description: FunctionType contains function type configuration
+                properties:
+                  cloud:
+                    description: Cloud contains cloud function package configuration
+                    properties:
+                      image:
+                        description: Image specifies the container image for cloud
+                          deployment
+                        type: string
+                    required:
+                    - image
+                    type: object
+                type: object
+              logo:
+                description: Logo is the URL or base64 encoded image for the package
+                  logo
+                type: string
+              modules:
+                additionalProperties:
+                  description: Module defines a module within a package
+                  properties:
+                    config:
+                      description: Config is a list of configuration items for the
+                        module
+                      items:
+                        description: ConfigItem defines a configuration item for a
+                          module
+                        properties:
+                          description:
+                            description: Description provides additional information
+                              about the config item
+                            type: string
+                          displayName:
+                            description: DisplayName is the human-readable name of
+                              the config item
+                            type: string
+                          required:
+                            description: Required indicates whether this config item
+                              is mandatory
+                            type: boolean
+                          type:
+                            description: Type specifies the data type of the config
+                              item
+                            type: string
+                        required:
+                        - description
+                        - displayName
+                        - required
+                        - type
+                        type: object
+                      type: array
+                    description:
+                      description: Description provides additional information about
+                        the module
+                      type: string
+                    displayName:
+                      description: DisplayName is the human-readable name of the module
+                      type: string
+                    sinkSchema:
+                      description: SinkSchema defines the output schema for the module
+                      type: string
+                    sourceSchema:
+                      description: SourceSchema defines the input schema for the module
+                      type: string
+                  required:
+                  - description
+                  - displayName
+                  type: object
+                description: Modules is a map of module names to their configurations
+                type: object
+            required:
+            - description
+            - displayName
+            - functionType
+            - modules
+            type: object
+          status:
+            description: PackageStatus defines the observed state of Package.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

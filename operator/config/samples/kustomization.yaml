@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- fs_v1alpha1_packages.yaml
+- fs_v1alpha1_function.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

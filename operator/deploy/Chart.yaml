@@ -1,0 +1,15 @@
+apiVersion: v2
+name: functionstream-operator
+version: 0.1.0
+appVersion: "1.0.0"
+description: A Helm chart for deploying the FunctionStream Operator, including CRDs and the manager.
+keywords:
+  - operator
+  - functionstream
+  - kubernetes
+home: https://github.com/functionstream/operator
+sources:
+  - https://github.com/functionstream/operator
+maintainers:
+  - name: FunctionStream Team
+    email: team@functionstream.io 
