@@ -39,6 +39,7 @@ import (
 
 	fsv1alpha1 "github.com/FunctionStream/function-stream/operator/api/v1alpha1"
 	"github.com/FunctionStream/function-stream/operator/internal/controller"
+	webhookfsv1alpha1 "github.com/FunctionStream/function-stream/operator/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -230,6 +231,20 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Function")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err = webhookfsv1alpha1.SetupFunctionWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Function")
+			os.Exit(1)
+		}
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err = webhookfsv1alpha1.SetupPackagesWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Packages")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

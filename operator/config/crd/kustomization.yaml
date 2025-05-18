@@ -4,6 +4,7 @@
 resources:
 - ./bases/fs.functionstream.github.io_packages.yaml
 - bases/fs.functionstream.github.io_functions.yaml
+- bases/fs.functionstream.github.io_packages.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

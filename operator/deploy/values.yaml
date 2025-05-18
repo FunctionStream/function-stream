@@ -5,6 +5,9 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+pulsar:
+  serviceURL: ""
+
 replicaCount: 1
 
 serviceAccount:

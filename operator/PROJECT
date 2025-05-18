@@ -14,9 +14,13 @@ resources:
   controller: true
   domain: functionstream.github.io
   group: fs
-  kind: Packages
+  kind: Package
   path: github.com/FunctionStream/function-stream/operator/api/v1alpha1
   version: v1alpha1
+  webhooks:
+    defaulting: true
+    validation: true
+    webhookVersion: v1
 - api:
     crdVersion: v1
     namespaced: true
@@ -26,4 +30,8 @@ resources:
   kind: Function
   path: github.com/FunctionStream/function-stream/operator/api/v1alpha1
   version: v1alpha1
+  webhooks:
+    defaulting: true
+    validation: true
+    webhookVersion: v1
 version: "3"

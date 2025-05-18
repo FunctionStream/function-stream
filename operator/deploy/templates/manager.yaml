@@ -43,6 +43,9 @@ spec:
           - --health-probe-bind-address=:8081
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+          - name: PULSAR_SERVICE_URL
+            value: {{ .Values.pulsar.serviceURL | quote }}
         name: manager
         ports: []
         securityContext:
