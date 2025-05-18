@@ -83,8 +83,16 @@ type PulsarSinkSpec struct {
 
 // FunctionStatus defines the observed state of Function
 type FunctionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Number of available pods (ready for at least minReadySeconds)
+	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
+	// Total number of ready pods
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+	// Total number of non-terminated pods targeted by this deployment
+	Replicas int32 `json:"replicas,omitempty"`
+	// Total number of updated pods
+	UpdatedReplicas int32 `json:"updatedReplicas,omitempty"`
+	// Most recent generation observed for this Function
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

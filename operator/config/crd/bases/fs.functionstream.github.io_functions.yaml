@@ -112,6 +112,28 @@ spec:
             type: object
           status:
             description: FunctionStatus defines the observed state of Function
+            properties:
+              availableReplicas:
+                description: Number of available pods (ready for at least minReadySeconds)
+                format: int32
+                type: integer
+              observedGeneration:
+                description: Most recent generation observed for this Function
+                format: int64
+                type: integer
+              readyReplicas:
+                description: Total number of ready pods
+                format: int32
+                type: integer
+              replicas:
+                description: Total number of non-terminated pods targeted by this
+                  deployment
+                format: int32
+                type: integer
+              updatedReplicas:
+                description: Total number of updated pods
+                format: int32
+                type: integer
             type: object
         type: object
     served: true

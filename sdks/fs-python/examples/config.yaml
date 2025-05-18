@@ -43,5 +43,5 @@ sink:
 
 # Optional: Additional configuration parameters
 config:
-  - test: "Hello from config"  # Example configuration value
-  - test2: "Another config value"  # Another example configuration value
+  test: "Hello from config"  # Example configuration value
+  test2: "Another config value"  # Another example configuration value

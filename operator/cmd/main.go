@@ -63,6 +63,9 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var pulsarServiceUrl string
+	var pulsarAuthPlugin string
+	var pulsarAuthParams string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -81,11 +84,22 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	// Pulsar CLI flags
+	flag.StringVar(&pulsarServiceUrl, "pulsar-service-url", os.Getenv("PULSAR_SERVICE_URL"), "Pulsar service URL")
+	flag.StringVar(&pulsarAuthPlugin, "pulsar-auth-plugin", os.Getenv("PULSAR_AUTH_PLUGIN"), "Pulsar auth plugin")
+	flag.StringVar(&pulsarAuthParams, "pulsar-auth-params", os.Getenv("PULSAR_AUTH_PARAMS"), "Pulsar auth params")
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	// Build Config struct (no need to set env)
+	config := controller.Config{
+		PulsarServiceURL: pulsarServiceUrl,
+		PulsarAuthPlugin: pulsarAuthPlugin,
+		PulsarAuthParams: pulsarAuthParams,
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -212,6 +226,7 @@ func main() {
 	if err = (&controller.FunctionReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Config: config,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Function")
 		os.Exit(1)

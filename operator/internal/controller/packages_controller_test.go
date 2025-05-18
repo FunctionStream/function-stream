@@ -48,10 +48,15 @@ var _ = Describe("Package Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &fsv1alpha1.Package{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name:      typeNamespacedName.Name,
+						Namespace: typeNamespacedName.Namespace,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: fsv1alpha1.PackageSpec{
+						DisplayName:  "test",
+						Description:  "desc",
+						FunctionType: fsv1alpha1.FunctionType{},
+						Modules:      map[string]fsv1alpha1.Module{},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
