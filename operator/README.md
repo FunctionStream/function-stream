@@ -1,8 +1,10 @@
 # operator
-// TODO(user): Add simple overview of use/purpose
+
+FunctionStream Operator is a Kubernetes operator designed to manage custom resources for serverless function orchestration and package management on Kubernetes clusters.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+This project provides a Kubernetes operator that automates the lifecycle of custom resources such as Functions and Packages. It enables users to define, deploy, and manage serverless functions and their dependencies using Kubernetes-native APIs. The operator ensures that the desired state specified in custom resources is reflected in the actual cluster state, supporting extensibility and integration with cloud-native workflows.
 
 ## Getting Started
 
@@ -21,7 +23,7 @@ make docker-build docker-push IMG=<some-registry>/operator:tag
 
 **NOTE:** This image ought to be published in the personal registry you specified.
 And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+Make sure you have the proper permission to the registry if the above commands don't work.
 
 **Install the CRDs into the cluster:**
 
