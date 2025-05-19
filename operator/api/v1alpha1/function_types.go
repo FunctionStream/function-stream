@@ -38,7 +38,7 @@ type FunctionSpec struct {
 	Sources []SourceSpec `json:"sources,omitempty"`
 	// Request source
 	RequestSource SourceSpec `json:"requestSource,omitempty"`
-	// sink
+	// Sink specifies the sink configuration
 	Sink SinkSpec `json:"sink,omitempty"`
 	// Configurations as key-value pairs
 	Config map[string]string `json:"config,omitempty"`
