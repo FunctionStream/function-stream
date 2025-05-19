@@ -6,15 +6,78 @@ FunctionStream Operator is a Kubernetes operator designed to manage custom resou
 
 This project provides a Kubernetes operator that automates the lifecycle of custom resources such as Functions and Packages. It enables users to define, deploy, and manage serverless functions and their dependencies using Kubernetes-native APIs. The operator ensures that the desired state specified in custom resources is reflected in the actual cluster state, supporting extensibility and integration with cloud-native workflows.
 
+## Deploying with Helm Chart
+
+The recommended way to deploy the FunctionStream Operator is using the provided Helm chart. This method simplifies installation, upgrades, and configuration management.
+
+### Prerequisites
+
+- [Helm](https://helm.sh/) v3.0+
+- Access to a Kubernetes v1.11.3+ cluster
+
+### Installation
+
+1. **Clone this repository (if using the local chart):**
+
+   ```sh
+   git clone https://github.com/FunctionStream/function-stream.git
+   cd function-stream/operator
+   ```
+
+2. **Install the operator using Helm:**
+
+   ```sh
+   helm install fs ./deploy/chart \
+     --namespace fs --create-namespace
+   ```
+   This will install the operator in the `fs` namespace with the release name `fs`.
+
+3. **(Optional) Customize your deployment:**
+   - You can override default values by editing `deploy/chart/values.yaml`, by providing your own values file, or by using the `--set` flag.
+   - To use your own values file:
+     ```sh
+     helm install fs ./deploy/chart \
+       --namespace fs --create-namespace \
+       -f my-values.yaml
+     ```
+   - To override values from the command line:
+     ```sh
+     helm install fs ./deploy/chart \
+       --namespace fs \
+       --set controllerManager.replicas=2
+     ```
+   - For a full list of configurable options, see [`deploy/chart/values.yaml`](deploy/chart/values.yaml).
+
+### Upgrading
+
+To upgrade the operator after making changes or pulling a new chart version:
+
+```sh
+helm upgrade fs ./deploy/chart \
+  --namespace fs
+```
+
+### Uninstallation
+
+To uninstall the operator and all associated resources:
+
+```sh
+helm uninstall fs --namespace fs
+```
+
+> **Note:** By default, CRDs are retained after uninstall. You can control this behavior via the `crd.keep` value in `values.yaml`.
+
 ## Getting Started
 
 ### Prerequisites
+
 - go version v1.23.0+
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
 ### To Deploy on the cluster
+
 **Build and push your image to the location specified by `IMG`:**
 
 ```sh
@@ -50,6 +113,7 @@ kubectl apply -k config/samples/
 >**NOTE**: Ensure that the samples has default values to test it out.
 
 ### To Uninstall
+
 **Delete the instances (CRs) from the cluster:**
 
 ```sh
@@ -112,8 +176,6 @@ the '--force' flag and manually ensure that any custom configuration
 previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
 is manually re-applied afterwards.
 
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 

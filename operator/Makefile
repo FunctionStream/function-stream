@@ -230,3 +230,14 @@ mv $(1) $(1)-$(3) ;\
 } ;\
 ln -sf $(1)-$(3) $(1)
 endef
+
+generate-helm:
+	rm -rf deploy
+	rm -rf dist
+	kubebuilder edit --plugins=helm/v1-alpha --force
+	mv dist deploy
+	patch -p1 < hack/helm.patch
+
+generate-hack-helm-patch:
+	kubebuilder edit --plugins=helm/v1-alpha --force
+	git diff --no-index dist deploy > hack/helm.patch || true

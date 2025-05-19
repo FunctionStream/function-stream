@@ -1,0 +1,19 @@
+apiVersion: v2
+name: operator
+description: A Helm chart to deploy the FunctionStream operator on Kubernetes.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: "https://github.com/FunctionStream/function-stream"
+sources:
+  - "https://github.com/FunctionStream/function-stream/operator"
+maintainers:
+  - name: Zike Yang
+    email: zike@apache.org
+keywords:
+  - serverless
+  - streaming
+  - functionstream
+  - operators
+annotations:
+  category: "Operators"
