@@ -1,14 +1,19 @@
 # operator
 
-FunctionStream Operator is a Kubernetes operator designed to manage custom resources for serverless function orchestration and package management on Kubernetes clusters.
+FunctionStream Operator is a Kubernetes operator designed to manage custom resources for serverless function
+orchestration and package management on Kubernetes clusters.
 
 ## Description
 
-This project provides a Kubernetes operator that automates the lifecycle of custom resources such as Functions and Packages. It enables users to define, deploy, and manage serverless functions and their dependencies using Kubernetes-native APIs. The operator ensures that the desired state specified in custom resources is reflected in the actual cluster state, supporting extensibility and integration with cloud-native workflows.
+This project provides a Kubernetes operator that automates the lifecycle of custom resources such as Functions and
+Packages. It enables users to define, deploy, and manage serverless functions and their dependencies using
+Kubernetes-native APIs. The operator ensures that the desired state specified in custom resources is reflected in the
+actual cluster state, supporting extensibility and integration with cloud-native workflows.
 
 ## Deploying with Helm Chart
 
-The recommended way to deploy the FunctionStream Operator is using the provided Helm chart. This method simplifies installation, upgrades, and configuration management.
+The recommended way to deploy the FunctionStream Operator is using the provided Helm chart. This method simplifies
+installation, upgrades, and configuration management.
 
 ### Prerequisites
 
@@ -33,20 +38,25 @@ The recommended way to deploy the FunctionStream Operator is using the provided 
    This will install the operator in the `fs` namespace with the release name `fs`.
 
 3. **(Optional) Customize your deployment:**
-   - You can override default values by editing `deploy/chart/values.yaml`, by providing your own values file, or by using the `--set` flag.
-   - To use your own values file:
-     ```sh
-     helm install fs ./deploy/chart \
-       --namespace fs --create-namespace \
-       -f my-values.yaml
-     ```
-   - To override values from the command line:
-     ```sh
-     helm install fs ./deploy/chart \
-       --namespace fs \
-       --set controllerManager.replicas=2
-     ```
-   - For a full list of configurable options, see [`deploy/chart/values.yaml`](deploy/chart/values.yaml).
+    - You can override default values by editing `deploy/chart/values.yaml`, by providing your own values file, or by
+      using the `--set` flag.
+    - To use your own values file:
+
+      ```sh
+      helm install fs ./deploy/chart \
+        --namespace fs --create-namespace \
+        -f my-values.yaml
+      ```
+
+    - To override values from the command line:
+
+      ```sh
+      helm install fs ./deploy/chart \
+        --namespace fs \
+        --set controllerManager.replicas=2
+      ```
+
+    - For a full list of configurable options, see [`deploy/chart/values.yaml`](deploy/chart/values.yaml).
 
 ### Upgrading
 
@@ -65,7 +75,8 @@ To uninstall the operator and all associated resources:
 helm uninstall fs --namespace fs
 ```
 
-> **Note:** By default, CRDs are retained after uninstall. You can control this behavior via the `crd.keep` value in `values.yaml`.
+> **Note:** By default, CRDs are retained after uninstall. You can control this behavior via the `crd.keep` value in
+`values.yaml`.
 
 ## Getting Started
 
@@ -101,7 +112,7 @@ make deploy IMG=<some-registry>/operator:tag
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
+> privileges or be logged in as admin.
 
 **Create instances of your solution**
 You can apply the samples (examples) from the config/sample:
@@ -110,7 +121,7 @@ You can apply the samples (examples) from the config/sample:
 kubectl apply -k config/samples/
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+> **NOTE**: Ensure that the samples has default values to test it out.
 
 ### To Uninstall
 
@@ -140,34 +151,34 @@ Following the options to release and provide this solution to the users.
 
 1. Build the installer for the image built and published in the registry:
 
-```sh
-make build-installer IMG=<some-registry>/operator:tag
-```
+    ```sh
+    make build-installer IMG=<some-registry>/operator:tag
+    ```
 
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
+   **NOTE:** The makefile target mentioned above generates an 'install.yaml'
+   file in the dist directory. This file contains all the resources built
+   with Kustomize, which are necessary to install this project without its
+   dependencies.
 
 2. Using the installer
 
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
+   Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
+   the project, i.e.:
 
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/operator/<tag or branch>/dist/install.yaml
-```
+    ```sh
+    kubectl apply -f https://raw.githubusercontent.com/<org>/operator/<tag or branch>/dist/install.yaml
+    ```
 
 ### By providing a Helm Chart
 
 1. Build the chart using the optional helm plugin
 
-```sh
-kubebuilder edit --plugins=helm/v1-alpha
-```
+    ```sh
+    kubebuilder edit --plugins=helm/v1-alpha
+    ```
 
 2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
+   can obtain this solution from there.
 
 **NOTE:** If you change the project, you need to update the Helm Chart
 using the same command above to sync the latest changes. Furthermore,
@@ -175,7 +186,6 @@ if you create webhooks, you need to use the above command with
 the '--force' flag and manually ensure that any custom configuration
 previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
 is manually re-applied afterwards.
-
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
