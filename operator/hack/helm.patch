@@ -1,0 +1,83 @@
+diff --git a/dist/chart/Chart.yaml b/deploy/chart/Chart.yaml
+index 221f200..2eac6b8 100644
+--- a/dist/chart/Chart.yaml
++++ b/deploy/chart/Chart.yaml
+@@ -1,7 +1,19 @@
+ apiVersion: v2
+ name: operator
+-description: A Helm chart to distribute the project operator
++description: A Helm chart to deploy the FunctionStream operator on Kubernetes.
+ type: application
+ version: 0.1.0
+ appVersion: "0.1.0"
+-icon: "https://example.com/icon.png"
++home: "https://github.com/FunctionStream/function-stream"
++sources:
++  - "https://github.com/FunctionStream/function-stream/operator"
++maintainers:
++  - name: Zike Yang
++    email: zike@apache.org
++keywords:
++  - serverless
++  - streaming
++  - functionstream
++  - operators
++annotations:
++  category: "Operators"
+diff --git a/dist/chart/templates/manager/manager.yaml b/deploy/chart/templates/manager/manager.yaml
+index 7f6c891..bb1146f 100644
+--- a/dist/chart/templates/manager/manager.yaml
++++ b/deploy/chart/templates/manager/manager.yaml
+@@ -34,13 +34,26 @@ spec:
+           command:
+             - /manager
+           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}
+-          {{- if .Values.controllerManager.container.env }}
++          imagePullPolicy: {{ .Values.controllerManager.container.imagePullPolicy }}
+           env:
++            {{- if .Values.pulsar.serviceUrl }}
++            - name: PULSAR_SERVICE_URL
++              value: {{ .Values.pulsar.serviceUrl }}
++            {{- end }}
++            {{- if .Values.pulsar.authPlugin }}
++            - name: PULSAR_AUTH_PLUGIN
++              value: {{ .Values.pulsar.authPlugin }}
++            {{- end }}
++            {{- if .Values.pulsar.authParams }}
++            - name: PULSAR_AUTH_PARAMS
++              value: {{ .Values.pulsar.authParams }}
++            {{- end }}
++            {{- if .Values.controllerManager.container.env }}
+             {{- range $key, $value := .Values.controllerManager.container.env }}
+             - name: {{ $key }}
+               value: {{ $value }}
+             {{- end }}
+-          {{- end }}
++            {{- end }}
+           livenessProbe:
+             {{- toYaml .Values.controllerManager.container.livenessProbe | nindent 12 }}
+           readinessProbe:
+diff --git a/dist/chart/values.yaml b/deploy/chart/values.yaml
+index 9357643..6b2dcf6 100644
+--- a/dist/chart/values.yaml
++++ b/deploy/chart/values.yaml
+@@ -3,8 +3,9 @@ controllerManager:
+   replicas: 1
+   container:
+     image:
+-      repository: controller
++      repository: functionstream/operator
+       tag: latest
++    imagePullPolicy: IfNotPresent
+     args:
+       - "--leader-elect"
+       - "--metrics-bind-address=:8443"
+@@ -81,3 +82,8 @@ certmanager:
+ # [NETWORK POLICIES]: To enable NetworkPolicies set true
+ networkPolicy:
+   enable: false
++
++pulsar:
++  serviceUrl: pulsar://your-pulsar-cluster:6650
++  authPlugin: ""
++  authParams: ""

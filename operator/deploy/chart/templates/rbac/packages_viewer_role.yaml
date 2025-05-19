@@ -1,0 +1,30 @@
+{{- if .Values.rbac.enable }}
+# This rule is not used by the project operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants read-only access to fs.functionstream.github.io resources.
+# This role is intended for users who need visibility into these resources
+# without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: packages-viewer-role
+rules:
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages/status
+  verbs:
+  - get
+{{- end -}}

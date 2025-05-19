@@ -40,9 +40,9 @@ class TestConfig:
             "subscriptionName": "test_subscription",
             "name": "test_function",
             "description": "Test function",
-            "config": [
-                {"test_key": "test_value"}
-            ]
+            "config": {
+                "test_key": "test_value"
+            }
         }
         
         config_path = tmp_path / "config.yaml"

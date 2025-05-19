@@ -30,7 +30,7 @@ class Config(BaseModel):
     requestSource: Optional[SourceSpec] = None
     sink: Optional[SinkSpec] = None
     subscriptionName: str = "fs-sdk-subscription"
-    config: List[Dict[str, Any]] = Field(default_factory=list)
+    config: Dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_yaml(cls, config_path: str = "config.yaml") -> "Config":
@@ -60,7 +60,4 @@ class Config(BaseModel):
         Returns:
             Any: The configuration value, or None if not found
         """
-        for item in self.config:
-            if config_name in item:
-                return item[config_name]
-        return None
+        return self.config.get(config_name)
