@@ -242,7 +242,7 @@ func main() {
 	// nolint:goconst
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err = webhookfsv1alpha1.SetupPackagesWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "Packages")
+			setupLog.Error(err, "unable to create webhook", "webhook", "Package")
 			os.Exit(1)
 		}
 	}

@@ -169,7 +169,7 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 					Containers: []corev1.Container{{
 						Name:            "function",
 						Image:           image,
-						ImagePullPolicy: corev1.PullNever,
+						ImagePullPolicy: corev1.PullIfNotPresent,
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      "function-config",
 							MountPath: "/function/config.yaml",
@@ -203,13 +203,13 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			existingDeploy.Labels = deployment.Labels
 			err = r.Update(ctx, &existingDeploy)
 			if err != nil {
-				return ctrl.Result{}, err
+				return HandleReconcileError(log, err, "Conflict when updating Deployment, will retry automatically")
 			}
 		}
 	} else if errors.IsNotFound(deployErr) {
 		err = r.Create(ctx, deployment)
 		if err != nil {
-			return ctrl.Result{}, err
+			return HandleReconcileError(log, err, "Conflict when creating Deployment, will retry automatically")
 		}
 	} else {
 		return ctrl.Result{}, deployErr
@@ -219,8 +219,7 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, &existingDeploy); err == nil {
 		fn.Status = convertDeploymentStatusToFunctionStatus(&existingDeploy.Status)
 		if err := r.Status().Update(ctx, &fn); err != nil {
-			log.Error(err, "Failed to update Function status")
-			return ctrl.Result{}, err
+			return HandleReconcileError(log, err, "Conflict when updating Function status, will retry automatically")
 		}
 	}
 

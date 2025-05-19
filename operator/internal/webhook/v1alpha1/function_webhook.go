@@ -80,7 +80,7 @@ func (d *FunctionCustomDefaulter) Default(ctx context.Context, obj runtime.Objec
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
-// +kubebuilder:webhook:path=/validate-fs-functionstream-github-io-v1alpha1-function,mutating=false,failurePolicy=fail,sideEffects=None,groups=fs.functionstream.github.io,resources=functions,verbs=create;update,versions=v1alpha1,name=vfunction-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-fs-functionstream-github-io-v1alpha1-function,mutating=false,failurePolicy=fail,sideEffects=None,groups=fs.functionstream.github.io,resources=functions,verbs=create;update;delete,versions=v1alpha1,name=vfunction-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // FunctionCustomValidator struct is responsible for validating the Function resource
 // when it is created, updated, or deleted.
