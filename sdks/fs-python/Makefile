@@ -4,4 +4,4 @@ build-image:
 	docker build -t functionstream/fs-python-base .
 
 test:
-	pytest -v
+	PYTHONPATH=. python -m pytest

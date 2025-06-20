@@ -24,15 +24,13 @@ FunctionStream SDK is a powerful Python library for building and deploying serve
 - **Message Processing**: Built-in support for Apache Pulsar message processing
 - **Metrics Collection**: Automatic collection of performance metrics
 - **Resource Management**: Efficient handling of connections and resources
-- **Graceful Shutdown**: Proper cleanup of resources during shutdown
 - **Configuration Management**: Flexible configuration through YAML files
-- **Schema Validation**: Input and output schema validation
 - **Error Handling**: Comprehensive error handling and logging
 
 ## Installation
 
 ```bash
-pip install fs-sdk
+pip install function-stream
 ```
 
 ## Quick Start
@@ -40,7 +38,7 @@ pip install fs-sdk
 1. Create a function that processes messages:
 
 ```python
-from fs_sdk import FSFunction
+from function_stream import FSFunction
 
 async def my_process_function(request_data: dict) -> dict:
     # Process the request data
@@ -180,13 +178,13 @@ source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 
 # Install the package in development mode
-pip install -e .
+python -m pip install -e .
 ```
 
 ### Running Tests
 
 ```bash
-pytest
+make test
 ```
 
 ## Support

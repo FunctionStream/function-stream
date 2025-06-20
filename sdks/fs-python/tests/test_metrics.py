@@ -1,10 +1,11 @@
+"""
+Unit tests for the Metrics and MetricsServer classes.
+"""
+
 import pytest
-import asyncio
-import time
 import json
-from aiohttp import web
 from aiohttp.test_utils import make_mocked_request
-from fs_sdk.metrics import Metrics, MetricsServer
+from function_stream.metrics import Metrics, MetricsServer
 
 @pytest.fixture
 def metrics():

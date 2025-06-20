@@ -98,7 +98,7 @@ class Config(BaseModel):
     sink: Optional[SinkSpec] = None
     """Output sink configuration (optional)"""
     
-    subscriptionName: str = "fs-sdk-subscription"
+    subscriptionName: str = "function-stream-sdk-subscription"
     """Pulsar subscription name for consuming messages"""
     
     metric: Metric = Field(default_factory=Metric)

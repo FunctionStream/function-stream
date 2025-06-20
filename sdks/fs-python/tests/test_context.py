@@ -4,8 +4,8 @@ Unit tests for the FSContext class.
 
 import pytest
 from unittest.mock import Mock, patch
-from fs_sdk.context import FSContext
-from fs_sdk.config import Config
+from function_stream.context import FSContext
+from function_stream.config import Config
 
 class TestFSContext:
     """Test suite for FSContext class."""
@@ -60,4 +60,4 @@ class TestFSContext:
         
         # Verify
         mock_config.get_config_value.assert_called_once_with("test_key")
-        assert result == "123" 
+        assert result == 123 
