@@ -3,10 +3,13 @@ FSContext module provides a context object that manages configuration access for
 """
 
 import logging
+from typing import Any, Dict
+
 from .config import Config
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
 
 class FSContext:
     """
@@ -17,18 +20,20 @@ class FSContext:
     
     Attributes:
         config (Config): The configuration object containing all settings.
+        function (FSFunction, optional): Reference to the parent FSFunction instance.
     """
-    
+
     def __init__(self, config: Config):
         """
-        Initialize the FSContext with a configuration object.
+        Initialize the FSContext with a configuration object and optional FSFunction reference.
 
         Args:
             config (Config): The configuration object to be used by this context.
+            function (FSFunction, optional): The parent FSFunction instance.
         """
         self.config = config
 
-    def get_config(self, config_name: str) -> str:
+    def get_config(self, config_name: str) -> Any:
         """
         Get a configuration value by name.
 
@@ -40,10 +45,16 @@ class FSContext:
             config_name (str): The name of the configuration to retrieve.
 
         Returns:
-            str: The configuration value if found, empty string if not found or error occurs.
+            Any: The configuration value if found, empty string if not found or error occurs.
         """
         try:
-            return str(self.config.get_config_value(config_name))
+            return self.config.get_config_value(config_name)
         except Exception as e:
             logger.error(f"Error getting config {config_name}: {str(e)}")
-            return "" 
+            return ""
+
+    def get_configs(self) -> Dict[str, Any]:
+        return self.config.config
+
+    def get_module(self) -> str:
+        return self.config.module
