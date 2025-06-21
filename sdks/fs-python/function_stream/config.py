@@ -75,7 +75,7 @@ class Config(BaseModel):
     """Function description (optional)"""
     
     pulsar: PulsarConfig = Field(default_factory=PulsarConfig)
-    """Global Pulsar connection configuration"""
+    """Pulsar connection configuration"""
     
     module: str = "default"
     """Module name for the function (default: 'default')"""
