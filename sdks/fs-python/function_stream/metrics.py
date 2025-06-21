@@ -1,13 +1,13 @@
-import json
-import time
 import logging
-import asyncio
+import time
 from typing import Dict, Any
+
 from aiohttp import web
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 class Metrics:
     """
@@ -16,6 +16,7 @@ class Metrics:
     This class tracks various metrics including request counts, latencies, and event statistics.
     All metrics are exposed in Prometheus-compatible format.
     """
+
     def __init__(self):
         self.total_requests = 0
         self.active_requests = 0
@@ -83,16 +84,18 @@ class Metrics:
             'fs_failed_requests': self.failed_requests,
             'fs_request_latency_seconds': self.request_latency,
             'fs_last_request_timestamp': self.last_request_time,
-            
+
             # Event metrics
             'fs_total_events': self.total_events,
             'fs_successful_events': self.successful_events,
             'fs_failed_events': self.failed_events,
-            
+
             # Derived metrics
-            'fs_request_success_rate': (self.successful_requests / self.total_requests) if self.total_requests > 0 else 0,
+            'fs_request_success_rate': (
+                        self.successful_requests / self.total_requests) if self.total_requests > 0 else 0,
             'fs_event_success_rate': (self.successful_events / self.total_events) if self.total_events > 0 else 0
         }
+
 
 class MetricsServer:
     def __init__(self, metrics: Metrics, host: str = '127.0.0.1', port: int = 9099):
@@ -140,4 +143,4 @@ class MetricsServer:
                 logger.info("Metrics server stopped")
             except Exception as e:
                 logger.error(f"Error stopping metrics server: {str(e)}")
-                raise 
+                raise

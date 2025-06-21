@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from typing import Dict, Any
+
 from .context import FSContext
-from typing import Dict, Any, Union, Awaitable
 
 
 class FSModule(ABC):
@@ -13,6 +14,7 @@ class FSModule(ABC):
     Attributes:
         name (str): The name of the module
     """
+
     @abstractmethod
     def init(self, context: FSContext):
         """

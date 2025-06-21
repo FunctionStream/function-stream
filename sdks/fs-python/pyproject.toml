@@ -7,12 +7,12 @@ name = "function-stream"
 dynamic = ["version"]
 description = "FunctionStream SDK is a powerful Python library for building and deploying serverless streaming functions that runs on Function Stream platform."
 readme = "README.md"
-license = {text = "Apache-2.0"}
+license = { text = "Apache-2.0" }
 authors = [
-    {name = "FunctionStream Org"}
+    { name = "FunctionStream Org" }
 ]
 maintainers = [
-    {name = "FunctionStream Org"}
+    { name = "FunctionStream Org" }
 ]
 keywords = ["serverless", "functions", "pulsar", "event-driven", "streaming"]
 classifiers = [
@@ -66,7 +66,7 @@ Repository = "https://github.com/functionstream/function-stream"
 "Source Code" = "https://github.com/functionstream/function-stream"
 
 [tool.setuptools.dynamic]
-version = {attr = "function_stream.__version__"}
+version = { attr = "function_stream.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]

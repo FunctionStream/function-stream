@@ -16,7 +16,9 @@
 
 # FunctionStream Python SDK
 
-FunctionStream SDK is a powerful Python library for building and deploying serverless functions that process messages from Apache Pulsar. It provides a simple yet flexible framework for creating event-driven applications with robust error handling, metrics collection, and resource management.
+FunctionStream SDK is a powerful Python library for building and deploying serverless functions that process messages
+from Apache Pulsar. It provides a simple yet flexible framework for creating event-driven applications with robust error
+handling, metrics collection, and resource management.
 
 ## Features
 
@@ -103,6 +105,7 @@ modules:
 ### FSFunction
 
 The main class for creating serverless functions. It handles:
+
 - Message consumption and processing
 - Response generation
 - Resource management
@@ -112,6 +115,7 @@ The main class for creating serverless functions. It handles:
 ### Configuration
 
 The SDK uses YAML configuration files to define:
+
 - Pulsar connection settings
 - Module selection
 - Topic subscriptions
@@ -121,6 +125,7 @@ The SDK uses YAML configuration files to define:
 ### Metrics
 
 Built-in metrics collection for:
+
 - Request processing time
 - Success/failure rates
 - Message throughput
@@ -138,24 +143,24 @@ Check out the `examples` directory for complete examples:
 ## Best Practices
 
 1. **Error Handling**
-   - Always handle exceptions in your process functions
-   - Use proper logging for debugging
-   - Implement graceful shutdown
+    - Always handle exceptions in your process functions
+    - Use proper logging for debugging
+    - Implement graceful shutdown
 
 2. **Resource Management**
-   - Close resources properly
-   - Use context managers when possible
-   - Monitor resource usage
+    - Close resources properly
+    - Use context managers when possible
+    - Monitor resource usage
 
 3. **Configuration**
-   - Use environment variables for sensitive data
-   - Validate configuration values
-   - Document configuration options
+    - Use environment variables for sensitive data
+    - Validate configuration values
+    - Document configuration options
 
 4. **Testing**
-   - Write unit tests for your functions
-   - Test error scenarios
-   - Validate input/output schemas
+    - Write unit tests for your functions
+    - Test error scenarios
+    - Validate input/output schemas
 
 ## Development
 

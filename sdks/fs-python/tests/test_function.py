@@ -2,23 +2,26 @@
 Unit tests for the FSFunction class.
 """
 
-import pytest
-import json
 import asyncio
-import pulsar
+import json
 from unittest.mock import Mock, patch, AsyncMock
+
+import pulsar
+import pytest
+
 from function_stream import (
-    FSFunction, 
-    Config, 
-    PulsarConfig, 
-    SinkSpec, 
-    SourceSpec, 
+    FSFunction,
+    Config,
+    PulsarConfig,
+    SinkSpec,
+    SourceSpec,
     PulsarSourceConfig,
-    Metrics, 
+    Metrics,
     MetricsServer,
     FSContext
 )
 from function_stream.function import MsgWrapper
+
 
 class TestFSFunction:
     """Test suite for FSFunction class."""
@@ -42,7 +45,7 @@ class TestFSFunction:
         metric_mock = Mock()
         metric_mock.port = 8080
         config.metric = metric_mock
-        
+
         return config
 
     @pytest.fixture
@@ -61,15 +64,15 @@ class TestFSFunction:
     def mock_producer(self):
         """Create a mock Pulsar producer."""
         producer = Mock()
-        
+
         # Mock send_async to properly handle callbacks
         def mock_send_async(data, callback, **kwargs):
             # Simulate successful send by calling the callback with Ok result
             callback(pulsar.Result.Ok, "mock_message_id")
-        
+
         producer.send_async = mock_send_async
         producer.send = Mock()
-        
+
         return producer
 
     @pytest.fixture
@@ -87,21 +90,21 @@ class TestFSFunction:
         return metrics_server
 
     @pytest.fixture
-    def function(self, mock_config, mock_client, mock_consumer, 
-                mock_producer, mock_metrics, mock_metrics_server):
+    def function(self, mock_config, mock_client, mock_consumer,
+                 mock_producer, mock_metrics, mock_metrics_server):
         """Create a FSFunction instance with mocks, patching Config to avoid file IO."""
         with patch('function_stream.function.Config.from_yaml', return_value=mock_config), \
-             patch('function_stream.function.Client', return_value=mock_client), \
-             patch('function_stream.function.Metrics', return_value=mock_metrics), \
-             patch('function_stream.function.MetricsServer', return_value=mock_metrics_server):
-            
+                patch('function_stream.function.Client', return_value=mock_client), \
+                patch('function_stream.function.Metrics', return_value=mock_metrics), \
+                patch('function_stream.function.MetricsServer', return_value=mock_metrics_server):
             mock_client.subscribe.return_value = mock_consumer
             mock_client.create_producer.return_value = mock_producer
-            
+
             from typing import Dict, Any
 
             async def process_func(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
                 return {"result": "test_result"}
+
             process_funcs = {"test_module": process_func}
             function = FSFunction(
                 process_funcs=process_funcs,
@@ -117,19 +120,22 @@ class TestFSFunction:
 
         async def process_func(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
             return {"result": "test_result"}
+
         process_funcs = {"test_module": process_func}
         with patch('function_stream.function.Config.from_yaml') as mock_from_yaml, \
-             patch('function_stream.function.Client'), \
-             patch('function_stream.function.Metrics'), \
-             patch('function_stream.function.MetricsServer'):
+                patch('function_stream.function.Client'), \
+                patch('function_stream.function.Metrics'), \
+                patch('function_stream.function.MetricsServer'):
             mock_config = Mock()
             mock_config.module = "test_module"
             mock_config.subscriptionName = "test_subscription"
+
             class PulsarConfig:
                 authPlugin = ""
                 authParams = ""
                 max_concurrent_requests = 10
                 serviceUrl = "pulsar://localhost:6650"
+
             mock_config.pulsar = PulsarConfig()
             mock_config.sources = [SourceSpec(pulsar=PulsarSourceConfig(topic="test_topic"))]
             mock_config.requestSource = None
@@ -138,7 +144,7 @@ class TestFSFunction:
             metric_mock = Mock()
             metric_mock.port = 8080
             mock_config.metric = metric_mock
-            
+
             mock_from_yaml.return_value = mock_config
             function = FSFunction(
                 process_funcs=process_funcs,
@@ -157,12 +163,12 @@ class TestFSFunction:
             "response_topic": "response_topic"
         }
         message.message_id.return_value = "test_message_id"
-        
+
         # Mock the consumer acknowledge method
         function._consumer.acknowledge = Mock()
-        
+
         await function.process_request(message)
-        
+
         # Verify that the message was processed successfully by checking
         # that the consumer acknowledge was called
         function._consumer.acknowledge.assert_called_once_with(message)
@@ -174,10 +180,10 @@ class TestFSFunction:
         message.data.return_value = b"invalid json"
         message.properties.return_value = {"request_id": "test_id"}
         message.message_id.return_value = "test_message_id"
-        
+
         # Mock the consumer acknowledge method
         function._consumer.acknowledge = Mock()
-        
+
         # The function has a bug where it tries to access request_id in finally block
         # even when JSON parsing fails, so we expect an UnboundLocalError
         with pytest.raises(UnboundLocalError):
@@ -191,10 +197,10 @@ class TestFSFunction:
         message.properties.return_value = {"request_id": "test_id"}
         message.message_id.return_value = "test_message_id"
         function.config.sink = None
-        
+
         # Mock the consumer acknowledge method
         function._consumer.acknowledge = Mock()
-        
+
         await function.process_request(message)
         # The function processes successfully but skips sending response due to no topic
         # So it should record success, not failure
@@ -235,13 +241,13 @@ class TestFSFunction:
         response_topic = "test_topic"
         request_id = "test_id"
         response_data = {"result": "test"}
-        
+
         # Create MsgWrapper objects as expected by _send_response
         msg_wrappers = [MsgWrapper(data=response_data)]
-        
+
         # This should not raise an exception
         await function._send_response(response_topic, request_id, msg_wrappers)
-        
+
         # The test passes if no exception is raised
         assert True
 
@@ -251,19 +257,19 @@ class TestFSFunction:
         response_topic = "test_topic"
         request_id = "test_id"
         response_data = {"test": "data"}
-        
+
         # Create MsgWrapper objects as expected by _send_response
         msg_wrappers = [MsgWrapper(data=response_data)]
-        
+
         # Clear the cache and get the producer
         function._get_producer.cache_clear()
         producer = function._get_producer(response_topic)
-        
+
         # Mock send_async to raise an exception
         def mock_send_async_with_error(data, callback, **kwargs):
             raise Exception("Send error")
-        
+
         producer.send_async = mock_send_async_with_error
-        
+
         with pytest.raises(Exception, match="Send error"):
-            await function._send_response(response_topic, request_id, msg_wrappers) 
+            await function._send_response(response_topic, request_id, msg_wrappers)

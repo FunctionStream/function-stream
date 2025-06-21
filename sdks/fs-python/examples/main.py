@@ -20,8 +20,7 @@ This example shows the basic structure of a FunctionStream function, including:
 import asyncio
 from typing import Dict, Any
 
-from fs_sdk import FSFunction
-from fs_sdk.context import FSContext
+from function_stream import FSFunction, FSContext
 
 async def string_process_function(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
     """

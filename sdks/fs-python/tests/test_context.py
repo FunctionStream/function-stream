@@ -2,9 +2,12 @@
 Unit tests for the FSContext class.
 """
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, patch
+
 from function_stream import FSContext, Config
+
 
 class TestFSContext:
     """Test suite for FSContext class."""
@@ -29,10 +32,10 @@ class TestFSContext:
         """Test successful config value retrieval."""
         # Setup
         mock_config.get_config_value.return_value = "test_value"
-        
+
         # Execute
         result = context.get_config("test_key")
-        
+
         # Verify
         mock_config.get_config_value.assert_called_once_with("test_key")
         assert result == "test_value"
@@ -41,10 +44,10 @@ class TestFSContext:
         """Test config value retrieval with error."""
         # Setup
         mock_config.get_config_value.side_effect = Exception("Test error")
-        
+
         # Execute
         result = context.get_config("test_key")
-        
+
         # Verify
         mock_config.get_config_value.assert_called_once_with("test_key")
         assert result == ""
@@ -53,10 +56,10 @@ class TestFSContext:
         """Test config value retrieval with non-string value."""
         # Setup
         mock_config.get_config_value.return_value = 123
-        
+
         # Execute
         result = context.get_config("test_key")
-        
+
         # Verify
         mock_config.get_config_value.assert_called_once_with("test_key")
-        assert result == 123 
+        assert result == 123

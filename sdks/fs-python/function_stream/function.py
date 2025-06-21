@@ -4,23 +4,25 @@ FunctionStream SDK - A Python SDK for building and deploying serverless function
 This module provides the core functionality for creating and managing FunctionStream
 functions. It handles message processing, request/response flow, and resource management.
 """
-import dataclasses
-import datetime
-import json
 import asyncio
-import logging
-import pulsar
-import time
+import dataclasses
 import functools
 import inspect
-from typing import Callable, Any, Dict, Set, Union, Awaitable, get_type_hints, List, Optional
-from pulsar import Client, Producer
-from .config import Config
-from .metrics import Metrics, MetricsServer
-from .context import FSContext
-from .module import FSModule
+import json
+import logging
+import os
+import time
 import typing
 from datetime import datetime, timezone
+from typing import Callable, Any, Dict, Set, Union, Awaitable, get_type_hints, List, Optional
+
+import pulsar
+from pulsar import Client, Producer
+
+from .config import Config
+from .context import FSContext
+from .metrics import Metrics, MetricsServer
+from .module import FSModule
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -91,28 +93,28 @@ def _validate_process_func(func: Callable, module_name: str):
 
     def is_awaitable_dict(annotation):
         ann = unwrap_annotated(annotation)
-        origin = typing.get_origin(annotation)
+        origin = typing.get_origin(ann)
         args = typing.get_args(ann)
         return origin in (typing.Awaitable,) and len(args) == 1 and is_dict_return(args[0])
 
     def is_awaitable_none(annotation):
         ann = unwrap_annotated(annotation)
-        origin = typing.get_origin(annotation)
+        origin = typing.get_origin(ann)
         args = typing.get_args(ann)
         return origin in (typing.Awaitable,) and len(args) == 1 and is_none_type(args[0])
 
     def is_union_of_dict_and_none(annotation):
         ann = unwrap_annotated(annotation)
-        origin = typing.get_origin(annotation)
-        args = typing.get_args(annotation)
+        origin = typing.get_origin(ann)
+        args = typing.get_args(ann)
         if origin in (typing.Union, Union):
             return (any(is_dict_return(arg) for arg in args) and any(is_none_type(arg) for arg in args))
         return False
 
     def is_awaitable_union_dict_none(annotation):
         ann = unwrap_annotated(annotation)
-        origin = typing.get_origin(annotation)
-        args = typing.get_args(annotation)
+        origin = typing.get_origin(ann)
+        args = typing.get_args(ann)
         if origin in (typing.Awaitable,):
             if len(args) == 1:
                 return is_union_of_dict_and_none(args[0])
@@ -158,8 +160,9 @@ class FSFunction:
     def __init__(
             self,
             process_funcs: Dict[
-                str, Union[Callable[["FSContext", Dict[str, Any]], Union[Dict[str, Any], Awaitable[Dict[str, Any]]]], FSModule]],
-            config_path: str = "config.yaml"
+                str, Union[Callable[
+                    ["FSContext", Dict[str, Any]], Union[Dict[str, Any], Awaitable[Dict[str, Any]]]], FSModule]],
+            config_path: str = None
     ):
         """
         Initialize the FS Function.
@@ -169,13 +172,15 @@ class FSFunction:
                 Each function must accept two parameters: (context: FSContext, data: Dict[str, Any])
                 and return either a Dict[str, Any] or an Awaitable[Dict[str, Any]].
                 Each module must be an instance of FSModule.
-            config_path (str): Path to the configuration file. Defaults to "config.yaml".
+            config_path (str): Path to the configuration file.
 
         Raises:
             ValueError: If no module is specified in config or if the specified module
                       doesn't have a corresponding process function, or if the function
                       structure is invalid.
         """
+        if config_path is None:
+            config_path = os.getenv("FS_CONFIG_PATH", "config.yaml")
         self.config = Config.from_yaml(config_path)
         self.process_funcs = process_funcs
         self.context = FSContext(self.config)
@@ -217,7 +222,6 @@ class FSFunction:
         self._tasks_lock = asyncio.Lock()
         self._consumer = None
 
-
         # Create multi-topics consumer
         self._setup_consumer()
 
@@ -257,7 +261,7 @@ class FSFunction:
             topics,
             subscription_name,
             consumer_type=pulsar.ConsumerType.Shared,
-            unacked_messages_timeout_ms=30_000 # Only for non-ordering guarantee workload
+            unacked_messages_timeout_ms=30_000  # Only for non-ordering guarantee workload
         )
         logger.info(f"Created multi-topics consumer for topics: {topics} with subscription: {subscription_name}")
 
@@ -425,10 +429,12 @@ class FSFunction:
         loop = asyncio.get_event_loop()
         try:
             producer = self._get_producer(response_topic)
+
             def default_serializer(o):
                 if isinstance(o, datetime):
                     return o.isoformat()
                 return str(o)
+
             send_futures = []
             for m in msg:
                 future = loop.create_future()
@@ -442,6 +448,7 @@ class FSFunction:
                             loop.call_soon_threadsafe(f.set_exception, err)
                         else:
                             loop.call_soon_threadsafe(f.set_result, msg_id)
+
                     return callback
 
                 event_timestamp = None

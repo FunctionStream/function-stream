@@ -1,7 +1,9 @@
 import os
-import yaml
 from typing import Dict, Any, Optional, List
+
+import yaml
 from pydantic import BaseModel, Field
+
 
 class PulsarConfig(BaseModel):
     """
@@ -12,15 +14,16 @@ class PulsarConfig(BaseModel):
     """
     serviceUrl: str = "pulsar://localhost:6650"
     """Pulsar service URL in format 'pulsar://host:port' or 'pulsar+ssl://host:port' for SSL"""
-    
+
     authPlugin: str = ""
     """Authentication plugin class name (e.g., 'org.apache.pulsar.client.impl.auth.AuthenticationTls')"""
-    
+
     authParams: str = ""
     """Authentication parameters in JSON format or key-value pairs"""
-    
+
     max_concurrent_requests: int = 10
     """Maximum number of concurrent requests allowed for this connection"""
+
 
 class PulsarSourceConfig(BaseModel):
     """
@@ -32,6 +35,7 @@ class PulsarSourceConfig(BaseModel):
     topic: str
     """Pulsar topic name to consume from or produce to"""
 
+
 class SourceSpec(BaseModel):
     """
     Specification for data sources.
@@ -41,6 +45,7 @@ class SourceSpec(BaseModel):
     """
     pulsar: Optional[PulsarSourceConfig] = None
     """Pulsar source configuration (optional)"""
+
 
 class SinkSpec(BaseModel):
     """
@@ -52,6 +57,7 @@ class SinkSpec(BaseModel):
     pulsar: Optional[PulsarSourceConfig] = None
     """Pulsar sink configuration (optional)"""
 
+
 class Metric(BaseModel):
     """
     Configuration for metrics and monitoring.
@@ -60,6 +66,7 @@ class Metric(BaseModel):
     """
     port: Optional[int] = 9099
     """Port number for metrics endpoint (default: 9099)"""
+
 
 class Config(BaseModel):
     """
@@ -70,31 +77,31 @@ class Config(BaseModel):
     """
     name: Optional[str] = None
     """Function name identifier (optional)"""
-    
+
     description: Optional[str] = None
     """Function description (optional)"""
-    
+
     pulsar: PulsarConfig = Field(default_factory=PulsarConfig)
     """Pulsar connection configuration"""
-    
+
     module: str = "default"
     """Module name for the function (default: 'default')"""
-    
+
     sources: List[SourceSpec] = Field(default_factory=list)
     """List of input data sources"""
-    
+
     requestSource: Optional[SourceSpec] = None
     """Request source configuration for request-response pattern (optional)"""
-    
+
     sink: Optional[SinkSpec] = None
     """Output sink configuration (optional)"""
-    
+
     subscriptionName: str = "function-stream-sdk-subscription"
     """Pulsar subscription name for consuming messages"""
-    
+
     metric: Metric = Field(default_factory=Metric)
     """Metrics and monitoring configuration"""
-    
+
     config: Dict[str, Any] = Field(default_factory=dict)
     """Custom configuration key-value pairs for function-specific settings"""
 
@@ -118,7 +125,7 @@ class Config(BaseModel):
         """
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
-            
+
         with open(config_path, 'r') as f:
             config_data = yaml.safe_load(f)
             return cls(**config_data)

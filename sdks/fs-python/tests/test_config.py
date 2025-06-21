@@ -4,7 +4,9 @@ Unit tests for the Config class.
 
 import pytest
 import yaml
+
 from function_stream import Config
+
 
 class TestConfig:
     """Test suite for Config class."""
@@ -44,7 +46,7 @@ class TestConfig:
                 "test_key": "test_value"
             }
         }
-        
+
         config_path = tmp_path / "config.yaml"
         with open(config_path, 'w') as f:
             yaml.dump(config_data, f)
@@ -53,33 +55,33 @@ class TestConfig:
     def test_from_yaml(self, sample_config_yaml):
         """Test loading configuration from YAML file."""
         config = Config.from_yaml(sample_config_yaml)
-        
+
         # Test Pulsar config
         assert config.pulsar.serviceUrl == "pulsar://localhost:6650"
         assert config.pulsar.authPlugin == ""
         assert config.pulsar.authParams == ""
         assert config.pulsar.max_concurrent_requests == 10
-        
+
         # Test module config
         assert config.module == "test_module"
-        
+
         # Test sources
         assert len(config.sources) == 1
         assert config.sources[0].pulsar.topic == "test_topic"
-        
+
         # Test request source
         assert config.requestSource.pulsar.topic == "request_topic"
-        
+
         # Test sink
         assert config.sink.pulsar.topic == "response_topic"
-        
+
         # Test subscription name
         assert config.subscriptionName == "test_subscription"
-        
+
         # Test name and description
         assert config.name == "test_function"
         assert config.description == "Test function"
-        
+
         # Test config values
         assert config.get_config_value("test_key") == "test_value"
 
