@@ -7,9 +7,18 @@ import json
 import asyncio
 import pulsar
 from unittest.mock import Mock, patch, AsyncMock
-from function_stream.function import FSFunction, MsgWrapper
-from function_stream.config import Config, PulsarConfig, SinkSpec, SourceSpec, PulsarSourceConfig
-from function_stream.metrics import Metrics, MetricsServer
+from function_stream import (
+    FSFunction, 
+    Config, 
+    PulsarConfig, 
+    SinkSpec, 
+    SourceSpec, 
+    PulsarSourceConfig,
+    Metrics, 
+    MetricsServer,
+    FSContext
+)
+from function_stream.function import MsgWrapper
 
 class TestFSFunction:
     """Test suite for FSFunction class."""
@@ -89,7 +98,6 @@ class TestFSFunction:
             mock_client.subscribe.return_value = mock_consumer
             mock_client.create_producer.return_value = mock_producer
             
-            from function_stream.context import FSContext
             from typing import Dict, Any
 
             async def process_func(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -105,7 +113,6 @@ class TestFSFunction:
     async def test_init(self):
         """Test FSFunction initialization."""
         import inspect
-        from function_stream.context import FSContext
         from typing import Dict, Any
 
         async def process_func(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:

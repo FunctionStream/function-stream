@@ -4,8 +4,7 @@ Unit tests for the FSContext class.
 
 import pytest
 from unittest.mock import Mock, patch
-from function_stream.context import FSContext
-from function_stream.config import Config
+from function_stream import FSContext, Config
 
 class TestFSContext:
     """Test suite for FSContext class."""

@@ -4,7 +4,7 @@ Unit tests for the Config class.
 
 import pytest
 import yaml
-from function_stream.config import Config
+from function_stream import Config
 
 class TestConfig:
     """Test suite for Config class."""

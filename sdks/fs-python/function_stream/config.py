@@ -31,15 +31,6 @@ class PulsarSourceConfig(BaseModel):
     """
     topic: str
     """Pulsar topic name to consume from or produce to"""
-    
-    serviceUrl: Optional[str] = None
-    """Override service URL for this specific source/sink (optional)"""
-    
-    authPlugin: Optional[str] = None
-    """Override authentication plugin for this specific source/sink (optional)"""
-    
-    authParams: Optional[str] = None
-    """Override authentication parameters for this specific source/sink (optional)"""
 
 class SourceSpec(BaseModel):
     """

@@ -5,7 +5,7 @@ Unit tests for the Metrics and MetricsServer classes.
 import pytest
 import json
 from aiohttp.test_utils import make_mocked_request
-from function_stream.metrics import Metrics, MetricsServer
+from function_stream import Metrics, MetricsServer
 
 @pytest.fixture
 def metrics():
