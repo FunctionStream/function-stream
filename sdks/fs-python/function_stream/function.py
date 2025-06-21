@@ -197,7 +197,6 @@ class FSFunction:
         if isinstance(process_func, FSModule):
             # For FSModule, we'll use its process method
             process_func.init(self.context)
-            pass
         else:
             _validate_process_func(process_func, module)
 
