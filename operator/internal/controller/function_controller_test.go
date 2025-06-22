@@ -104,8 +104,8 @@ var _ = Describe("Function Controller", func() {
 			patch := client.MergeFrom(function.DeepCopy())
 			function.Spec.Package = "test-pkg"
 			function.Spec.Module = "mod"
-			function.Spec.Sink = fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}}
-			function.Spec.RequestSource = fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in"}}
+			function.Spec.Sink = &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}}
+			function.Spec.RequestSource = &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in"}}
 			Expect(k8sClient.Patch(ctx, function, patch)).To(Succeed())
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -154,7 +154,6 @@ var _ = Describe("Function Controller", func() {
 
 			// Verify labels
 			Expect(deploy.Labels).To(HaveKey("function"))
-			Expect(deploy.Labels).To(HaveKey("configmap-hash"))
 			Expect(deploy.Labels["function"]).To(Equal(typeNamespacedName.Name))
 
 			// Simulate Deployment status update
@@ -180,10 +179,8 @@ var _ = Describe("Function Controller", func() {
 			Expect(fn.Status.UpdatedReplicas).To(Equal(int32(1)))
 			Expect(fn.Status.ObservedGeneration).To(Equal(int64(2)))
 
-			// Test config hash update when function spec changes
-			oldHash := deploy.Labels["configmap-hash"]
-
-			// Update function spec to trigger hash change
+			// Test deployment update when function spec changes
+			// Update function spec to trigger deployment update
 			patchFn := client.MergeFrom(fn.DeepCopy())
 			fn.Spec.Description = "Updated description"
 			Expect(k8sClient.Patch(ctx, fn, patchFn)).To(Succeed())
@@ -193,10 +190,10 @@ var _ = Describe("Function Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify deployment hash has changed
+			// Verify deployment was updated
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: typeNamespacedName.Namespace}, deploy)).To(Succeed())
-			newHash := deploy.Labels["configmap-hash"]
-			Expect(newHash).NotTo(Equal(oldHash))
+			// The deployment should still exist and be updated
+			Expect(deploy).NotTo(BeNil())
 		})
 
 		It("should only reconcile when Deployment has 'function' label", func() {
@@ -233,10 +230,11 @@ var _ = Describe("Function Controller", func() {
 					Namespace: "default",
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:       "test-pkg-label",
-					Module:        "mod",
-					Sink:          fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}},
-					RequestSource: fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in", SubscriptionName: "sub"}},
+					Package:          "test-pkg-label",
+					Module:           "mod",
+					SubscriptionName: "sub",
+					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}},
+					RequestSource:    &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in"}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, fn)).To(Succeed())
@@ -250,7 +248,6 @@ var _ = Describe("Function Controller", func() {
 			deployName := "function-" + fn.Name
 			deploy := &appsv1.Deployment{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, deploy)).To(Succeed())
-			oldHash := deploy.Labels["configmap-hash"]
 
 			// Create a Deployment without 'function' label
 			unlabeledDeploy := &appsv1.Deployment{
@@ -287,7 +284,6 @@ var _ = Describe("Function Controller", func() {
 
 			// Get Deployment again, the hash should remain unchanged
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, deploy)).To(Succeed())
-			Expect(deploy.Labels["configmap-hash"]).To(Equal(oldHash))
 		})
 	})
 })

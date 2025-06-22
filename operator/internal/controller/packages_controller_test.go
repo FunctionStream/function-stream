@@ -55,7 +55,7 @@ var _ = Describe("Package Controller", func() {
 						DisplayName:  "test",
 						Description:  "desc",
 						FunctionType: fsv1alpha1.FunctionType{},
-						Modules:      map[string]fsv1alpha1.Module{},
+						Modules:      map[string]fsv1alpha1.Module{"mod": {DisplayName: "mod", Description: "desc"}},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
