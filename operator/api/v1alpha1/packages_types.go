@@ -23,27 +23,36 @@ import (
 // ConfigItem defines a configuration item for a module
 type ConfigItem struct {
 	// DisplayName is the human-readable name of the config item
-	DisplayName string `json:"displayName"`
+	// +kubebuilder:validation:Optional
+	DisplayName string `json:"displayName,omitempty"`
 	// Description provides additional information about the config item
-	Description string `json:"description"`
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
 	// Type specifies the data type of the config item
-	Type string `json:"type"`
+	// +kubebuilder:validation:Optional
+	Type string `json:"type,omitempty"`
 	// Required indicates whether this config item is mandatory
-	Required bool `json:"required"`
+	// +kubebuilder:validation:Optional
+	Required bool `json:"required,omitempty"`
 }
 
 // Module defines a module within a package
 type Module struct {
 	// DisplayName is the human-readable name of the module
-	DisplayName string `json:"displayName"`
+	// +kubebuilder:validation:Optional
+	DisplayName string `json:"displayName,omitempty"`
 	// Description provides additional information about the module
-	Description string `json:"description"`
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
 	// SourceSchema defines the input schema for the module
+	// +kubebuilder:validation:Optional
 	SourceSchema string `json:"sourceSchema,omitempty"`
 	// SinkSchema defines the output schema for the module
+	// +kubebuilder:validation:Optional
 	SinkSchema string `json:"sinkSchema,omitempty"`
 	// Config is a list of configuration items for the module
-	Config []ConfigItem `json:"config,omitempty"`
+	// +kubebuilder:validation:Optional
+	Config map[string]ConfigItem `json:"config,omitempty"`
 }
 
 // CloudType defines cloud function package configuration
@@ -55,17 +64,21 @@ type CloudType struct {
 // FunctionType defines the function type configuration
 type FunctionType struct {
 	// Cloud contains cloud function package configuration
+	// +kubebuilder:validation:Optional
 	Cloud *CloudType `json:"cloud,omitempty"`
 }
 
 // PackageSpec defines the desired state of Package
 type PackageSpec struct {
 	// DisplayName is the human-readable name of the package
-	DisplayName string `json:"displayName"`
+	// +kubebuilder:validation:Optional
+	DisplayName string `json:"displayName,omitempty"`
 	// Logo is the URL or base64 encoded image for the package logo
+	// +kubebuilder:validation:Optional
 	Logo string `json:"logo,omitempty"`
 	// Description provides additional information about the package
-	Description string `json:"description"`
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
 	// FunctionType contains function type configuration
 	FunctionType FunctionType `json:"functionType"`
 	// Modules is a map of module names to their configurations

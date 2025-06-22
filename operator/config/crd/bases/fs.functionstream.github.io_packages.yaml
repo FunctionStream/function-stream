@@ -71,9 +71,7 @@ spec:
                   description: Module defines a module within a package
                   properties:
                     config:
-                      description: Config is a list of configuration items for the
-                        module
-                      items:
+                      additionalProperties:
                         description: ConfigItem defines a configuration item for a
                           module
                         properties:
@@ -93,13 +91,10 @@ spec:
                             description: Type specifies the data type of the config
                               item
                             type: string
-                        required:
-                        - description
-                        - displayName
-                        - required
-                        - type
                         type: object
-                      type: array
+                      description: Config is a list of configuration items for the
+                        module
+                      type: object
                     description:
                       description: Description provides additional information about
                         the module
@@ -113,15 +108,10 @@ spec:
                     sourceSchema:
                       description: SourceSchema defines the input schema for the module
                       type: string
-                  required:
-                  - description
-                  - displayName
                   type: object
                 description: Modules is a map of module names to their configurations
                 type: object
             required:
-            - description
-            - displayName
             - functionType
             - modules
             type: object

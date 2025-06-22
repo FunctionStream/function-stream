@@ -95,7 +95,6 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	// Build Config struct (no need to set env)
 	config := controller.Config{
 		PulsarServiceURL: pulsarServiceUrl,
 		PulsarAuthPlugin: pulsarAuthPlugin,

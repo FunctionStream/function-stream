@@ -25,4 +25,3 @@ spec:
         properties:
           result:
             type: string
-      config: []

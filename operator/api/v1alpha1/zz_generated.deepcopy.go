@@ -21,6 +21,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -123,13 +124,21 @@ func (in *FunctionSpec) DeepCopyInto(out *FunctionSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	in.RequestSource.DeepCopyInto(&out.RequestSource)
-	in.Sink.DeepCopyInto(&out.Sink)
+	if in.RequestSource != nil {
+		in, out := &in.RequestSource, &out.RequestSource
+		*out = new(SourceSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.Sink != nil {
+		in, out := &in.Sink, &out.Sink
+		*out = new(SinkSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Config != nil {
 		in, out := &in.Config, &out.Config
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]v1.JSON, len(*in))
 		for key, val := range *in {
-			(*out)[key] = val
+			(*out)[key] = *val.DeepCopy()
 		}
 	}
 }
@@ -184,8 +193,10 @@ func (in *Module) DeepCopyInto(out *Module) {
 	*out = *in
 	if in.Config != nil {
 		in, out := &in.Config, &out.Config
-		*out = make([]ConfigItem, len(*in))
-		copy(*out, *in)
+		*out = make(map[string]ConfigItem, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
 	}
 }
 

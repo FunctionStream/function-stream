@@ -18,8 +18,6 @@ package controller
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fsv1alpha1 "github.com/FunctionStream/function-stream/operator/api/v1alpha1"
-	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,7 +68,7 @@ var _ = Describe("Function Controller", func() {
 			By("Cleanup the specific resource instance Function")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
-		It("should successfully reconcile the resource and create ConfigMap, Deployment, and update Status", func() {
+		It("should successfully reconcile the resource and create Deployment with init container, and update Status", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &FunctionReconciler{
 				Client: k8sClient,
@@ -108,7 +105,7 @@ var _ = Describe("Function Controller", func() {
 			function.Spec.Package = "test-pkg"
 			function.Spec.Module = "mod"
 			function.Spec.Sink = fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}}
-			function.Spec.RequestSource = fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in", SubscriptionName: "sub"}}
+			function.Spec.RequestSource = fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in"}}
 			Expect(k8sClient.Patch(ctx, function, patch)).To(Succeed())
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -116,27 +113,49 @@ var _ = Describe("Function Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Check ConfigMap
-			cmName := "function-" + typeNamespacedName.Name + "-config"
-			cm := &corev1.ConfigMap{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: typeNamespacedName.Namespace}, cm)).To(Succeed())
-			Expect(cm.Data).To(HaveKey("config.yaml"))
-
-			// Assert pulsar config in config.yaml
-			var configYaml map[string]interface{}
-			Expect(yaml.Unmarshal([]byte(cm.Data["config.yaml"]), &configYaml)).To(Succeed())
-			pulsarCfg, ok := configYaml["pulsar"].(map[string]interface{})
-			Expect(ok).To(BeTrue())
-			Expect(pulsarCfg["serviceUrl"]).To(Equal("pulsar://test-broker:6650"))
-			Expect(pulsarCfg["authPlugin"]).To(Equal("org.apache.pulsar.client.impl.auth.AuthenticationToken"))
-			Expect(pulsarCfg["authParams"]).To(Equal("token:my-token"))
-
 			// Check Deployment
 			deployName := "function-" + typeNamespacedName.Name
 			deploy := &appsv1.Deployment{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: typeNamespacedName.Namespace}, deploy)).To(Succeed())
-			Expect(deploy.Spec.Template.Spec.Containers[0].Image).To(Equal("busybox:latest"))
-			Expect(deploy.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(cmName))
+
+			// Verify init container exists and has correct configuration
+			Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer := deploy.Spec.Template.Spec.InitContainers[0]
+			Expect(initContainer.Name).To(Equal("init-config"))
+			Expect(initContainer.Image).To(Equal("busybox:latest"))
+			Expect(initContainer.Command).To(HaveLen(3))
+			Expect(initContainer.Command[0]).To(Equal("/bin/sh"))
+			Expect(initContainer.Command[1]).To(Equal("-c"))
+
+			// Verify the init command contains config.yaml content
+			initCommand := initContainer.Command[2]
+			Expect(initCommand).To(ContainSubstring("cat > /config/config.yaml"))
+
+			// Verify main container configuration
+			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+			mainContainer := deploy.Spec.Template.Spec.Containers[0]
+			Expect(mainContainer.Name).To(Equal("function"))
+			Expect(mainContainer.Image).To(Equal("busybox:latest"))
+
+			// Verify volume mounts
+			Expect(mainContainer.VolumeMounts).To(HaveLen(1))
+			Expect(mainContainer.VolumeMounts[0].Name).To(Equal("function-config"))
+			Expect(mainContainer.VolumeMounts[0].MountPath).To(Equal("/config"))
+
+			// Verify environment variable
+			Expect(mainContainer.Env).To(HaveLen(1))
+			Expect(mainContainer.Env[0].Name).To(Equal("FS_CONFIG_PATH"))
+			Expect(mainContainer.Env[0].Value).To(Equal("/config/config.yaml"))
+
+			// Verify volumes
+			Expect(deploy.Spec.Template.Spec.Volumes).To(HaveLen(1))
+			Expect(deploy.Spec.Template.Spec.Volumes[0].Name).To(Equal("function-config"))
+			Expect(deploy.Spec.Template.Spec.Volumes[0].EmptyDir).NotTo(BeNil())
+
+			// Verify labels
+			Expect(deploy.Labels).To(HaveKey("function"))
+			Expect(deploy.Labels).To(HaveKey("configmap-hash"))
+			Expect(deploy.Labels["function"]).To(Equal(typeNamespacedName.Name))
 
 			// Simulate Deployment status update
 			patchDeploy := client.MergeFrom(deploy.DeepCopy())
@@ -161,23 +180,27 @@ var _ = Describe("Function Controller", func() {
 			Expect(fn.Status.UpdatedReplicas).To(Equal(int32(1)))
 			Expect(fn.Status.ObservedGeneration).To(Equal(int64(2)))
 
-			// Simulate ConfigMap change and check Deployment hash label update
-			patchCM := client.MergeFrom(cm.DeepCopy())
-			cm.Data["config.yaml"] = cm.Data["config.yaml"] + "#changed"
-			Expect(k8sClient.Patch(ctx, cm, patchCM)).To(Succeed())
-			// Force re-get to ensure the content has changed
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: typeNamespacedName.Namespace}, cm)).To(Succeed())
+			// Test config hash update when function spec changes
+			oldHash := deploy.Labels["configmap-hash"]
+
+			// Update function spec to trigger hash change
+			patchFn := client.MergeFrom(fn.DeepCopy())
+			fn.Spec.Description = "Updated description"
+			Expect(k8sClient.Patch(ctx, fn, patchFn)).To(Succeed())
+
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+
+			// Verify deployment hash has changed
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: typeNamespacedName.Namespace}, deploy)).To(Succeed())
-			// hash label should change
-			Expect(deploy.Labels).To(HaveKey("configmap-hash"))
+			newHash := deploy.Labels["configmap-hash"]
+			Expect(newHash).NotTo(Equal(oldHash))
 		})
 
-		It("should only reconcile when ConfigMap has 'function' label", func() {
-			By("setting up a Function and its labeled ConfigMap")
+		It("should only reconcile when Deployment has 'function' label", func() {
+			By("setting up a Function and its labeled Deployment")
 			controllerReconciler := &FunctionReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
@@ -218,59 +241,53 @@ var _ = Describe("Function Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, fn)).To(Succeed())
 
-			// Initial reconcile to create ConfigMap and Deployment
+			// Initial reconcile to create Deployment
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			cmName := "function-" + fn.Name + "-config"
-			cm := &corev1.ConfigMap{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: fn.Namespace}, cm)).To(Succeed())
-			oldHash := sha256sum(cm.Data["config.yaml"])
-
-			// Patch labeled ConfigMap, should NOT trigger reconcile or hash change
-			patchCM := client.MergeFrom(cm.DeepCopy())
-			cm.Data["config.yaml"] = cm.Data["config.yaml"] + "#changed"
-			Expect(k8sClient.Patch(ctx, cm, patchCM)).To(Succeed())
-			// Force re-get to ensure the content has changed
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: fn.Namespace}, cm)).To(Succeed())
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace},
-			})
-			Expect(err).NotTo(HaveOccurred())
+			deployName := "function-" + fn.Name
 			deploy := &appsv1.Deployment{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "function-" + fn.Name, Namespace: fn.Namespace}, deploy)).To(Succeed())
-			newHash := deploy.Labels["configmap-hash"]
-			Expect(newHash).To(Equal(oldHash))
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, deploy)).To(Succeed())
+			oldHash := deploy.Labels["configmap-hash"]
 
-			// Create a ConfigMap without 'function' label
-			unlabeledCM := &corev1.ConfigMap{
+			// Create a Deployment without 'function' label
+			unlabeledDeploy := &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "unlabeled-cm",
+					Name:      "unlabeled-deploy",
 					Namespace: fn.Namespace,
+					Labels:    map[string]string{"app": "test"},
 				},
-				Data: map[string]string{"foo": "bar"},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: &[]int32{1}[0],
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "test"},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{"app": "test"},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{
+								Name:  "test",
+								Image: "busybox:latest",
+							}},
+						},
+					},
+				},
 			}
-			Expect(k8sClient.Create(ctx, unlabeledCM)).To(Succeed())
-			// Patch unlabeled ConfigMap, should NOT trigger reconcile or hash change
-			patchUnlabeled := client.MergeFrom(unlabeledCM.DeepCopy())
-			unlabeledCM.Data["foo"] = "baz"
-			Expect(k8sClient.Patch(ctx, unlabeledCM, patchUnlabeled)).To(Succeed())
+			Expect(k8sClient.Create(ctx, unlabeledDeploy)).To(Succeed())
+
 			// Manually call Reconcile to simulate the event, but the hash should not change
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
+
 			// Get Deployment again, the hash should remain unchanged
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "function-" + fn.Name, Namespace: fn.Namespace}, deploy)).To(Succeed())
-			Expect(deploy.Labels["configmap-hash"]).To(Equal(newHash))
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, deploy)).To(Succeed())
+			Expect(deploy.Labels["configmap-hash"]).To(Equal(oldHash))
 		})
 	})
 })
-
-// Utility function: first 32 characters of sha256
-func sha256sum(s string) string {
-	hash := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(hash[:])[:32]
-}
