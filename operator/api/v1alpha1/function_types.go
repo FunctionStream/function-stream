@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,8 +26,10 @@ import (
 // +kubebuilder:validation:Optional
 type FunctionSpec struct {
 	// Display name of the function
+	// +kubebuilder:validation:Optional
 	DisplayName string `json:"displayName,omitempty"`
 	// Description of the function
+	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
 	// Package name
 	// +kubebuilder:validation:Required
@@ -34,14 +37,20 @@ type FunctionSpec struct {
 	// Module name
 	// +kubebuilder:validation:Required
 	Module string `json:"module"`
+	// +kubebuilder:validation:Optional
+	SubscriptionName string `json:"subscriptionName,omitempty"`
 	// List of sources
+	// +kubebuilder:validation:Optional
 	Sources []SourceSpec `json:"sources,omitempty"`
 	// Request source
-	RequestSource SourceSpec `json:"requestSource,omitempty"`
+	// +kubebuilder:validation:Optional
+	RequestSource *SourceSpec `json:"requestSource,omitempty"`
 	// Sink specifies the sink configuration
-	Sink SinkSpec `json:"sink,omitempty"`
+	// +kubebuilder:validation:Optional
+	Sink *SinkSpec `json:"sink,omitempty"`
 	// Configurations as key-value pairs
-	Config map[string]string `json:"config,omitempty"`
+	// +kubebuilder:validation:Optional
+	Config map[string]v1.JSON `json:"config,omitempty"`
 }
 
 // SourceSpec defines a source or sink specification
@@ -49,6 +58,7 @@ type FunctionSpec struct {
 // +kubebuilder:validation:Optional
 type SourceSpec struct {
 	// Pulsar source specification
+	// +kubebuilder:validation:Optional
 	Pulsar *PulsarSourceSpec `json:"pulsar,omitempty"`
 }
 
@@ -59,9 +69,6 @@ type PulsarSourceSpec struct {
 	// Topic name
 	// +kubebuilder:validation:Required
 	Topic string `json:"topic"`
-	// Subscription name
-	// +kubebuilder:validation:Required
-	SubscriptionName string `json:"subscriptionName"`
 }
 
 // SinkSpec defines a sink specification
@@ -69,6 +76,7 @@ type PulsarSourceSpec struct {
 // +kubebuilder:validation:Optional
 type SinkSpec struct {
 	// Pulsar sink specification
+	// +kubebuilder:validation:Optional
 	Pulsar *PulsarSinkSpec `json:"pulsar,omitempty"`
 }
 

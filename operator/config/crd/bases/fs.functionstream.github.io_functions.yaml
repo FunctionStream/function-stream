@@ -41,7 +41,7 @@ spec:
             properties:
               config:
                 additionalProperties:
-                  type: string
+                  x-kubernetes-preserve-unknown-fields: true
                 description: Configurations as key-value pairs
                 type: object
               description:
@@ -62,19 +62,15 @@ spec:
                   pulsar:
                     description: Pulsar source specification
                     properties:
-                      subscriptionName:
-                        description: Subscription name
-                        type: string
                       topic:
                         description: Topic name
                         type: string
                     required:
-                    - subscriptionName
                     - topic
                     type: object
                 type: object
               sink:
-                description: sink
+                description: Sink specifies the sink configuration
                 properties:
                   pulsar:
                     description: Pulsar sink specification
@@ -94,18 +90,16 @@ spec:
                     pulsar:
                       description: Pulsar source specification
                       properties:
-                        subscriptionName:
-                          description: Subscription name
-                          type: string
                         topic:
                           description: Topic name
                           type: string
                       required:
-                      - subscriptionName
                       - topic
                       type: object
                   type: object
                 type: array
+              subscriptionName:
+                type: string
             required:
             - module
             - package

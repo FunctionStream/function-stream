@@ -18,9 +18,9 @@ package controller
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
+	"github.com/FunctionStream/function-stream/operator/utils"
+	"k8s.io/apimachinery/pkg/util/json"
 	"reflect"
 
 	"gopkg.in/yaml.v3"
@@ -58,7 +58,6 @@ type FunctionReconciler struct {
 // +kubebuilder:rbac:groups=fs.functionstream.github.io,resources=functions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=fs.functionstream.github.io,resources=functions/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -71,6 +70,7 @@ type FunctionReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	log.Info("Reconciling Function", "function", req.NamespacedName)
 
 	// 1. Get Function
 	var fn fsv1alpha1.Function
@@ -95,61 +95,26 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("package %s has no image", fn.Spec.Package)
 	}
 
-	// 3. Build ConfigMap data (yaml)
-	configMapName := fmt.Sprintf("function-%s-config", fn.Name)
+	// 3. Build config yaml content
 	configYaml, err := buildFunctionConfigYaml(&fn, r.Config)
 	if err != nil {
 		log.Error(err, "Failed to marshal config yaml")
 		return ctrl.Result{}, err
 	}
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: fn.Namespace,
-			Labels: map[string]string{
-				"function": fn.Name,
-			},
-		},
-		Data: map[string]string{
-			"config.yaml": configYaml,
-		},
-	}
-	// Set owner
-	if err := ctrl.SetControllerReference(&fn, configMap, r.Scheme); err != nil {
-		return ctrl.Result{}, err
-	}
 
-	// 4. Create or Update ConfigMap
-	var existingCM corev1.ConfigMap
-	cmErr := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: fn.Namespace}, &existingCM)
-	if cmErr == nil {
-		if !reflect.DeepEqual(existingCM.Data, configMap.Data) {
-			existingCM.Data = configMap.Data
-			err = r.Update(ctx, &existingCM)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-	} else if errors.IsNotFound(cmErr) {
-		err = r.Create(ctx, configMap)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	} else {
-		return ctrl.Result{}, cmErr
-	}
-
-	// 5. Calculate ConfigMap hash
-	hash := sha256.Sum256([]byte(configYaml))
-	hashStr := hex.EncodeToString(hash[:])[:32]
-
-	// 6. Build Deployment
+	// 4. Build Deployment
 	deployName := fmt.Sprintf("function-%s", fn.Name)
 	var replicas int32 = 1
 	labels := map[string]string{
-		"function":       fn.Name,
-		"configmap-hash": hashStr,
+		"function": fn.Name,
 	}
+
+	// Create init command to write config file
+	initCommand := fmt.Sprintf(`cat > /config/config.yaml << 'EOF'
+%s
+EOF
+`, configYaml)
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deployName,
@@ -166,22 +131,33 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{{
+						Name:            "init-config",
+						Image:           image,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"/bin/sh", "-c", initCommand},
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      "function-config",
+							MountPath: "/config",
+						}},
+					}},
 					Containers: []corev1.Container{{
 						Name:            "function",
 						Image:           image,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      "function-config",
-							MountPath: "/function/config.yaml",
-							SubPath:   "config.yaml",
+							MountPath: "/config",
+						}},
+						Env: []corev1.EnvVar{{
+							Name:  "FS_CONFIG_PATH",
+							Value: "/config/config.yaml",
 						}},
 					}},
 					Volumes: []corev1.Volume{{
 						Name: "function-config",
 						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
-							},
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					}},
 				},
@@ -192,7 +168,7 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// 7. Create or Update Deployment
+	// 5. Create or Update Deployment
 	var existingDeploy appsv1.Deployment
 	deployErr := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, &existingDeploy)
 	if deployErr == nil {
@@ -203,23 +179,23 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			existingDeploy.Labels = deployment.Labels
 			err = r.Update(ctx, &existingDeploy)
 			if err != nil {
-				return HandleReconcileError(log, err, "Conflict when updating Deployment, will retry automatically")
+				return utils.HandleReconcileError(log, err, "Conflict when updating Deployment, will retry automatically")
 			}
 		}
 	} else if errors.IsNotFound(deployErr) {
 		err = r.Create(ctx, deployment)
 		if err != nil {
-			return HandleReconcileError(log, err, "Conflict when creating Deployment, will retry automatically")
+			return utils.HandleReconcileError(log, err, "Conflict when creating Deployment, will retry automatically")
 		}
 	} else {
 		return ctrl.Result{}, deployErr
 	}
 
-	// 8. Update Function Status from Deployment Status
+	// 7. Update Function Status from Deployment Status
 	if err := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, &existingDeploy); err == nil {
 		fn.Status = convertDeploymentStatusToFunctionStatus(&existingDeploy.Status)
 		if err := r.Status().Update(ctx, &fn); err != nil {
-			return HandleReconcileError(log, err, "Conflict when updating Function status, will retry automatically")
+			return utils.HandleReconcileError(log, err, "Conflict when updating Function status, will retry automatically")
 		}
 	}
 
@@ -240,17 +216,30 @@ func buildFunctionConfigYaml(fn *fsv1alpha1.Function, operatorCfg Config) (strin
 	if len(fn.Spec.Sources) > 0 {
 		cfg["sources"] = fn.Spec.Sources
 	}
-	if fn.Spec.RequestSource.Pulsar != nil {
+	if fn.Spec.RequestSource != nil {
 		cfg["requestSource"] = fn.Spec.RequestSource
 	}
-	if fn.Spec.Sink.Pulsar != nil {
+	if fn.Spec.SubscriptionName != "" {
+		cfg["subscriptionName"] = fn.Spec.SubscriptionName
+	} else {
+		cfg["subscriptionName"] = fmt.Sprintf("fs-%s", fn.Name)
+	}
+	if fn.Spec.Sink != nil {
 		cfg["sink"] = fn.Spec.Sink
 	}
 	if fn.Spec.Module != "" {
 		cfg["module"] = fn.Spec.Module
 	}
 	if fn.Spec.Config != nil {
-		cfg["config"] = fn.Spec.Config
+		configMap := make(map[string]interface{})
+		for k, v := range fn.Spec.Config {
+			var r interface{}
+			if err := json.Unmarshal(v.Raw, &r); err != nil {
+				return "", fmt.Errorf("failed to unmarshal config value for key %s: %w", k, err)
+			}
+			configMap[k] = r
+		}
+		cfg["config"] = configMap
 	}
 	if fn.Spec.Description != "" {
 		cfg["description"] = fn.Spec.Description
@@ -290,7 +279,6 @@ func (r *FunctionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	functionLabelPredicate := predicate.NewPredicateFuncs(hasFunctionLabel)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&fsv1alpha1.Function{}).
-		Owns(&corev1.ConfigMap{}, builder.WithPredicates(functionLabelPredicate)).
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(functionLabelPredicate)).
 		Named("function").
 		Complete(r)
