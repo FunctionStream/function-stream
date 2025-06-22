@@ -20,7 +20,6 @@ import asyncio
 import pulsar
 import json
 import uuid
-import time
 
 async def test_string_function():
     """

@@ -1,18 +1,24 @@
-import pytest
-import asyncio
-import time
+"""
+Unit tests for the Metrics and MetricsServer classes.
+"""
+
 import json
-from aiohttp import web
+
+import pytest
 from aiohttp.test_utils import make_mocked_request
-from fs_sdk.metrics import Metrics, MetricsServer
+
+from function_stream import Metrics, MetricsServer
+
 
 @pytest.fixture
 def metrics():
     return Metrics()
 
+
 @pytest.fixture
 def metrics_server(metrics):
     return MetricsServer(metrics, host='127.0.0.1', port=9099)
+
 
 class TestMetrics:
     def test_initial_state(self, metrics):
@@ -87,7 +93,7 @@ class TestMetrics:
         metrics.record_request_end(success=True, latency=0.5)
         metrics.record_request_start()
         metrics.record_request_end(success=False, latency=0.3)
-        
+
         # Record some events
         metrics.record_event(success=True)
         metrics.record_event(success=True)
@@ -103,7 +109,8 @@ class TestMetrics:
         assert metrics_data['fs_successful_events'] == 2
         assert metrics_data['fs_failed_events'] == 1
         assert metrics_data['fs_request_success_rate'] == 0.5
-        assert metrics_data['fs_event_success_rate'] == 2/3
+        assert metrics_data['fs_event_success_rate'] == 2 / 3
+
 
 @pytest.mark.asyncio
 class TestMetricsServer:
@@ -149,4 +156,4 @@ class TestMetricsServer:
         # Stop server
         await metrics_server.stop()
         # Note: runner is not set to None after cleanup in aiohttp
-        # We just verify that the server was started and stopped successfully 
+        # We just verify that the server was started and stopped successfully

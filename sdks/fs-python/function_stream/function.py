@@ -4,20 +4,25 @@ FunctionStream SDK - A Python SDK for building and deploying serverless function
 This module provides the core functionality for creating and managing FunctionStream
 functions. It handles message processing, request/response flow, and resource management.
 """
-
-import json
 import asyncio
-import logging
-import pulsar
-import time
+import dataclasses
 import functools
 import inspect
-from typing import Callable, Any, Dict, Set, Union, Awaitable, get_type_hints
-from pulsar import Client, Producer
-from .config import Config
-from .metrics import Metrics, MetricsServer
-from .context import FSContext
+import json
+import logging
+import os
+import time
 import typing
+from datetime import datetime, timezone
+from typing import Callable, Any, Dict, Set, Union, Awaitable, get_type_hints, List, Optional
+
+import pulsar
+from pulsar import Client, Producer
+
+from .config import Config
+from .context import FSContext
+from .metrics import Metrics, MetricsServer
+from .module import FSModule
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,16 +57,19 @@ def _validate_process_func(func: Callable, module_name: str):
         raise ValueError(
             f"Process function for module '{module_name}' must have type hints for both parameters named 'context', 'data', and a return type"
         )
+
     def unwrap_annotated(annotation):
         origin = typing.get_origin(annotation)
         if origin is typing.Annotated:
             return unwrap_annotated(typing.get_args(annotation)[0])
         return annotation
+
     def is_dict_str_any(annotation):
         ann = unwrap_annotated(annotation)
         origin = typing.get_origin(ann)
         args = typing.get_args(ann)
         return (origin in (dict, typing.Dict)) and args == (str, Any)
+
     if not (type_hints["context"] == FSContext):
         raise ValueError(
             f"Process function for module '{module_name}' must have FSContext as first parameter"
@@ -72,20 +80,63 @@ def _validate_process_func(func: Callable, module_name: str):
         )
     # Check return type
     return_type = type_hints.get('return')
+
     def is_dict_return(annotation):
         ann = unwrap_annotated(annotation)
         origin = typing.get_origin(ann)
         args = typing.get_args(ann)
         return (origin in (dict, typing.Dict)) and args == (str, Any)
+
+    def is_none_type(annotation):
+        ann = unwrap_annotated(annotation)
+        return ann is type(None)
+
     def is_awaitable_dict(annotation):
         ann = unwrap_annotated(annotation)
         origin = typing.get_origin(ann)
         args = typing.get_args(ann)
         return origin in (typing.Awaitable,) and len(args) == 1 and is_dict_return(args[0])
-    if not (is_dict_return(return_type) or is_awaitable_dict(return_type)):
+
+    def is_awaitable_none(annotation):
+        ann = unwrap_annotated(annotation)
+        origin = typing.get_origin(ann)
+        args = typing.get_args(ann)
+        return origin in (typing.Awaitable,) and len(args) == 1 and is_none_type(args[0])
+
+    def is_union_of_dict_and_none(annotation):
+        ann = unwrap_annotated(annotation)
+        origin = typing.get_origin(ann)
+        args = typing.get_args(ann)
+        if origin in (typing.Union, Union):
+            return (any(is_dict_return(arg) for arg in args) and any(is_none_type(arg) for arg in args))
+        return False
+
+    def is_awaitable_union_dict_none(annotation):
+        ann = unwrap_annotated(annotation)
+        origin = typing.get_origin(ann)
+        args = typing.get_args(ann)
+        if origin in (typing.Awaitable,):
+            if len(args) == 1:
+                return is_union_of_dict_and_none(args[0])
+        return False
+
+    if not (
+            is_dict_return(return_type)
+            or is_awaitable_dict(return_type)
+            or is_none_type(return_type)
+            or is_awaitable_none(return_type)
+            or is_union_of_dict_and_none(return_type)
+            or is_awaitable_union_dict_none(return_type)
+    ):
         raise ValueError(
-            f"Process function for module '{module_name}' must return Dict[str, Any], dict[str, Any], or Awaitable thereof, got {return_type}"
+            f"Process function for module '{module_name}' must return Dict[str, Any], dict[str, Any], None, Awaitable thereof, or a Union with None, got {return_type}"
         )
+
+
+@dataclasses.dataclass
+class MsgWrapper:
+    data: Dict[str, Any]
+    event_time: Optional[datetime] = None
 
 
 class FSFunction:
@@ -98,7 +149,7 @@ class FSFunction:
 
     Attributes:
         config (Config): Configuration object containing function settings
-        process_funcs (Dict[str, Callable]): Dictionary of process functions by module
+        process_funcs (Dict[str, Union[Callable, FSModule]]): Dictionary of process functions or modules by module name
         client (Client): Pulsar client instance
         semaphore (asyncio.Semaphore): Semaphore for controlling concurrent requests
         metrics (Metrics): Metrics collection object
@@ -107,37 +158,48 @@ class FSFunction:
     """
 
     def __init__(
-        self,
-        process_funcs: Dict[str, Callable[["FSContext", Dict[str, Any]], Union[Dict[str, Any], Awaitable[Dict[str, Any]]]]],
-        config_path: str = "config.yaml"
+            self,
+            process_funcs: Dict[
+                str, Union[Callable[
+                    ["FSContext", Dict[str, Any]], Union[Dict[str, Any], Awaitable[Dict[str, Any]]]], FSModule]],
+            config_path: str = None
     ):
         """
         Initialize the FS Function.
 
         Args:
-            process_funcs (Dict[str, Callable]): Dictionary mapping module names to their process functions.
+            process_funcs (Dict[str, Union[Callable, FSModule]]): Dictionary mapping module names to their process functions or modules.
                 Each function must accept two parameters: (context: FSContext, data: Dict[str, Any])
                 and return either a Dict[str, Any] or an Awaitable[Dict[str, Any]].
-            config_path (str): Path to the configuration file. Defaults to "config.yaml".
+                Each module must be an instance of FSModule.
+            config_path (str): Path to the configuration file.
 
         Raises:
             ValueError: If no module is specified in config or if the specified module
                       doesn't have a corresponding process function, or if the function
                       structure is invalid.
         """
+        if config_path is None:
+            config_path = os.getenv("FS_CONFIG_PATH", "config.yaml")
         self.config = Config.from_yaml(config_path)
         self.process_funcs = process_funcs
-        
+        self.context = FSContext(self.config)
+
         # Validate module
         module = self.config.module
         if not module:
             raise ValueError("No module specified in config")
         if module not in process_funcs:
             raise ValueError(f"Process function not found for module: {module}")
-            
+
         # Validate function structure
-        _validate_process_func(process_funcs[module], module)
-        
+        process_func = process_funcs[module]
+        if isinstance(process_func, FSModule):
+            # For FSModule, we'll use its process method
+            process_func.init(self.context)
+        else:
+            _validate_process_func(process_func, module)
+
         # Create authentication if specified
         auth = None
         if self.config.pulsar.authPlugin:
@@ -145,7 +207,7 @@ class FSFunction:
                 self.config.pulsar.authPlugin,
                 self.config.pulsar.authParams
             )
-            
+
         self.client = Client(
             self.config.pulsar.serviceUrl,
             authentication=auth,
@@ -153,13 +215,12 @@ class FSFunction:
         )
         self.semaphore = asyncio.Semaphore(self.config.pulsar.max_concurrent_requests)
         self.metrics = Metrics()
-        self.metrics_server = MetricsServer(self.metrics)
+        self.metrics_server = MetricsServer(self.metrics, port=self.config.metric.port)
         self._shutdown_event = asyncio.Event()
         self._current_tasks: Set[asyncio.Task] = set()
         self._tasks_lock = asyncio.Lock()
         self._consumer = None
-        self.context = FSContext(self.config)
-        
+
         # Create multi-topics consumer
         self._setup_consumer()
 
@@ -198,20 +259,10 @@ class FSFunction:
         self._consumer = self.client.subscribe(
             topics,
             subscription_name,
-            consumer_type=pulsar.ConsumerType.Shared
+            consumer_type=pulsar.ConsumerType.Shared,
+            unacked_messages_timeout_ms=30_000  # Only for non-ordering guarantee workload
         )
         logger.info(f"Created multi-topics consumer for topics: {topics} with subscription: {subscription_name}")
-
-    def _signal_handler(self, signum, frame):
-        """
-        Handle termination signals.
-
-        Args:
-            signum: Signal number
-            frame: Current stack frame
-        """
-        logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-        asyncio.create_task(self._graceful_shutdown())
 
     async def _add_task(self, task: asyncio.Task):
         """
@@ -246,35 +297,6 @@ class FSFunction:
         async with self._tasks_lock:
             return set(self._current_tasks)
 
-    async def _graceful_shutdown(self):
-        """
-        Perform graceful shutdown of the service.
-
-        This method:
-        1. Sets the shutdown event
-        2. Cancels all ongoing tasks
-        3. Closes all resources
-        """
-        logger.info("Starting graceful shutdown...")
-        self._shutdown_event.set()
-        
-        tasks_to_cancel = await self._get_tasks()
-        
-        if tasks_to_cancel:
-            logger.info(f"Cancelling {len(tasks_to_cancel)} ongoing tasks...")
-            for task in tasks_to_cancel:
-                if not task.done():
-                    task.cancel()
-            
-            try:
-                await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
-            except Exception as e:
-                logger.error(f"Error while cancelling tasks: {str(e)}")
-            logger.info("All ongoing tasks cancelled")
-        
-        await self.close()
-        logger.info("Graceful shutdown completed")
-
     @functools.lru_cache(maxsize=100)
     def _get_producer(self, topic: str) -> Producer:
         """
@@ -303,10 +325,10 @@ class FSFunction:
         """
         start_time = time.time()
         self.metrics.record_request_start()
-        
+
         task = asyncio.current_task()
         await self._add_task(task)
-        
+
         try:
             async with self.semaphore:
                 if self._shutdown_event.is_set():
@@ -322,71 +344,131 @@ class FSFunction:
                     if not response_topic and self.config.sink and self.config.sink.pulsar and self.config.sink.pulsar.topic:
                         response_topic = self.config.sink.pulsar.topic
 
-                    if not response_topic:
-                        logger.error("No response_topic provided and no sink topic available")
-                        self.metrics.record_event(False)
-                        return
-
                     module = self.config.module
                     process_func = self.process_funcs[module]
 
-                    # Call the function with context as first argument and handle both sync and async results
-                    result = process_func(self.context, request_data)
-                    if isinstance(result, Awaitable):
-                        response_data = await result
-                    else:
-                        response_data = result
+                    context = FSContext(self.config)
+                    resp_msgs: List[MsgWrapper] = []
 
-                    await self._send_response(response_topic, request_id, response_data)
-                    
+                    def produce(data: Dict[str, Any], event_time: datetime = None):
+                        resp_msgs.append(MsgWrapper(data=data, event_time=event_time))
+
+                    context.produce = produce
+
+                    # Call the function with context as first argument and handle both sync and async results
+                    response_data = None
+                    try:
+                        if isinstance(process_func, FSModule):
+                            result = process_func.process(context, request_data)
+                        else:
+                            result = process_func(context, request_data)
+
+                        if result is not None:
+                            if isinstance(result, Awaitable):
+                                response_data = await result
+                            else:
+                                response_data = result
+                    except Exception as e:
+                        logger.error(f"Error invoking process function: {str(e)}")
+                        raise Exception(f"Error invoking process function: {str(e)}") from e
+                    if response_data:
+                        resp_msgs.append(MsgWrapper(data=response_data, event_time=datetime.utcnow()))
+
+                    if not response_topic:
+                        logger.warning("No response_topic provided and no sink topic available. Skip messages")
+                    else:
+                        await self._send_response(response_topic, request_id, resp_msgs)
+
                     latency = time.time() - start_time
                     self.metrics.record_request_end(True, latency)
                     self.metrics.record_event(True)
 
-                except json.JSONDecodeError:
-                    logger.error("Failed to decode request JSON")
+                    if request_id is None:
+                        logger.info(f"Finished processing request and acknowledged {message.message_id()}")
+                        self._consumer.acknowledge(message)
+
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to decode request JSON: {e}")
                     self.metrics.record_request_end(False, time.time() - start_time)
                     self.metrics.record_event(False)
-                except asyncio.CancelledError:
+                    raise e
+                except asyncio.CancelledError as e:
                     logger.info("Request processing cancelled due to shutdown")
                     self.metrics.record_request_end(False, time.time() - start_time)
                     self.metrics.record_event(False)
-                    raise
+                    raise e
                 except Exception as e:
-                    logger.error(f"Error processing request: {str(e)}")
+                    logger.error(f"Error processing request: {type(e).__name__}: {e}")
                     if not self._shutdown_event.is_set():
-                        if request_id: # Only send the response back if the request_id exists
+                        if request_id:  # Only send the response back if the request_id exists
                             await self._send_response(
                                 response_topic,
                                 request_id,
-                                {'error': str(e)}
+                                [MsgWrapper(data={'error': str(e)}, event_time=datetime.utcnow())]
                             )
                     self.metrics.record_request_end(False, time.time() - start_time)
                     self.metrics.record_event(False)
         finally:
             await self._remove_task(task)
+            if request_id:
+                self._consumer.acknowledge(message)
 
-    async def _send_response(self, response_topic: str, request_id: str, response_data: dict):
+    async def _send_response(self, response_topic: str, request_id: str, msg: List[MsgWrapper]):
         """
-        Send a response message using cached producer.
+        Send a response message using cached producer asynchronously.
 
         Args:
             response_topic (str): The topic to send the response to
             request_id (str): The ID of the request being responded to
-            response_data (dict): The response data to send
+            msg (List[MsgWrapper]): The list of messages to send
 
         Raises:
             Exception: If there's an error sending the response
         """
+        loop = asyncio.get_event_loop()
         try:
             producer = self._get_producer(response_topic)
-            message_data = json.dumps(response_data).encode('utf-8')
-            producer.send(
-                message_data,
-                properties={'request_id': request_id}
-            )
+
+            def default_serializer(o):
+                if isinstance(o, datetime):
+                    return o.isoformat()
+                return str(o)
+
+            send_futures = []
+            for m in msg:
+                future = loop.create_future()
+                message_data = json.dumps(m.data, default=default_serializer).encode('utf-8')
+
+                def create_callback(f):
+                    def callback(res, msg_id):
+                        if res != pulsar.Result.Ok:
+                            err = Exception(f"Error producing: {res}")
+                            logger.error(str(err))
+                            loop.call_soon_threadsafe(f.set_exception, err)
+                        else:
+                            loop.call_soon_threadsafe(f.set_result, msg_id)
+
+                    return callback
+
+                event_timestamp = None
+                if m.event_time is not None:
+                    # Convert datetime to milliseconds since epoch, with exact millisecond precision
+                    event_timestamp = int(
+                        m.event_time.replace(tzinfo=timezone.utc).timestamp()) * 1000 + m.event_time.microsecond // 1000
+                send_kwargs = dict(
+                    event_timestamp=event_timestamp
+                )
+                if request_id is not None:
+                    send_kwargs['properties'] = {'request_id': request_id}
+                producer.send_async(
+                    message_data,
+                    create_callback(future),
+                    **send_kwargs
+                )
+                send_futures.append(future)
+            await asyncio.gather(*send_futures, return_exceptions=True)
         except Exception as e:
-            logger.error(f"Error sending response: {str(e)}")
+            logger.error(f"Error sending response: {type(e).__name__}: {e}")
             raise
 
     async def start(self):
@@ -400,9 +482,9 @@ class FSFunction:
         """
         module = self.config.module
         logger.info(f"Starting FS Function with module: {module}")
-        
+
         await self.metrics_server.start()
-        
+
         try:
             while not self._shutdown_event.is_set():
                 try:
@@ -410,8 +492,7 @@ class FSFunction:
                         None, lambda: self._consumer.receive(1000)
                     )
                     if msg:
-                        await self.process_request(msg)
-                        self._consumer.acknowledge(msg)
+                        asyncio.create_task(self.process_request(msg))
                 except pulsar.Timeout:
                     continue
                 except asyncio.CancelledError:
@@ -440,22 +521,21 @@ class FSFunction:
         4. Closes the Pulsar client
         """
         logger.info("Closing FS Function resources...")
-        
+
         await self.metrics_server.stop()
-        
+
         # Close consumer
         if self._consumer is not None:
             try:
-                self._consumer.unsubscribe()
                 self._consumer.close()
                 self._consumer = None
                 logger.info("Consumer closed successfully")
             except Exception as e:
                 logger.error(f"Error closing consumer: {str(e)}")
-        
+
         # Clear the producer cache
         self._get_producer.cache_clear()
-        
+
         # Close the Pulsar client
         try:
             await asyncio.sleep(0.1)
@@ -469,7 +549,7 @@ class FSFunction:
         """
         Ensure resources are cleaned up when the object is destroyed.
         
-        This destructor ensures that all resources are properly closed when the
+        This finalizer ensures that all resources are properly closed when the
         object is garbage collected.
         """
         if self._consumer is not None:
@@ -503,4 +583,4 @@ class FSFunction:
         Returns:
             FSContext: The context object containing configuration and runtime information.
         """
-        return self.context 
+        return self.context

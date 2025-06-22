@@ -16,7 +16,7 @@
 # This configuration file defines the settings for the string processing function example.
 
 pulsar:
-  serviceUrl: "pulsar://192.168.31.80:6650"  # Required: URL of the Pulsar broker
+  serviceUrl: "pulsar://127.0.0.1:6650"  # Required: URL of the Pulsar broker
   authPlugin: ""  # Optional: Authentication plugin class name
   authParams: ""  # Optional: Authentication parameters
 
