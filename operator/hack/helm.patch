@@ -25,17 +25,20 @@ index 221f200..2eac6b8 100644
 +annotations:
 +  category: "Operators"
 diff --git a/dist/chart/templates/manager/manager.yaml b/deploy/chart/templates/manager/manager.yaml
-index 7f6c891..bb1146f 100644
+index 7f6c891..ce6c11d 100644
 --- a/dist/chart/templates/manager/manager.yaml
 +++ b/deploy/chart/templates/manager/manager.yaml
-@@ -34,13 +34,26 @@ spec:
+@@ -34,13 +34,29 @@ spec:
            command:
              - /manager
            image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}
 -          {{- if .Values.controllerManager.container.env }}
 +          imagePullPolicy: {{ .Values.controllerManager.container.imagePullPolicy }}
            env:
-+            {{- if .Values.pulsar.serviceUrl }}
++            {{- if .Values.pulsar.standalone.enable }}
++            - name: PULSAR_SERVICE_URL
++              value: pulsar://{{ .Release.Name }}-pulsar-standalone.{{ .Release.Namespace }}.svc.cluster.local:6650
++            {{- else if .Values.pulsar.serviceUrl }}
 +            - name: PULSAR_SERVICE_URL
 +              value: {{ .Values.pulsar.serviceUrl }}
 +            {{- end }}
@@ -57,8 +60,134 @@ index 7f6c891..bb1146f 100644
            livenessProbe:
              {{- toYaml .Values.controllerManager.container.livenessProbe | nindent 12 }}
            readinessProbe:
+diff --git a/deploy/chart/templates/pulsar/service.yaml b/deploy/chart/templates/pulsar/service.yaml
+new file mode 100644
+index 0000000..a460cbc
+--- /dev/null
++++ b/deploy/chart/templates/pulsar/service.yaml
+@@ -0,0 +1,24 @@
++{{- if .Values.pulsar.standalone.enable }}
++apiVersion: v1
++kind: Service
++metadata:
++  name: {{ .Release.Name }}-pulsar-standalone
++  namespace: {{ .Release.Namespace }}
++  labels:
++    {{- include "chart.labels" . | nindent 4 }}
++    app: pulsar-standalone
++spec:
++  type: {{ .Values.pulsar.standalone.service.type }}
++  ports:
++    - name: pulsar
++      port: {{ .Values.pulsar.standalone.service.ports.pulsar }}
++      targetPort: 6650
++      protocol: TCP
++    - name: admin
++      port: {{ .Values.pulsar.standalone.service.ports.admin }}
++      targetPort: 8080
++      protocol: TCP
++  selector:
++    {{- include "chart.selectorLabels" . | nindent 4 }}
++    app: pulsar-standalone
++{{- end }} 
+\ No newline at end of file
+diff --git a/deploy/chart/templates/pulsar/statefulset.yaml b/deploy/chart/templates/pulsar/statefulset.yaml
+new file mode 100644
+index 0000000..c9722f5
+--- /dev/null
++++ b/deploy/chart/templates/pulsar/statefulset.yaml
+@@ -0,0 +1,88 @@
++{{- if .Values.pulsar.standalone.enable }}
++apiVersion: apps/v1
++kind: StatefulSet
++metadata:
++  name: {{ .Release.Name }}-pulsar-standalone
++  namespace: {{ .Release.Namespace }}
++  labels:
++    {{- include "chart.labels" . | nindent 4 }}
++    app: pulsar-standalone
++    app.kubernetes.io/component: messaging
++spec:
++  serviceName: {{ .Release.Name }}-pulsar-standalone
++  replicas: 1
++  selector:
++    matchLabels:
++      {{- include "chart.selectorLabels" . | nindent 6 }}
++      app: pulsar-standalone
++  template:
++    metadata:
++      labels:
++        {{- include "chart.labels" . | nindent 8 }}
++        app: pulsar-standalone
++        app.kubernetes.io/component: messaging
++    spec:
++      containers:
++        - name: pulsar
++          image: {{ .Values.pulsar.standalone.image.repository }}:{{ .Values.pulsar.standalone.image.tag }}
++          command:
++            - sh
++            - -c
++            - |
++              # Initialize Pulsar standalone
++              bin/pulsar standalone -nfw -nss
++          ports:
++            - name: pulsar
++              containerPort: 6650
++              protocol: TCP
++            - name: admin
++              containerPort: 8080
++              protocol: TCP
++          env:
++            - name: PULSAR_GC
++              value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=10"
++          resources:
++            {{- toYaml .Values.pulsar.standalone.resources | nindent 12 }}
++          volumeMounts:
++            - name: pulsar-data
++              mountPath: /pulsar/data
++            - name: pulsar-logs
++              mountPath: /pulsar/logs
++          livenessProbe:
++            httpGet:
++              path: /admin/v2/brokers/health
++              port: 8080
++            initialDelaySeconds: 60
++            periodSeconds: 30
++            timeoutSeconds: 5
++            failureThreshold: 3
++          readinessProbe:
++            httpGet:
++              path: /admin/v2/brokers/health
++              port: 8080
++            initialDelaySeconds: 30
++            periodSeconds: 10
++            timeoutSeconds: 3
++            failureThreshold: 3
++  volumeClaimTemplates:
++    - metadata:
++        name: pulsar-data
++      spec:
++        accessModes: ["ReadWriteOnce"]
++        {{- if .Values.pulsar.standalone.storage.storageClass }}
++        storageClassName: {{ .Values.pulsar.standalone.storage.storageClass }}
++        {{- end }}
++        resources:
++          requests:
++            storage: {{ .Values.pulsar.standalone.storage.size }}
++    - metadata:
++        name: pulsar-logs
++      spec:
++        accessModes: ["ReadWriteOnce"]
++        {{- if .Values.pulsar.standalone.storage.storageClass }}
++        storageClassName: {{ .Values.pulsar.standalone.storage.storageClass }}
++        {{- end }}
++        resources:
++          requests:
++            storage: {{ .Values.pulsar.standalone.storage.size }}
++{{- end }} 
+\ No newline at end of file
 diff --git a/dist/chart/values.yaml b/deploy/chart/values.yaml
-index 9357643..6b2dcf6 100644
+index 9357643..734155f 100644
 --- a/dist/chart/values.yaml
 +++ b/deploy/chart/values.yaml
 @@ -3,8 +3,9 @@ controllerManager:
@@ -72,12 +201,35 @@ index 9357643..6b2dcf6 100644
      args:
        - "--leader-elect"
        - "--metrics-bind-address=:8443"
-@@ -81,3 +82,8 @@ certmanager:
+@@ -81,3 +82,31 @@ certmanager:
  # [NETWORK POLICIES]: To enable NetworkPolicies set true
  networkPolicy:
    enable: false
 +
++# [PULSAR]: Pulsar configuration
 +pulsar:
++  # Enable Pulsar standalone cluster deployment
++  standalone:
++    enable: false
++    image:
++      repository: apachepulsar/pulsar
++      tag: "latest"
++    resources:
++      limits:
++        cpu: 1000m
++        memory: 2Gi
++      requests:
++        cpu: 500m
++        memory: 1Gi
++    storage:
++      size: 10Gi
++      storageClass: ""
++    service:
++      type: ClusterIP
++      ports:
++        pulsar: 6650
++        admin: 8080
++  # External Pulsar cluster configuration (used when standalone.enable is false)
 +  serviceUrl: pulsar://your-pulsar-cluster:6650
 +  authPlugin: ""
 +  authParams: ""

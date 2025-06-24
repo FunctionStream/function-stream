@@ -1,0 +1,88 @@
+{{- if .Values.pulsar.standalone.enable }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-pulsar-standalone
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+    app: pulsar-standalone
+    app.kubernetes.io/component: messaging
+spec:
+  serviceName: {{ .Release.Name }}-pulsar-standalone
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+      app: pulsar-standalone
+  template:
+    metadata:
+      labels:
+        {{- include "chart.labels" . | nindent 8 }}
+        app: pulsar-standalone
+        app.kubernetes.io/component: messaging
+    spec:
+      containers:
+        - name: pulsar
+          image: {{ .Values.pulsar.standalone.image.repository }}:{{ .Values.pulsar.standalone.image.tag }}
+          command:
+            - sh
+            - -c
+            - |
+              # Initialize Pulsar standalone
+              bin/pulsar standalone -nfw -nss
+          ports:
+            - name: pulsar
+              containerPort: 6650
+              protocol: TCP
+            - name: admin
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: PULSAR_GC
+              value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=10"
+          resources:
+            {{- toYaml .Values.pulsar.standalone.resources | nindent 12 }}
+          volumeMounts:
+            - name: pulsar-data
+              mountPath: /pulsar/data
+            - name: pulsar-logs
+              mountPath: /pulsar/logs
+          livenessProbe:
+            httpGet:
+              path: /admin/v2/brokers/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /admin/v2/brokers/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: pulsar-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.pulsar.standalone.storage.storageClass }}
+        storageClassName: {{ .Values.pulsar.standalone.storage.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.pulsar.standalone.storage.size }}
+    - metadata:
+        name: pulsar-logs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.pulsar.standalone.storage.storageClass }}
+        storageClassName: {{ .Values.pulsar.standalone.storage.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.pulsar.standalone.storage.size }}
+{{- end }} 

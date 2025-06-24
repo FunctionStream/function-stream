@@ -83,7 +83,30 @@ certmanager:
 networkPolicy:
   enable: false
 
+# [PULSAR]: Pulsar configuration
 pulsar:
+  # Enable Pulsar standalone cluster deployment
+  standalone:
+    enable: false
+    image:
+      repository: apachepulsar/pulsar
+      tag: "latest"
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    storage:
+      size: 10Gi
+      storageClass: ""
+    service:
+      type: ClusterIP
+      ports:
+        pulsar: 6650
+        admin: 8080
+  # External Pulsar cluster configuration (used when standalone.enable is false)
   serviceUrl: pulsar://your-pulsar-cluster:6650
   authPlugin: ""
   authParams: ""
