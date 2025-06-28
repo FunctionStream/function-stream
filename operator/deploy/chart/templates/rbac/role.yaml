@@ -5,7 +5,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: operator-manager-role
+  name: functionstream-operator-manager-role
 rules:
 - apiGroups:
   - apps

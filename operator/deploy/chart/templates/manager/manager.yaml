@@ -36,7 +36,10 @@ spec:
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}
           imagePullPolicy: {{ .Values.controllerManager.container.imagePullPolicy }}
           env:
-            {{- if .Values.pulsar.serviceUrl }}
+            {{- if .Values.pulsar.standalone.enable }}
+            - name: PULSAR_SERVICE_URL
+              value: pulsar://{{ .Release.Name }}-pulsar-standalone.{{ .Release.Namespace }}.svc.cluster.local:6650
+            {{- else if .Values.pulsar.serviceUrl }}
             - name: PULSAR_SERVICE_URL
               value: {{ .Values.pulsar.serviceUrl }}
             {{- end }}

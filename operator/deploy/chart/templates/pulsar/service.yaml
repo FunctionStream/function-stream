@@ -1,0 +1,24 @@
+{{- if .Values.pulsar.standalone.enable }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-pulsar-standalone
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+    app: pulsar-standalone
+spec:
+  type: {{ .Values.pulsar.standalone.service.type }}
+  ports:
+    - name: pulsar
+      port: {{ .Values.pulsar.standalone.service.ports.pulsar }}
+      targetPort: 6650
+      protocol: TCP
+    - name: admin
+      port: {{ .Values.pulsar.standalone.service.ports.admin }}
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    {{- include "chart.selectorLabels" . | nindent 4 }}
+    app: pulsar-standalone
+{{- end }} 

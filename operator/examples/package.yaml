@@ -1,27 +1,15 @@
 apiVersion: fs.functionstream.github.io/v1alpha1
 kind: Package
 metadata:
-  name: my-function
+  name: current-time
 spec:
-  displayName: My sample function
+  displayName: Get Current Time
   logo: ""
-  description: "A function package for string processing."
+  description: "A function for getting the current time."
   functionType:
     cloud:
-      image: "my-function:latest"
+      image: "functionstream/time-function:latest"
   modules:
-    string:
-      displayName: String Manipulation Function
-      description: "Appends an exclamation mark to the input string"
-      sourceSchema: |
-        type: object
-        properties:
-          text:
-            type: string
-        required:
-          - text
-      sinkSchema: |
-        type: object
-        properties:
-          result:
-            type: string
+    getCurrentTime:
+      displayName: Get Current Time
+      description: "A tool that returns the current time."
