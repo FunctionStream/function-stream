@@ -39,7 +39,7 @@ controllerManager:
     seccompProfile:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
-  serviceAccountName: operator-controller-manager
+  serviceAccountName: functionstream-operator
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
@@ -92,13 +92,13 @@ pulsar:
       repository: apachepulsar/pulsar
       tag: "latest"
     resources:
-      limits:
-        cpu: 1000m
-        memory: 2Gi
       requests:
         cpu: 500m
         memory: 1Gi
     storage:
+      # Enable persistence for Pulsar data
+      persistence:
+        enabled: false
       size: 10Gi
       storageClass: ""
     service:

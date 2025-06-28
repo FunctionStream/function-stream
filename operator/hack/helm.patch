@@ -93,10 +93,10 @@ index 0000000..a460cbc
 \ No newline at end of file
 diff --git a/deploy/chart/templates/pulsar/statefulset.yaml b/deploy/chart/templates/pulsar/statefulset.yaml
 new file mode 100644
-index 0000000..c9722f5
+index 0000000..a7f7ef8
 --- /dev/null
 +++ b/deploy/chart/templates/pulsar/statefulset.yaml
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,77 @@
 +{{- if .Values.pulsar.standalone.enable }}
 +apiVersion: apps/v1
 +kind: StatefulSet
@@ -137,16 +137,13 @@ index 0000000..c9722f5
 +            - name: admin
 +              containerPort: 8080
 +              protocol: TCP
-+          env:
-+            - name: PULSAR_GC
-+              value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=10"
 +          resources:
 +            {{- toYaml .Values.pulsar.standalone.resources | nindent 12 }}
++          {{- if .Values.pulsar.standalone.storage.persistence.enabled }}
 +          volumeMounts:
 +            - name: pulsar-data
 +              mountPath: /pulsar/data
-+            - name: pulsar-logs
-+              mountPath: /pulsar/logs
++          {{- end }}
 +          livenessProbe:
 +            httpGet:
 +              path: /admin/v2/brokers/health
@@ -163,6 +160,7 @@ index 0000000..c9722f5
 +            periodSeconds: 10
 +            timeoutSeconds: 3
 +            failureThreshold: 3
++  {{- if .Values.pulsar.standalone.storage.persistence.enabled }}
 +  volumeClaimTemplates:
 +    - metadata:
 +        name: pulsar-data
@@ -174,20 +172,81 @@ index 0000000..c9722f5
 +        resources:
 +          requests:
 +            storage: {{ .Values.pulsar.standalone.storage.size }}
-+    - metadata:
-+        name: pulsar-logs
-+      spec:
-+        accessModes: ["ReadWriteOnce"]
-+        {{- if .Values.pulsar.standalone.storage.storageClass }}
-+        storageClassName: {{ .Values.pulsar.standalone.storage.storageClass }}
-+        {{- end }}
-+        resources:
-+          requests:
-+            storage: {{ .Values.pulsar.standalone.storage.size }}
++  {{- end }}
 +{{- end }} 
 \ No newline at end of file
+diff --git a/dist/chart/templates/rbac/metrics_auth_role.yaml b/deploy/chart/templates/rbac/metrics_auth_role.yaml
+index b0c7913..decef92 100755
+--- a/dist/chart/templates/rbac/metrics_auth_role.yaml
++++ b/deploy/chart/templates/rbac/metrics_auth_role.yaml
+@@ -4,7 +4,7 @@ kind: ClusterRole
+ metadata:
+   labels:
+     {{- include "chart.labels" . | nindent 4 }}
+-  name: operator-metrics-auth-role
++  name: {{ .Release.Name }}-operator-metrics-auth-role
+ rules:
+ - apiGroups:
+   - authentication.k8s.io
+diff --git a/dist/chart/templates/rbac/metrics_auth_role_binding.yaml b/deploy/chart/templates/rbac/metrics_auth_role_binding.yaml
+index a13f6a6..0172099 100755
+--- a/dist/chart/templates/rbac/metrics_auth_role_binding.yaml
++++ b/deploy/chart/templates/rbac/metrics_auth_role_binding.yaml
+@@ -4,7 +4,7 @@ kind: ClusterRoleBinding
+ metadata:
+   labels:
+     {{- include "chart.labels" . | nindent 4 }}
+-  name: operator-metrics-auth-rolebinding
++  name: {{ .Release.Name }}-operator-metrics-auth-rolebinding
+ roleRef:
+   apiGroup: rbac.authorization.k8s.io
+   kind: ClusterRole
+diff --git a/dist/chart/templates/rbac/metrics_reader_role.yaml b/deploy/chart/templates/rbac/metrics_reader_role.yaml
+index 1f0a0f5..f5655e7 100755
+--- a/dist/chart/templates/rbac/metrics_reader_role.yaml
++++ b/deploy/chart/templates/rbac/metrics_reader_role.yaml
+@@ -4,7 +4,7 @@ kind: ClusterRole
+ metadata:
+   labels:
+     {{- include "chart.labels" . | nindent 4 }}
+-  name: operator-metrics-reader
++  name: {{ .Release.Name }}-operator-metrics-reader
+ rules:
+ - nonResourceURLs:
+   - "/metrics"
+diff --git a/dist/chart/templates/rbac/role.yaml b/deploy/chart/templates/rbac/role.yaml
+index 3ae0961..a32998a 100755
+--- a/dist/chart/templates/rbac/role.yaml
++++ b/deploy/chart/templates/rbac/role.yaml
+@@ -5,7 +5,7 @@ kind: ClusterRole
+ metadata:
+   labels:
+     {{- include "chart.labels" . | nindent 4 }}
+-  name: operator-manager-role
++  name: functionstream-operator-manager-role
+ rules:
+ - apiGroups:
+   - apps
+diff --git a/dist/chart/templates/rbac/role_binding.yaml b/deploy/chart/templates/rbac/role_binding.yaml
+index a4f2cfa..77c8250 100755
+--- a/dist/chart/templates/rbac/role_binding.yaml
++++ b/deploy/chart/templates/rbac/role_binding.yaml
+@@ -4,11 +4,11 @@ kind: ClusterRoleBinding
+ metadata:
+   labels:
+     {{- include "chart.labels" . | nindent 4 }}
+-  name: operator-manager-rolebinding
++  name: {{ .Release.Name }}-functionstream-operator-manager-rolebinding
+ roleRef:
+   apiGroup: rbac.authorization.k8s.io
+   kind: ClusterRole
+-  name: operator-manager-role
++  name: functionstream-operator-manager-role
+ subjects:
+ - kind: ServiceAccount
+   name: {{ .Values.controllerManager.serviceAccountName }}
 diff --git a/dist/chart/values.yaml b/deploy/chart/values.yaml
-index 9357643..734155f 100644
+index 9357643..4851d3b 100644
 --- a/dist/chart/values.yaml
 +++ b/deploy/chart/values.yaml
 @@ -3,8 +3,9 @@ controllerManager:
@@ -201,6 +260,15 @@ index 9357643..734155f 100644
      args:
        - "--leader-elect"
        - "--metrics-bind-address=:8443"
+@@ -38,7 +39,7 @@ controllerManager:
+     seccompProfile:
+       type: RuntimeDefault
+   terminationGracePeriodSeconds: 10
+-  serviceAccountName: operator-controller-manager
++  serviceAccountName: functionstream-operator
+ 
+ # [RBAC]: To enable RBAC (Permissions) configurations
+ rbac:
 @@ -81,3 +82,31 @@ certmanager:
  # [NETWORK POLICIES]: To enable NetworkPolicies set true
  networkPolicy:
@@ -215,13 +283,13 @@ index 9357643..734155f 100644
 +      repository: apachepulsar/pulsar
 +      tag: "latest"
 +    resources:
-+      limits:
-+        cpu: 1000m
-+        memory: 2Gi
 +      requests:
 +        cpu: 500m
 +        memory: 1Gi
 +    storage:
++      # Enable persistence for Pulsar data
++      persistence:
++        enabled: false
 +      size: 10Gi
 +      storageClass: ""
 +    service:

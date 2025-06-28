@@ -4,7 +4,7 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: operator-metrics-auth-rolebinding
+  name: {{ .Release.Name }}-operator-metrics-auth-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

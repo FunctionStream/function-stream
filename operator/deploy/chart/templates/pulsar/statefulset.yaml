@@ -38,16 +38,13 @@ spec:
             - name: admin
               containerPort: 8080
               protocol: TCP
-          env:
-            - name: PULSAR_GC
-              value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=10"
           resources:
             {{- toYaml .Values.pulsar.standalone.resources | nindent 12 }}
+          {{- if .Values.pulsar.standalone.storage.persistence.enabled }}
           volumeMounts:
             - name: pulsar-data
               mountPath: /pulsar/data
-            - name: pulsar-logs
-              mountPath: /pulsar/logs
+          {{- end }}
           livenessProbe:
             httpGet:
               path: /admin/v2/brokers/health
@@ -64,6 +61,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
+  {{- if .Values.pulsar.standalone.storage.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
         name: pulsar-data
@@ -75,14 +73,5 @@ spec:
         resources:
           requests:
             storage: {{ .Values.pulsar.standalone.storage.size }}
-    - metadata:
-        name: pulsar-logs
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        {{- if .Values.pulsar.standalone.storage.storageClass }}
-        storageClassName: {{ .Values.pulsar.standalone.storage.storageClass }}
-        {{- end }}
-        resources:
-          requests:
-            storage: {{ .Values.pulsar.standalone.storage.size }}
+  {{- end }}
 {{- end }} 
