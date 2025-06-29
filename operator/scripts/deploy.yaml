@@ -1,0 +1,1132 @@
+---
+# Source: operator/templates/namespace/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: function-stream
+---
+# Source: operator/templates/rbac/service_account.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: functionstream-operator
+  namespace: function-stream
+---
+# Source: operator/templates/crd/fs.functionstream.github.io_functions.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/resource-policy": keep
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: functions.fs.functionstream.github.io
+spec:
+  group: fs.functionstream.github.io
+  names:
+    kind: Function
+    listKind: FunctionList
+    plural: functions
+    singular: function
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Function is the Schema for the functions API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: FunctionSpec defines the desired state of Function
+            properties:
+              config:
+                additionalProperties:
+                  x-kubernetes-preserve-unknown-fields: true
+                description: Configurations as key-value pairs
+                type: object
+              description:
+                description: Description of the function
+                type: string
+              displayName:
+                description: Display name of the function
+                type: string
+              module:
+                description: Module name
+                type: string
+              package:
+                description: Package name
+                type: string
+              requestSource:
+                description: Request source
+                properties:
+                  pulsar:
+                    description: Pulsar source specification
+                    properties:
+                      topic:
+                        description: Topic name
+                        type: string
+                    required:
+                    - topic
+                    type: object
+                type: object
+              sink:
+                description: Sink specifies the sink configuration
+                properties:
+                  pulsar:
+                    description: Pulsar sink specification
+                    properties:
+                      topic:
+                        description: Topic name
+                        type: string
+                    required:
+                    - topic
+                    type: object
+                type: object
+              sources:
+                description: List of sources
+                items:
+                  description: SourceSpec defines a source or sink specification
+                  properties:
+                    pulsar:
+                      description: Pulsar source specification
+                      properties:
+                        topic:
+                          description: Topic name
+                          type: string
+                      required:
+                      - topic
+                      type: object
+                  type: object
+                type: array
+              subscriptionName:
+                type: string
+            required:
+            - module
+            - package
+            type: object
+          status:
+            description: FunctionStatus defines the observed state of Function
+            properties:
+              availableReplicas:
+                description: Number of available pods (ready for at least minReadySeconds)
+                format: int32
+                type: integer
+              observedGeneration:
+                description: Most recent generation observed for this Function
+                format: int64
+                type: integer
+              readyReplicas:
+                description: Total number of ready pods
+                format: int32
+                type: integer
+              replicas:
+                description: Total number of non-terminated pods targeted by this
+                  deployment
+                format: int32
+                type: integer
+              updatedReplicas:
+                description: Total number of updated pods
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+# Source: operator/templates/crd/fs.functionstream.github.io_packages.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/resource-policy": keep
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: packages.fs.functionstream.github.io
+spec:
+  group: fs.functionstream.github.io
+  names:
+    kind: Package
+    listKind: PackageList
+    plural: packages
+    shortNames:
+    - pkg
+    singular: package
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Package is the Schema for the packages API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PackageSpec defines the desired state of Package
+            properties:
+              description:
+                description: Description provides additional information about the
+                  package
+                type: string
+              displayName:
+                description: DisplayName is the human-readable name of the package
+                type: string
+              functionType:
+                description: FunctionType contains function type configuration
+                properties:
+                  cloud:
+                    description: Cloud contains cloud function package configuration
+                    properties:
+                      image:
+                        description: Image specifies the container image for cloud
+                          deployment
+                        type: string
+                    required:
+                    - image
+                    type: object
+                type: object
+              logo:
+                description: Logo is the URL or base64 encoded image for the package
+                  logo
+                type: string
+              modules:
+                additionalProperties:
+                  description: Module defines a module within a package
+                  properties:
+                    config:
+                      additionalProperties:
+                        description: ConfigItem defines a configuration item for a
+                          module
+                        properties:
+                          description:
+                            description: Description provides additional information
+                              about the config item
+                            type: string
+                          displayName:
+                            description: DisplayName is the human-readable name of
+                              the config item
+                            type: string
+                          required:
+                            description: Required indicates whether this config item
+                              is mandatory
+                            type: boolean
+                          type:
+                            description: Type specifies the data type of the config
+                              item
+                            type: string
+                        type: object
+                      description: Config is a list of configuration items for the
+                        module
+                      type: object
+                    description:
+                      description: Description provides additional information about
+                        the module
+                      type: string
+                    displayName:
+                      description: DisplayName is the human-readable name of the module
+                      type: string
+                    sinkSchema:
+                      description: SinkSchema defines the output schema for the module
+                      type: string
+                    sourceSchema:
+                      description: SourceSchema defines the input schema for the module
+                      type: string
+                  type: object
+                description: Modules is a map of module names to their configurations
+                type: object
+            required:
+            - functionType
+            - modules
+            type: object
+          status:
+            description: PackageStatus defines the observed state of Package.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+# Source: operator/templates/rbac/function_admin_role.yaml
+# This rule is not used by the project operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants full permissions ('*') over fs.functionstream.github.io.
+# This role is intended for users authorized to modify roles and bindings within the cluster,
+# enabling them to delegate specific permissions to other users or groups as needed.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: function-admin-role
+rules:
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions
+  verbs:
+  - '*'
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions/status
+  verbs:
+  - get
+---
+# Source: operator/templates/rbac/function_editor_role.yaml
+# This rule is not used by the project operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants permissions to create, update, and delete resources within the fs.functionstream.github.io.
+# This role is intended for users who need to manage these resources
+# but should not control RBAC or manage permissions for others.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: function-editor-role
+rules:
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions/status
+  verbs:
+  - get
+---
+# Source: operator/templates/rbac/function_viewer_role.yaml
+# This rule is not used by the project operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants read-only access to fs.functionstream.github.io resources.
+# This role is intended for users who need visibility into these resources
+# without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: function-viewer-role
+rules:
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions/status
+  verbs:
+  - get
+---
+# Source: operator/templates/rbac/metrics_auth_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: fs-operator-metrics-auth-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+# Source: operator/templates/rbac/metrics_reader_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: fs-operator-metrics-reader
+rules:
+- nonResourceURLs:
+  - "/metrics"
+  verbs:
+  - get
+---
+# Source: operator/templates/rbac/packages_admin_role.yaml
+# This rule is not used by the project operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants full permissions ('*') over fs.functionstream.github.io.
+# This role is intended for users authorized to modify roles and bindings within the cluster,
+# enabling them to delegate specific permissions to other users or groups as needed.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: packages-admin-role
+rules:
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages
+  verbs:
+  - '*'
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages/status
+  verbs:
+  - get
+---
+# Source: operator/templates/rbac/packages_editor_role.yaml
+# This rule is not used by the project operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants permissions to create, update, and delete resources within the fs.functionstream.github.io.
+# This role is intended for users who need to manage these resources
+# but should not control RBAC or manage permissions for others.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: packages-editor-role
+rules:
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages/status
+  verbs:
+  - get
+---
+# Source: operator/templates/rbac/packages_viewer_role.yaml
+# This rule is not used by the project operator itself.
+# It is provided to allow the cluster admin to help manage permissions for users.
+#
+# Grants read-only access to fs.functionstream.github.io resources.
+# This role is intended for users who need visibility into these resources
+# without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: packages-viewer-role
+rules:
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages/status
+  verbs:
+  - get
+---
+# Source: operator/templates/rbac/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: fs-operator-manager-role
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions
+  - package
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions/finalizers
+  - package/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - functions/status
+  - package/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - fs.functionstream.github.io
+  resources:
+  - packages
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: operator/templates/rbac/metrics_auth_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: functionstream-fs-operator-metrics-auth-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fs-operator-metrics-auth-role
+subjects:
+- kind: ServiceAccount
+  name: functionstream-operator
+  namespace: function-stream
+---
+# Source: operator/templates/rbac/role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: functionstream-fs-operator-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fs-operator-manager-role
+subjects:
+- kind: ServiceAccount
+  name: functionstream-operator
+  namespace: function-stream
+---
+# Source: operator/templates/rbac/leader_election_role.yaml
+# permissions to do leader election.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  namespace: function-stream
+  name: fs-operator-leader-election-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+# Source: operator/templates/rbac/leader_election_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  namespace: function-stream
+  name: functionstream-fs-operator-leader-election-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fs-operator-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: functionstream-operator
+  namespace: function-stream
+---
+# Source: operator/templates/metrics/metrics-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: operator-controller-manager-metrics-service
+  namespace: function-stream
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 8443
+      targetPort: 8443
+      protocol: TCP
+      name: https
+  selector:
+    control-plane: controller-manager
+---
+# Source: operator/templates/pulsar/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: functionstream-pulsar-standalone
+  namespace: function-stream
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+    app: pulsar-standalone
+spec:
+  type: ClusterIP
+  ports:
+    - name: pulsar
+      port: 6650
+      targetPort: 6650
+      protocol: TCP
+    - name: admin
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app: pulsar-standalone
+---
+# Source: operator/templates/webhook/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: operator-webhook-service
+  namespace: function-stream
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    control-plane: controller-manager
+---
+# Source: operator/templates/manager/manager.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: function-stream
+  namespace: function-stream
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+    control-plane: controller-manager
+spec:
+  replicas:  1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: operator
+      app.kubernetes.io/instance: functionstream
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/version: "0.1.0"
+        helm.sh/chart: "0.1.0"
+        app.kubernetes.io/name: operator
+        app.kubernetes.io/instance: functionstream
+        app.kubernetes.io/managed-by: Helm
+        control-plane: controller-manager
+    spec:
+      containers:
+        - name: manager
+          args:
+            - --leader-elect
+            - --metrics-bind-address=:8443
+            - --health-probe-bind-address=:8081
+          command:
+            - /manager
+          image: functionstream/operator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PULSAR_SERVICE_URL
+              value: pulsar://functionstream-pulsar-standalone.function-stream.svc.cluster.local:6650
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          volumeMounts:
+            - name: webhook-cert
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+            - name: metrics-certs
+              mountPath: /tmp/k8s-metrics-server/metrics-certs
+              readOnly: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: functionstream-operator
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: webhook-cert
+          secret:
+            secretName: webhook-server-cert
+        - name: metrics-certs
+          secret:
+            secretName: metrics-server-cert
+---
+# Source: operator/templates/pulsar/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: functionstream-pulsar-standalone
+  namespace: function-stream
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+    app: pulsar-standalone
+    app.kubernetes.io/component: messaging
+spec:
+  serviceName: functionstream-pulsar-standalone
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: operator
+      app.kubernetes.io/instance: functionstream
+      app: pulsar-standalone
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/version: "0.1.0"
+        helm.sh/chart: "0.1.0"
+        app.kubernetes.io/name: operator
+        app.kubernetes.io/instance: functionstream
+        app.kubernetes.io/managed-by: Helm
+        app: pulsar-standalone
+        app.kubernetes.io/component: messaging
+    spec:
+      containers:
+        - name: pulsar
+          image: apachepulsar/pulsar:latest
+          command:
+            - sh
+            - -c
+            - |
+              # Initialize Pulsar standalone
+              bin/pulsar standalone -nfw -nss
+          ports:
+            - name: pulsar
+              containerPort: 6650
+              protocol: TCP
+            - name: admin
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /admin/v2/brokers/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /admin/v2/brokers/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+# Source: operator/templates/prometheus/monitor.yaml
+# To integrate with Prometheus.
+---
+# Source: operator/templates/certmanager/certificate.yaml
+# Certificate for the webhook
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  annotations:
+    "helm.sh/resource-policy": keep
+  name: serving-cert
+  namespace: function-stream
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+spec:
+  dnsNames:
+    - operator.function-stream.svc
+    - operator.function-stream.svc.cluster.local
+    - operator-webhook-service.function-stream.svc
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: webhook-server-cert
+---
+# Source: operator/templates/certmanager/certificate.yaml
+# Certificate for the metrics
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: metrics-certs
+  namespace: function-stream
+spec:
+  dnsNames:
+    - operator.function-stream.svc
+    - operator.function-stream.svc.cluster.local
+    - operator-metrics-service.function-stream.svc
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: metrics-server-cert
+---
+# Source: operator/templates/certmanager/certificate.yaml
+# Self-signed Issuer
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+  name: selfsigned-issuer
+  namespace: function-stream
+spec:
+  selfSigned: {}
+---
+# Source: operator/templates/webhook/webhooks.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: operator-mutating-webhook-configuration
+  namespace: function-stream
+  annotations:
+    cert-manager.io/inject-ca-from: "function-stream/serving-cert"
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+webhooks:
+  - name: mfunction-v1alpha1.kb.io
+    clientConfig:
+      service:
+        name: operator-webhook-service
+        namespace: function-stream
+        path: /mutate-fs-functionstream-github-io-v1alpha1-function
+    failurePolicy: Fail
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+        apiGroups:
+          - fs.functionstream.github.io
+        apiVersions:
+          - v1alpha1
+        resources:
+          - functions
+  - name: mpackage-v1alpha1.kb.io
+    clientConfig:
+      service:
+        name: operator-webhook-service
+        namespace: function-stream
+        path: /mutate-fs-functionstream-github-io-v1alpha1-package
+    failurePolicy: Fail
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+        apiGroups:
+          - fs.functionstream.github.io
+        apiVersions:
+          - v1alpha1
+        resources:
+          - packages
+---
+# Source: operator/templates/webhook/webhooks.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: operator-validating-webhook-configuration
+  namespace: function-stream
+  annotations:
+    cert-manager.io/inject-ca-from: "function-stream/serving-cert"
+  labels:
+    app.kubernetes.io/version: "0.1.0"
+    helm.sh/chart: "0.1.0"
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/instance: functionstream
+    app.kubernetes.io/managed-by: Helm
+webhooks:
+  - name: vfunction-v1alpha1.kb.io
+    clientConfig:
+      service:
+        name: operator-webhook-service
+        namespace: function-stream
+        path: /validate-fs-functionstream-github-io-v1alpha1-function
+    failurePolicy: Fail
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        apiGroups:
+          - fs.functionstream.github.io
+        apiVersions:
+          - v1alpha1
+        resources:
+          - functions
+  - name: vpackage-v1alpha1.kb.io
+    clientConfig:
+      service:
+        name: operator-webhook-service
+        namespace: function-stream
+        path: /validate-fs-functionstream-github-io-v1alpha1-package
+    failurePolicy: Fail
+    sideEffects: None
+    admissionReviewVersions:
+      - v1
+    rules:
+      - operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        apiGroups:
+          - fs.functionstream.github.io
+        apiVersions:
+          - v1alpha1
+        resources:
+          - packages

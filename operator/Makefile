@@ -242,3 +242,6 @@ generate-helm:
 generate-hack-helm-patch:
 	kubebuilder edit --plugins=helm/v1-alpha --force
 	git diff --no-index dist deploy > hack/helm.patch || true
+
+generate-deploy-yaml:
+	helm template functionstream ./deploy/chart --set pulsar.standalone.enable=true --set createNamespace=true --namespace function-stream --create-namespace > ./scripts/deploy.yaml

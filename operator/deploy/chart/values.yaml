@@ -41,6 +41,8 @@ controllerManager:
   terminationGracePeriodSeconds: 10
   serviceAccountName: functionstream-operator
 
+createNamespace: false
+
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
   enable: true

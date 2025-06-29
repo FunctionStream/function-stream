@@ -4,7 +4,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: {{ .Release.Name }}-operator-metrics-reader
+  name: fs-operator-metrics-reader
 rules:
 - nonResourceURLs:
   - "/metrics"
