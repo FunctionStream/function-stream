@@ -4,7 +4,7 @@ kind: ClusterRole
 metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
-  name: {{ .Release.Name }}-operator-metrics-auth-role
+  name: fs-operator-metrics-auth-role
 rules:
 - apiGroups:
   - authentication.k8s.io
