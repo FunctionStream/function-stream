@@ -15,7 +15,6 @@
 name: Lint
 
 on:
-  push:
   pull_request:
 
 jobs:
@@ -33,5 +32,6 @@ jobs:
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v6
+        working-directory: ./operator/
         with:
           version: v1.63.4
