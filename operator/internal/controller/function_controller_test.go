@@ -596,7 +596,7 @@ var _ = Describe("Function Controller", func() {
 					Namespace: "default",
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-replicas",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-replicas"},
 					Module:           "mod",
 					Replicas:         &customReplicas,
 					SubscriptionName: "sub",
@@ -642,7 +642,7 @@ var _ = Describe("Function Controller", func() {
 					Namespace: "default",
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-replicas",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-replicas"},
 					Module:           "mod",
 					SubscriptionName: "sub-default",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out-default"}},
