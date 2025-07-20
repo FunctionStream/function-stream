@@ -114,6 +114,9 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// 5. Build Deployment
 	deployName := fmt.Sprintf("function-%s", fn.Name)
 	var replicas int32 = 1
+	if fn.Spec.Replicas != nil {
+		replicas = *fn.Spec.Replicas
+	}
 	labels := map[string]string{
 		"function": fn.Name,
 	}

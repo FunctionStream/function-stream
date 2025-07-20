@@ -49,6 +49,10 @@ type FunctionSpec struct {
 	// Module name
 	// +kubebuilder:validation:Required
 	Module string `json:"module"`
+	// Number of replicas for the function deployment
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=1
+	Replicas *int32 `json:"replicas,omitempty"`
 	// +kubebuilder:validation:Optional
 	SubscriptionName string `json:"subscriptionName,omitempty"`
 	// List of sources

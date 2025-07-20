@@ -21,7 +21,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -118,6 +118,11 @@ func (in *FunctionList) DeepCopyObject() runtime.Object {
 func (in *FunctionSpec) DeepCopyInto(out *FunctionSpec) {
 	*out = *in
 	out.PackageRef = in.PackageRef
+	if in.Replicas != nil {
+		in, out := &in.Replicas, &out.Replicas
+		*out = new(int32)
+		**out = **in
+	}
 	if in.Sources != nil {
 		in, out := &in.Sources, &out.Sources
 		*out = make([]SourceSpec, len(*in))

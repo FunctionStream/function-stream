@@ -65,6 +65,11 @@ spec:
                 required:
                 - name
                 type: object
+              replicas:
+                default: 1
+                description: Number of replicas for the function deployment
+                format: int32
+                type: integer
               requestSource:
                 description: Request source
                 properties:
