@@ -23,6 +23,7 @@ import (
 	fsv1alpha1 "github.com/FunctionStream/function-stream/operator/api/v1alpha1"
 	// TODO (user): Add any additional imports if needed
 	"context"
+	"fmt"
 )
 
 var _ = Describe("Packages Webhook", func() {
@@ -108,13 +109,13 @@ var _ = Describe("Packages Webhook", func() {
 				Spec: fsv1alpha1.FunctionSpec{
 					DisplayName: "fn1",
 					Description: "desc",
-					Package:     obj.Name,
+					PackageRef:  fsv1alpha1.PackageRef{Name: obj.Name},
 					Module:      "mod",
 				},
 			}
 			fn1.Name = "fn1"
 			fn1.Namespace = obj.Namespace
-			fn1.Labels = map[string]string{"package": obj.Name}
+			fn1.Labels = map[string]string{"package": fmt.Sprintf("%s.%s", obj.Namespace, obj.Name)}
 			fn2 := fn1.DeepCopy()
 			fn2.Name = "fn2"
 			Expect(k8sClient.Create(ctx, fn1)).To(Succeed())

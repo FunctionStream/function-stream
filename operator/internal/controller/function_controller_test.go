@@ -102,7 +102,7 @@ var _ = Describe("Function Controller", func() {
 
 			// Patch the Function to reference the Package and fill required fields
 			patch := client.MergeFrom(function.DeepCopy())
-			function.Spec.Package = "test-pkg"
+			function.Spec.PackageRef = fsv1alpha1.PackageRef{Name: "test-pkg"}
 			function.Spec.Module = "mod"
 			function.Spec.Sink = &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}}
 			function.Spec.RequestSource = &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in"}}
@@ -230,7 +230,7 @@ var _ = Describe("Function Controller", func() {
 					Namespace: "default",
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-label",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-label"},
 					Module:           "mod",
 					SubscriptionName: "sub",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}},
@@ -323,7 +323,7 @@ var _ = Describe("Function Controller", func() {
 					Labels:    map[string]string{"app": "test"}, // No package label initially
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-label-auto",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-label-auto"},
 					Module:           "mod",
 					SubscriptionName: "sub",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}},
@@ -332,22 +332,15 @@ var _ = Describe("Function Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, fn)).To(Succeed())
 
-			// Verify Function doesn't have package label initially
-			Expect(fn.Labels).NotTo(HaveKey("package"))
-
 			// Reconcile the Function
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify package label was added by re-fetching the Function
+			// Verify other labels are preserved
 			updatedFn := &fsv1alpha1.Function{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace}, updatedFn)).To(Succeed())
-			Expect(updatedFn.Labels).To(HaveKey("package"))
-			Expect(updatedFn.Labels["package"]).To(Equal("test-pkg-label-auto"))
-
-			// Verify other labels are preserved
 			Expect(updatedFn.Labels).To(HaveKey("app"))
 			Expect(updatedFn.Labels["app"]).To(Equal("test"))
 		})
@@ -404,7 +397,7 @@ var _ = Describe("Function Controller", func() {
 					Namespace: "default",
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-1",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-1"},
 					Module:           "mod",
 					SubscriptionName: "sub",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}},
@@ -419,25 +412,16 @@ var _ = Describe("Function Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify initial package label by re-fetching
-			updatedFn := &fsv1alpha1.Function{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace}, updatedFn)).To(Succeed())
-			Expect(updatedFn.Labels["package"]).To(Equal("test-pkg-1"))
-
 			// Change the package
-			patch := client.MergeFrom(updatedFn.DeepCopy())
-			updatedFn.Spec.Package = "test-pkg-2"
-			Expect(k8sClient.Patch(ctx, updatedFn, patch)).To(Succeed())
+			patch := client.MergeFrom(fn.DeepCopy())
+			fn.Spec.PackageRef = fsv1alpha1.PackageRef{Name: "test-pkg-2"}
+			Expect(k8sClient.Patch(ctx, fn, patch)).To(Succeed())
 
 			// Reconcile again
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
-
-			// Verify package label was updated by re-fetching
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace}, updatedFn)).To(Succeed())
-			Expect(updatedFn.Labels["package"]).To(Equal("test-pkg-2"))
 
 			// Verify deployment was updated with new image
 			deployName := "function-" + fn.Name
@@ -480,9 +464,10 @@ var _ = Describe("Function Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-fn-mapping-1",
 					Namespace: "default",
+					Labels:    map[string]string{"package": "default.test-pkg-mapping"},
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-mapping",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-mapping"},
 					Module:           "mod1",
 					SubscriptionName: "sub1",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out1"}},
@@ -495,9 +480,10 @@ var _ = Describe("Function Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-fn-mapping-2",
 					Namespace: "default",
+					Labels:    map[string]string{"package": "default.test-pkg-mapping"},
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-mapping",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-mapping"},
 					Module:           "mod2",
 					SubscriptionName: "sub2",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out2"}},
@@ -511,9 +497,10 @@ var _ = Describe("Function Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-fn-mapping-3",
 					Namespace: "default",
+					Labels:    map[string]string{"package": "default.different-pkg"},
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "different-pkg",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "different-pkg"},
 					Module:           "mod3",
 					SubscriptionName: "sub3",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out3"}},
@@ -522,7 +509,7 @@ var _ = Describe("Function Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, fn3)).To(Succeed())
 
-			// Initial reconcile to set up package labels
+			// Initial reconcile
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: fn1.Name, Namespace: fn1.Namespace},
 			})
@@ -532,15 +519,6 @@ var _ = Describe("Function Controller", func() {
 				NamespacedName: types.NamespacedName{Name: fn2.Name, Namespace: fn2.Namespace},
 			})
 			Expect(err).NotTo(HaveOccurred())
-
-			// Verify package labels were set by re-fetching
-			updatedFn1 := &fsv1alpha1.Function{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn1.Name, Namespace: fn1.Namespace}, updatedFn1)).To(Succeed())
-			Expect(updatedFn1.Labels["package"]).To(Equal("test-pkg-mapping"))
-
-			updatedFn2 := &fsv1alpha1.Function{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn2.Name, Namespace: fn2.Namespace}, updatedFn2)).To(Succeed())
-			Expect(updatedFn2.Labels["package"]).To(Equal("test-pkg-mapping"))
 
 			// Test the mapPackageToFunctions function
 			requests := controllerReconciler.mapPackageToFunctions(ctx, pkg)
@@ -618,7 +596,7 @@ var _ = Describe("Function Controller", func() {
 					Namespace: "default",
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-replicas",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-replicas"},
 					Module:           "mod",
 					Replicas:         &customReplicas,
 					SubscriptionName: "sub",
@@ -664,7 +642,7 @@ var _ = Describe("Function Controller", func() {
 					Namespace: "default",
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-replicas",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-replicas"},
 					Module:           "mod",
 					SubscriptionName: "sub-default",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out-default"}},
@@ -753,9 +731,10 @@ var _ = Describe("Function Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-fn-ns1",
 					Namespace: "namespace1",
+					Labels:    map[string]string{"package": "namespace1.test-pkg-ns1"},
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-ns1",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-ns1"},
 					Module:           "mod1",
 					SubscriptionName: "sub1",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out1"}},
@@ -769,9 +748,10 @@ var _ = Describe("Function Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-fn-ns2",
 					Namespace: "namespace2",
+					Labels:    map[string]string{"package": "namespace2.test-pkg-ns2"},
 				},
 				Spec: fsv1alpha1.FunctionSpec{
-					Package:          "test-pkg-ns2",
+					PackageRef:       fsv1alpha1.PackageRef{Name: "test-pkg-ns2"},
 					Module:           "mod2",
 					SubscriptionName: "sub2",
 					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out2"}},
@@ -780,7 +760,7 @@ var _ = Describe("Function Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, fn2)).To(Succeed())
 
-			// Initial reconcile to set up package labels
+			// Initial reconcile
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: fn1.Name, Namespace: fn1.Namespace},
 			})

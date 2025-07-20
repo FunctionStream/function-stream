@@ -95,19 +95,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-	// Wait for the Package and Function CRDs to be established
-	//crdNames := []string{"packages.fs.functionstream.github.io", "functions.fs.functionstream.github.io"}
-	//for _, crdName := range crdNames {
-	//	_ = wait.PollImmediate(100*time.Millisecond, 10*time.Second, func() (bool, error) {
-	//		var crd apiextensionsv1.CustomResourceDefinition
-	//		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: crdName}, &crd)
-	//		if err != nil {
-	//			return false, nil // keep retrying
-	//		}
-	//		return true, nil
-	//	})
-	//}
-
 	// start webhook server using Manager.
 	webhookInstallOptions := &testEnv.WebhookInstallOptions
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{

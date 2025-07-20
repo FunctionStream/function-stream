@@ -84,20 +84,16 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// 2. Ensure Function has package label
-	if fn.Labels == nil {
-		fn.Labels = make(map[string]string)
-	}
-	labelUpdated := false
-	if fn.Labels["package"] != fn.Spec.Package {
-		fn.Labels["package"] = fn.Spec.Package
-		labelUpdated = true
-	}
+	// 2. Get package label for later use
+	packageLabel := generatePackageLabel(&fn)
 
 	// 3. Get Package
 	var pkg fsv1alpha1.Package
-	if err := r.Get(ctx, types.NamespacedName{Name: fn.Spec.Package, Namespace: req.Namespace}, &pkg); err != nil {
-		log.Error(err, "Failed to get Package", "package", fn.Spec.Package)
+	packageNamespace := fn.Spec.PackageRef.Namespace
+	if packageNamespace == "" {
+		packageNamespace = req.Namespace
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: fn.Spec.PackageRef.Name, Namespace: packageNamespace}, &pkg); err != nil {
 		return ctrl.Result{}, err
 	}
 	image := ""
@@ -105,7 +101,7 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		image = pkg.Spec.FunctionType.Cloud.Image
 	}
 	if image == "" {
-		return ctrl.Result{}, fmt.Errorf("package %s has no image", fn.Spec.Package)
+		return ctrl.Result{}, fmt.Errorf("package %s has no image", packageLabel)
 	}
 
 	// 4. Build config yaml content
@@ -213,24 +209,6 @@ EOF
 		}
 	}
 
-	// 8. Update Function labels if needed
-	if labelUpdated {
-		// Re-fetch the Function to ensure we have the latest version
-		var latestFn fsv1alpha1.Function
-		if err := r.Get(ctx, req.NamespacedName, &latestFn); err != nil {
-			log.Error(err, "Failed to get latest Function for label update")
-			return ctrl.Result{}, err
-		}
-		// Apply our label changes to the latest version
-		if latestFn.Labels == nil {
-			latestFn.Labels = make(map[string]string)
-		}
-		latestFn.Labels["package"] = fn.Spec.Package
-		if err := r.Update(ctx, &latestFn); err != nil {
-			return utils.HandleReconcileError(log, err, "Conflict when updating Function labels, will retry automatically")
-		}
-	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -279,8 +257,8 @@ func buildFunctionConfigYaml(fn *fsv1alpha1.Function, operatorCfg Config) (strin
 	if fn.Spec.DisplayName != "" {
 		cfg["displayName"] = fn.Spec.DisplayName
 	}
-	if fn.Spec.Package != "" {
-		cfg["package"] = fn.Spec.Package
+	if fn.Spec.PackageRef.Name != "" {
+		cfg["package"] = generatePackageLabel(fn)
 	}
 	out, err := yaml.Marshal(cfg)
 	if err != nil {
@@ -306,6 +284,15 @@ func hasFunctionLabel(obj client.Object) bool {
 	return ok
 }
 
+// generatePackageLabel generates a package label in the format "{namespace}.{packageName}"
+func generatePackageLabel(fn *fsv1alpha1.Function) string {
+	packageNamespace := fn.Spec.PackageRef.Namespace
+	if packageNamespace == "" {
+		packageNamespace = fn.Namespace
+	}
+	return fmt.Sprintf("%s.%s", packageNamespace, fn.Spec.PackageRef.Name)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *FunctionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	functionLabelPredicate := predicate.NewPredicateFuncs(hasFunctionLabel)
@@ -327,22 +314,32 @@ func (r *FunctionReconciler) mapPackageToFunctions(ctx context.Context, obj clie
 		return nil
 	}
 
-	// Get Functions that reference this Package using label selector
+	var requests []reconcile.Request
+
+	// Get Functions that reference this Package using the new label format {namespace}.{package name}
+	packageLabel := fmt.Sprintf("%s.%s", packageObj.Namespace, packageObj.Name)
 	var functions fsv1alpha1.FunctionList
 	if err := r.List(ctx, &functions,
-		client.InNamespace(packageObj.Namespace),
-		client.MatchingLabels(map[string]string{"package": packageObj.Name})); err != nil {
+		client.MatchingLabels(map[string]string{"package": packageLabel})); err != nil {
 		return nil
 	}
 
-	var requests []reconcile.Request
 	for _, function := range functions.Items {
-		requests = append(requests, reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      function.Name,
-				Namespace: function.Namespace,
-			},
-		})
+		// Check if this function actually references this package
+		if function.Spec.PackageRef.Name == packageObj.Name {
+			packageNamespace := function.Spec.PackageRef.Namespace
+			if packageNamespace == "" {
+				packageNamespace = function.Namespace
+			}
+			if packageNamespace == packageObj.Namespace {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      function.Name,
+						Namespace: function.Namespace,
+					},
+				})
+			}
+		}
 	}
 
 	return requests

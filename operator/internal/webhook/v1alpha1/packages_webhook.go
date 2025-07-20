@@ -108,8 +108,9 @@ func (v *PackagesCustomValidator) referencingFunctions(ctx context.Context, name
 		return nil, fmt.Errorf("failed to list Functions in namespace '%s': %w", namespace, err)
 	}
 	var referencing []string
+	packageLabel := fmt.Sprintf("%s.%s", namespace, packageName)
 	for _, fn := range functionList.Items {
-		if fn.Labels["package"] == packageName {
+		if fn.Labels["package"] == packageLabel {
 			referencing = append(referencing, fn.Name)
 		}
 	}

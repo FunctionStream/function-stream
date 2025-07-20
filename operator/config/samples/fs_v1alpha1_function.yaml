@@ -8,6 +8,8 @@ metadata:
 spec:
   displayName: "Sample Function"
   description: "A sample function for demonstration purposes."
-  package: "sample-package"
+  packageRef:
+    name: "sample-package"
+    # namespace: "default"  # Optional: defaults to the same namespace as the Function
   module: "sample-module"
   # TODO(user): Add fields here

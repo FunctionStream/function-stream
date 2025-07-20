@@ -68,11 +68,16 @@ func (d *FunctionCustomDefaulter) Default(ctx context.Context, obj runtime.Objec
 	}
 	functionlog.Info("Defaulting for Function", "name", function.GetName())
 
-	// Ensure the 'package' label is always set to the current Spec.Package value
+	// Ensure the 'package' label is always set to the current Spec.PackageRef value
 	if function.Labels == nil {
 		function.Labels = make(map[string]string)
 	}
-	function.Labels["package"] = function.Spec.Package
+	packageNamespace := function.Spec.PackageRef.Namespace
+	if packageNamespace == "" {
+		packageNamespace = function.Namespace
+	}
+	packageLabel := fmt.Sprintf("%s.%s", packageNamespace, function.Spec.PackageRef.Name)
+	function.Labels["package"] = packageLabel
 
 	return nil
 }
@@ -98,12 +103,16 @@ var _ webhook.CustomValidator = &FunctionCustomValidator{}
 func (v *FunctionCustomValidator) validateReferences(ctx context.Context, function *fsv1alpha1.Function) error {
 	// Check if the referenced package exists
 	var pkg fsv1alpha1.Package
+	packageNamespace := function.Spec.PackageRef.Namespace
+	if packageNamespace == "" {
+		packageNamespace = function.Namespace
+	}
 	err := v.Client.Get(ctx, client.ObjectKey{
-		Namespace: function.Namespace,
-		Name:      function.Spec.Package,
+		Namespace: packageNamespace,
+		Name:      function.Spec.PackageRef.Name,
 	}, &pkg)
 	if err != nil {
-		return fmt.Errorf("referenced package '%s' not found in namespace '%s': %w", function.Spec.Package, function.Namespace, err)
+		return fmt.Errorf("referenced package '%s' not found in namespace '%s': %w", function.Spec.PackageRef.Name, packageNamespace, err)
 	}
 	// Add more reference checks here in the future as needed
 	return nil
