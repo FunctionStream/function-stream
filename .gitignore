@@ -111,3 +111,6 @@ bin/
 benchmark/*.pprof
 
 operator/vendor/
+
+._*
+**/.DS_Store
