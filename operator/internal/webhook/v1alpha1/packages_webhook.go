@@ -118,18 +118,6 @@ func (v *PackagesCustomValidator) referencingFunctions(ctx context.Context, name
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Packages.
 func (v *PackagesCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	packages, ok := newObj.(*fsv1alpha1.Package)
-	if !ok {
-		return nil, fmt.Errorf("expected a Packages object for the newObj but got %T", newObj)
-	}
-	packageslog.Info("Validation for Packages upon update", "name", packages.GetName())
-
-	if referencing, err := v.referencingFunctions(ctx, packages.Namespace, packages.Name); err != nil {
-		return nil, err
-	} else if len(referencing) > 0 {
-		return nil, fmt.Errorf("cannot update Package '%s' because it is referenced by the following Functions in the same namespace: %v", packages.Name, referencing)
-	}
-
 	return nil, nil
 }
 

@@ -285,5 +285,416 @@ var _ = Describe("Function Controller", func() {
 			// Get Deployment again, the hash should remain unchanged
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, deploy)).To(Succeed())
 		})
+
+		It("should automatically add package label to Function", func() {
+			By("creating a Function without package label")
+			controllerReconciler := &FunctionReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Config: Config{
+					PulsarServiceURL: "pulsar://test-broker:6650",
+					PulsarAuthPlugin: "org.apache.pulsar.client.impl.auth.AuthenticationToken",
+					PulsarAuthParams: "token:my-token",
+				},
+			}
+
+			// Create Package first
+			pkg := &fsv1alpha1.Package{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pkg-label-auto",
+					Namespace: "default",
+				},
+				Spec: fsv1alpha1.PackageSpec{
+					DisplayName: "Test Package",
+					Description: "desc",
+					FunctionType: fsv1alpha1.FunctionType{
+						Cloud: &fsv1alpha1.CloudType{Image: "busybox:latest"},
+					},
+					Modules: map[string]fsv1alpha1.Module{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pkg)).To(Succeed())
+
+			// Create Function without package label
+			fn := &fsv1alpha1.Function{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-fn-label-auto",
+					Namespace: "default",
+					Labels:    map[string]string{"app": "test"}, // No package label initially
+				},
+				Spec: fsv1alpha1.FunctionSpec{
+					Package:          "test-pkg-label-auto",
+					Module:           "mod",
+					SubscriptionName: "sub",
+					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}},
+					RequestSource:    &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, fn)).To(Succeed())
+
+			// Verify Function doesn't have package label initially
+			Expect(fn.Labels).NotTo(HaveKey("package"))
+
+			// Reconcile the Function
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify package label was added by re-fetching the Function
+			updatedFn := &fsv1alpha1.Function{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace}, updatedFn)).To(Succeed())
+			Expect(updatedFn.Labels).To(HaveKey("package"))
+			Expect(updatedFn.Labels["package"]).To(Equal("test-pkg-label-auto"))
+
+			// Verify other labels are preserved
+			Expect(updatedFn.Labels).To(HaveKey("app"))
+			Expect(updatedFn.Labels["app"]).To(Equal("test"))
+		})
+
+		It("should update package label when Function package changes", func() {
+			By("creating Functions with different packages")
+			controllerReconciler := &FunctionReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Config: Config{
+					PulsarServiceURL: "pulsar://test-broker:6650",
+					PulsarAuthPlugin: "org.apache.pulsar.client.impl.auth.AuthenticationToken",
+					PulsarAuthParams: "token:my-token",
+				},
+			}
+
+			// Create two Packages
+			pkg1 := &fsv1alpha1.Package{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pkg-1",
+					Namespace: "default",
+				},
+				Spec: fsv1alpha1.PackageSpec{
+					DisplayName: "Test Package 1",
+					Description: "desc",
+					FunctionType: fsv1alpha1.FunctionType{
+						Cloud: &fsv1alpha1.CloudType{Image: "busybox:latest"},
+					},
+					Modules: map[string]fsv1alpha1.Module{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pkg1)).To(Succeed())
+
+			pkg2 := &fsv1alpha1.Package{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pkg-2",
+					Namespace: "default",
+				},
+				Spec: fsv1alpha1.PackageSpec{
+					DisplayName: "Test Package 2",
+					Description: "desc",
+					FunctionType: fsv1alpha1.FunctionType{
+						Cloud: &fsv1alpha1.CloudType{Image: "nginx:latest"},
+					},
+					Modules: map[string]fsv1alpha1.Module{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pkg2)).To(Succeed())
+
+			// Create Function with initial package
+			fn := &fsv1alpha1.Function{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-fn-package-change",
+					Namespace: "default",
+				},
+				Spec: fsv1alpha1.FunctionSpec{
+					Package:          "test-pkg-1",
+					Module:           "mod",
+					SubscriptionName: "sub",
+					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out"}},
+					RequestSource:    &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, fn)).To(Succeed())
+
+			// Initial reconcile
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify initial package label by re-fetching
+			updatedFn := &fsv1alpha1.Function{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace}, updatedFn)).To(Succeed())
+			Expect(updatedFn.Labels["package"]).To(Equal("test-pkg-1"))
+
+			// Change the package
+			patch := client.MergeFrom(updatedFn.DeepCopy())
+			updatedFn.Spec.Package = "test-pkg-2"
+			Expect(k8sClient.Patch(ctx, updatedFn, patch)).To(Succeed())
+
+			// Reconcile again
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify package label was updated by re-fetching
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn.Name, Namespace: fn.Namespace}, updatedFn)).To(Succeed())
+			Expect(updatedFn.Labels["package"]).To(Equal("test-pkg-2"))
+
+			// Verify deployment was updated with new image
+			deployName := "function-" + fn.Name
+			deploy := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, deploy)).To(Succeed())
+			Expect(deploy.Spec.Template.Spec.Containers[0].Image).To(Equal("nginx:latest"))
+		})
+
+		It("should map Package changes to related Functions", func() {
+			By("creating multiple Functions that reference the same Package")
+			controllerReconciler := &FunctionReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Config: Config{
+					PulsarServiceURL: "pulsar://test-broker:6650",
+					PulsarAuthPlugin: "org.apache.pulsar.client.impl.auth.AuthenticationToken",
+					PulsarAuthParams: "token:my-token",
+				},
+			}
+
+			// Create Package
+			pkg := &fsv1alpha1.Package{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pkg-mapping",
+					Namespace: "default",
+				},
+				Spec: fsv1alpha1.PackageSpec{
+					DisplayName: "Test Package",
+					Description: "desc",
+					FunctionType: fsv1alpha1.FunctionType{
+						Cloud: &fsv1alpha1.CloudType{Image: "busybox:latest"},
+					},
+					Modules: map[string]fsv1alpha1.Module{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pkg)).To(Succeed())
+
+			// Create multiple Functions that reference the same Package
+			fn1 := &fsv1alpha1.Function{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-fn-mapping-1",
+					Namespace: "default",
+				},
+				Spec: fsv1alpha1.FunctionSpec{
+					Package:          "test-pkg-mapping",
+					Module:           "mod1",
+					SubscriptionName: "sub1",
+					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out1"}},
+					RequestSource:    &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in1"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, fn1)).To(Succeed())
+
+			fn2 := &fsv1alpha1.Function{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-fn-mapping-2",
+					Namespace: "default",
+				},
+				Spec: fsv1alpha1.FunctionSpec{
+					Package:          "test-pkg-mapping",
+					Module:           "mod2",
+					SubscriptionName: "sub2",
+					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out2"}},
+					RequestSource:    &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in2"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, fn2)).To(Succeed())
+
+			// Create a Function that references a different Package
+			fn3 := &fsv1alpha1.Function{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-fn-mapping-3",
+					Namespace: "default",
+				},
+				Spec: fsv1alpha1.FunctionSpec{
+					Package:          "different-pkg",
+					Module:           "mod3",
+					SubscriptionName: "sub3",
+					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out3"}},
+					RequestSource:    &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in3"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, fn3)).To(Succeed())
+
+			// Initial reconcile to set up package labels
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: fn1.Name, Namespace: fn1.Namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: fn2.Name, Namespace: fn2.Namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify package labels were set by re-fetching
+			updatedFn1 := &fsv1alpha1.Function{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn1.Name, Namespace: fn1.Namespace}, updatedFn1)).To(Succeed())
+			Expect(updatedFn1.Labels["package"]).To(Equal("test-pkg-mapping"))
+
+			updatedFn2 := &fsv1alpha1.Function{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fn2.Name, Namespace: fn2.Namespace}, updatedFn2)).To(Succeed())
+			Expect(updatedFn2.Labels["package"]).To(Equal("test-pkg-mapping"))
+
+			// Test the mapPackageToFunctions function
+			requests := controllerReconciler.mapPackageToFunctions(ctx, pkg)
+			Expect(requests).To(HaveLen(2))
+
+			// Verify the requests contain the correct Functions
+			requestNames := make(map[string]bool)
+			for _, req := range requests {
+				requestNames[req.NamespacedName.Name] = true
+			}
+			Expect(requestNames).To(HaveKey("test-fn-mapping-1"))
+			Expect(requestNames).To(HaveKey("test-fn-mapping-2"))
+			Expect(requestNames).NotTo(HaveKey("test-fn-mapping-3")) // Should not be included
+
+			// Test that updating the Package triggers reconciliation of related Functions
+			// Update the Package image
+			patch := client.MergeFrom(pkg.DeepCopy())
+			pkg.Spec.FunctionType.Cloud.Image = "nginx:latest"
+			Expect(k8sClient.Patch(ctx, pkg, patch)).To(Succeed())
+
+			// Simulate the Package update by calling mapPackageToFunctions
+			requests = controllerReconciler.mapPackageToFunctions(ctx, pkg)
+			Expect(requests).To(HaveLen(2))
+
+			// Manually reconcile the Functions to simulate the triggered reconciliation
+			for _, req := range requests {
+				_, err := controllerReconciler.Reconcile(ctx, req)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			// Verify that the Deployments were updated with the new image
+			deploy1 := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "function-" + fn1.Name, Namespace: fn1.Namespace}, deploy1)).To(Succeed())
+			Expect(deploy1.Spec.Template.Spec.Containers[0].Image).To(Equal("nginx:latest"))
+
+			deploy2 := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "function-" + fn2.Name, Namespace: fn2.Namespace}, deploy2)).To(Succeed())
+			Expect(deploy2.Spec.Template.Spec.Containers[0].Image).To(Equal("nginx:latest"))
+		})
+
+		It("should handle Package updates in different namespaces", func() {
+			By("creating Functions and Packages in different namespaces")
+			controllerReconciler := &FunctionReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				Config: Config{
+					PulsarServiceURL: "pulsar://test-broker:6650",
+					PulsarAuthPlugin: "org.apache.pulsar.client.impl.auth.AuthenticationToken",
+					PulsarAuthParams: "token:my-token",
+				},
+			}
+
+			// Create namespaces
+			ns1 := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "namespace1",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns1)).To(Succeed())
+
+			ns2 := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "namespace2",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns2)).To(Succeed())
+
+			// Create Package in namespace1
+			pkg1 := &fsv1alpha1.Package{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pkg-ns1",
+					Namespace: "namespace1",
+				},
+				Spec: fsv1alpha1.PackageSpec{
+					DisplayName: "Test Package NS1",
+					Description: "desc",
+					FunctionType: fsv1alpha1.FunctionType{
+						Cloud: &fsv1alpha1.CloudType{Image: "busybox:latest"},
+					},
+					Modules: map[string]fsv1alpha1.Module{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pkg1)).To(Succeed())
+
+			// Create Package in namespace2
+			pkg2 := &fsv1alpha1.Package{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pkg-ns2",
+					Namespace: "namespace2",
+				},
+				Spec: fsv1alpha1.PackageSpec{
+					DisplayName: "Test Package NS2",
+					Description: "desc",
+					FunctionType: fsv1alpha1.FunctionType{
+						Cloud: &fsv1alpha1.CloudType{Image: "nginx:latest"},
+					},
+					Modules: map[string]fsv1alpha1.Module{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pkg2)).To(Succeed())
+
+			// Create Function in namespace1
+			fn1 := &fsv1alpha1.Function{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-fn-ns1",
+					Namespace: "namespace1",
+				},
+				Spec: fsv1alpha1.FunctionSpec{
+					Package:          "test-pkg-ns1",
+					Module:           "mod1",
+					SubscriptionName: "sub1",
+					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out1"}},
+					RequestSource:    &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in1"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, fn1)).To(Succeed())
+
+			// Create Function in namespace2
+			fn2 := &fsv1alpha1.Function{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-fn-ns2",
+					Namespace: "namespace2",
+				},
+				Spec: fsv1alpha1.FunctionSpec{
+					Package:          "test-pkg-ns2",
+					Module:           "mod2",
+					SubscriptionName: "sub2",
+					Sink:             &fsv1alpha1.SinkSpec{Pulsar: &fsv1alpha1.PulsarSinkSpec{Topic: "out2"}},
+					RequestSource:    &fsv1alpha1.SourceSpec{Pulsar: &fsv1alpha1.PulsarSourceSpec{Topic: "in2"}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, fn2)).To(Succeed())
+
+			// Initial reconcile to set up package labels
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: fn1.Name, Namespace: fn1.Namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: fn2.Name, Namespace: fn2.Namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Test that Package updates only affect Functions in the same namespace
+			requests1 := controllerReconciler.mapPackageToFunctions(ctx, pkg1)
+			Expect(requests1).To(HaveLen(1))
+			Expect(requests1[0].NamespacedName.Name).To(Equal("test-fn-ns1"))
+			Expect(requests1[0].NamespacedName.Namespace).To(Equal("namespace1"))
+
+			requests2 := controllerReconciler.mapPackageToFunctions(ctx, pkg2)
+			Expect(requests2).To(HaveLen(1))
+			Expect(requests2[0].NamespacedName.Name).To(Equal("test-fn-ns2"))
+			Expect(requests2[0].NamespacedName.Namespace).To(Equal("namespace2"))
+		})
 	})
 })

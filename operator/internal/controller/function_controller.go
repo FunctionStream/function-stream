@@ -19,9 +19,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
+
 	"github.com/FunctionStream/function-stream/operator/utils"
 	"k8s.io/apimachinery/pkg/util/json"
-	"reflect"
 
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,8 +34,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	fsv1alpha1 "github.com/FunctionStream/function-stream/operator/api/v1alpha1"
 )
@@ -81,7 +84,17 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// 2. Get Package
+	// 2. Ensure Function has package label
+	if fn.Labels == nil {
+		fn.Labels = make(map[string]string)
+	}
+	labelUpdated := false
+	if fn.Labels["package"] != fn.Spec.Package {
+		fn.Labels["package"] = fn.Spec.Package
+		labelUpdated = true
+	}
+
+	// 3. Get Package
 	var pkg fsv1alpha1.Package
 	if err := r.Get(ctx, types.NamespacedName{Name: fn.Spec.Package, Namespace: req.Namespace}, &pkg); err != nil {
 		log.Error(err, "Failed to get Package", "package", fn.Spec.Package)
@@ -95,14 +108,14 @@ func (r *FunctionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("package %s has no image", fn.Spec.Package)
 	}
 
-	// 3. Build config yaml content
+	// 4. Build config yaml content
 	configYaml, err := buildFunctionConfigYaml(&fn, r.Config)
 	if err != nil {
 		log.Error(err, "Failed to marshal config yaml")
 		return ctrl.Result{}, err
 	}
 
-	// 4. Build Deployment
+	// 5. Build Deployment
 	deployName := fmt.Sprintf("function-%s", fn.Name)
 	var replicas int32 = 1
 	labels := map[string]string{
@@ -132,19 +145,17 @@ EOF
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{{
-						Name:            "init-config",
-						Image:           image,
-						ImagePullPolicy: corev1.PullIfNotPresent,
-						Command:         []string{"/bin/sh", "-c", initCommand},
+						Name:    "init-config",
+						Image:   image,
+						Command: []string{"/bin/sh", "-c", initCommand},
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      "function-config",
 							MountPath: "/config",
 						}},
 					}},
 					Containers: []corev1.Container{{
-						Name:            "function",
-						Image:           image,
-						ImagePullPolicy: corev1.PullIfNotPresent,
+						Name:  "function",
+						Image: image,
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      "function-config",
 							MountPath: "/config",
@@ -168,7 +179,7 @@ EOF
 		return ctrl.Result{}, err
 	}
 
-	// 5. Create or Update Deployment
+	// 6. Create or Update Deployment
 	var existingDeploy appsv1.Deployment
 	deployErr := r.Get(ctx, types.NamespacedName{Name: deployName, Namespace: fn.Namespace}, &existingDeploy)
 	if deployErr == nil {
@@ -196,6 +207,24 @@ EOF
 		fn.Status = convertDeploymentStatusToFunctionStatus(&existingDeploy.Status)
 		if err := r.Status().Update(ctx, &fn); err != nil {
 			return utils.HandleReconcileError(log, err, "Conflict when updating Function status, will retry automatically")
+		}
+	}
+
+	// 8. Update Function labels if needed
+	if labelUpdated {
+		// Re-fetch the Function to ensure we have the latest version
+		var latestFn fsv1alpha1.Function
+		if err := r.Get(ctx, req.NamespacedName, &latestFn); err != nil {
+			log.Error(err, "Failed to get latest Function for label update")
+			return ctrl.Result{}, err
+		}
+		// Apply our label changes to the latest version
+		if latestFn.Labels == nil {
+			latestFn.Labels = make(map[string]string)
+		}
+		latestFn.Labels["package"] = fn.Spec.Package
+		if err := r.Update(ctx, &latestFn); err != nil {
+			return utils.HandleReconcileError(log, err, "Conflict when updating Function labels, will retry automatically")
 		}
 	}
 
@@ -280,6 +309,38 @@ func (r *FunctionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&fsv1alpha1.Function{}).
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(functionLabelPredicate)).
+		Watches(
+			&fsv1alpha1.Package{},
+			handler.EnqueueRequestsFromMapFunc(r.mapPackageToFunctions),
+		).
 		Named("function").
 		Complete(r)
+}
+
+// mapPackageToFunctions maps Package changes to related Functions
+func (r *FunctionReconciler) mapPackageToFunctions(ctx context.Context, obj client.Object) []reconcile.Request {
+	packageObj, ok := obj.(*fsv1alpha1.Package)
+	if !ok {
+		return nil
+	}
+
+	// Get Functions that reference this Package using label selector
+	var functions fsv1alpha1.FunctionList
+	if err := r.List(ctx, &functions,
+		client.InNamespace(packageObj.Namespace),
+		client.MatchingLabels(map[string]string{"package": packageObj.Name})); err != nil {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, function := range functions.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      function.Name,
+				Namespace: function.Namespace,
+			},
+		})
+	}
+
+	return requests
 }
