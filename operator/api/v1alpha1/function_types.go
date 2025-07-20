@@ -21,6 +21,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// PackageRef defines a reference to a Package resource
+// +kubebuilder:object:generate=true
+// +kubebuilder:validation:Optional
+type PackageRef struct {
+	// Name of the Package resource
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// Namespace of the Package resource
+	// +kubebuilder:validation:Optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // FunctionSpec defines the desired state of Function
 // +kubebuilder:object:generate=true
 // +kubebuilder:validation:Optional
@@ -31,9 +43,9 @@ type FunctionSpec struct {
 	// Description of the function
 	// +kubebuilder:validation:Optional
 	Description string `json:"description,omitempty"`
-	// Package name
+	// Package reference
 	// +kubebuilder:validation:Required
-	Package string `json:"package"`
+	PackageRef PackageRef `json:"packageRef"`
 	// Module name
 	// +kubebuilder:validation:Required
 	Module string `json:"module"`

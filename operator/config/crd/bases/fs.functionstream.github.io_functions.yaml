@@ -53,9 +53,18 @@ spec:
               module:
                 description: Module name
                 type: string
-              package:
-                description: Package name
-                type: string
+              packageRef:
+                description: Package reference
+                properties:
+                  name:
+                    description: Name of the Package resource
+                    type: string
+                  namespace:
+                    description: Namespace of the Package resource
+                    type: string
+                required:
+                - name
+                type: object
               requestSource:
                 description: Request source
                 properties:
@@ -102,7 +111,7 @@ spec:
                 type: string
             required:
             - module
-            - package
+            - packageRef
             type: object
           status:
             description: FunctionStatus defines the observed state of Function
