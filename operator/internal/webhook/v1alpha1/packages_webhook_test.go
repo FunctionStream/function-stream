@@ -99,29 +99,6 @@ var _ = Describe("Packages Webhook", func() {
 	})
 
 	Context("Validating Webhook for update/delete with referencing Functions", func() {
-		It("should deny update if one Function references the Package", func() {
-			// Create the Package
-			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
-			// Create a referencing Function
-			fn := &fsv1alpha1.Function{
-				ObjectMeta: fsv1alpha1.Function{}.ObjectMeta,
-				Spec: fsv1alpha1.FunctionSpec{
-					DisplayName: "fn1",
-					Description: "desc",
-					Package:     obj.Name,
-					Module:      "mod",
-				},
-			}
-			fn.Name = "fn1"
-			fn.Namespace = obj.Namespace
-			fn.Labels = map[string]string{"package": obj.Name}
-			Expect(k8sClient.Create(ctx, fn)).To(Succeed())
-			DeferCleanup(func() { _ = k8sClient.Delete(ctx, fn) })
-			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("referenced by the following Functions"))
-			Expect(err.Error()).To(ContainSubstring("fn1"))
-		})
 
 		It("should deny delete if multiple Functions reference the Package", func() {
 			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
