@@ -62,6 +62,11 @@ spec:
               package:
                 description: Package name
                 type: string
+              replicas:
+                default: 1
+                description: Number of replicas for the function deployment
+                format: int32
+                type: integer
               requestSource:
                 description: Request source
                 properties:
