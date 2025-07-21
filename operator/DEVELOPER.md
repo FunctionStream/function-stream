@@ -109,4 +109,17 @@ is manually re-applied afterwards.
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
+### CRD Updates
+
+When CRD definitions are updated in `operator/config/crd/bases/`, you need to ensure the Helm chart CRD templates are also updated to match. The Helm chart CRD templates are located in `operator/deploy/chart/templates/crd/`.
+
+To update the Helm chart CRD templates:
+
+1. Update the CRD definitions in `operator/config/crd/bases/`
+2. Manually update the corresponding files in `operator/deploy/chart/templates/crd/` to match the base definitions
+3. Ensure any Helm-specific templating (like `{{- if .Values.crd.enable }}`) is preserved
+4. Test the changes to ensure the CRDs work correctly
+
+**Important:** The Helm chart CRD templates should always reflect the latest changes from the base CRD definitions to ensure consistency between direct CRD installation and Helm chart installation.
+
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
