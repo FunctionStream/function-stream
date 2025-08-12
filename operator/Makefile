@@ -178,10 +178,12 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+CODEGEN ?= $(LOCALBIN)/code-generator
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.6.0
 CONTROLLER_TOOLS_VERSION ?= v0.17.2
+CODEGEN_VERSION ?= v0.32.1
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
@@ -215,6 +217,21 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: code-generator
+code-generator: $(CODEGEN) ## Download code-generator locally if necessary.
+$(CODEGEN): $(LOCALBIN)
+	$(call go-install-tool,$(CODEGEN),k8s.io/code-generator/cmd/...,$(CODEGEN_VERSION))
+
+.PHONY: generate-client
+generate-client: ## Generate client SDK using code-generator
+	@echo "Generating client SDK..."
+	@mkdir -p pkg/client
+	@go install k8s.io/code-generator/cmd/client-gen@v0.32.1
+	@go install k8s.io/code-generator/cmd/lister-gen@v0.32.1
+	@go install k8s.io/code-generator/cmd/informer-gen@v0.32.1
+	@go install k8s.io/code-generator/cmd/deepcopy-gen@v0.32.1
+	@hack/update-codegen.sh
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
