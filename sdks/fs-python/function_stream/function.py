@@ -429,7 +429,7 @@ class FSFunction:
                         if key == "message_id":
                             return message.message_id()
                         raise KeyError(key)
-                    
+
                     context.get_metadata = get_metadata
 
                     # Call the function with context as first argument and handle both sync and async results
@@ -449,7 +449,7 @@ class FSFunction:
                         logger.error(f"Error invoking process function: {str(e)}")
                         raise Exception(f"Error invoking process function: {str(e)}") from e
                     if response_data:
-                        resp_msgs.append(MsgWrapper(data=response_data, event_time=datetime.utcnow()))
+                        resp_msgs.append(MsgWrapper(data=response_data, event_time=datetime.now(timezone.utc)))
 
                     if not response_topic:
                         logger.warning("No response_topic provided and no sink topic available. Skip messages")
@@ -481,7 +481,7 @@ class FSFunction:
                             await self._send_response(
                                 response_topic,
                                 request_id,
-                                [MsgWrapper(data={'error': str(e)}, event_time=datetime.utcnow())]
+                                [MsgWrapper(data={'error': str(e)}, event_time=datetime.now(timezone.utc))]
                             )
                     self.metrics.record_request_end(False, time.time() - start_time)
                     self.metrics.record_event(False)
@@ -642,7 +642,7 @@ class FSFunction:
     def __del__(self):
         """
         Ensure resources are cleaned up when the object is destroyed.
-        
+
         This finalizer ensures that all resources are properly closed when the
         object is garbage collected. It provides a safety net for resource cleanup
         in case the explicit close() method is not called.

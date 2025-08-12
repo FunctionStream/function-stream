@@ -3,7 +3,7 @@ Unit tests for the FSContext class.
 """
 
 from unittest.mock import Mock
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -73,8 +73,8 @@ class TestFSContext:
     def test_produce_default_implementation(self, context):
         """Test that produce does nothing by default."""
         test_data = {"key": "value"}
-        test_time = datetime.utcnow()
-        
+        test_time = datetime.now(timezone.utc)
+
         # Should not raise any exception
         result = context.produce(test_data, test_time)
         assert result is None
@@ -82,7 +82,7 @@ class TestFSContext:
     def test_produce_without_event_time(self, context):
         """Test produce method without event_time parameter."""
         test_data = {"key": "value"}
-        
+
         # Should not raise any exception
         result = context.produce(test_data)
         assert result is None

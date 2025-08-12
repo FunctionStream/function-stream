@@ -115,9 +115,7 @@ class TestFSFunction:
     async def test_init(self):
         """Test FSFunction initialization."""
         with patch('function_stream.function.Config.from_yaml') as mock_from_yaml, \
-                patch('function_stream.function.Client') as mock_client, \
-                patch('function_stream.function.Metrics') as mock_metrics, \
-                patch('function_stream.function.MetricsServer') as mock_metrics_server:
+                patch('function_stream.function.Client') as mock_client:
             mock_config = Mock(spec=Config)
             mock_config.module = "test_module"
             mock_config.subscriptionName = "test_subscription"
