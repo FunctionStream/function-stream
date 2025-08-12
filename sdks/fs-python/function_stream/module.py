@@ -37,7 +37,6 @@ class FSModule(ABC):
             context (FSContext): The context object containing configuration and 
                                runtime information for the module.
         """
-        pass
 
     @abstractmethod
     async def process(self, context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
