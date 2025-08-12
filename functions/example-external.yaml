@@ -13,14 +13,14 @@
 # limitations under the License.
 
 name: external-function
-namespace: fs
+namespace: function-stream
 runtime:
   type: "external"
 sources:
   - config:
       inputs:
         - "external-input"
-      subscription-name: "fs"
+      subscription-name: "function-stream"
     type: "memory"
 sink:
   config:

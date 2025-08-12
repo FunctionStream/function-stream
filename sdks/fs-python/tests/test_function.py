@@ -3,7 +3,9 @@ Unit tests for the FSFunction class.
 """
 
 import asyncio
+import inspect
 import json
+from typing import Dict, Any
 from unittest.mock import Mock, patch, AsyncMock
 
 import pulsar
@@ -100,52 +102,45 @@ class TestFSFunction:
             mock_client.subscribe.return_value = mock_consumer
             mock_client.create_producer.return_value = mock_producer
 
-            from typing import Dict, Any
-
             async def process_func(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
-                return {"result": "test_result"}
+                return {"processed": data}
 
             process_funcs = {"test_module": process_func}
-            function = FSFunction(
+            return FSFunction(
                 process_funcs=process_funcs,
                 config_path="test_config.yaml"
             )
-            return function
 
     @pytest.mark.asyncio
     async def test_init(self):
         """Test FSFunction initialization."""
-        import inspect
-        from typing import Dict, Any
-
-        async def process_func(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
-            return {"result": "test_result"}
-
-        process_funcs = {"test_module": process_func}
         with patch('function_stream.function.Config.from_yaml') as mock_from_yaml, \
-                patch('function_stream.function.Client'), \
-                patch('function_stream.function.Metrics'), \
-                patch('function_stream.function.MetricsServer'):
-            mock_config = Mock()
+                patch('function_stream.function.Client') as mock_client:
+            mock_config = Mock(spec=Config)
             mock_config.module = "test_module"
             mock_config.subscriptionName = "test_subscription"
-
-            class PulsarConfig:
-                authPlugin = ""
-                authParams = ""
-                max_concurrent_requests = 10
-                serviceUrl = "pulsar://localhost:6650"
-
-            mock_config.pulsar = PulsarConfig()
+            mock_config.pulsar = PulsarConfig(
+                serviceUrl="pulsar://localhost:6650",
+                authPlugin="",
+                authParams="",
+                max_concurrent_requests=10
+            )
             mock_config.sources = [SourceSpec(pulsar=PulsarSourceConfig(topic="test_topic"))]
-            mock_config.requestSource = None
-            mock_config.sink = None
+            mock_config.requestSource = SourceSpec(pulsar=PulsarSourceConfig(topic="request_topic"))
+            mock_config.sink = SinkSpec(pulsar=PulsarSourceConfig(topic="response_topic"))
 
             metric_mock = Mock()
             metric_mock.port = 8080
             mock_config.metric = metric_mock
 
             mock_from_yaml.return_value = mock_config
+            mock_client.return_value.subscribe.return_value = Mock()
+            mock_client.return_value.create_producer.return_value = Mock()
+
+            async def process_func(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
+                return {"processed": data}
+
+            process_funcs = {"test_module": process_func}
             function = FSFunction(
                 process_funcs=process_funcs,
                 config_path="test_config.yaml"
@@ -171,6 +166,70 @@ class TestFSFunction:
 
         # Verify that the message was processed successfully by checking
         # that the consumer acknowledge was called
+        function._consumer.acknowledge.assert_called_once_with(message)
+
+    @pytest.mark.asyncio
+    async def test_process_request_with_metadata_access(self, function):
+        """Test request processing with metadata access through context."""
+        message = Mock()
+        message.data.return_value = json.dumps({"test": "data"}).encode('utf-8')
+        message.properties.return_value = {
+            "request_id": "test_id",
+            "response_topic": "response_topic"
+        }
+        message.message_id.return_value = "test_message_id"
+        message.topic_name.return_value = "test_topic"
+
+        # Mock the consumer acknowledge method
+        function._consumer.acknowledge = Mock()
+
+        # Create a process function that accesses metadata
+        async def process_func_with_metadata(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
+            topic = context.get_metadata("topic")
+            message_id = context.get_metadata("message_id")
+            return {
+                "processed": data,
+                "metadata": {
+                    "topic": topic,
+                    "message_id": message_id
+                }
+            }
+
+        function.process_funcs["test_module"] = process_func_with_metadata
+
+        await function.process_request(message)
+
+        # Verify that the message was processed successfully
+        function._consumer.acknowledge.assert_called_once_with(message)
+
+    @pytest.mark.asyncio
+    async def test_process_request_metadata_invalid_key(self, function):
+        """Test request processing with invalid metadata key access."""
+        message = Mock()
+        message.data.return_value = json.dumps({"test": "data"}).encode('utf-8')
+        message.properties.return_value = {
+            "request_id": "test_id",
+            "response_topic": "response_topic"
+        }
+        message.message_id.return_value = "test_message_id"
+        message.topic_name.return_value = "test_topic"
+
+        # Mock the consumer acknowledge method
+        function._consumer.acknowledge = Mock()
+
+        # Create a process function that accesses invalid metadata
+        async def process_func_with_invalid_metadata(context: FSContext, data: Dict[str, Any]) -> Dict[str, Any]:
+            try:
+                context.get_metadata("invalid_key")
+                return {"error": "Should have raised KeyError"}
+            except KeyError:
+                return {"error": "KeyError raised as expected"}
+
+        function.process_funcs["test_module"] = process_func_with_invalid_metadata
+
+        await function.process_request(message)
+
+        # Verify that the message was processed successfully
         function._consumer.acknowledge.assert_called_once_with(message)
 
     @pytest.mark.asyncio

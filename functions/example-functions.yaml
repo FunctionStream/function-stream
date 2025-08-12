@@ -13,7 +13,7 @@
 # limitations under the License.
 
 name: function-sample
-namespace: fs
+namespace: function-stream
 runtime:
   type: "wasm"
   config:
@@ -22,7 +22,7 @@ sources:
   - config:
       inputs:
         - "input"
-      subscription-name: "fs"
+      subscription-name: "function-stream"
     type: "memory"
 sink:
   config:
