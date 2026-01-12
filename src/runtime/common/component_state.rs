@@ -1,0 +1,245 @@
+// Component State - Task component state machine
+//
+// Defines common state and control mechanisms for all task components (Input, Output, Processor, etc.)
+//
+// This is a pure state machine definition without any interface constraints
+// Each component can choose how to use these states according to its own needs
+
+/// Control task channel capacity (maximum number of tasks in fixed-length channel)
+/// Since control tasks (CheckPoint, Stop, Close) have low frequency, capacity doesn't need to be too large
+pub const CONTROL_TASK_CHANNEL_CAPACITY: usize = 10;
+
+/// Task component state
+/// 
+/// Represents the lifecycle state of task components (Input, Output, Processor, etc.)
+/// 
+/// State transition diagram:
+/// ```
+/// Uninitialized -> Initialized -> Starting -> Running
+///                                             |
+///                                             v
+///                                          Checkpointing (checkpointing)
+///                                             |
+///                                             v
+///                                          Stopping -> Stopped
+///                                             |
+///                                             v
+///                                          Closing -> Closed
+///                                             
+///                                          Error (any state can transition to error)
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComponentState {
+    /// Uninitialized
+    Uninitialized,
+    /// Initialized
+    Initialized,
+    /// Starting
+    Starting,
+    /// Running
+    Running,
+    /// Checkpointing
+    Checkpointing,
+    /// Stopping
+    Stopping,
+    /// Stopped
+    Stopped,
+    /// Closing
+    Closing,
+    /// Closed
+    Closed,
+    /// Error state
+    Error {
+        /// Error message
+        error: String,
+    },
+}
+
+impl ComponentState {
+    /// Check if state can accept new operations
+    pub fn can_accept_operations(&self) -> bool {
+        matches!(
+            self,
+            ComponentState::Initialized
+                | ComponentState::Running
+                | ComponentState::Stopped
+        )
+    }
+
+    /// Check if state is running
+    pub fn is_running(&self) -> bool {
+        matches!(self, ComponentState::Running | ComponentState::Checkpointing)
+    }
+
+    /// Check if state is closed
+    pub fn is_closed(&self) -> bool {
+        matches!(self, ComponentState::Closed)
+    }
+
+    /// Check if state is in error state
+    pub fn is_error(&self) -> bool {
+        matches!(self, ComponentState::Error { .. })
+    }
+
+    /// Check if can transition from current state to target state
+    pub fn can_transition_to(&self, target: &ComponentState) -> bool {
+        use ComponentState::*;
+        
+        match (self, target) {
+            // Can transition from Uninitialized to Initialized
+            (Uninitialized, Initialized) => true,
+            
+            // Can transition from Initialized to Starting
+            (Initialized, Starting) => true,
+            
+            // Can transition from Starting to Running
+            (Starting, Running) => true,
+            
+            // Can transition from Running to Checkpointing
+            (Running, Checkpointing) => true,
+            
+            // Can transition from Checkpointing back to Running
+            (Checkpointing, Running) => true,
+            
+            // Can transition from Running or Checkpointing to Stopping
+            (Running, Stopping) | (Checkpointing, Stopping) => true,
+            
+            // Can transition from Stopping to Stopped
+            (Stopping, Stopped) => true,
+            
+            // Can restart from Stopped
+            (Stopped, Starting) => true,
+            
+            // Can transition from Running, Checkpointing, or Stopped to Closing
+            (Running, Closing) | (Checkpointing, Closing) | (Stopped, Closing) => true,
+            
+            // Can transition from Closing to Closed
+            (Closing, Closed) => true,
+            
+            // Any state can transition to Error state
+            (_, Error { .. }) => true,
+            
+            // Other transitions are not allowed
+            _ => false,
+        }
+    }
+}
+
+impl Default for ComponentState {
+    fn default() -> Self {
+        ComponentState::Uninitialized
+    }
+}
+
+impl std::fmt::Display for ComponentState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComponentState::Uninitialized => write!(f, "Uninitialized"),
+            ComponentState::Initialized => write!(f, "Initialized"),
+            ComponentState::Starting => write!(f, "Starting"),
+            ComponentState::Running => write!(f, "Running"),
+            ComponentState::Checkpointing => write!(f, "Checkpointing"),
+            ComponentState::Stopping => write!(f, "Stopping"),
+            ComponentState::Stopped => write!(f, "Stopped"),
+            ComponentState::Closing => write!(f, "Closing"),
+            ComponentState::Closed => write!(f, "Closed"),
+            ComponentState::Error { error } => write!(f, "Error({})", error),
+        }
+    }
+}
+
+/// Control task type
+/// 
+/// Used to pass various control tasks between component threads and main thread
+/// All task components should support these control tasks
+#[derive(Debug, Clone)]
+pub enum ControlTask {
+    /// Checkpoint task
+    Checkpoint {
+        /// Checkpoint ID
+        checkpoint_id: u64,
+        /// Timestamp (optional)
+        timestamp: Option<u64>,
+    },
+    /// Stop task
+    Stop {
+        /// Stop reason (optional)
+        reason: Option<String>,
+    },
+    /// Close task
+    Close {
+        /// Close reason (optional)
+        reason: Option<String>,
+    },
+    /// Error task
+    Error {
+        /// Error message
+        error: String,
+        /// Error type (optional)
+        error_type: Option<String>,
+        /// Whether component should be stopped
+        should_stop: bool,
+    },
+}
+
+/// State transition helper functions
+pub mod state_machine {
+    use super::ComponentState;
+
+    /// Attempt state transition
+    /// 
+    /// # Arguments
+    /// - `current`: Current state
+    /// - `target`: Target state
+    /// 
+    /// # Returns
+    /// - `Ok(ComponentState)`: Transition successful
+    /// - `Err(...)`: Transition failed
+    pub fn transition(
+        current: &ComponentState,
+        target: ComponentState,
+    ) -> Result<ComponentState, String> {
+        if current.can_transition_to(&target) {
+            Ok(target)
+        } else {
+            Err(format!(
+                "Invalid state transition from {} to {}",
+                current, target
+            ))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_state_transitions() {
+        // Test valid state transitions
+        assert!(ComponentState::Uninitialized.can_transition_to(&ComponentState::Initialized));
+        assert!(ComponentState::Initialized.can_transition_to(&ComponentState::Starting));
+        assert!(ComponentState::Starting.can_transition_to(&ComponentState::Running));
+        assert!(ComponentState::Running.can_transition_to(&ComponentState::Checkpointing));
+        assert!(ComponentState::Checkpointing.can_transition_to(&ComponentState::Running));
+        assert!(ComponentState::Running.can_transition_to(&ComponentState::Stopping));
+        assert!(ComponentState::Checkpointing.can_transition_to(&ComponentState::Stopping));
+        assert!(ComponentState::Stopping.can_transition_to(&ComponentState::Stopped));
+
+        // Test invalid state transitions
+        assert!(!ComponentState::Uninitialized.can_transition_to(&ComponentState::Running));
+        assert!(!ComponentState::Closed.can_transition_to(&ComponentState::Running));
+    }
+
+    #[test]
+    fn test_state_machine_transition() {
+        let current = ComponentState::Initialized;
+        let result = state_machine::transition(&current, ComponentState::Starting);
+        assert!(result.is_ok());
+
+        let current = ComponentState::Uninitialized;
+        let result = state_machine::transition(&current, ComponentState::Running);
+        assert!(result.is_err());
+    }
+}
+

@@ -1,0 +1,16 @@
+[package]
+name = "go-processor-test"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "kafka_test"
+path = "kafka_test.rs"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+rdkafka = { version = "0.38", features = ["cmake-build"] }
+serde_json = "1.0"
+
