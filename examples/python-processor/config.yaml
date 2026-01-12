@@ -1,4 +1,4 @@
-name: "python-processor-example1111x11x"
+name: "python-processor-example"
 type: processor
 input-groups:
   - inputs:
