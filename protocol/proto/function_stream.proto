@@ -1,0 +1,73 @@
+// Function Stream Authentication Protocol Buffers Definition
+// This file defines the authentication interfaces over gRPC
+
+syntax = "proto3";
+
+package function_stream;
+
+// Status codes for API responses
+enum StatusCode {
+  // Unknown status (default)
+  STATUS_UNKNOWN = 0;
+
+  // Success codes (2xx)
+  OK = 200;
+  CREATED = 201;
+  ACCEPTED = 202;
+  NO_CONTENT = 204;
+
+  // Client error codes (4xx)
+  BAD_REQUEST = 400;
+  UNAUTHORIZED = 401;
+  FORBIDDEN = 403;
+  NOT_FOUND = 404;
+  METHOD_NOT_ALLOWED = 405;
+  CONFLICT = 409;
+  UNPROCESSABLE_ENTITY = 422;
+  TOO_MANY_REQUESTS = 429;
+
+  // Server error codes (5xx)
+  INTERNAL_SERVER_ERROR = 500;
+  NOT_IMPLEMENTED = 501;
+  BAD_GATEWAY = 502;
+  SERVICE_UNAVAILABLE = 503;
+  GATEWAY_TIMEOUT = 504;
+}
+
+// Unified response structure
+message Response {
+  StatusCode status_code = 1;
+  string message = 2;
+  optional string data = 3;
+}
+
+// Login request
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  optional int64 timestamp = 3;
+}
+
+// User information
+message UserInfo {
+  string user_id = 1;
+  string username = 2;
+}
+
+// Empty request for logout
+message LogoutRequest {}
+
+// SQL execution request
+message SqlRequest {
+  string sql = 1;
+}
+
+// Function Stream service
+service FunctionStreamService {
+  // Authentication methods
+  rpc Login(LoginRequest) returns (Response);
+  rpc Logout(LogoutRequest) returns (Response);
+  
+  // SQL execution
+  rpc ExecuteSql(SqlRequest) returns (Response);
+}
