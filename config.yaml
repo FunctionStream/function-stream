@@ -1,0 +1,88 @@
+# Function Stream Configuration
+service:
+  service_id: "my-service-001"
+  service_name: "function-stream"
+  version: "1.0.0"
+  host: "127.0.0.1"
+  port: 8080
+  # workers: null  # If specified, overrides worker_multiplier
+  # worker_multiplier: 4  # CPU cores × multiplier (default: 4 if not specified)
+  debug: false
+
+logging:
+  level: info
+  format: json
+  file_path: logs/app.log  # Log file path (directory will be created automatically)
+  max_file_size: 100
+  max_files: 5
+
+# State Storage Configuration
+# 状态存储配置
+# 用于存储任务运行时的状态数据
+state_storage:
+  # 存储类型：memory（内存）或 rocksdb（持久化）
+  # 默认值：memory
+  storage_type: rocksdb
+  
+  # 基础目录路径（仅当 storage_type 为 rocksdb 时使用）
+  # 最终路径格式：{base_dir}/state/{task_name}-{created_at}
+  # 例如：如果 base_dir 为 "data"，任务名为 "my_task"，创建时间为 1234567890
+  # 则完整路径为：data/state/my_task-1234567890
+  # 默认值：data
+  base_dir: data
+  
+  # RocksDB 配置（仅当 storage_type 为 rocksdb 时使用）
+  rocksdb:
+    # 最大打开文件数（可选）
+    # 默认值：None（使用 RocksDB 默认值）
+    max_open_files: 1000
+    
+    # 写缓冲区大小（字节）（可选）
+    # 默认值：None（使用 RocksDB 默认值）
+    # 示例：67108864 表示 64MB
+    write_buffer_size: 67108864
+    
+    # 最大写缓冲区数量（可选）
+    # 默认值：None（使用 RocksDB 默认值）
+    max_write_buffer_number: 3
+    
+    # 目标文件大小基数（字节）（可选）
+    # 默认值：None（使用 RocksDB 默认值）
+    # 示例：67108864 表示 64MB
+    target_file_size_base: 67108864
+    
+    # Level 0 最大字节数（字节）（可选）
+    # 默认值：None（使用 RocksDB 默认值）
+    # 示例：268435456 表示 256MB
+    max_bytes_for_level_base: 268435456
+
+# Task Storage Configuration
+# 任务存储配置
+# 用于存储任务的元数据（任务名称、WASM 字节、配置字节、状态、创建时间等）
+task_storage:
+  # 存储类型：rocksdb（持久化）
+  # 默认值：rocksdb
+  storage_type: rocksdb
+  
+  # 数据库路径（可选）
+  # 如果为 null 或未指定，则使用默认路径：data/task/{task_name}
+  # 例如：如果任务名为 "my_task"，则默认路径为 data/task/my_task
+  # 如果指定了路径，则使用指定的路径
+  db_path: null
+  
+  # RocksDB 配置
+  rocksdb:
+    # 最大打开文件数（可选）
+    max_open_files: 1000
+    
+    # 写缓冲区大小（字节）（可选）
+    write_buffer_size: 67108864
+    
+    # 最大写缓冲区数量（可选）
+    max_write_buffer_number: 3
+    
+    # 目标文件大小基数（字节）（可选）
+    target_file_size_base: 67108864
+    
+    # Level 0 最大字节数（字节）（可选）
+    max_bytes_for_level_base: 268435456

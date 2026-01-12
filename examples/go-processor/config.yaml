@@ -1,0 +1,15 @@
+name: "go-processor-example"
+type: processor
+input-groups:
+  - inputs:
+      - input-type: kafka
+        bootstrap_servers: "localhost:9092"
+        topic: "input-topic"
+        partition: 0
+        group_id: "go-processor-group"
+outputs:
+  - output-type: kafka
+    bootstrap_servers: "localhost:9092"
+    topic: "output-topic"
+    partition: 0
+
