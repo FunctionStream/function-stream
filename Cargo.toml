@@ -1,0 +1,60 @@
+[workspace]
+members = [
+    ".",
+    "protocol",
+    "cli/cli",
+    "cli/rust-client",
+]
+
+[package]
+name = "function-stream"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "function_stream"
+path = "src/lib.rs"
+
+
+#[[bin]]
+#name = "server"
+#path = "src/bin/server.rs"
+
+# 默认的 main.rs 作为库的示例
+[[bin]]
+name = "function-stream"
+path = "src/main.rs"
+
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
+log = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
+tracing-appender = "0.2"
+anyhow = "1.0"
+tonic = { version = "0.12", features = ["default"] }
+async-trait = "0.1"
+num_cpus = "1.0"
+protocol = { path = "./protocol" }
+rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi"] }
+crossbeam-channel = "0.5"
+pest = "2.7"
+pest_derive = "2.7"
+clap = { version = "4.5", features = ["derive"] }
+wasmtime = { version = "28.0", features = ["component-model", "async"] }
+base64 = "0.22"
+wasmtime-wasi = "28.0"
+rocksdb = { version = "0.21", features = ["multi-threaded-cf"] }
+
+[features]
+# 默认开启的特性列表（如果你希望默认就开启增量编译，就把 "incremental-cache" 写在这里）
+default = ["incremental-cache"]
+
+# 定义 "incremental-cache" 特性
+# 当你开启这个特性时，它会自动开启 wasmtime 的 "incremental-cache"
+incremental-cache = ["wasmtime/incremental-cache"]

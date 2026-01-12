@@ -1,74 +1,211 @@
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Makefile for function-stream project
 
-.PHONY: license
+# Installation directory
+INSTALL_DIR ?= function-stream
+PREFIX ?= $(shell pwd)
+
+.PHONY: clean build test help install uninstall dist
+
+help:
+	@echo "Available targets:"
+	@echo "  clean     - Remove all build artifacts and generated files"
+	@echo "  build     - Build the project"
+	@echo "  build-release - Build release version and prepare distribution"
+	@echo "  test      - Run tests"
+	@echo "  install   - Install to $(INSTALL_DIR)/ directory"
+	@echo "  uninstall - Remove installed files"
+	@echo "  dist      - Build release and prepare distribution (alias for build-release)"
+
+clean:
+	@echo "🧹 Cleaning all build artifacts and generated files..."
+	@echo "  → Running cargo clean (workspace)..."
+	cargo clean
+	@echo "  → Cleaning CLI target directories..."
+	@if [ -d "cli/cli/target" ]; then \
+		rm -rf cli/cli/target; \
+		echo "  ✓ Cleaned cli/cli/target"; \
+	else \
+		echo "  ℹ cli/cli/target directory does not exist (already clean)"; \
+	fi
+	@if [ -d "cli/rust-client/target" ]; then \
+		rm -rf cli/rust-client/target; \
+		echo "  ✓ Cleaned cli/rust-client/target"; \
+	else \
+		echo "  ℹ cli/rust-client/target directory does not exist (already clean)"; \
+	fi
+	@if [ -d "cli/go-client/target" ]; then \
+		rm -rf cli/go-client/target; \
+		echo "  ✓ Cleaned cli/go-client/target"; \
+	else \
+		echo "  ℹ cli/go-client/target directory does not exist (already clean)"; \
+	fi
+	@if [ -d "cli/java-client/target" ]; then \
+		rm -rf cli/java-client/target; \
+		echo "  ✓ Cleaned cli/java-client/target"; \
+	else \
+		echo "  ℹ cli/java-client/target directory does not exist (already clean)"; \
+	fi
+	@if [ -d "cli/python-client/target" ]; then \
+		rm -rf cli/python-client/target; \
+		echo "  ✓ Cleaned cli/python-client/target"; \
+	else \
+		echo "  ℹ cli/python-client/target directory does not exist (already clean)"; \
+	fi
+	@echo "  → Cleaning other target directories..."
+	@find . -name "target" -type d -not -path "./target" -not -path "./cli/cli/target" -not -path "./cli/rust-client/target" -not -path "./cli/go-client/target" -not -path "./cli/java-client/target" -not -path "./cli/python-client/target" -exec rm -rf {} + 2>/dev/null || true
+	@echo "  → Removing protocol/generated directory..."
+	@if [ -d "protocol/generated" ]; then \
+		rm -rf protocol/generated; \
+		echo "  ✓ Cleaned protocol/generated"; \
+	else \
+		echo "  ℹ protocol/generated directory does not exist (already clean)"; \
+	fi
+	@echo "  → Removing logs directory..."
+	@if [ -d "logs" ]; then \
+		rm -rf logs; \
+		echo "  ✓ Cleaned logs"; \
+	else \
+		echo "  ℹ logs directory does not exist (already clean)"; \
+	fi
+	@echo "  → Removing function-stream installation directory..."
+	@if [ -d "function-stream" ]; then \
+		rm -rf function-stream; \
+		echo "  ✓ Cleaned function-stream"; \
+	else \
+		echo "  ℹ function-stream directory does not exist (already clean)"; \
+	fi
+	@echo "  → Removing distribution directory..."
+	@if [ -d "distribution" ]; then \
+		rm -rf distribution; \
+		echo "  ✓ Cleaned distribution"; \
+	else \
+		echo "  ℹ distribution directory does not exist (already clean)"; \
+	fi
+	@echo ""
+	@echo "✅ Clean complete! All build artifacts, generated files, and installation directories have been removed."
+
 build:
-	go build -v -o bin/function-stream ./cmd
-
-build-example:
-	tinygo build -o bin/example_basic.wasm -target=wasi ./examples/basic
-	go build -o bin/example_external_function ./examples/basic
-
-run-example-external-functions:
-	FS_SOCKET_PATH=/tmp/fs.sock FS_FUNCTION_NAME=fs/external-function ./bin/example_external_function
-
-lint:
-	golangci-lint run
-
-lint-fix:
-	golangci-lint run --fix
-
-build-all: build build-example
+	cargo build
 
 test:
-	go test -race ./... -timeout 10m
+	cargo test
 
-bench:
-	go test -bench=. ./benchmark -timeout 10m
+install: build-release
+	@echo "📦 Installing function-stream to $(PREFIX)/$(INSTALL_DIR)/..."
+	@mkdir -p $(PREFIX)/$(INSTALL_DIR)/bin
+	@mkdir -p $(PREFIX)/$(INSTALL_DIR)/lib
+	@mkdir -p $(PREFIX)/$(INSTALL_DIR)/data
+	@mkdir -p $(PREFIX)/$(INSTALL_DIR)/logs
+	@mkdir -p $(PREFIX)/$(INSTALL_DIR)/conf
+	@echo "  → Copying binary files..."
+	@cp target/release/function-stream $(PREFIX)/$(INSTALL_DIR)/bin/ 2>/dev/null || echo "  ⚠ Binary not found, skipping..."
+	@chmod +x $(PREFIX)/$(INSTALL_DIR)/bin/function-stream 2>/dev/null || true
+	@echo "  → Copying library files..."
+	@cp target/release/libfunction_stream*.rlib $(PREFIX)/$(INSTALL_DIR)/lib/ 2>/dev/null || echo "  ℹ No .rlib files found"
+	@cp target/release/libprotocol*.rlib $(PREFIX)/$(INSTALL_DIR)/lib/ 2>/dev/null || echo "  ℹ No protocol .rlib files found"
+	@if [ -f target/release/libfunction_stream.so ]; then \
+		cp target/release/libfunction_stream.so $(PREFIX)/$(INSTALL_DIR)/lib/; \
+	fi
+	@if [ -f target/release/libfunction_stream.dylib ]; then \
+		cp target/release/libfunction_stream.dylib $(PREFIX)/$(INSTALL_DIR)/lib/; \
+	fi
+	@if [ -f target/release/libprotocol.so ]; then \
+		cp target/release/libprotocol.so $(PREFIX)/$(INSTALL_DIR)/lib/; \
+	fi
+	@if [ -f target/release/libprotocol.dylib ]; then \
+		cp target/release/libprotocol.dylib $(PREFIX)/$(INSTALL_DIR)/lib/; \
+	fi
+	@echo "  → Copying configuration files..."
+	@if [ -f config.yaml ]; then \
+		cp config.yaml $(PREFIX)/$(INSTALL_DIR)/conf/; \
+		echo "  ✓ Copied config.yaml"; \
+	else \
+		echo "  ⚠ Config file not found, creating default..."; \
+		echo "# Function Stream Configuration" > $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "# Generated by make install" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "service:" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  service_id: \"my-service-001\"" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  service_name: \"function-stream\"" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  version: \"1.0.0\"" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  host: \"127.0.0.1\"" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  port: 8080" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  debug: false" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "logging:" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  level: info" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  format: json" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+		echo "  file_path: logs/app.log" >> $(PREFIX)/$(INSTALL_DIR)/conf/config.yaml; \
+	fi
+	@echo "  → Creating directory structure..."
+	@touch $(PREFIX)/$(INSTALL_DIR)/logs/.gitkeep 2>/dev/null || true
+	@touch $(PREFIX)/$(INSTALL_DIR)/data/.gitkeep 2>/dev/null || true
+	@echo ""
+	@echo "✅ Installation complete!"
+	@echo ""
+	@echo "Installed to: $(PREFIX)/$(INSTALL_DIR)/"
+	@echo "  bin/  - Binary executables"
+	@echo "  lib/  - Library files"
+	@echo "  data/ - Data directory"
+	@echo "  logs/ - Log files directory"
+	@echo "  conf/ - Configuration files"
+	@echo ""
+	@echo "To run: $(PREFIX)/$(INSTALL_DIR)/bin/function-stream"
 
-bench_race:
-	go test -race -bench=. ./benchmark -timeout 10m
+dist: build-release
 
-get-apidocs:
-	curl -o apidocs.json http://localhost:7300/apidocs
+build-release:
+	@echo "🔨 Building release version..."
+	cargo build --release
+	@echo "📦 Preparing distribution..."
+	@mkdir -p distribution/functionstream/bin
+	@mkdir -p distribution/functionstream/data
+	@mkdir -p distribution/functionstream/conf
+	@mkdir -p distribution/functionstream/logs
+	@echo "  → Copying binary files..."
+	@if [ -f target/release/function-stream ]; then \
+		cp target/release/function-stream distribution/functionstream/bin/; \
+		chmod +x distribution/functionstream/bin/function-stream; \
+		echo "  ✓ Copied function-stream"; \
+	fi
+	@if [ -f target/release/cli ]; then \
+		cp target/release/cli distribution/functionstream/bin/; \
+		chmod +x distribution/functionstream/bin/cli; \
+		echo "  ✓ Copied cli"; \
+	fi
+	@echo "  → Copying configuration files..."
+	@if [ -f config.yaml ]; then \
+		cp config.yaml distribution/functionstream/conf/; \
+		echo "  ✓ Copied config.yaml"; \
+	else \
+		echo "  ⚠ Config file not found, creating default..."; \
+		echo "# Function Stream Configuration" > distribution/functionstream/conf/config.yaml; \
+		echo "# Generated by make build-release" >> distribution/functionstream/conf/config.yaml; \
+		echo "service:" >> distribution/functionstream/conf/config.yaml; \
+		echo "  service_id: \"my-service-001\"" >> distribution/functionstream/conf/config.yaml; \
+		echo "  service_name: \"function-stream\"" >> distribution/functionstream/conf/config.yaml; \
+		echo "  version: \"1.0.0\"" >> distribution/functionstream/conf/config.yaml; \
+		echo "  host: \"127.0.0.1\"" >> distribution/functionstream/conf/config.yaml; \
+		echo "  port: 8080" >> distribution/functionstream/conf/config.yaml; \
+		echo "  debug: false" >> distribution/functionstream/conf/config.yaml; \
+		echo "logging:" >> distribution/functionstream/conf/config.yaml; \
+		echo "  level: info" >> distribution/functionstream/conf/config.yaml; \
+		echo "  format: json" >> distribution/functionstream/conf/config.yaml; \
+		echo "  file_path: logs/app.log" >> distribution/functionstream/conf/config.yaml; \
+	fi
+	@echo ""
+	@echo "✅ Distribution prepared!"
+	@echo ""
+	@echo "Distribution directory: distribution/functionstream/"
+	@echo "  bin/  - Binary executables"
+	@echo "  data/ - Data directory"
+	@echo "  conf/ - Configuration files"
+	@echo "  logs/ - Log files directory"
 
-ADMIN_CLIENT_DIR := admin/client
-FILES_TO_REMOVE := go.mod go.sum .travis.yml .openapi-generator-ignore git_push.sh .openapi-generator api test
+uninstall:
+	@echo "🗑️  Uninstalling function-stream..."
+	@if [ -d $(PREFIX)/$(INSTALL_DIR) ]; then \
+		rm -rf $(PREFIX)/$(INSTALL_DIR); \
+		echo "✅ Uninstalled from $(PREFIX)/$(INSTALL_DIR)/"; \
+	else \
+		echo "ℹ Installation directory not found: $(PREFIX)/$(INSTALL_DIR)/"; \
+	fi
 
-gen-rest-client:
-	-rm -r $(ADMIN_CLIENT_DIR)
-	mkdir -p $(ADMIN_CLIENT_DIR)
-	openapi-generator generate -i ./apidocs.json -g go -o $(ADMIN_CLIENT_DIR) \
-		--git-user-id functionstream \
-		--git-repo-id function-stream/$(ADMIN_CLIENT_DIR) \
-		--package-name adminclient \
-		--global-property apiDocs,apis,models,supportingFiles
-	rm -r $(addprefix $(ADMIN_CLIENT_DIR)/, $(FILES_TO_REMOVE))
-
-proto:
-	for PROTO_FILE in $$(find . -name '*.proto'); do \
-		echo "generating codes for $$PROTO_FILE"; \
-		protoc \
-			--go_out=. \
-			--go_opt paths=source_relative \
-			--plugin protoc-gen-go="${GOPATH}/bin/protoc-gen-go" \
-			--go-grpc_out=. \
-			--go-grpc_opt paths=source_relative \
-			--plugin protoc-gen-go-grpc="${GOPATH}/bin/protoc-gen-go-grpc" \
-			$$PROTO_FILE; \
-	done
-
-license:
-	./license-checker/license-checker.sh
-
-gen-changelog:
-	.chglog/gen-chg-log.sh
