@@ -1,6 +1,6 @@
-# CLI - Multi-language Client Libraries
-
 This directory contains client libraries for rust-function-stream in multiple programming languages.
+
+# CLI - Multi-language Client Libraries
 
 ## Structure
 

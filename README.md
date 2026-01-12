@@ -1,3 +1,5 @@
+Rust Function Stream is a stream processing framework built with Rust.
+
 # Rust Function Stream
 
 ## Project Structure
