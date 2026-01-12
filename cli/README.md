@@ -1,4 +1,4 @@
-s# CLI - Multi-language Client Libraries
+# CLI - Multi-language Client Libraries
 
 This directory contains client libraries for rust-function-stream in multiple programming languages.
 
@@ -14,12 +14,14 @@ This directory contains client libraries for rust-function-stream in multiple pr
 ### Rust
 
 Add to your `Cargo.toml`:
+
 ```toml
 [dependencies]
 cli-rust = { path = "./cli/cli-rust" }
 ```
 
 Use in your code:
+
 ```rust
 use cli_rust::{CliClient, execute_login, execute_logout};
 
