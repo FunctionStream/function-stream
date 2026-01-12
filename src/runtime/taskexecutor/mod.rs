@@ -1,7 +1,7 @@
 // TaskExecutor module
 
-mod task_manager;
 mod init_context;
+mod task_manager;
 
-pub use task_manager::TaskManager;
 pub use init_context::InitContext;
+pub use task_manager::TaskManager;

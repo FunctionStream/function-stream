@@ -6,19 +6,19 @@
 // - 状态由 runloop 线程统一管理
 // - 热点路径（process_input）没有锁和原子变量操作
 
-use crate::runtime::input::InputSource;
-use crate::runtime::output::OutputSink;
+use super::thread_pool::{TaskThreadPool, ThreadGroup};
+use super::wasm_processor_trait::WasmProcessor;
 use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::common::{ComponentState, TaskCompletionFlag};
+use crate::runtime::input::InputSource;
+use crate::runtime::output::OutputSink;
 use crate::runtime::task::TaskLifecycle;
-use super::wasm_processor_trait::WasmProcessor;
-use super::thread_pool::{TaskThreadPool, ThreadGroup};
-use crossbeam_channel::{bounded, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use crossbeam_channel::{Receiver, Sender, bounded};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use std::sync::mpsc;
 
 /// 控制操作超时（毫秒）
 const CONTROL_OPERATION_TIMEOUT_MS: u64 = 5000;
@@ -35,10 +35,9 @@ pub struct TaskEnvironment {
 
 impl TaskEnvironment {
     pub fn new(task_name: String) -> Self {
-        Self { task_name}
+        Self { task_name }
     }
 }
-
 
 /// 任务控制信号
 enum TaskControlSignal {
@@ -49,9 +48,15 @@ enum TaskControlSignal {
     /// 取消任务
     Cancel { completion_flag: TaskCompletionFlag },
     /// 开始检查点
-    Checkpoint { checkpoint_id: u64, completion_flag: TaskCompletionFlag },
+    Checkpoint {
+        checkpoint_id: u64,
+        completion_flag: TaskCompletionFlag,
+    },
     /// 完成检查点
-    CheckpointFinish { checkpoint_id: u64, completion_flag: TaskCompletionFlag },
+    CheckpointFinish {
+        checkpoint_id: u64,
+        completion_flag: TaskCompletionFlag,
+    },
     /// 关闭任务
     Close { completion_flag: TaskCompletionFlag },
 }
@@ -75,7 +80,6 @@ enum TaskState {
     Closed,
     Failed,
 }
-
 
 /// 执行状态（用于线程管理）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,13 +151,13 @@ pub struct WasmTask {
 
 impl WasmTask {
     /// 创建新的流任务
-    /// 
+    ///
     /// # 参数
     /// - `environment`: 任务环境配置
     /// - `inputs`: 输入源列表
     /// - `processor`: 处理器
     /// - `sinks`: 输出接收器列表
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(WasmTask)`: 成功创建的任务
     /// - `Err(...)`: 创建失败
@@ -183,7 +187,7 @@ impl WasmTask {
     }
 
     /// 初始化任务（启动 runloop 线程）
-    /// 
+    ///
     /// # 参数
     /// - `init_context`: 初始化上下文（包含线程池）
     pub fn init_with_context(
@@ -191,88 +195,107 @@ impl WasmTask {
         init_context: &crate::runtime::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
         let total_start = std::time::Instant::now();
-        
+
         // 从结构体中取出，准备移动到线程中
         // 注意：这些字段在移动到线程后，结构体中会变为 None，但结构体本身仍然存在
         // 由于这些字段在 init 后不再被访问，直接移动即可
         let take_start = std::time::Instant::now();
-        let mut inputs = self.inputs.take()
-            .ok_or_else(|| Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+        let mut inputs = self.inputs.take().ok_or_else(|| {
+            Box::new(std::io::Error::other(
                 "inputs already moved to thread",
-            )) as Box<dyn std::error::Error + Send>)?;
-        let mut processor = self.processor.take()
-            .ok_or_else(|| Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            )) as Box<dyn std::error::Error + Send>
+        })?;
+        let mut processor = self.processor.take().ok_or_else(|| {
+            Box::new(std::io::Error::other(
                 "processor already moved to thread",
-            )) as Box<dyn std::error::Error + Send>)?;
-        let mut sinks = self.sinks.take()
-            .ok_or_else(|| Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            )) as Box<dyn std::error::Error + Send>
+        })?;
+        let mut sinks = self.sinks.take().ok_or_else(|| {
+            Box::new(std::io::Error::other(
                 "sinks already moved to thread",
-            )) as Box<dyn std::error::Error + Send>)?;
+            )) as Box<dyn std::error::Error + Send>
+        })?;
         let take_elapsed = take_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Take fields: {:.3}s", take_elapsed);
-        
+        log::info!(
+            "[Timing] init_with_context - Take fields: {:.3}s",
+            take_elapsed
+        );
+
         // 克隆 init_context 以便在闭包中使用
         let clone_start = std::time::Instant::now();
         let init_context = init_context.clone();
         let clone_elapsed = clone_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Clone context: {:.3}s", clone_elapsed);
-        
+        log::info!(
+            "[Timing] init_with_context - Clone context: {:.3}s",
+            clone_elapsed
+        );
+
         // 初始化顺序：先 Sink，再 Processor，最后 Source
         // 这样 Processor 在初始化时可以使用 Sinks 来创建 WasmHost
-        
+
         // 1. 先初始化所有 sinks
         let sinks_init_start = std::time::Instant::now();
         for (idx, sink) in sinks.iter_mut().enumerate() {
             let sink_start = std::time::Instant::now();
             if let Err(e) = sink.init_with_context(&init_context) {
                 log::error!("Failed to init sink {}: {}", idx, e);
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(Box::new(std::io::Error::other(
                     format!("Failed to init sink {}: {}", idx, e),
                 )));
             }
             let sink_elapsed = sink_start.elapsed().as_secs_f64();
-            log::info!("[Timing] init_with_context - Init sink {}: {:.3}s", idx, sink_elapsed);
+            log::info!(
+                "[Timing] init_with_context - Init sink {}: {:.3}s",
+                idx,
+                sink_elapsed
+            );
         }
         let sinks_init_elapsed = sinks_init_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Init all sinks: {:.3}s", sinks_init_elapsed);
+        log::info!(
+            "[Timing] init_with_context - Init all sinks: {:.3}s",
+            sinks_init_elapsed
+        );
 
         // 2. 初始化 processor
         let processor_init_start = std::time::Instant::now();
         if let Err(e) = processor.init_with_context(&init_context) {
             log::error!("Failed to init processor: {}", e);
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(Box::new(std::io::Error::other(
                 format!("Failed to init processor: {}", e),
             )));
         }
         let processor_init_elapsed = processor_init_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Init processor: {:.3}s", processor_init_elapsed);
+        log::info!(
+            "[Timing] init_with_context - Init processor: {:.3}s",
+            processor_init_elapsed
+        );
 
         // 2.1. 初始化 WasmHost（需要传入 sinks）
         // 直接将 sinks 的所有权传递给 WasmHost（不克隆）
         use crate::runtime::processor::WASM::WasmProcessorImpl;
         let wasm_host_init_start = std::time::Instant::now();
-        if let Some(wasm_processor_impl) = processor.as_any_mut().downcast_mut::<WasmProcessorImpl>() {
-            if let Err(e) = wasm_processor_impl.init_wasm_host(sinks, &init_context, self.task_name.clone()) {
+        if let Some(wasm_processor_impl) =
+            processor.as_any_mut().downcast_mut::<WasmProcessorImpl>()
+        {
+            if let Err(e) =
+                wasm_processor_impl.init_wasm_host(sinks, &init_context, self.task_name.clone())
+            {
                 log::error!("Failed to init WasmHost: {}", e);
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(Box::new(std::io::Error::other(
                     format!("Failed to init WasmHost: {}", e),
                 )));
             }
         } else {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(Box::new(std::io::Error::other(
                 "Processor is not a WasmProcessorImpl, cannot initialize WasmHost",
             )));
         }
         let wasm_host_init_elapsed = wasm_host_init_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Init WasmHost: {:.3}s", wasm_host_init_elapsed);
-        
+        log::info!(
+            "[Timing] init_with_context - Init WasmHost: {:.3}s",
+            wasm_host_init_elapsed
+        );
+
         // 注意：sinks 的所有权已经移交给 WasmHost（在 Store<HostState> 中）
         // runloop 线程不再需要 sinks，因为输出通过 WASM processor 内部的 collector 完成
 
@@ -282,16 +305,22 @@ impl WasmTask {
             let input_start = std::time::Instant::now();
             if let Err(e) = input.init_with_context(&init_context) {
                 log::error!("Failed to init input {}: {}", idx, e);
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(Box::new(std::io::Error::other(
                     format!("Failed to init input {}: {}", idx, e),
                 )));
             }
             let input_elapsed = input_start.elapsed().as_secs_f64();
-            log::info!("[Timing] init_with_context - Init input {}: {:.3}s", idx, input_elapsed);
+            log::info!(
+                "[Timing] init_with_context - Init input {}: {:.3}s",
+                idx,
+                input_elapsed
+            );
         }
         let inputs_init_elapsed = inputs_init_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Init all inputs: {:.3}s", inputs_init_elapsed);
+        log::info!(
+            "[Timing] init_with_context - Init all inputs: {:.3}s",
+            inputs_init_elapsed
+        );
 
         // 创建控制 channel
         let channel_start = std::time::Instant::now();
@@ -308,39 +337,44 @@ impl WasmTask {
             _tx
         };
         let channel_elapsed = channel_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Create channels: {:.3}s", channel_elapsed);
+        log::info!(
+            "[Timing] init_with_context - Create channels: {:.3}s",
+            channel_elapsed
+        );
 
         // 标记线程开始运行
         let thread_prep_start = std::time::Instant::now();
         thread_running.store(true, Ordering::Relaxed);
-        self.execution_state.store(ExecutionState::Initializing as u8, Ordering::Relaxed);
+        self.execution_state
+            .store(ExecutionState::Initializing as u8, Ordering::Relaxed);
         let thread_prep_elapsed = thread_prep_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Prepare thread state: {:.3}s", thread_prep_elapsed);
+        log::info!(
+            "[Timing] init_with_context - Prepare thread state: {:.3}s",
+            thread_prep_elapsed
+        );
 
         // 启动 runloop 线程，将所有数据 move 进去
         let thread_spawn_start = std::time::Instant::now();
         let thread_handle = thread::Builder::new()
             .name(format!("stream-task-{}", task_name))
             .spawn(move || {
-                Self::task_thread_loop(
-                    task_name,
-                    inputs,
-                    processor,
-                    control_receiver,
-                    state,
-                );
+                Self::task_thread_loop(task_name, inputs, processor, control_receiver, state);
 
                 // 线程结束时更新状态
                 execution_state.store(ExecutionState::Finished as u8, Ordering::Relaxed);
                 thread_running.store(false, Ordering::Relaxed);
                 let _ = termination_tx.send(ExecutionState::Finished);
             })
-            .map_err(|e| Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to start task thread: {}", e),
-            )) as Box<dyn std::error::Error + Send>)?;
+            .map_err(|e| {
+                Box::new(std::io::Error::other(
+                    format!("Failed to start task thread: {}", e),
+                )) as Box<dyn std::error::Error + Send>
+            })?;
         let thread_spawn_elapsed = thread_spawn_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Spawn thread: {:.3}s", thread_spawn_elapsed);
+        log::info!(
+            "[Timing] init_with_context - Spawn thread: {:.3}s",
+            thread_spawn_elapsed
+        );
 
         // 注册主 runloop 线程组
         let register_start = std::time::Instant::now();
@@ -352,8 +386,11 @@ impl WasmTask {
         main_runloop_group.add_thread(thread_handle, format!("stream-task-{}", self.task_name));
         init_context.register_thread_group(main_runloop_group);
         let register_elapsed = register_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Register thread group: {:.3}s", register_elapsed);
-        
+        log::info!(
+            "[Timing] init_with_context - Register thread group: {:.3}s",
+            register_elapsed
+        );
+
         let total_elapsed = total_start.elapsed().as_secs_f64();
         log::info!("[Timing] init_with_context total: {:.3}s", total_elapsed);
 
@@ -361,23 +398,41 @@ impl WasmTask {
         let take_groups_start = std::time::Instant::now();
         let thread_groups = init_context.take_thread_groups();
         let take_groups_elapsed = take_groups_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Take thread groups: {:.3}s", take_groups_elapsed);
-        log::info!("WasmTask '{}' registered {} thread groups", self.task_name, thread_groups.len());
+        log::info!(
+            "[Timing] init_with_context - Take thread groups: {:.3}s",
+            take_groups_elapsed
+        );
+        log::info!(
+            "WasmTask '{}' registered {} thread groups",
+            self.task_name,
+            thread_groups.len()
+        );
 
         // 存储线程组信息，以便在 TaskThreadPool::submit 中使用
         let store_groups_start = std::time::Instant::now();
         self.thread_groups = Some(thread_groups);
         let store_groups_elapsed = store_groups_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Store thread groups: {:.3}s", store_groups_elapsed);
+        log::info!(
+            "[Timing] init_with_context - Store thread groups: {:.3}s",
+            store_groups_elapsed
+        );
 
         let finalize_start = std::time::Instant::now();
         self.task_thread = None; // 线程句柄已经移动到线程组中
-        self.execution_state.store(ExecutionState::Running as u8, Ordering::Relaxed);
+        self.execution_state
+            .store(ExecutionState::Running as u8, Ordering::Relaxed);
         let finalize_elapsed = finalize_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context - Finalize state: {:.3}s", finalize_elapsed);
-        
+        log::info!(
+            "[Timing] init_with_context - Finalize state: {:.3}s",
+            finalize_elapsed
+        );
+
         let total_elapsed = total_start.elapsed().as_secs_f64();
-        log::info!("WasmTask initialized: {} (total init_with_context: {:.3}s)", self.task_name, total_elapsed);
+        log::info!(
+            "WasmTask initialized: {} (total init_with_context: {:.3}s)",
+            self.task_name,
+            total_elapsed
+        );
         Ok(())
     }
 
@@ -399,16 +454,26 @@ impl WasmTask {
         let mut current_input_index: usize = 0;
         let mut is_running = false;
         let init_elapsed = init_start.elapsed().as_secs_f64();
-        log::info!("[Timing] task_thread_loop - Initialize local state: {:.3}s", init_elapsed);
+        log::info!(
+            "[Timing] task_thread_loop - Initialize local state: {:.3}s",
+            init_elapsed
+        );
 
         // 更新共享状态
         let lock_start = std::time::Instant::now();
         *shared_state.lock().unwrap() = ComponentState::Initialized;
         let lock_elapsed = lock_start.elapsed().as_secs_f64();
-        log::info!("[Timing] task_thread_loop - Update shared state: {:.3}s", lock_elapsed);
+        log::info!(
+            "[Timing] task_thread_loop - Update shared state: {:.3}s",
+            lock_elapsed
+        );
 
         let thread_init_elapsed = thread_start_time.elapsed().as_secs_f64();
-        log::info!("Task thread started (paused): {} (thread init: {:.3}s)", task_name, thread_init_elapsed);
+        log::info!(
+            "Task thread started (paused): {} (thread init: {:.3}s)",
+            task_name,
+            thread_init_elapsed
+        );
 
         loop {
             if is_running {
@@ -544,7 +609,10 @@ impl WasmTask {
                 ControlAction::Exit
             }
 
-            TaskControlSignal::Checkpoint { checkpoint_id, completion_flag } => {
+            TaskControlSignal::Checkpoint {
+                checkpoint_id,
+                completion_flag,
+            } => {
                 if *state != TaskState::Running {
                     let error = format!("Cannot checkpoint in state: {:?}", state);
                     log::error!("{} for task: {}", error, task_name);
@@ -552,7 +620,11 @@ impl WasmTask {
                     return ControlAction::Continue;
                 }
 
-                log::info!("Checkpoint {} started for task: {}", checkpoint_id, task_name);
+                log::info!(
+                    "Checkpoint {} started for task: {}",
+                    checkpoint_id,
+                    task_name
+                );
                 *state = TaskState::Checkpointing;
                 *shared_state.lock().unwrap() = ComponentState::Checkpointing;
 
@@ -572,7 +644,10 @@ impl WasmTask {
                 ControlAction::Continue
             }
 
-            TaskControlSignal::CheckpointFinish { checkpoint_id, completion_flag } => {
+            TaskControlSignal::CheckpointFinish {
+                checkpoint_id,
+                completion_flag,
+            } => {
                 if *state != TaskState::Checkpointing {
                     let error = format!("Cannot finish checkpoint in state: {:?}", state);
                     log::error!("{} for task: {}", error, task_name);
@@ -580,7 +655,11 @@ impl WasmTask {
                     return ControlAction::Continue;
                 }
 
-                log::info!("Checkpoint {} finished for task: {}", checkpoint_id, task_name);
+                log::info!(
+                    "Checkpoint {} finished for task: {}",
+                    checkpoint_id,
+                    task_name
+                );
 
                 // 完成所有输入源的检查点
                 for (idx, input) in inputs.iter_mut().enumerate() {
@@ -617,7 +696,7 @@ impl WasmTask {
     // ==================== 数据处理（热点路径，无锁无原子操作）====================
 
     /// 批量处理数据
-    /// 
+    ///
     /// 这是热点路径，没有任何锁或原子变量操作
     #[inline]
     fn process_batch(
@@ -679,7 +758,6 @@ impl WasmTask {
             // 通过处理器处理数据
             if let Err(e) = processor.process(buffer_bytes.to_vec(), input_index) {
                 log::error!("Processor error from input {}: {}", input_index, e);
-                return;
             }
         }
     }
@@ -726,8 +804,7 @@ impl WasmTask {
             match completion_flag.wait_timeout(timeout) {
                 Ok(_) => {
                     if let Some(error) = completion_flag.get_error() {
-                        return Err(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        return Err(Box::new(std::io::Error::other(
                             format!("{} failed: {}", operation_name, error),
                         )));
                     }
@@ -736,7 +813,10 @@ impl WasmTask {
                 Err(_) => {
                     log::warn!(
                         "{} timeout (retry {}/{}), task: {}",
-                        operation_name, retry + 1, CONTROL_OPERATION_MAX_RETRIES, self.task_name
+                        operation_name,
+                        retry + 1,
+                        CONTROL_OPERATION_MAX_RETRIES,
+                        self.task_name
                     );
                 }
             }
@@ -744,7 +824,10 @@ impl WasmTask {
 
         Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::TimedOut,
-            format!("{} failed after {} retries", operation_name, CONTROL_OPERATION_MAX_RETRIES),
+            format!(
+                "{} failed after {} retries",
+                operation_name, CONTROL_OPERATION_MAX_RETRIES
+            ),
         )))
     }
 
@@ -752,11 +835,15 @@ impl WasmTask {
     pub fn start(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
-            sender.send(TaskControlSignal::Start { completion_flag: completion_flag.clone() })
-                .map_err(|e| Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to send start signal: {}", e),
-                )) as Box<dyn std::error::Error + Send>)?;
+            sender
+                .send(TaskControlSignal::Start {
+                    completion_flag: completion_flag.clone(),
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(
+                        format!("Failed to send start signal: {}", e),
+                    )) as Box<dyn std::error::Error + Send>
+                })?;
         }
         self.wait_with_retry(&completion_flag, "Start")
     }
@@ -765,11 +852,15 @@ impl WasmTask {
     pub fn stop(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
-            sender.send(TaskControlSignal::Stop { completion_flag: completion_flag.clone() })
-                .map_err(|e| Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to send stop signal: {}", e),
-                )) as Box<dyn std::error::Error + Send>)?;
+            sender
+                .send(TaskControlSignal::Stop {
+                    completion_flag: completion_flag.clone(),
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(
+                        format!("Failed to send stop signal: {}", e),
+                    )) as Box<dyn std::error::Error + Send>
+                })?;
         }
         self.wait_with_retry(&completion_flag, "Stop")
     }
@@ -778,37 +869,57 @@ impl WasmTask {
     pub fn cancel(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
-            sender.send(TaskControlSignal::Cancel { completion_flag: completion_flag.clone() })
-                .map_err(|e| Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to send cancel signal: {}", e),
-                )) as Box<dyn std::error::Error + Send>)?;
+            sender
+                .send(TaskControlSignal::Cancel {
+                    completion_flag: completion_flag.clone(),
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(
+                        format!("Failed to send cancel signal: {}", e),
+                    )) as Box<dyn std::error::Error + Send>
+                })?;
         }
         self.wait_with_retry(&completion_flag, "Cancel")
     }
 
     /// 开始检查点
-    pub fn take_checkpoint(&self, checkpoint_id: u64) -> Result<(), Box<dyn std::error::Error + Send>> {
+    pub fn take_checkpoint(
+        &self,
+        checkpoint_id: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
-            sender.send(TaskControlSignal::Checkpoint { checkpoint_id, completion_flag: completion_flag.clone() })
-                .map_err(|e| Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to send checkpoint signal: {}", e),
-                )) as Box<dyn std::error::Error + Send>)?;
+            sender
+                .send(TaskControlSignal::Checkpoint {
+                    checkpoint_id,
+                    completion_flag: completion_flag.clone(),
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(
+                        format!("Failed to send checkpoint signal: {}", e),
+                    )) as Box<dyn std::error::Error + Send>
+                })?;
         }
         self.wait_with_retry(&completion_flag, "Checkpoint")
     }
 
     /// 完成检查点
-    pub fn finish_checkpoint(&self, checkpoint_id: u64) -> Result<(), Box<dyn std::error::Error + Send>> {
+    pub fn finish_checkpoint(
+        &self,
+        checkpoint_id: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
-            sender.send(TaskControlSignal::CheckpointFinish { checkpoint_id, completion_flag: completion_flag.clone() })
-                .map_err(|e| Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to send checkpoint finish signal: {}", e),
-                )) as Box<dyn std::error::Error + Send>)?;
+            sender
+                .send(TaskControlSignal::CheckpointFinish {
+                    checkpoint_id,
+                    completion_flag: completion_flag.clone(),
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(
+                        format!("Failed to send checkpoint finish signal: {}", e),
+                    )) as Box<dyn std::error::Error + Send>
+                })?;
         }
         self.wait_with_retry(&completion_flag, "CheckpointFinish")
     }
@@ -817,18 +928,19 @@ impl WasmTask {
     pub fn close(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
-            let _ = sender.send(TaskControlSignal::Close { completion_flag: completion_flag.clone() });
+            let _ = sender.send(TaskControlSignal::Close {
+                completion_flag: completion_flag.clone(),
+            });
             let _ = self.wait_with_retry(&completion_flag, "Close");
         }
 
         // 注意：线程句柄已经移动到线程组中，由 TaskHandle 统一管理
         // 这里不再需要 join，线程组会在 TaskHandle 中统一等待
         // 如果 task_thread 还存在（旧代码路径），则 join 它
-        if let Some(handle) = self.task_thread.take() {
-            if let Err(e) = handle.join() {
+        if let Some(handle) = self.task_thread.take()
+            && let Err(e) = handle.join() {
                 log::warn!("Task thread join error: {:?}", e);
             }
-        }
 
         self.control_sender.take();
         log::info!("WasmTask closed: {}", self.task_name);
@@ -853,7 +965,7 @@ impl WasmTask {
     }
 
     /// 获取线程组信息（用于 TaskThreadPool::submit）
-    /// 
+    ///
     /// # 返回值
     /// - `Some(Vec<ThreadGroup>)`: 线程组信息（会从 WasmTask 中移除）
     /// - `None`: 没有线程组信息
@@ -866,7 +978,8 @@ impl WasmTask {
     /// 等待任务完成
     pub fn wait_for_completion(&self) -> Result<ExecutionState, Box<dyn std::error::Error>> {
         if let Some(rx) = self.termination_future.lock().unwrap().take() {
-            rx.recv().map_err(|e| format!("Failed to receive termination state: {}", e).into())
+            rx.recv()
+                .map_err(|e| format!("Failed to receive termination state: {}", e).into())
         } else {
             Err("Termination future already consumed".into())
         }
@@ -890,7 +1003,9 @@ impl WasmTask {
     /// 等待线程完成（用于测试和调试）
     pub fn join_thread(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(handle) = self.task_thread.take() {
-            handle.join().map_err(|e| format!("Thread join error: {:?}", e))?;
+            handle
+                .join()
+                .map_err(|e| format!("Thread join error: {:?}", e))?;
         }
         Ok(())
     }
@@ -901,7 +1016,9 @@ impl WasmTask {
         if !self.thread_running.load(Ordering::Relaxed) {
             // 线程已结束，尝试 join
             if let Some(handle) = self.task_thread.take() {
-                handle.join().map_err(|e| format!("Thread join error: {:?}", e))?;
+                handle
+                    .join()
+                    .map_err(|e| format!("Thread join error: {:?}", e))?;
                 return Ok(true);
             }
             return Ok(true); // 没有线程句柄，认为已完成
@@ -910,9 +1027,12 @@ impl WasmTask {
     }
 
     /// 强制等待线程完成（带超时）
-    pub fn wait_thread_with_timeout(&mut self, timeout: Duration) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn wait_thread_with_timeout(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
         let start = std::time::Instant::now();
-        
+
         // 等待线程结束标志
         while self.thread_running.load(Ordering::Relaxed) {
             if start.elapsed() > timeout {
@@ -920,18 +1040,23 @@ impl WasmTask {
             }
             thread::sleep(Duration::from_millis(10));
         }
-        
+
         // 线程已结束，join 它
         if let Some(handle) = self.task_thread.take() {
-            handle.join().map_err(|e| format!("Thread join error: {:?}", e))?;
+            handle
+                .join()
+                .map_err(|e| format!("Thread join error: {:?}", e))?;
         }
-        
+
         Ok(true)
     }
 }
 
 impl TaskLifecycle for WasmTask {
-    fn init_with_context(&mut self, init_context: &crate::runtime::taskexecutor::InitContext) -> Result<(), Box<dyn std::error::Error + Send>> {
+    fn init_with_context(
+        &mut self,
+        init_context: &crate::runtime::taskexecutor::InitContext,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         // 直接调用内部的 init_with_context 方法（线程池已包含在 InitContext 中）
         <WasmTask>::init_with_context(self, init_context)
     }
@@ -946,7 +1071,10 @@ impl TaskLifecycle for WasmTask {
         <WasmTask>::stop(self)
     }
 
-    fn take_checkpoint(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn std::error::Error + Send>> {
+    fn take_checkpoint(
+        &mut self,
+        checkpoint_id: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         // 使用完全限定语法调用原有的 take_checkpoint 方法
         <WasmTask>::take_checkpoint(self, checkpoint_id)
     }

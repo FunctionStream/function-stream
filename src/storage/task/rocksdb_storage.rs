@@ -6,7 +6,7 @@ use super::storage::{StoredTaskInfo, TaskStorage};
 use crate::config::storage::RocksDBStorageConfig;
 use crate::runtime::common::ComponentState;
 use anyhow::{Context, Result};
-use rocksdb::{DB, Options, ColumnFamilyDescriptor, MergeOperands};
+use rocksdb::{ColumnFamilyDescriptor, DB, MergeOperands, Options};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
@@ -46,34 +46,31 @@ pub struct RocksDBTaskStorage {
 
 impl RocksDBTaskStorage {
     /// 创建新的 RocksDB 任务存储实例
-    /// 
+    ///
     /// # 参数
     /// - `db_path`: RocksDB 数据库路径
     /// - `config`: RocksDB 配置选项（可选）
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(RocksDBTaskStorage)`: 成功创建
     /// - `Err(...)`: 创建失败
-    pub fn new<P: AsRef<Path>>(
-        db_path: P,
-        config: Option<&RocksDBStorageConfig>,
-    ) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(db_path: P, config: Option<&RocksDBStorageConfig>) -> Result<Self> {
         let path = db_path.as_ref();
-        
+
         // 创建列族描述符
         let mut cf_opts = Options::default();
         cf_opts.set_merge_operator_associative("state_merge", state_merge_operator);
-        
+
         // 应用配置到列族选项（如果需要）
         // 注意：列族选项通常不需要这些配置，主要配置在数据库选项中
-        
+
         let cf_descriptor = ColumnFamilyDescriptor::new(CF_TASK, cf_opts);
-        
+
         // 创建数据库选项
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
-        
+
         // 应用配置选项
         if let Some(config) = config {
             if let Some(max_open_files) = config.max_open_files {
@@ -92,20 +89,19 @@ impl RocksDBTaskStorage {
                 db_opts.set_max_bytes_for_level_base(max_bytes_for_level_base);
             }
         }
-        
+
         // 打开数据库
         let cfs = vec![cf_descriptor];
         let db = DB::open_cf_descriptors(&db_opts, path, cfs)
             .context(format!("Failed to open RocksDB at path: {:?}", path))?;
-        
-        Ok(Self {
-            db: Arc::new(db),
-        })
+
+        Ok(Self { db: Arc::new(db) })
     }
 
     /// 获取任务列族
     fn get_cf(&self) -> std::sync::Arc<rocksdb::BoundColumnFamily<'_>> {
-        self.db.cf_handle(CF_TASK)
+        self.db
+            .cf_handle(CF_TASK)
             .expect("Task column family should exist")
     }
 }
@@ -130,7 +126,7 @@ fn state_merge_operator(
             task_data.state = state_update.state;
             continue;
         }
-        
+
         // 尝试解析为检查点 ID 更新
         if let Ok(checkpoint_update) = serde_json::from_slice::<CheckpointIdUpdate>(operand) {
             task_data.checkpoint_id = checkpoint_update.checkpoint_id;
@@ -146,12 +142,12 @@ impl TaskStorage for RocksDBTaskStorage {
     fn create_task(&self, task_info: &StoredTaskInfo) -> Result<()> {
         let cf = self.get_cf();
         let key = task_info.name.as_bytes();
-        
+
         // 检查任务是否已存在
         if self.db.get_cf(&cf, key)?.is_some() {
             return Err(anyhow::anyhow!("Task '{}' already exists", task_info.name));
         }
-        
+
         // 构建任务数据
         let task_data = TaskData {
             wasm_bytes: task_info.wasm_bytes.clone(),
@@ -160,92 +156,93 @@ impl TaskStorage for RocksDBTaskStorage {
             created_at: task_info.created_at,
             checkpoint_id: task_info.checkpoint_id,
         };
-        
+
         // 序列化为 JSON
-        let value = serde_json::to_vec(&task_data)
-            .context("Failed to serialize task data")?;
-        
+        let value = serde_json::to_vec(&task_data).context("Failed to serialize task data")?;
+
         // 写入 RocksDB
-        self.db.put_cf(&cf, key, value)
+        self.db
+            .put_cf(&cf, key, value)
             .context("Failed to write task to RocksDB")?;
-        
+
         Ok(())
     }
 
     fn update_task_state(&self, task_name: &str, new_state: ComponentState) -> Result<()> {
         let cf = self.get_cf();
         let key = task_name.as_bytes();
-        
+
         // 检查任务是否存在
         if self.db.get_cf(&cf, key)?.is_none() {
             return Err(anyhow::anyhow!("Task '{}' not found", task_name));
         }
-        
+
         // 构建状态更新
         let state_update = StateUpdate {
             state: format!("{:?}", new_state),
         };
-        
+
         // 序列化状态更新
-        let merge_value = serde_json::to_vec(&state_update)
-            .context("Failed to serialize state update")?;
-        
+        let merge_value =
+            serde_json::to_vec(&state_update).context("Failed to serialize state update")?;
+
         // 使用 merge 操作更新状态
-        self.db.merge_cf(&cf, key, merge_value)
+        self.db
+            .merge_cf(&cf, key, merge_value)
             .context("Failed to merge state update")?;
-        
+
         Ok(())
     }
 
     fn update_task_checkpoint_id(&self, task_name: &str, checkpoint_id: Option<u64>) -> Result<()> {
         let cf = self.get_cf();
         let key = task_name.as_bytes();
-        
+
         // 检查任务是否存在
         if self.db.get_cf(&cf, key)?.is_none() {
             return Err(anyhow::anyhow!("Task '{}' not found", task_name));
         }
-        
+
         // 构建检查点 ID 更新
-        let checkpoint_update = CheckpointIdUpdate {
-            checkpoint_id,
-        };
-        
+        let checkpoint_update = CheckpointIdUpdate { checkpoint_id };
+
         // 序列化检查点 ID 更新
         let merge_value = serde_json::to_vec(&checkpoint_update)
             .context("Failed to serialize checkpoint ID update")?;
-        
+
         // 使用 merge 操作更新检查点 ID
-        self.db.merge_cf(&cf, key, merge_value)
+        self.db
+            .merge_cf(&cf, key, merge_value)
             .context("Failed to merge checkpoint ID update")?;
-        
+
         Ok(())
     }
 
     fn delete_task(&self, task_name: &str) -> Result<()> {
         let cf = self.get_cf();
         let key = task_name.as_bytes();
-        
-        self.db.delete_cf(&cf, key)
+
+        self.db
+            .delete_cf(&cf, key)
             .context("Failed to delete task from RocksDB")?;
-        
+
         Ok(())
     }
 
     fn load_task(&self, task_name: &str) -> Result<StoredTaskInfo> {
         let cf = self.get_cf();
         let key = task_name.as_bytes();
-        
+
         match self.db.get_cf(&cf, key) {
             Ok(Some(value)) => {
                 // 反序列化任务数据
-                let task_data: TaskData = serde_json::from_slice(&value)
-                    .context("Failed to deserialize task data")?;
-                
+                let task_data: TaskData =
+                    serde_json::from_slice(&value).context("Failed to deserialize task data")?;
+
                 // 解析状态字符串为 ComponentState
                 let state = parse_component_state(&task_data.state)
                     .ok_or_else(|| anyhow::anyhow!("Invalid state: {}", task_data.state))?;
-                
+
                 Ok(StoredTaskInfo {
                     name: task_name.to_string(),
                     wasm_bytes: task_data.wasm_bytes,
@@ -255,19 +252,15 @@ impl TaskStorage for RocksDBTaskStorage {
                     checkpoint_id: task_data.checkpoint_id,
                 })
             }
-            Ok(None) => {
-                Err(anyhow::anyhow!("Task '{}' not found", task_name))
-            }
-            Err(e) => {
-                Err(anyhow::anyhow!("Failed to read from RocksDB: {}", e))
-            }
+            Ok(None) => Err(anyhow::anyhow!("Task '{}' not found", task_name)),
+            Err(e) => Err(anyhow::anyhow!("Failed to read from RocksDB: {}", e)),
         }
     }
 
     fn task_exists(&self, task_name: &str) -> Result<bool> {
         let cf = self.get_cf();
         let key = task_name.as_bytes();
-        
+
         match self.db.get_cf(&cf, key) {
             Ok(Some(_)) => Ok(true),
             Ok(None) => Ok(false),

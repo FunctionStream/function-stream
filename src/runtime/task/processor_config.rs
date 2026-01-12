@@ -11,25 +11,25 @@ use std::collections::HashMap;
 // ============================================================================
 
 /// YAML 配置示例
-/// 
+///
 /// 包含各种配置类型的完整 YAML 示例，用于文档和解析参考
 pub mod yaml_examples {
     /// Processor 类型配置的完整 YAML 示例
-    /// 
+    ///
     /// 这是一个完整的 Processor 配置文件示例，包含：
     /// - name: 任务名称（根级别）
     /// - type: 配置类型（根级别，值为 "processor"）
     /// - input-groups: 输入组配置（支持多个输入组，每个组包含多个输入源）
     /// - outputs: 输出配置（支持多个输出接收器）
-    /// 
+    ///
     /// 注意：配置文件在根级别包含 `name` 和 `type` 字段，用于区分配置类型。
-    /// 
+    ///
     /// # 示例
-    /// 
+    ///
     /// ```yaml
     /// name: "my-task"
     /// type: processor
-    /// 
+    ///
     /// # input-groups 是一个数组，可以包含多个输入组
     /// # 每个输入组包含多个输入源配置，支持同时从多个数据源读取数据
     /// input-groups:
@@ -44,7 +44,7 @@ pub mod yaml_examples {
     ///         topic: "input-topic-2"
     ///         partition: 0
     ///         group_id: "my-group"
-    /// 
+    ///
     /// # outputs 是一个数组，可以包含多个输出接收器配置
     /// # 支持同时向多个数据源写入数据
     /// outputs:
@@ -80,11 +80,11 @@ outputs:
     partition: 0"#;
 
     /// Source 类型配置的完整 YAML 示例（未来支持）
-    /// 
+    ///
     /// 这是一个 Source 配置示例，用于未来扩展。
-    /// 
+    ///
     /// # 示例
-    /// 
+    ///
     /// ```yaml
     /// name: "my-source"
     /// type: source
@@ -95,11 +95,11 @@ type: source
 # Source 配置内容（待实现）"#;
 
     /// Sink 类型配置的完整 YAML 示例（未来支持）
-    /// 
+    ///
     /// 这是一个 Sink 配置示例，用于未来扩展。
-    /// 
+    ///
     /// # 示例
-    /// 
+    ///
     /// ```yaml
     /// name: "my-sink"
     /// type: sink
@@ -115,7 +115,7 @@ type: sink
 // ============================================================================
 
 /// InputConfig - 输入源配置
-/// 
+///
 /// 支持多种输入源类型，每种类型有对应的配置结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "input-type", rename_all = "kebab-case")]
@@ -139,22 +139,23 @@ pub enum InputConfig {
 
 impl InputConfig {
     /// 从 YAML Value 解析 InputConfig
-    /// 
+    ///
     /// # 参数
     /// - `value`: YAML Value 对象
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(InputConfig)`: 成功解析
     /// - `Err(...)`: 解析失败
     pub fn from_yaml_value(value: &Value) -> Result<Self, Box<dyn std::error::Error + Send>> {
         // 先尝试使用 serde 反序列化
-        let config: InputConfig = serde_yaml::from_value(value.clone())
-            .map_err(|e| -> Box<dyn std::error::Error + Send> {
+        let config: InputConfig = serde_yaml::from_value(value.clone()).map_err(
+            |e| -> Box<dyn std::error::Error + Send> {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Failed to parse input config: {}", e),
                 ))
-            })?;
+            },
+        )?;
         Ok(config)
     }
 
@@ -171,23 +172,23 @@ impl InputConfig {
 // ============================================================================
 
 /// InputGroup - 输入组配置
-/// 
+///
 /// 一个输入组包含多个输入源配置。
 /// WASM 任务可以包含多个输入组，每个组可以包含多个输入源。
 #[derive(Debug, Clone)]
 pub struct InputGroup {
     /// 输入源配置列表
-    /// 
+    ///
     /// 一个输入组可以包含多个输入源，这些输入源会被组合在一起处理。
     pub inputs: Vec<InputConfig>,
 }
 
 impl InputGroup {
     /// 创建新的输入组
-    /// 
+    ///
     /// # 参数
     /// - `inputs`: 输入源配置列表
-    /// 
+    ///
     /// # 返回值
     /// - `InputGroup`: 创建的输入组
     pub fn new(inputs: Vec<InputConfig>) -> Self {
@@ -195,10 +196,10 @@ impl InputGroup {
     }
 
     /// 从 YAML Value 解析 InputGroup
-    /// 
+    ///
     /// # 参数
     /// - `value`: YAML Value 对象（应该是一个包含 inputs 数组的对象）
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(InputGroup)`: 成功解析
     /// - `Err(...)`: 解析失败
@@ -211,9 +212,9 @@ impl InputGroup {
                     .get("input-type")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown");
-                
-                let input = InputConfig::from_yaml_value(input_value)
-                    .map_err(|e| -> Box<dyn std::error::Error + Send> {
+
+                let input = InputConfig::from_yaml_value(input_value).map_err(
+                    |e| -> Box<dyn std::error::Error + Send> {
                         Box::new(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             format!(
@@ -223,8 +224,9 @@ impl InputGroup {
                                 e
                             ),
                         ))
-                    })?;
-                
+                    },
+                )?;
+
                 let parsed_type = input.input_type();
                 if parsed_type != input_type && input_type != "unknown" {
                     return Err(Box::new(std::io::Error::new(
@@ -237,24 +239,24 @@ impl InputGroup {
                         ),
                     )) as Box<dyn std::error::Error + Send>);
                 }
-                
+
                 inputs.push(input);
             }
             return Ok(InputGroup::new(inputs));
         }
-        
+
         // 如果 value 是一个对象，尝试获取 inputs 字段
-        if let Some(inputs_value) = value.get("inputs") {
-            if let Some(inputs_seq) = inputs_value.as_sequence() {
+        if let Some(inputs_value) = value.get("inputs")
+            && let Some(inputs_seq) = inputs_value.as_sequence() {
                 let mut inputs = Vec::new();
                 for (idx, input_value) in inputs_seq.iter().enumerate() {
                     let input_type = input_value
                         .get("input-type")
                         .and_then(|v| v.as_str())
                         .unwrap_or("unknown");
-                    
-                    let input = InputConfig::from_yaml_value(input_value)
-                        .map_err(|e| -> Box<dyn std::error::Error + Send> {
+
+                    let input = InputConfig::from_yaml_value(input_value).map_err(
+                        |e| -> Box<dyn std::error::Error + Send> {
                             Box::new(std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
                                 format!(
@@ -264,8 +266,9 @@ impl InputGroup {
                                     e
                                 ),
                             ))
-                        })?;
-                    
+                        },
+                    )?;
+
                     let parsed_type = input.input_type();
                     if parsed_type != input_type && input_type != "unknown" {
                         return Err(Box::new(std::io::Error::new(
@@ -276,15 +279,15 @@ impl InputGroup {
                                 input_type,
                                 parsed_type
                             ),
-                        )) as Box<dyn std::error::Error + Send>);
+                        ))
+                            as Box<dyn std::error::Error + Send>);
                     }
-                    
+
                     inputs.push(input);
                 }
                 return Ok(InputGroup::new(inputs));
             }
-        }
-        
+
         Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "Invalid input group format: expected an array of inputs or an object with 'inputs' field",
@@ -297,37 +300,37 @@ impl InputGroup {
 // ============================================================================
 
 /// ProcessorConfig - 处理器配置
-/// 
+///
 /// 包含处理器的基本信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessorConfig {
     /// 处理器名称
     pub name: String,
     /// WASM 模块字节（不在配置文件中，运行时设置）
-    /// 
+    ///
     /// 注意：此字段不会从配置文件序列化/反序列化，保证配置文件和 WASM 模块字节解耦
     #[serde(skip)]
     pub wasm_bytes: Option<Vec<u8>>,
     /// 是否使用内置 Event 序列化方式
-    /// 
+    ///
     /// 如果为 true，则使用系统内置的 Event 序列化方式
     /// 如果为 false 或不设置，则使用默认序列化方式
     #[serde(default)]
     pub use_builtin_event_serialization: bool,
     /// 是否启用 CheckPoint
-    /// 
+    ///
     /// 如果为 true，则启用检查点功能
     /// 如果为 false 或不设置，则不启用检查点
     #[serde(default)]
     pub enable_checkpoint: bool,
     /// CheckPoint 时间间隔（秒）
-    /// 
+    ///
     /// 检查点的时间间隔，最小值为 1 秒
     /// 如果未设置或小于 1，则使用默认值 1 秒
     #[serde(default = "default_checkpoint_interval")]
     pub checkpoint_interval_seconds: u64,
     /// WASM 初始化配置（可选）
-    /// 
+    ///
     /// 传递给 WASM 模块 fs_init 函数的配置参数
     /// 如果不配置，则传递空 Map
     #[serde(default)]
@@ -341,47 +344,68 @@ fn default_checkpoint_interval() -> u64 {
 
 impl ProcessorConfig {
     /// 从 YAML Value 解析 ProcessorConfig
-    /// 
+    ///
     /// # 参数
     /// - `value`: YAML Value 对象（根级别的配置，包含 name、input-groups、outputs 等字段）
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(ProcessorConfig)`: 成功解析
     /// - `Err(...)`: 解析失败
-    /// 
+    ///
     /// 注意：需要从根级别配置中提取 processor 相关字段，忽略 `type`、`input-groups`、`outputs` 等字段。
     pub fn from_yaml_value(value: &Value) -> Result<Self, Box<dyn std::error::Error + Send>> {
         // 创建一个新的 Value，只包含 processor 相关字段，排除 type、input-groups、outputs 等
         let mut processor_value = serde_yaml::Mapping::new();
-        
+
         // 复制 name 字段（如果存在）
         if let Some(name_val) = value.get("name") {
-            processor_value.insert(serde_yaml::Value::String("name".to_string()), name_val.clone());
+            processor_value.insert(
+                serde_yaml::Value::String("name".to_string()),
+                name_val.clone(),
+            );
         }
-        
+
         // 复制其他 processor 相关字段（如果存在）
         if let Some(use_builtin) = value.get("use_builtin_event_serialization") {
-            processor_value.insert(serde_yaml::Value::String("use_builtin_event_serialization".to_string()), use_builtin.clone());
+            processor_value.insert(
+                serde_yaml::Value::String("use_builtin_event_serialization".to_string()),
+                use_builtin.clone(),
+            );
         }
         if let Some(enable_checkpoint) = value.get("enable_checkpoint") {
-            processor_value.insert(serde_yaml::Value::String("enable_checkpoint".to_string()), enable_checkpoint.clone());
+            processor_value.insert(
+                serde_yaml::Value::String("enable_checkpoint".to_string()),
+                enable_checkpoint.clone(),
+            );
         }
         if let Some(checkpoint_interval) = value.get("checkpoint_interval_seconds") {
-            processor_value.insert(serde_yaml::Value::String("checkpoint_interval_seconds".to_string()), checkpoint_interval.clone());
+            processor_value.insert(
+                serde_yaml::Value::String("checkpoint_interval_seconds".to_string()),
+                checkpoint_interval.clone(),
+            );
         }
-        
+
         // 从清理后的 Value 解析 ProcessorConfig
         let clean_value = serde_yaml::Value::Mapping(processor_value);
-        let mut config: ProcessorConfig = serde_yaml::from_value(clean_value)
-            .map_err(|e| -> Box<dyn std::error::Error + Send> {
-                let available_keys: Vec<String> = value.as_mapping()
-                    .map(|m| m.keys().filter_map(|k| k.as_str().map(|s| s.to_string())).collect())
+        let mut config: ProcessorConfig = serde_yaml::from_value(clean_value).map_err(
+            |e| -> Box<dyn std::error::Error + Send> {
+                let available_keys: Vec<String> = value
+                    .as_mapping()
+                    .map(|m| {
+                        m.keys()
+                            .filter_map(|k| k.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
                     .unwrap_or_default();
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Failed to parse processor config: {}. Available keys in root: {:?}", e, available_keys),
+                    format!(
+                        "Failed to parse processor config: {}. Available keys in root: {:?}",
+                        e, available_keys
+                    ),
                 ))
-            })?;
+            },
+        )?;
 
         // 如果没有提供 name，使用默认值
         if config.name.is_empty() {
@@ -397,7 +421,7 @@ impl ProcessorConfig {
     }
 
     /// 设置 WASM 模块字节
-    /// 
+    ///
     /// # 参数
     /// - `bytes`: WASM 模块字节
     pub fn set_wasm_bytes(&mut self, bytes: Vec<u8>) {
@@ -410,7 +434,7 @@ impl ProcessorConfig {
 // ============================================================================
 
 /// OutputConfig - 输出配置
-/// 
+///
 /// 支持多种输出类型，每种类型有对应的配置结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "output-type", rename_all = "kebab-case")]
@@ -431,21 +455,22 @@ pub enum OutputConfig {
 
 impl OutputConfig {
     /// 从 YAML Value 解析 OutputConfig
-    /// 
+    ///
     /// # 参数
     /// - `value`: YAML Value 对象
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(OutputConfig)`: 成功解析
     /// - `Err(...)`: 解析失败
     pub fn from_yaml_value(value: &Value) -> Result<Self, Box<dyn std::error::Error + Send>> {
-        let config: OutputConfig = serde_yaml::from_value(value.clone())
-            .map_err(|e| -> Box<dyn std::error::Error + Send> {
+        let config: OutputConfig = serde_yaml::from_value(value.clone()).map_err(
+            |e| -> Box<dyn std::error::Error + Send> {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Failed to parse output config: {}", e),
                 ))
-            })?;
+            },
+        )?;
         Ok(config)
     }
 
@@ -462,14 +487,14 @@ impl OutputConfig {
 // ============================================================================
 
 /// WasmTaskConfig - WASM 任务配置
-/// 
+///
 /// 包含 Input、Processor、Output 三个组件的配置
 #[derive(Debug, Clone)]
 pub struct WasmTaskConfig {
     /// 任务名称
     pub task_name: String,
     /// 输入组配置列表
-    /// 
+    ///
     /// 这是一个数组，可以包含多个输入组。
     /// 每个输入组包含多个输入源配置，支持同时从多个数据源读取数据。
     /// 例如：可以有多个输入组，每个组包含多个 Kafka topic 的输入源。
@@ -477,7 +502,7 @@ pub struct WasmTaskConfig {
     /// 处理器配置
     pub processor: ProcessorConfig,
     /// 输出配置列表
-    /// 
+    ///
     /// 这是一个数组，可以包含多个输出配置。
     /// 每个输出配置代表一组输出，支持同时向多个数据源写入数据。
     /// 例如：可以同时向多个 Kafka topic 写入数据。
@@ -486,15 +511,15 @@ pub struct WasmTaskConfig {
 
 impl WasmTaskConfig {
     /// 从 YAML Value 解析 WasmTaskConfig
-    /// 
+    ///
     /// # 参数
     /// - `task_name`: 任务名称（如果配置中没有 name 字段，则使用此值）
     /// - `value`: YAML Value 对象（根级别的配置，包含 name、type、input-groups、outputs 等）
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(WasmTaskConfig)`: 成功解析
     /// - `Err(...)`: 解析失败
-    /// 
+    ///
     /// 配置格式：
     /// ```yaml
     /// name: "my-task"
@@ -506,19 +531,19 @@ impl WasmTaskConfig {
         task_name: String,
         value: &Value,
     ) -> Result<Self, Box<dyn std::error::Error + Send>> {
-        use crate::runtime::task::yaml_keys::{NAME, INPUT_GROUPS, INPUTS, OUTPUTS};
-        
+        use crate::runtime::task::yaml_keys::{INPUT_GROUPS, INPUTS, NAME, OUTPUTS};
+
         // 1. 获取配置中的 name（如果存在），否则使用传入的 task_name
         let config_name = value
             .get(NAME)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or(task_name);
-        
+
         // 2. 解析 Processor 配置（从根级别配置中提取 processor 相关字段）
         // 注意：现在配置在根级别，ProcessorConfig 需要能够从根级别解析
         let mut processor = ProcessorConfig::from_yaml_value(value)?;
-        
+
         // 如果 ProcessorConfig 中的 name 为空，使用配置中的 name
         if processor.name.is_empty() {
             processor.name = config_name.clone();
@@ -530,22 +555,23 @@ impl WasmTaskConfig {
         // 2. input-groups 数组，每个元素是一个输入组
         let input_groups_value = value
             .get(INPUT_GROUPS)
-            .or_else(|| value.get(INPUTS))  // 向后兼容
+            .or_else(|| value.get(INPUTS)) // 向后兼容
             .ok_or_else(|| {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Missing '{}' or '{}' in processor config", INPUT_GROUPS, INPUTS),
+                    format!(
+                        "Missing '{}' or '{}' in processor config",
+                        INPUT_GROUPS, INPUTS
+                    ),
                 )) as Box<dyn std::error::Error + Send>
             })?;
 
-        let input_groups_seq = input_groups_value
-            .as_sequence()
-            .ok_or_else(|| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid 'input-groups' or 'inputs' format, expected a list",
-                )) as Box<dyn std::error::Error + Send>
-            })?;
+        let input_groups_seq = input_groups_value.as_sequence().ok_or_else(|| {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid 'input-groups' or 'inputs' format, expected a list",
+            )) as Box<dyn std::error::Error + Send>
+        })?;
 
         if input_groups_seq.is_empty() {
             return Err(Box::new(std::io::Error::new(
@@ -558,7 +584,11 @@ impl WasmTaskConfig {
         if input_groups_seq.len() > MAX_INPUT_GROUPS {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Too many input groups: {} (maximum is {})", input_groups_seq.len(), MAX_INPUT_GROUPS),
+                format!(
+                    "Too many input groups: {} (maximum is {})",
+                    input_groups_seq.len(),
+                    MAX_INPUT_GROUPS
+                ),
             )) as Box<dyn std::error::Error + Send>);
         }
 
@@ -566,18 +596,15 @@ impl WasmTaskConfig {
         // input-groups 是一个数组，每个元素代表一个输入组（包含多个输入源）
         let mut input_groups = Vec::new();
         for (group_idx, group_value) in input_groups_seq.iter().enumerate() {
-            let input_group = InputGroup::from_yaml_value(group_value)
-                .map_err(|e| -> Box<dyn std::error::Error + Send> {
+            let input_group = InputGroup::from_yaml_value(group_value).map_err(
+                |e| -> Box<dyn std::error::Error + Send> {
                     Box::new(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        format!(
-                            "Failed to parse input group #{}: {}",
-                            group_idx + 1,
-                            e
-                        ),
+                        format!("Failed to parse input group #{}: {}", group_idx + 1, e),
                     ))
-                })?;
-            
+                },
+            )?;
+
             // 验证输入组不为空
             if input_group.inputs.is_empty() {
                 return Err(Box::new(std::io::Error::new(
@@ -585,28 +612,24 @@ impl WasmTaskConfig {
                     format!("Input group #{} is empty", group_idx + 1),
                 )) as Box<dyn std::error::Error + Send>);
             }
-            
+
             input_groups.push(input_group);
         }
 
         // 4. 解析 Outputs 配置
-        let outputs_value = value
-            .get(OUTPUTS)
-            .ok_or_else(|| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Missing 'outputs' in processor config",
-                )) as Box<dyn std::error::Error + Send>
-            })?;
+        let outputs_value = value.get(OUTPUTS).ok_or_else(|| {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Missing 'outputs' in processor config",
+            )) as Box<dyn std::error::Error + Send>
+        })?;
 
-        let outputs_seq = outputs_value
-            .as_sequence()
-            .ok_or_else(|| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid 'outputs' format, expected a list",
-                )) as Box<dyn std::error::Error + Send>
-            })?;
+        let outputs_seq = outputs_value.as_sequence().ok_or_else(|| {
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid 'outputs' format, expected a list",
+            )) as Box<dyn std::error::Error + Send>
+        })?;
 
         if outputs_seq.is_empty() {
             return Err(Box::new(std::io::Error::new(
@@ -619,7 +642,11 @@ impl WasmTaskConfig {
         if outputs_seq.len() > MAX_OUTPUTS {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Too many outputs: {} (maximum is {})", outputs_seq.len(), MAX_OUTPUTS),
+                format!(
+                    "Too many outputs: {} (maximum is {})",
+                    outputs_seq.len(),
+                    MAX_OUTPUTS
+                ),
             )) as Box<dyn std::error::Error + Send>);
         }
 
@@ -632,9 +659,9 @@ impl WasmTaskConfig {
                 .get("output-type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            
-            let output = OutputConfig::from_yaml_value(output_value)
-                .map_err(|e| -> Box<dyn std::error::Error + Send> {
+
+            let output = OutputConfig::from_yaml_value(output_value).map_err(
+                |e| -> Box<dyn std::error::Error + Send> {
                     Box::new(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!(
@@ -644,8 +671,9 @@ impl WasmTaskConfig {
                             e
                         ),
                     ))
-                })?;
-            
+                },
+            )?;
+
             // 验证输出类型是否匹配
             let parsed_type = output.output_type();
             if parsed_type != output_type && output_type != "unknown" {
@@ -659,7 +687,7 @@ impl WasmTaskConfig {
                     ),
                 )) as Box<dyn std::error::Error + Send>);
             }
-            
+
             outputs.push(output);
         }
 
@@ -671,4 +699,3 @@ impl WasmTaskConfig {
         })
     }
 }
-

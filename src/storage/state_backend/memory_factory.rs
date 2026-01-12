@@ -19,11 +19,11 @@ impl MemoryStateStoreFactory {
     }
 
     /// 获取系统默认的内存状态存储工厂（单例）
-    /// 
+    ///
     /// 使用静态变量存储默认工厂实例
     pub fn default_factory() -> Arc<dyn StateStoreFactory> {
         static FACTORY: Mutex<Option<Arc<MemoryStateStoreFactory>>> = Mutex::new(None);
-        
+
         let mut factory = FACTORY.lock().unwrap();
         if factory.is_none() {
             *factory = Some(Arc::new(MemoryStateStoreFactory::new()));
@@ -39,9 +39,11 @@ impl Default for MemoryStateStoreFactory {
 }
 
 impl StateStoreFactory for MemoryStateStoreFactory {
-    fn new_state_store(&self, _column_family: Option<String>) -> Result<Box<dyn crate::storage::state_backend::store::StateStore>, BackendError> {
+    fn new_state_store(
+        &self,
+        _column_family: Option<String>,
+    ) -> Result<Box<dyn crate::storage::state_backend::store::StateStore>, BackendError> {
         // 内存存储不支持列族，忽略 column_family 参数
         Ok(Box::new(MemoryStateStore::new()))
     }
 }
-

@@ -140,4 +140,3 @@ impl Default for MetricsRegistry {
         Self::new()
     }
 }
-

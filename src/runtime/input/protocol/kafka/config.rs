@@ -4,11 +4,11 @@
 //
 // Note: Each input source only supports one topic and one partition
 
-use std::collections::HashMap;
 use serde_yaml::Value;
+use std::collections::HashMap;
 
 /// KafkaConfig - Kafka configuration
-/// 
+///
 /// Contains all configuration options for Kafka input source
 #[derive(Debug, Clone)]
 pub struct KafkaConfig {
@@ -27,7 +27,7 @@ pub struct KafkaConfig {
 
 impl KafkaConfig {
     /// Create new Kafka configuration
-    /// 
+    ///
     /// # Arguments
     /// - `bootstrap_servers`: List of Kafka broker addresses
     /// - `topic`: Topic name (single)
@@ -51,9 +51,9 @@ impl KafkaConfig {
     }
 
     /// Create configuration from single bootstrap servers string
-    /// 
+    ///
     /// Supports comma-separated multiple server addresses
-    /// 
+    ///
     /// # Arguments
     /// - `bootstrap_servers`: Kafka broker addresses (comma-separated string)
     /// - `topic`: Topic name (single)
@@ -80,7 +80,7 @@ impl KafkaConfig {
     pub fn bootstrap_servers_str(&self) -> String {
         self.bootstrap_servers.join(",")
     }
-    
+
     /// Get partition display string
     pub fn partition_str(&self) -> String {
         match self.partition {
@@ -90,14 +90,16 @@ impl KafkaConfig {
     }
 
     /// Parse Kafka configuration from YAML Value
-    /// 
+    ///
     /// # Arguments
     /// - `input_config`: YAML Value of input configuration
-    /// 
+    ///
     /// # Returns
     /// - `Ok(KafkaConfig)`: Configuration parsed successfully
     /// - `Err(...)`: Parse failed
-    pub fn from_yaml_value(input_config: &Value) -> Result<Self, Box<dyn std::error::Error + Send>> {
+    pub fn from_yaml_value(
+        input_config: &Value,
+    ) -> Result<Self, Box<dyn std::error::Error + Send>> {
         // Parse bootstrap.servers
         // Supports two formats:
         // 1. bootstrap_servers: "localhost:9092" or "kafka1:9092,kafka2:9092"
@@ -105,13 +107,15 @@ impl KafkaConfig {
         let bootstrap_servers = if let Some(servers_value) = input_config.get("bootstrap_servers") {
             if let Some(servers_str) = servers_value.as_str() {
                 // Single string, possibly comma-separated multiple addresses
-                servers_str.split(',')
+                servers_str
+                    .split(',')
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect()
             } else if let Some(servers_seq) = servers_value.as_sequence() {
                 // String list
-                servers_seq.iter()
+                servers_seq
+                    .iter()
                     .filter_map(|v| v.as_str().map(|s| s.to_string()))
                     .collect()
             } else {
@@ -141,13 +145,12 @@ impl KafkaConfig {
 
         // Parse partition (optional, uses subscribe auto-assignment if not specified)
         let partition = if let Some(partition_value) = input_config.get("partition") {
-            Some(partition_value.as_i64()
-                .ok_or_else(|| {
-                    Box::new(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "Invalid 'partition' format in Kafka input config (must be an integer)",
-                    )) as Box<dyn std::error::Error + Send>
-                })? as i32)
+            Some(partition_value.as_i64().ok_or_else(|| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid 'partition' format in Kafka input config (must be an integer)",
+                )) as Box<dyn std::error::Error + Send>
+            })? as i32)
         } else {
             // Don't specify partition, use subscribe auto-assignment
             None
@@ -175,7 +178,12 @@ impl KafkaConfig {
             }
         }
 
-        Ok(Self::new(bootstrap_servers, topic, partition, group_id, properties))
+        Ok(Self::new(
+            bootstrap_servers,
+            topic,
+            partition,
+            group_id,
+            properties,
+        ))
     }
 }
-

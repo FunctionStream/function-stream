@@ -16,5 +16,3 @@ impl PlanNode for ShowWasmTasksPlan {
         visitor.visit_show_wasm_tasks(self, context)
     }
 }
-
-

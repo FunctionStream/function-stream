@@ -5,10 +5,10 @@
 use crate::runtime::buffer_and_event::event::Event;
 
 /// BufferOrEvent - Buffer or event
-/// 
+///
 /// Unified representation of data received from network or message queue
 /// Can be a buffer containing data records (byte array), or an event (Event)
-/// 
+///
 /// Reference Flink's BufferOrEvent class
 #[derive(Debug)]
 pub struct BufferOrEvent {
@@ -123,4 +123,3 @@ impl BufferOrEvent {
         self.more_available = more_available;
     }
 }
-

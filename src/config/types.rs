@@ -41,6 +41,7 @@ pub struct LogConfig {
 
 /// Global configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct GlobalConfig {
     /// Service configuration
     pub service: ServiceConfig,
@@ -54,16 +55,6 @@ pub struct GlobalConfig {
     pub task_storage: crate::config::storage::TaskStorageConfig,
 }
 
-impl Default for GlobalConfig {
-    fn default() -> Self {
-        Self {
-            service: ServiceConfig::default(),
-            logging: LogConfig::default(),
-            state_storage: crate::config::storage::StateStorageConfig::default(),
-            task_storage: crate::config::storage::TaskStorageConfig::default(),
-        }
-    }
-}
 
 impl GlobalConfig {
     /// Create configuration with version information from Cargo.toml
@@ -142,7 +133,9 @@ impl GlobalConfig {
 
 impl GlobalConfig {
     /// Load configuration from file path, use default path if None
-    pub fn load<P: AsRef<std::path::Path>>(path: Option<P>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn load<P: AsRef<std::path::Path>>(
+        path: Option<P>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let config_path = path
             .map(|p| p.as_ref().to_path_buf())
             .unwrap_or_else(|| std::path::PathBuf::from("config.yaml"));
@@ -155,4 +148,3 @@ impl GlobalConfig {
         }
     }
 }
-

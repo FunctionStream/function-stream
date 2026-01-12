@@ -16,6 +16,7 @@ pub enum StateStorageType {
 
 /// RocksDB configuration options
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct RocksDBStorageConfig {
     // Note: dir_name is no longer used, database is stored directly in {base_dir}/state/{task_name}-{time} directory
     // Example: data/state/my_task-1234567890
@@ -32,17 +33,6 @@ pub struct RocksDBStorageConfig {
     // Note: Compression configuration is not currently supported, uses default none compression
 }
 
-impl Default for RocksDBStorageConfig {
-    fn default() -> Self {
-        Self {
-            max_open_files: None,
-            write_buffer_size: None,
-            max_write_buffer_number: None,
-            target_file_size_base: None,
-            max_bytes_for_level_base: None,
-        }
-    }
-}
 
 /// State storage configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,4 +108,3 @@ impl Default for TaskStorageConfig {
         }
     }
 }
-

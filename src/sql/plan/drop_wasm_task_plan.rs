@@ -10,7 +10,7 @@ impl DropWasmTaskPlan {
     pub fn new(name: String) -> Self {
         Self { name, force: false }
     }
-    
+
     pub fn with_force(name: String, force: bool) -> Self {
         Self { name, force }
     }
@@ -21,5 +21,3 @@ impl PlanNode for DropWasmTaskPlan {
         visitor.visit_drop_wasm_task(self, context)
     }
 }
-
-

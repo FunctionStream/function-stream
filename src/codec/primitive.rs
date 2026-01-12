@@ -2,26 +2,37 @@
 //
 // Provides encoding and decoding functionality for basic data types
 
-use super::varint::{encode_var_int64, decode_var_int64};
+use super::varint::{decode_var_int64, encode_var_int64};
 
 /// Encode boolean value
 /// Writes to the specified position in the buffer, returns the number of bytes written
-pub fn encode_boolean(buffer: &mut [u8], offset: usize, value: bool) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_boolean(
+    buffer: &mut [u8],
+    offset: usize,
+    value: bool,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     let val = if value { 1i64 } else { 0i64 };
     encode_var_int64(buffer, offset, val)
 }
 
 /// Decode boolean value
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_boolean(bytes: &[u8], offset: usize) -> Result<(bool, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_boolean(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(bool, usize), Box<dyn std::error::Error + Send>> {
     let (value, consumed) = decode_var_int64(bytes, offset)?;
     Ok((value != 0, consumed))
 }
 
 /// Encode 32-bit integer (little-endian)
 /// Writes to the specified position in the buffer, returns the number of bytes written (fixed at 4)
-pub fn encode_i32(buffer: &mut [u8], offset: usize, value: i32) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_i32(
+    buffer: &mut [u8],
+    offset: usize,
+    value: i32,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     if offset + 4 > buffer.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -34,9 +45,12 @@ pub fn encode_i32(buffer: &mut [u8], offset: usize, value: i32) -> Result<usize,
 }
 
 /// Decode 32-bit integer (little-endian)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_i32(bytes: &[u8], offset: usize) -> Result<(i32, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_i32(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(i32, usize), Box<dyn std::error::Error + Send>> {
     if offset + 4 > bytes.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
@@ -50,7 +64,11 @@ pub fn decode_i32(bytes: &[u8], offset: usize) -> Result<(i32, usize), Box<dyn s
 
 /// Encode 64-bit integer (little-endian)
 /// Writes to the specified position in the buffer, returns the number of bytes written (fixed at 8)
-pub fn encode_i64(buffer: &mut [u8], offset: usize, value: i64) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_i64(
+    buffer: &mut [u8],
+    offset: usize,
+    value: i64,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     if offset + 8 > buffer.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -63,9 +81,12 @@ pub fn encode_i64(buffer: &mut [u8], offset: usize, value: i64) -> Result<usize,
 }
 
 /// Decode 64-bit integer (little-endian)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_i64(bytes: &[u8], offset: usize) -> Result<(i64, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_i64(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(i64, usize), Box<dyn std::error::Error + Send>> {
     if offset + 8 > bytes.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
@@ -79,7 +100,11 @@ pub fn decode_i64(bytes: &[u8], offset: usize) -> Result<(i64, usize), Box<dyn s
 
 /// Encode 32-bit unsigned integer (little-endian)
 /// Writes to the specified position in the buffer, returns the number of bytes written (fixed at 4)
-pub fn encode_u32(buffer: &mut [u8], offset: usize, value: u32) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_u32(
+    buffer: &mut [u8],
+    offset: usize,
+    value: u32,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     if offset + 4 > buffer.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -92,9 +117,12 @@ pub fn encode_u32(buffer: &mut [u8], offset: usize, value: u32) -> Result<usize,
 }
 
 /// Decode 32-bit unsigned integer (little-endian)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_u32(bytes: &[u8], offset: usize) -> Result<(u32, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_u32(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(u32, usize), Box<dyn std::error::Error + Send>> {
     if offset + 4 > bytes.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
@@ -108,7 +136,11 @@ pub fn decode_u32(bytes: &[u8], offset: usize) -> Result<(u32, usize), Box<dyn s
 
 /// Encode 64-bit unsigned integer (little-endian)
 /// Writes to the specified position in the buffer, returns the number of bytes written (fixed at 8)
-pub fn encode_u64(buffer: &mut [u8], offset: usize, value: u64) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_u64(
+    buffer: &mut [u8],
+    offset: usize,
+    value: u64,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     if offset + 8 > buffer.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -121,9 +153,12 @@ pub fn encode_u64(buffer: &mut [u8], offset: usize, value: u64) -> Result<usize,
 }
 
 /// Decode 64-bit unsigned integer (little-endian)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_u64(bytes: &[u8], offset: usize) -> Result<(u64, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_u64(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(u64, usize), Box<dyn std::error::Error + Send>> {
     if offset + 8 > bytes.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
@@ -137,7 +172,11 @@ pub fn decode_u64(bytes: &[u8], offset: usize) -> Result<(u64, usize), Box<dyn s
 
 /// Encode single-precision floating point number (little-endian)
 /// Writes to the specified position in the buffer, returns the number of bytes written (fixed at 4)
-pub fn encode_f32(buffer: &mut [u8], offset: usize, value: f32) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_f32(
+    buffer: &mut [u8],
+    offset: usize,
+    value: f32,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     if offset + 4 > buffer.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -150,9 +189,12 @@ pub fn encode_f32(buffer: &mut [u8], offset: usize, value: f32) -> Result<usize,
 }
 
 /// Decode single-precision floating point number (little-endian)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_f32(bytes: &[u8], offset: usize) -> Result<(f32, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_f32(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(f32, usize), Box<dyn std::error::Error + Send>> {
     if offset + 4 > bytes.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
@@ -166,7 +208,11 @@ pub fn decode_f32(bytes: &[u8], offset: usize) -> Result<(f32, usize), Box<dyn s
 
 /// Encode double-precision floating point number (little-endian)
 /// Writes to the specified position in the buffer, returns the number of bytes written (fixed at 8)
-pub fn encode_f64(buffer: &mut [u8], offset: usize, value: f64) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_f64(
+    buffer: &mut [u8],
+    offset: usize,
+    value: f64,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     if offset + 8 > buffer.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -179,9 +225,12 @@ pub fn encode_f64(buffer: &mut [u8], offset: usize, value: f64) -> Result<usize,
 }
 
 /// Decode double-precision floating point number (little-endian)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_f64(bytes: &[u8], offset: usize) -> Result<(f64, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_f64(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(f64, usize), Box<dyn std::error::Error + Send>> {
     if offset + 8 > bytes.len() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
@@ -203,10 +252,10 @@ mod tests {
         let mut buffer_false = vec![0u8; 10];
         let written_true = encode_boolean(&mut buffer_true, 0, true).unwrap();
         let written_false = encode_boolean(&mut buffer_false, 0, false).unwrap();
-        
+
         let (decoded_true, _) = decode_boolean(&buffer_true, 0).unwrap();
         let (decoded_false, _) = decode_boolean(&buffer_false, 0).unwrap();
-        
+
         assert_eq!(decoded_true, true);
         assert_eq!(decoded_false, false);
     }
@@ -214,12 +263,12 @@ mod tests {
     #[test]
     fn test_i32() {
         let test_cases = vec![0, 1, -1, i32::MAX, i32::MIN];
-        
+
         for value in test_cases {
             let mut buffer = vec![0u8; 4];
             let written = encode_i32(&mut buffer, 0, value).unwrap();
             let (decoded, consumed) = decode_i32(&buffer, 0).unwrap();
-            
+
             assert_eq!(value, decoded);
             assert_eq!(written, consumed);
             assert_eq!(written, 4);
@@ -229,12 +278,12 @@ mod tests {
     #[test]
     fn test_i64() {
         let test_cases = vec![0i64, 1, -1, i64::MAX, i64::MIN];
-        
+
         for value in test_cases {
             let mut buffer = vec![0u8; 8];
             let written = encode_i64(&mut buffer, 0, value).unwrap();
             let (decoded, consumed) = decode_i64(&buffer, 0).unwrap();
-            
+
             assert_eq!(value, decoded);
             assert_eq!(written, consumed);
             assert_eq!(written, 8);
@@ -244,12 +293,12 @@ mod tests {
     #[test]
     fn test_f32() {
         let test_cases = vec![0.0f32, 1.0, -1.0, f32::MAX, f32::MIN];
-        
+
         for value in test_cases {
             let mut buffer = vec![0u8; 4];
             let written = encode_f32(&mut buffer, 0, value).unwrap();
             let (decoded, consumed) = decode_f32(&buffer, 0).unwrap();
-            
+
             assert!((decoded - value).abs() < f32::EPSILON);
             assert_eq!(written, consumed);
             assert_eq!(written, 4);
@@ -259,12 +308,12 @@ mod tests {
     #[test]
     fn test_f64() {
         let test_cases = vec![0.0f64, 1.0, -1.0, f64::MAX, f64::MIN];
-        
+
         for value in test_cases {
             let mut buffer = vec![0u8; 8];
             let written = encode_f64(&mut buffer, 0, value).unwrap();
             let (decoded, consumed) = decode_f64(&buffer, 0).unwrap();
-            
+
             assert!((decoded - value).abs() < f64::EPSILON);
             assert_eq!(written, consumed);
             assert_eq!(written, 8);

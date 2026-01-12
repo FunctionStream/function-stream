@@ -2,8 +2,8 @@
 //
 // 提供创建任务存储实例的工厂方法，根据配置创建相应的存储实现
 
-use super::storage::TaskStorage;
 use super::rocksdb_storage::RocksDBTaskStorage;
+use super::storage::TaskStorage;
 use crate::config::find_or_create_data_dir;
 use crate::config::storage::{TaskStorageConfig, TaskStorageType};
 use anyhow::{Context, Result};
@@ -14,11 +14,11 @@ pub struct TaskStorageFactory;
 
 impl TaskStorageFactory {
     /// 根据配置创建任务存储实例
-    /// 
+    ///
     /// # 参数
     /// - `config`: 任务存储配置
     /// - `task_name`: 任务名称（用于构建默认路径）
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(Box<dyn TaskStorage>)`: 成功创建存储实例
     /// - `Err(...)`: 创建失败
@@ -38,13 +38,13 @@ impl TaskStorageFactory {
                         .context("Failed to find or create data directory")?;
                     data_dir.join("task").join(task_name)
                 };
-                
+
                 // 确保目录存在
                 if let Some(parent) = db_path.parent() {
                     std::fs::create_dir_all(parent)
                         .context(format!("Failed to create directory: {:?}", parent))?;
                 }
-                
+
                 // 创建 RocksDB 存储实例
                 let storage = RocksDBTaskStorage::new(db_path, Some(&config.rocksdb))?;
                 Ok(Box::new(storage))

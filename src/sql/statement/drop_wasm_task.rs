@@ -11,8 +11,11 @@ impl DropWasmTask {
     }
 }
 impl Statement for DropWasmTask {
-    fn accept(&self, visitor: &dyn StatementVisitor, context: &StatementVisitorContext) -> StatementVisitorResult {
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
         visitor.visit_drop_wasm_task(self, context)
     }
 }
-

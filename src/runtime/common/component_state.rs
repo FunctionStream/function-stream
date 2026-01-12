@@ -10,9 +10,9 @@
 pub const CONTROL_TASK_CHANNEL_CAPACITY: usize = 10;
 
 /// Task component state
-/// 
+///
 /// Represents the lifecycle state of task components (Input, Output, Processor, etc.)
-/// 
+///
 /// State transition diagram:
 /// ```
 /// Uninitialized -> Initialized -> Starting -> Running
@@ -29,8 +29,10 @@ pub const CONTROL_TASK_CHANNEL_CAPACITY: usize = 10;
 ///                                          Error (any state can transition to error)
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ComponentState {
     /// Uninitialized
+    #[default]
     Uninitialized,
     /// Initialized
     Initialized,
@@ -60,15 +62,16 @@ impl ComponentState {
     pub fn can_accept_operations(&self) -> bool {
         matches!(
             self,
-            ComponentState::Initialized
-                | ComponentState::Running
-                | ComponentState::Stopped
+            ComponentState::Initialized | ComponentState::Running | ComponentState::Stopped
         )
     }
 
     /// Check if state is running
     pub fn is_running(&self) -> bool {
-        matches!(self, ComponentState::Running | ComponentState::Checkpointing)
+        matches!(
+            self,
+            ComponentState::Running | ComponentState::Checkpointing
+        )
     }
 
     /// Check if state is closed
@@ -84,52 +87,47 @@ impl ComponentState {
     /// Check if can transition from current state to target state
     pub fn can_transition_to(&self, target: &ComponentState) -> bool {
         use ComponentState::*;
-        
+
         match (self, target) {
             // Can transition from Uninitialized to Initialized
             (Uninitialized, Initialized) => true,
-            
+
             // Can transition from Initialized to Starting
             (Initialized, Starting) => true,
-            
+
             // Can transition from Starting to Running
             (Starting, Running) => true,
-            
+
             // Can transition from Running to Checkpointing
             (Running, Checkpointing) => true,
-            
+
             // Can transition from Checkpointing back to Running
             (Checkpointing, Running) => true,
-            
+
             // Can transition from Running or Checkpointing to Stopping
             (Running, Stopping) | (Checkpointing, Stopping) => true,
-            
+
             // Can transition from Stopping to Stopped
             (Stopping, Stopped) => true,
-            
+
             // Can restart from Stopped
             (Stopped, Starting) => true,
-            
+
             // Can transition from Running, Checkpointing, or Stopped to Closing
             (Running, Closing) | (Checkpointing, Closing) | (Stopped, Closing) => true,
-            
+
             // Can transition from Closing to Closed
             (Closing, Closed) => true,
-            
+
             // Any state can transition to Error state
             (_, Error { .. }) => true,
-            
+
             // Other transitions are not allowed
             _ => false,
         }
     }
 }
 
-impl Default for ComponentState {
-    fn default() -> Self {
-        ComponentState::Uninitialized
-    }
-}
 
 impl std::fmt::Display for ComponentState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -149,7 +147,7 @@ impl std::fmt::Display for ComponentState {
 }
 
 /// Control task type
-/// 
+///
 /// Used to pass various control tasks between component threads and main thread
 /// All task components should support these control tasks
 #[derive(Debug, Clone)]
@@ -187,11 +185,11 @@ pub mod state_machine {
     use super::ComponentState;
 
     /// Attempt state transition
-    /// 
+    ///
     /// # Arguments
     /// - `current`: Current state
     /// - `target`: Target state
-    /// 
+    ///
     /// # Returns
     /// - `Ok(ComponentState)`: Transition successful
     /// - `Err(...)`: Transition failed
@@ -242,4 +240,3 @@ mod tests {
         assert!(result.is_err());
     }
 }
-

@@ -27,4 +27,3 @@ impl std::fmt::Display for BackendError {
 }
 
 impl std::error::Error for BackendError {}
-

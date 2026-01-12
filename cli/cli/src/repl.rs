@@ -1,8 +1,8 @@
 // REPL (Read-Eval-Print Loop) for interactive SQL execution
 
 use protocol::cli::{
-    function_stream_service_client::FunctionStreamServiceClient,
-    LoginRequest, LogoutRequest, SqlRequest,
+    function_stream_service_client::FunctionStreamServiceClient, LoginRequest, LogoutRequest,
+    SqlRequest,
 };
 use rustyline::error::ReadlineError;
 use rustyline::{Config, DefaultEditor, EditMode};
@@ -29,7 +29,7 @@ impl Repl {
             .history_ignore_space(true)
             .edit_mode(EditMode::Emacs)
             .build();
-        
+
         let editor = match DefaultEditor::with_config(config) {
             Ok(mut ed) => {
                 let _ = ed.load_history(".function-stream-cli-history");
@@ -37,7 +37,7 @@ impl Repl {
             }
             Err(_) => None,
         };
-        
+
         Self {
             client: None,
             session: None,
@@ -51,7 +51,11 @@ impl Repl {
         format!("http://{}:{}", self.server_host, self.server_port)
     }
 
-    pub async fn authenticate(&mut self, username: String, password: String) -> Result<bool, String> {
+    pub async fn authenticate(
+        &mut self,
+        username: String,
+        password: String,
+    ) -> Result<bool, String> {
         let addr = self.server_address();
         let mut client = FunctionStreamServiceClient::connect(addr.clone())
             .await
@@ -100,7 +104,9 @@ impl Repl {
     }
 
     pub async fn execute_sql(&mut self, sql: &str) -> Result<String, String> {
-        let client = self.client.as_mut()
+        let client = self
+            .client
+            .as_mut()
             .ok_or_else(|| "Not connected to server".to_string())?;
 
         let request = Request::new(SqlRequest {
@@ -114,7 +120,10 @@ impl Repl {
                     let formatted = self.format_output(&resp.message, resp.data.as_deref());
                     Ok(formatted)
                 } else {
-                    Err(format!("Error (status {}): {}", resp.status_code, resp.message))
+                    Err(format!(
+                        "Error (status {}): {}",
+                        resp.status_code, resp.message
+                    ))
                 }
             }
             Err(e) => Err(format!("Execution error: {}", e)),
@@ -123,12 +132,13 @@ impl Repl {
 
     fn format_output(&self, message: &str, data: Option<&str>) -> String {
         let mut output = String::new();
-        
-        let clean_message = message.trim()
+
+        let clean_message = message
+            .trim()
             .replace("        ", " ")
             .replace("  ", " ")
             .replace("WASMTASKs", "WASMTASKS");
-        
+
         if let Some(data_str) = data {
             let data_trimmed = data_str.trim();
             if data_trimmed == "[]" {
@@ -138,11 +148,11 @@ impl Repl {
                 return output;
             }
         }
-        
+
         if !clean_message.is_empty() {
             output.push_str(&clean_message);
         }
-        
+
         if let Some(data_str) = data {
             let data_trimmed = data_str.trim();
             if !data_trimmed.is_empty() && data_trimmed != "[]" {
@@ -168,7 +178,7 @@ impl Repl {
                 }
             }
         }
-        
+
         output
     }
 
@@ -176,19 +186,19 @@ impl Repl {
         if json_str == "[]" {
             return Ok(String::new());
         }
-        
+
         let trimmed = json_str.trim_start_matches('[').trim_end_matches(']');
         if trimmed.is_empty() {
             return Ok(String::new());
         }
-        
+
         let items: Vec<&str> = trimmed.split("},{").collect();
         let mut rows = Vec::new();
-        
+
         for item in items.iter() {
             let trimmed_item = item.trim();
             let mut clean_item = String::new();
-            
+
             if !trimmed_item.starts_with('{') {
                 clean_item.push('{');
             }
@@ -196,50 +206,64 @@ impl Repl {
             if !trimmed_item.ends_with('}') {
                 clean_item.push('}');
             }
-            
-            if let Ok((name, wasm_path, state, created_at, started_at)) = self.parse_task_json(&clean_item) {
+
+            if let Ok((name, wasm_path, state, created_at, started_at)) =
+                self.parse_task_json(&clean_item)
+            {
                 rows.push((name, wasm_path, state, created_at, started_at));
             }
         }
-        
+
         if rows.is_empty() {
             return Ok(String::new());
         }
-        
+
         let name_width = rows.iter().map(|r| r.0.len()).max().unwrap_or(10).max(4);
         let path_width = rows.iter().map(|r| r.1.len()).max().unwrap_or(20).max(9);
         let state_width = rows.iter().map(|r| r.2.len()).max().unwrap_or(7).max(5);
         let created_width = rows.iter().map(|r| r.3.len()).max().unwrap_or(19).max(10);
         let started_width = rows.iter().map(|r| r.4.len()).max().unwrap_or(19).max(10);
-        
+
         let mut table = String::new();
-        
-        table.push_str(&format!("+{}+{}+{}+{}+{}+\n",
+
+        table.push_str(&format!(
+            "+{}+{}+{}+{}+{}+\n",
             "-".repeat(name_width + 2),
             "-".repeat(path_width + 2),
             "-".repeat(state_width + 2),
             "-".repeat(created_width + 2),
             "-".repeat(started_width + 2)
         ));
-        table.push_str(&format!("| {:<width$} | {:<path$} | {:<state$} | {:<created$} | {:<started$} |\n",
-            "Name", "WasmPath", "State", "CreatedAt", "StartedAt",
+        table.push_str(&format!(
+            "| {:<width$} | {:<path$} | {:<state$} | {:<created$} | {:<started$} |\n",
+            "Name",
+            "WasmPath",
+            "State",
+            "CreatedAt",
+            "StartedAt",
             width = name_width,
             path = path_width,
             state = state_width,
             created = created_width,
             started = started_width
         ));
-        table.push_str(&format!("+{}+{}+{}+{}+{}+\n",
+        table.push_str(&format!(
+            "+{}+{}+{}+{}+{}+\n",
             "-".repeat(name_width + 2),
             "-".repeat(path_width + 2),
             "-".repeat(state_width + 2),
             "-".repeat(created_width + 2),
             "-".repeat(started_width + 2)
         ));
-        
+
         for (name, wasm_path, state, created_at, started_at) in rows {
-            table.push_str(&format!("| {:<width$} | {:<path$} | {:<state$} | {:<created$} | {:<started$} |\n",
-                name, wasm_path, state, created_at, started_at,
+            table.push_str(&format!(
+                "| {:<width$} | {:<path$} | {:<state$} | {:<created$} | {:<started$} |\n",
+                name,
+                wasm_path,
+                state,
+                created_at,
+                started_at,
                 width = name_width,
                 path = path_width,
                 state = state_width,
@@ -247,25 +271,36 @@ impl Repl {
                 started = started_width
             ));
         }
-        
-        table.push_str(&format!("+{}+{}+{}+{}+{}+\n",
+
+        table.push_str(&format!(
+            "+{}+{}+{}+{}+{}+\n",
             "-".repeat(name_width + 2),
             "-".repeat(path_width + 2),
             "-".repeat(state_width + 2),
             "-".repeat(created_width + 2),
             "-".repeat(started_width + 2)
         ));
-        
+
         Ok(table)
     }
-    
+
     fn parse_task_json(&self, json: &str) -> Result<(String, String, String, String, String), ()> {
-        let name = self.extract_json_field(json, "name").unwrap_or_else(|| "N/A".to_string());
-        let wasm_path = self.extract_json_field(json, "wasm_path").unwrap_or_else(|| "N/A".to_string());
-        let state = self.extract_json_field(json, "state").unwrap_or_else(|| "N/A".to_string());
-        let created_at = self.extract_json_field(json, "created_at").unwrap_or_else(|| "N/A".to_string());
-        let started_at = self.extract_json_field(json, "started_at").unwrap_or_else(|| "null".to_string());
-        
+        let name = self
+            .extract_json_field(json, "name")
+            .unwrap_or_else(|| "N/A".to_string());
+        let wasm_path = self
+            .extract_json_field(json, "wasm_path")
+            .unwrap_or_else(|| "N/A".to_string());
+        let state = self
+            .extract_json_field(json, "state")
+            .unwrap_or_else(|| "N/A".to_string());
+        let created_at = self
+            .extract_json_field(json, "created_at")
+            .unwrap_or_else(|| "N/A".to_string());
+        let started_at = self
+            .extract_json_field(json, "started_at")
+            .unwrap_or_else(|| "null".to_string());
+
         let created_at_formatted = if created_at != "N/A" {
             created_at
                 .replace("SystemTime { tv_sec: ", "")
@@ -278,7 +313,7 @@ impl Repl {
         } else {
             created_at
         };
-        
+
         let started_at_formatted = if started_at == "null" || started_at.is_empty() {
             "-".to_string()
         } else {
@@ -291,17 +326,23 @@ impl Repl {
                 .unwrap_or(&started_at)
                 .to_string()
         };
-        
-        Ok((name, wasm_path, state, created_at_formatted, started_at_formatted))
+
+        Ok((
+            name,
+            wasm_path,
+            state,
+            created_at_formatted,
+            started_at_formatted,
+        ))
     }
-    
+
     fn extract_json_field(&self, json: &str, field: &str) -> Option<String> {
         let field_pattern = format!("\"{}\":", field);
         if let Some(start) = json.find(&field_pattern) {
             let value_start = start + field_pattern.len();
             let value_str = &json[value_start..];
             let value_str = value_str.trim_start();
-            
+
             if value_str.starts_with('"') {
                 let start = 1;
                 if let Some(end) = value_str[start..].find('"') {
@@ -320,34 +361,33 @@ impl Repl {
         None
     }
 
-
     fn is_sql_complete(&self, sql: &str) -> bool {
         let trimmed = sql.trim();
-        
+
         if trimmed.is_empty() {
             return true;
         }
-        
+
         let mut paren_count = 0;
         let mut in_string = false;
         let mut escape_next = false;
-        
+
         for ch in trimmed.chars() {
             if escape_next {
                 escape_next = false;
                 continue;
             }
-            
+
             if ch == '\\' {
                 escape_next = true;
                 continue;
             }
-            
+
             if ch == '\'' || ch == '"' {
                 in_string = !in_string;
                 continue;
             }
-            
+
             if !in_string {
                 match ch {
                     '(' => paren_count += 1,
@@ -360,21 +400,21 @@ impl Repl {
                 }
             }
         }
-        
+
         paren_count == 0 && !trimmed.ends_with('\\')
     }
 
     fn read_multiline_sql(&mut self, _username: &str) -> io::Result<String> {
         let mut lines = Vec::new();
         let mut is_first_line = true;
-        
+
         loop {
             let prompt = if is_first_line {
                 "FunctionStream> "
             } else {
                 "         > "
             };
-            
+
             let line = if let Some(ref mut editor) = self.editor {
                 match editor.readline(prompt) {
                     Ok(line) => {
@@ -390,7 +430,10 @@ impl Repl {
                         return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
                     }
                     Err(e) => {
-                        return Err(io::Error::new(io::ErrorKind::Other, format!("Readline error: {}", e)));
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("Readline error: {}", e),
+                        ));
                     }
                 }
             } else {
@@ -400,21 +443,21 @@ impl Repl {
                 io::stdin().read_line(&mut line)?;
                 line
             };
-            
+
             let trimmed_line = line.trim_start();
             let trimmed = trimmed_line.trim();
-            
+
             if is_first_line && trimmed.is_empty() {
                 continue;
             }
-            
+
             lines.push(trimmed_line.to_string());
             let combined = lines.join(" ");
-            
+
             if self.is_sql_complete(&combined) {
                 return Ok(combined.trim().to_string());
             }
-            
+
             is_first_line = false;
         }
     }
@@ -454,7 +497,7 @@ impl Repl {
                     break;
                 }
             };
-            
+
             if input.is_empty() {
                 continue;
             }
@@ -476,16 +519,14 @@ impl Repl {
                     }
                     break;
                 }
-                _ => {
-                    match self.execute_sql(&input).await {
-                        Ok(result) => {
-                            println!("{}", result);
-                        }
-                        Err(e) => {
-                            eprintln!("Error: {}", e);
-                        }
+                _ => match self.execute_sql(&input).await {
+                    Ok(result) => {
+                        println!("{}", result);
                     }
-                }
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                    }
+                },
             }
             println!();
         }
@@ -533,5 +574,3 @@ impl Repl {
         println!();
     }
 }
-
-

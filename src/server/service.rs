@@ -31,13 +31,11 @@ pub async fn start_server_with_shutdown(
         });
 
     // Spawn server task and wait for it to bind to address
-    let server_handle = tokio::spawn(async move {
-        server.await
-    });
+    let server_handle = tokio::spawn(server);
 
     // Wait a bit for server to bind, then notify ready
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    
+
     // Notify that server is ready (after binding to address)
     if let Some(tx) = ready_tx {
         let _ = tx.send(());
@@ -59,9 +57,8 @@ pub async fn start_server_with_shutdown(
                 anyhow::anyhow!("Server runtime error: {}", e)
             }
         })?;
-    
+
     log::info!("gRPC server stopped");
 
     Ok(())
 }
-

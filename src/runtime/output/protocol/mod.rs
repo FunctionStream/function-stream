@@ -3,4 +3,3 @@
 // Provides implementations of various output protocols
 
 pub mod kafka;
-

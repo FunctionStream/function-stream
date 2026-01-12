@@ -16,7 +16,12 @@ impl CreateWasmTaskPlan {
         config_path: Option<String>,
         properties: HashMap<String, String>,
     ) -> Self {
-        Self { name, wasm_path, config_path, properties }
+        Self {
+            name,
+            wasm_path,
+            config_path,
+            properties,
+        }
     }
 }
 
@@ -25,5 +30,3 @@ impl PlanNode for CreateWasmTaskPlan {
         visitor.visit_create_wasm_task(self, context)
     }
 }
-
-

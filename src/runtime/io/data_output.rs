@@ -3,31 +3,46 @@
 // Defines the standard interface for data output, used to send stream elements downstream
 
 use crate::runtime::buffer_and_event::stream_element::{
-    StreamRecord, Watermark, WatermarkStatus, LatencyMarker, RecordAttributes,
+    LatencyMarker, RecordAttributes, StreamRecord, Watermark, WatermarkStatus,
 };
 
 /// DataOutput - Data output interface
-/// 
+///
 /// Defines methods for sending various stream elements downstream
 pub trait DataOutput: Send + Sync {
     /// Emit record
-    fn emit_record(&mut self, record: StreamRecord) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn emit_record(
+        &mut self,
+        record: StreamRecord,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Emit watermark
-    fn emit_watermark(&mut self, watermark: Watermark) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn emit_watermark(
+        &mut self,
+        watermark: Watermark,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Emit watermark status
-    fn emit_watermark_status(&mut self, status: WatermarkStatus) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn emit_watermark_status(
+        &mut self,
+        status: WatermarkStatus,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Emit latency marker
-    fn emit_latency_marker(&mut self, marker: LatencyMarker) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn emit_latency_marker(
+        &mut self,
+        marker: LatencyMarker,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Emit record attributes
-    fn emit_record_attributes(&mut self, attributes: RecordAttributes) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn emit_record_attributes(
+        &mut self,
+        attributes: RecordAttributes,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 }
 
 /// FinishedDataOutput - Finished data output
-/// 
+///
 /// Used to represent output when input is finished, all methods are no-ops
 pub struct FinishedDataOutput;
 
@@ -44,25 +59,39 @@ impl Default for FinishedDataOutput {
 }
 
 impl DataOutput for FinishedDataOutput {
-    fn emit_record(&mut self, _record: StreamRecord) -> Result<(), Box<dyn std::error::Error + Send>> {
+    fn emit_record(
+        &mut self,
+        _record: StreamRecord,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         // Input finished, ignore all output
         Ok(())
     }
 
-    fn emit_watermark(&mut self, _watermark: Watermark) -> Result<(), Box<dyn std::error::Error + Send>> {
+    fn emit_watermark(
+        &mut self,
+        _watermark: Watermark,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         Ok(())
     }
 
-    fn emit_watermark_status(&mut self, _status: WatermarkStatus) -> Result<(), Box<dyn std::error::Error + Send>> {
+    fn emit_watermark_status(
+        &mut self,
+        _status: WatermarkStatus,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         Ok(())
     }
 
-    fn emit_latency_marker(&mut self, _marker: LatencyMarker) -> Result<(), Box<dyn std::error::Error + Send>> {
+    fn emit_latency_marker(
+        &mut self,
+        _marker: LatencyMarker,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         Ok(())
     }
 
-    fn emit_record_attributes(&mut self, _attributes: RecordAttributes) -> Result<(), Box<dyn std::error::Error + Send>> {
+    fn emit_record_attributes(
+        &mut self,
+        _attributes: RecordAttributes,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         Ok(())
     }
 }
-

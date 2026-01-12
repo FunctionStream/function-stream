@@ -12,10 +12,13 @@ pub trait OutputSink: Send + Sync {
     /// Initialize output sink with initialization context
     ///
     /// Called before use to perform necessary initialization work
-    /// 
+    ///
     /// # Arguments
     /// - `init_context`: Initialization context containing state storage, task storage and other resources
-    fn init_with_context(&mut self, init_context: &InitContext) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn init_with_context(
+        &mut self,
+        init_context: &InitContext,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Start output sink
     ///
@@ -54,7 +57,10 @@ pub trait OutputSink: Send + Sync {
     /// # Returns
     /// - `Ok(())`: Restore successful
     /// - `Err(...)`: Restore failed
-    fn restore_state(&mut self, _checkpoint_id: u64) -> Result<(), Box<dyn std::error::Error + Send>> {
+    fn restore_state(
+        &mut self,
+        _checkpoint_id: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         // Default implementation: state restoration not supported
         Ok(())
     }
@@ -70,7 +76,10 @@ pub trait OutputSink: Send + Sync {
     /// # Returns
     /// - `Ok(())`: Checkpoint start successful
     /// - `Err(...)`: Checkpoint start failed
-    fn take_checkpoint(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn take_checkpoint(
+        &mut self,
+        checkpoint_id: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Finish checkpoint
     ///
@@ -83,7 +92,10 @@ pub trait OutputSink: Send + Sync {
     /// # Returns
     /// - `Ok(())`: Checkpoint finish successful
     /// - `Err(...)`: Checkpoint finish failed
-    fn finish_checkpoint(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn finish_checkpoint(
+        &mut self,
+        checkpoint_id: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Flush buffered data
     ///
@@ -104,4 +116,3 @@ pub trait OutputSink: Send + Sync {
     /// - `Box<dyn OutputSink>`: Cloned OutputSink instance
     fn box_clone(&self) -> Box<dyn OutputSink>;
 }
-

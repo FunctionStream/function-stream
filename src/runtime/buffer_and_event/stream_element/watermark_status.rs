@@ -5,7 +5,7 @@
 use super::StreamElement;
 
 /// WatermarkStatus - Watermark status
-/// 
+///
 /// Represents the status of watermark (IDLE/ACTIVE)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WatermarkStatus {
@@ -39,14 +39,18 @@ impl StreamElement for WatermarkStatus {
 
 impl WatermarkStatus {
     /// Protocol Buffers serialization
-    /// 
+    ///
     /// # Protocol Buffers protocol
     /// ```protobuf
     /// message WatermarkStatus {
     ///     uint32 status = 1;  // 0=Idle, 1=Active
     /// }
     /// ```
-    pub fn serialize_protobuf(&self, buffer: &mut [u8], offset: usize) -> Result<usize, Box<dyn std::error::Error + Send>> {
+    pub fn serialize_protobuf(
+        &self,
+        buffer: &mut [u8],
+        offset: usize,
+    ) -> Result<usize, Box<dyn std::error::Error + Send>> {
         let status_value = match self {
             WatermarkStatus::Idle => 0u32,
             WatermarkStatus::Active => 1u32,
@@ -60,10 +64,14 @@ impl WatermarkStatus {
     }
 
     /// Protocol Buffers deserialization
-    /// 
+    ///
     /// Decode from the specified position in the byte array, returns (WatermarkStatus, bytes consumed)
-    pub fn deserialize_protobuf(bytes: &[u8], offset: usize) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
-        let (field_number, status_value, consumed) = crate::codec::decode_uint32_field(bytes, offset)?;
+    pub fn deserialize_protobuf(
+        bytes: &[u8],
+        offset: usize,
+    ) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
+        let (field_number, status_value, consumed) =
+            crate::codec::decode_uint32_field(bytes, offset)?;
         if field_number != 1 {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -83,4 +91,3 @@ impl WatermarkStatus {
         Ok((status, consumed))
     }
 }
-

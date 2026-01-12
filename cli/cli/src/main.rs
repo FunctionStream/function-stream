@@ -27,7 +27,10 @@ async fn main() {
 
     let mut repl = Repl::new(args.ip.clone(), args.port);
 
-    match repl.authenticate(args.username.clone(), args.password).await {
+    match repl
+        .authenticate(args.username.clone(), args.password)
+        .await
+    {
         Ok(true) => {
             if let Err(e) = repl.run_async().await {
                 eprintln!("Error: {}", e);
@@ -44,4 +47,3 @@ async fn main() {
         }
     }
 }
-

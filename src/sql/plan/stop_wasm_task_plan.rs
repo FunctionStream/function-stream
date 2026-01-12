@@ -8,9 +8,12 @@ pub struct StopWasmTaskPlan {
 
 impl StopWasmTaskPlan {
     pub fn new(name: String) -> Self {
-        Self { name, graceful: true }
+        Self {
+            name,
+            graceful: true,
+        }
     }
-    
+
     pub fn with_graceful(name: String, graceful: bool) -> Self {
         Self { name, graceful }
     }
@@ -21,5 +24,3 @@ impl PlanNode for StopWasmTaskPlan {
         visitor.visit_stop_wasm_task(self, context)
     }
 }
-
-

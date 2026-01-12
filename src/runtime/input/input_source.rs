@@ -7,7 +7,7 @@ use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::taskexecutor::InitContext;
 
 // Re-export common component state for compatibility
-pub use crate::runtime::common::{ComponentState as InputSourceState, CONTROL_TASK_CHANNEL_CAPACITY};
+pub use crate::runtime::common::ComponentState as InputSourceState;
 
 /// InputSource - Input source interface
 ///
@@ -18,8 +18,10 @@ pub use crate::runtime::common::{ComponentState as InputSourceState, CONTROL_TAS
 ///
 /// State is uniformly managed by the runloop thread, callers don't need to directly manipulate state
 pub trait InputSource: Send + Sync {
-
-    fn init_with_context(&mut self, init_context: &InitContext) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn init_with_context(
+        &mut self,
+        init_context: &InitContext,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Start input source
     ///
@@ -64,29 +66,34 @@ pub trait InputSource: Send + Sync {
     }
 
     /// Start checkpoint
-    /// 
+    ///
     /// Start saving current input source state for failure recovery
     /// State is set to Checkpointing by the runloop thread
-    /// 
+    ///
     /// # Arguments
     /// - `checkpoint_id`: Checkpoint ID
-    fn take_checkpoint(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn take_checkpoint(
+        &mut self,
+        checkpoint_id: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Finish checkpoint
-    /// 
+    ///
     /// Notify input source that checkpoint is complete
     /// State is set back to Running by the runloop thread
-    /// 
+    ///
     /// # Arguments
     /// - `checkpoint_id`: Checkpoint ID
-    fn finish_checkpoint(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn std::error::Error + Send>>;
+    fn finish_checkpoint(
+        &mut self,
+        checkpoint_id: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
     /// Get input group ID
-    /// 
+    ///
     /// Returns the input group index this input source belongs to (0-based)
-    /// 
+    ///
     /// # Returns
     /// - `usize`: Input group index
     fn get_group_id(&self) -> usize;
-
 }

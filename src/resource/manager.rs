@@ -24,7 +24,7 @@ impl ResourceManager {
     pub async fn register(&self, resource: Box<dyn Resource>) -> Result<()> {
         let id = resource.id().clone();
         let mut resources = self.resources.write().await;
-        
+
         if resources.contains_key(&id) {
             return Err(anyhow::anyhow!("Resource with ID '{}' already exists", id));
         }
@@ -52,11 +52,10 @@ impl ResourceManager {
         resources.keys().cloned().collect()
     }
 
-
     /// Unregister a resource
     pub async fn unregister(&self, id: &ResourceId) -> Result<()> {
         let mut resources = self.resources.write().await;
-        
+
         if let Some(mut resource) = resources.remove(id) {
             log::info!("Unregistering resource: {}", id);
             // Cleanup the resource
@@ -73,7 +72,7 @@ impl ResourceManager {
     pub async fn cleanup_all(&self) -> Result<()> {
         let mut resources = self.resources.write().await;
         let ids: Vec<ResourceId> = resources.keys().cloned().collect();
-        
+
         for id in ids {
             if let Some(mut resource) = resources.remove(&id) {
                 log::info!("Cleaning up resource: {}", id);
@@ -82,7 +81,7 @@ impl ResourceManager {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -98,4 +97,3 @@ impl Default for ResourceManager {
         Self::new()
     }
 }
-

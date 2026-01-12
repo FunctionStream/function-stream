@@ -7,14 +7,12 @@
 // - Basic type encoding/decoding
 // - Protocol Buffers codec
 
+mod primitive;
+mod protobuf;
+mod string_codec;
 mod varint;
 mod zigzag;
-mod primitive;
-mod string_codec;
-mod protobuf;
 
-pub use varint::*;
-pub use zigzag::*;
-pub use primitive::*;
-pub use string_codec::*;
 pub use protobuf::*;
+pub use string_codec::*;
+pub use varint::*;

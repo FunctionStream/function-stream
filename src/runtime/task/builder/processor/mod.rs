@@ -2,13 +2,13 @@
 //
 // Specifically handles building logic for Processor type configuration
 
-use crate::runtime::processor::WASM::wasm_task::{WasmTask, TaskEnvironment};
-use crate::runtime::task::{WasmTaskConfig, InputConfig, ProcessorConfig, OutputConfig};
-use crate::runtime::processor::WASM::wasm_processor_trait::WasmProcessor;
-use crate::runtime::processor::WASM::wasm_processor::WasmProcessorImpl;
 use crate::runtime::input::{InputSource, InputSourceProvider};
 use crate::runtime::output::{OutputSink, OutputSinkProvider};
+use crate::runtime::processor::WASM::wasm_processor::WasmProcessorImpl;
+use crate::runtime::processor::WASM::wasm_processor_trait::WasmProcessor;
+use crate::runtime::processor::WASM::wasm_task::{TaskEnvironment, WasmTask};
 use crate::runtime::task::yaml_keys::{TYPE, type_values};
+use crate::runtime::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
 use serde_yaml::Value;
 use std::sync::Arc;
 
@@ -17,12 +17,12 @@ pub struct ProcessorBuilder;
 
 impl ProcessorBuilder {
     /// Create Processor type WasmTask from YAML configuration
-    /// 
+    ///
     /// # Arguments
     /// - `task_name`: Task name
     /// - `yaml_value`: YAML configuration value (root-level configuration)
     /// - `wasm_path`: WASM module path
-    /// 
+    ///
     /// # Returns
     /// - `Ok(Arc<WasmTask>)`: Successfully created WasmTask
     /// - `Err(...)`: Creation failed
@@ -55,12 +55,14 @@ impl ProcessorBuilder {
 
         // 2. Parse as WasmTaskConfig
         let task_config = WasmTaskConfig::from_yaml_value(task_name.clone(), yaml_value)?;
-        
+
         // 3. Calculate total number of input sources
-        let total_inputs: usize = task_config.input_groups.iter()
+        let total_inputs: usize = task_config
+            .input_groups
+            .iter()
             .map(|group| group.inputs.len())
             .sum();
-        
+
         log::info!(
             "Parsed processor config: {} input groups ({} total inputs), {} outputs, processor: {}",
             task_config.input_groups.len(),
@@ -71,7 +73,7 @@ impl ProcessorBuilder {
 
         // 4. Create task environment
         let environment = TaskEnvironment::new(task_config.task_name.clone());
-        
+
         // 5. Create InputSource instances first
         let mut all_inputs = Vec::new();
         for (group_idx, input_group) in task_config.input_groups.iter().enumerate() {
@@ -79,18 +81,30 @@ impl ProcessorBuilder {
                 .map_err(|e| -> Box<dyn std::error::Error + Send> {
                     Box::new(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        format!("Failed to create input sources for input group #{}: {}", group_idx + 1, e),
+                        format!(
+                            "Failed to create input sources for input group #{}: {}",
+                            group_idx + 1,
+                            e
+                        ),
                     ))
                 })?;
-            log::info!("Created {} input source(s) for input group #{}", group_inputs.len(), group_idx + 1);
+            log::info!(
+                "Created {} input source(s) for input group #{}",
+                group_inputs.len(),
+                group_idx + 1
+            );
             all_inputs.extend(group_inputs);
         }
-        log::info!("Created {} total input source(s) from {} input group(s)", all_inputs.len(), task_config.input_groups.len());
-        
+        log::info!(
+            "Created {} total input source(s) from {} input group(s)",
+            all_inputs.len(),
+            task_config.input_groups.len()
+        );
+
         // 6. Create OutputSink instances first (create only one copy)
         let outputs = Self::create_outputs_from_config(&task_config.outputs)?;
         log::info!("Created {} output(s)", outputs.len());
-        
+
         // 7. Verify WASM file exists
         if !std::path::Path::new(&wasm_path).exists() {
             return Err(Box::new(std::io::Error::new(
@@ -109,22 +123,21 @@ impl ProcessorBuilder {
             })?
             .len();
         log::info!("WASM file size: {} MB", wasm_size / 1024 / 1024);
-        
+
         // 8. Create Processor instance from ProcessorConfig (pass path instead of byte array)
-        let processor = Self::create_processor_from_config(&task_config.processor, wasm_path.clone())?;
+        let processor =
+            Self::create_processor_from_config(&task_config.processor, wasm_path.clone())?;
         log::info!("Created WASM processor: {}", task_config.processor.name);
-        
+
         // 9. Create WasmTask (only pass outputs, use clone instead of recreating)
-        let task = WasmTask::new(
-            environment,
-            all_inputs,
-            processor,
-            outputs,
-        );
+        let task = WasmTask::new(environment, all_inputs, processor, outputs);
         let task = Arc::new(task);
-        
-        log::info!("WasmTask created successfully for processor task: {}", task_config.task_name);
-        
+
+        log::info!(
+            "WasmTask created successfully for processor task: {}",
+            task_config.task_name
+        );
+
         Ok(task)
     }
 
@@ -137,7 +150,7 @@ impl ProcessorBuilder {
     }
 
     /// Create Processor instance from ProcessorConfig
-    /// 
+    ///
     /// Note: processor is not initialized here, but initialized uniformly in WasmTask::init_with_context
     fn create_processor_from_config(
         processor_config: &ProcessorConfig,
@@ -148,7 +161,7 @@ impl ProcessorBuilder {
             wasm_path,
             processor_config.init_config.clone(),
         );
-        
+
         Ok(Box::new(processor_impl))
     }
 
@@ -159,4 +172,3 @@ impl ProcessorBuilder {
         OutputSinkProvider::from_output_configs(outputs)
     }
 }
-

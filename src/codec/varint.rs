@@ -4,10 +4,14 @@
 // Reference: Protocol Buffers variable-length integer encoding
 
 /// Encode VarInt32 (signed 32-bit variable-length integer)
-/// 
+///
 /// If the value is negative, VarInt64 encoding will be used
 /// Writes to the specified position in the buffer, returns the number of bytes written
-pub fn encode_var_int32(buffer: &mut [u8], offset: usize, value: i32) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_var_int32(
+    buffer: &mut [u8],
+    offset: usize,
+    value: i32,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     if value < 0 {
         encode_var_int64(buffer, offset, value as i64)
     } else {
@@ -16,13 +20,16 @@ pub fn encode_var_int32(buffer: &mut [u8], offset: usize, value: i32) -> Result<
 }
 
 /// Decode VarInt32 (signed 32-bit variable-length integer)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_var_int32(bytes: &[u8], offset: usize) -> Result<(i32, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_var_int32(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(i32, usize), Box<dyn std::error::Error + Send>> {
     let mut value: i32 = 0;
     let mut shift = 0;
     let mut pos = offset;
-    
+
     loop {
         if pos >= bytes.len() {
             return Err(Box::new(std::io::Error::new(
@@ -30,18 +37,18 @@ pub fn decode_var_int32(bytes: &[u8], offset: usize) -> Result<(i32, usize), Box
                 "Incomplete VarInt32",
             )));
         }
-        
+
         let b = bytes[pos] as i8;
         pos += 1;
-        
+
         if b >= 0 {
             value |= (b as i32) << shift;
             return Ok((value, pos - offset));
         }
-        
+
         value |= ((b as i32) ^ (0xffffff80u32 as i32)) << shift;
         shift += 7;
-        
+
         if shift >= 35 {
             // Handle negative numbers, need to read additional bytes
             if pos >= bytes.len() || bytes[pos] != 0xff {
@@ -51,7 +58,7 @@ pub fn decode_var_int32(bytes: &[u8], offset: usize) -> Result<(i32, usize), Box
                 )));
             }
             pos += 1;
-            
+
             for _ in 0..4 {
                 if pos >= bytes.len() || bytes[pos] != 0xff {
                     return Err(Box::new(std::io::Error::new(
@@ -61,7 +68,7 @@ pub fn decode_var_int32(bytes: &[u8], offset: usize) -> Result<(i32, usize), Box
                 }
                 pos += 1;
             }
-            
+
             if pos >= bytes.len() || bytes[pos] != 0x01 {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -69,7 +76,7 @@ pub fn decode_var_int32(bytes: &[u8], offset: usize) -> Result<(i32, usize), Box
                 )));
             }
             pos += 1;
-            
+
             return Ok((value, pos - offset));
         }
     }
@@ -77,7 +84,11 @@ pub fn decode_var_int32(bytes: &[u8], offset: usize) -> Result<(i32, usize), Box
 
 /// Encode VarUInt32 (unsigned 32-bit variable-length integer)
 /// Writes to the specified position in the buffer, returns the number of bytes written
-pub fn encode_var_uint32(buffer: &mut [u8], offset: usize, value: u32) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_var_uint32(
+    buffer: &mut [u8],
+    offset: usize,
+    value: u32,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     let size = compute_var_uint32_size(value);
     if offset + size > buffer.len() {
         return Err(Box::new(std::io::Error::new(
@@ -85,7 +96,7 @@ pub fn encode_var_uint32(buffer: &mut [u8], offset: usize, value: u32) -> Result
             "Buffer too small for VarUInt32 encoding",
         )));
     }
-    
+
     let mut val = value;
     let mut pos = offset;
     loop {
@@ -109,13 +120,16 @@ pub fn encode_var_uint32(buffer: &mut [u8], offset: usize, value: u32) -> Result
 }
 
 /// Decode VarUInt32 (unsigned 32-bit variable-length integer)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_var_uint32(bytes: &[u8], offset: usize) -> Result<(u32, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_var_uint32(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(u32, usize), Box<dyn std::error::Error + Send>> {
     let mut value: u32 = 0;
     let mut shift = 0;
     let mut pos = offset;
-    
+
     loop {
         if pos >= bytes.len() {
             return Err(Box::new(std::io::Error::new(
@@ -123,18 +137,18 @@ pub fn decode_var_uint32(bytes: &[u8], offset: usize) -> Result<(u32, usize), Bo
                 "Incomplete VarUInt32",
             )));
         }
-        
+
         let b = bytes[pos];
         pos += 1;
-        
+
         if (b & 0x80) == 0 {
             value |= (b as u32) << shift;
             return Ok((value, pos - offset));
         }
-        
+
         value |= ((b & 0x7f) as u32) << shift;
         shift += 7;
-        
+
         if shift >= 35 {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -146,7 +160,11 @@ pub fn decode_var_uint32(bytes: &[u8], offset: usize) -> Result<(u32, usize), Bo
 
 /// Encode VarInt64 (signed 64-bit variable-length integer)
 /// Writes to the specified position in the buffer, returns the number of bytes written
-pub fn encode_var_int64(buffer: &mut [u8], offset: usize, value: i64) -> Result<usize, Box<dyn std::error::Error + Send>> {
+pub fn encode_var_int64(
+    buffer: &mut [u8],
+    offset: usize,
+    value: i64,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
     // VarInt64 requires at most 10 bytes
     if offset + 10 > buffer.len() {
         return Err(Box::new(std::io::Error::new(
@@ -154,7 +172,7 @@ pub fn encode_var_int64(buffer: &mut [u8], offset: usize, value: i64) -> Result<
             "Buffer too small for VarInt64 encoding",
         )));
     }
-    
+
     let mut val = value;
     let mut pos = offset;
     loop {
@@ -197,13 +215,16 @@ pub fn encode_var_int64(buffer: &mut [u8], offset: usize, value: i64) -> Result<
 }
 
 /// Decode VarInt64 (signed 64-bit variable-length integer)
-/// 
+///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
-pub fn decode_var_int64(bytes: &[u8], offset: usize) -> Result<(i64, usize), Box<dyn std::error::Error + Send>> {
+pub fn decode_var_int64(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(i64, usize), Box<dyn std::error::Error + Send>> {
     let mut value: i64 = 0;
     let mut shift = 0;
     let mut pos = offset;
-    
+
     loop {
         if pos >= bytes.len() {
             return Err(Box::new(std::io::Error::new(
@@ -211,18 +232,18 @@ pub fn decode_var_int64(bytes: &[u8], offset: usize) -> Result<(i64, usize), Box
                 "Incomplete VarInt64",
             )));
         }
-        
+
         let b = bytes[pos] as i8;
         pos += 1;
-        
+
         if b >= 0 {
             value |= (b as i64) << shift;
             return Ok((value, pos - offset));
         }
-        
+
         value |= ((b as i64) ^ (0xffffffffffffff80u64 as i64)) << shift;
         shift += 7;
-        
+
         if shift >= 70 {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -237,7 +258,7 @@ pub fn compute_var_int32_size(value: i32) -> usize {
     if value < 0 {
         return 10;
     }
-    
+
     let val = value as u32;
     if (val & 0xffffff80) == 0 {
         1
@@ -298,7 +319,7 @@ pub fn compute_var_uint64_size(value: u64) -> usize {
     if value == 0 {
         1
     } else {
-        (64 - value.leading_zeros() as usize + 6) / 7
+        (64 - value.leading_zeros() as usize).div_ceil(7)
     }
 }
 
@@ -309,13 +330,13 @@ mod tests {
     #[test]
     fn test_var_uint32() {
         let test_cases = vec![0, 1, 127, 128, 16383, 16384, 2097151, 2097152, u32::MAX];
-        
+
         for value in test_cases {
             let size = compute_var_uint32_size(value);
             let mut buffer = vec![0u8; size];
             let written = encode_var_uint32(&mut buffer, 0, value).unwrap();
             let (decoded, consumed) = decode_var_uint32(&buffer, 0).unwrap();
-            
+
             assert_eq!(value, decoded);
             assert_eq!(written, consumed);
             assert_eq!(written, size);
@@ -325,13 +346,13 @@ mod tests {
     #[test]
     fn test_var_int32() {
         let test_cases = vec![0, 1, -1, 127, -128, 16383, -16384, i32::MAX, i32::MIN];
-        
+
         for value in test_cases {
             // Use sufficiently large buffer (VarInt32 negative numbers require at most 10 bytes)
             let mut buffer = vec![0u8; 15];
             let written = encode_var_int32(&mut buffer, 0, value).unwrap();
             let (decoded, consumed) = decode_var_int32(&buffer, 0).unwrap();
-            
+
             assert_eq!(value, decoded);
             assert_eq!(written, consumed);
         }
@@ -340,13 +361,13 @@ mod tests {
     #[test]
     fn test_var_int64() {
         let test_cases = vec![0i64, 1, -1, 127, -128, 16383, -16384, i64::MAX, i64::MIN];
-        
+
         for value in test_cases {
             // Use sufficiently large buffer (VarInt64 requires at most 10 bytes)
             let mut buffer = vec![0u8; 15];
             let written = encode_var_int64(&mut buffer, 0, value).unwrap();
             let (decoded, consumed) = decode_var_int64(&buffer, 0).unwrap();
-            
+
             assert_eq!(value, decoded);
             assert_eq!(written, consumed);
         }

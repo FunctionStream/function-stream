@@ -5,7 +5,7 @@
 use super::StreamElement;
 
 /// Watermark - Event time watermark
-/// 
+///
 /// Represents the progress of event time, telling operators that they should no longer receive elements with timestamps less than or equal to the watermark timestamp
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Watermark {
@@ -51,14 +51,18 @@ impl StreamElement for Watermark {
 
 impl Watermark {
     /// Protocol Buffers serialization
-    /// 
+    ///
     /// # Protocol Buffers protocol
     /// ```protobuf
     /// message Watermark {
     ///     uint64 timestamp = 1;  // Watermark timestamp (milliseconds)
     /// }
     /// ```
-    pub fn serialize_protobuf(&self, buffer: &mut [u8], offset: usize) -> Result<usize, Box<dyn std::error::Error + Send>> {
+    pub fn serialize_protobuf(
+        &self,
+        buffer: &mut [u8],
+        offset: usize,
+    ) -> Result<usize, Box<dyn std::error::Error + Send>> {
         crate::codec::encode_uint64_field(buffer, offset, 1, self.timestamp)
     }
 
@@ -68,9 +72,12 @@ impl Watermark {
     }
 
     /// Protocol Buffers deserialization
-    /// 
+    ///
     /// Decode from the specified position in the byte array, returns (Watermark, bytes consumed)
-    pub fn deserialize_protobuf(bytes: &[u8], offset: usize) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
+    pub fn deserialize_protobuf(
+        bytes: &[u8],
+        offset: usize,
+    ) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
         let (field_number, timestamp, consumed) = crate::codec::decode_uint64_field(bytes, offset)?;
         if field_number != 1 {
             return Err(Box::new(std::io::Error::new(
@@ -81,4 +88,3 @@ impl Watermark {
         Ok((Watermark { timestamp }, consumed))
     }
 }
-

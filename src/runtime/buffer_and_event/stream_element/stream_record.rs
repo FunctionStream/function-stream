@@ -2,11 +2,11 @@
 //
 // Represents a data record in the data stream, containing the actual data value and optional timestamp
 
-use std::fmt::Debug;
 use super::StreamElement;
+use std::fmt::Debug;
 
 /// StreamRecord - Data record
-/// 
+///
 /// Represents a data record in the data stream, containing the actual data value (byte array) and optional timestamp
 /// Note: StreamRecord is not an Event, but serialization support is required
 #[derive(Debug, Clone)]
@@ -45,7 +45,7 @@ impl StreamRecord {
     }
 
     /// Get timestamp
-    /// 
+    ///
     /// Returns None if there is no timestamp
     pub fn timestamp(&self) -> Option<u64> {
         self.timestamp
@@ -87,7 +87,7 @@ impl StreamElement for StreamRecord {
 }
 
 /// StreamRecordSerializable - StreamRecord serialization interface
-/// 
+///
 /// Serialization interface implemented by StreamRecord itself, used for getting type and serialization
 pub trait StreamRecordSerializable: Send + Sync + Debug {
     /// Get StreamRecord type
@@ -95,7 +95,11 @@ pub trait StreamRecordSerializable: Send + Sync + Debug {
 
     /// Serialize StreamRecord
     /// Write to the specified position in the buffer, returns bytes written
-    fn serialize(&self, buffer: &mut [u8], offset: usize) -> Result<usize, Box<dyn std::error::Error + Send>>;
+    fn serialize(
+        &self,
+        buffer: &mut [u8],
+        offset: usize,
+    ) -> Result<usize, Box<dyn std::error::Error + Send>>;
 
     /// Get serialized size
     fn serialized_size(&self) -> usize;
@@ -111,7 +115,7 @@ impl StreamRecordSerializable for StreamRecord {
     }
 
     /// Protocol Buffers serialization
-    /// 
+    ///
     /// # Protocol Buffers protocol
     /// ```protobuf
     /// message StreamRecord {
@@ -119,17 +123,21 @@ impl StreamRecordSerializable for StreamRecord {
     ///     uint64 timestamp = 2;  // Timestamp (optional, written if present)
     /// }
     /// ```
-    fn serialize(&self, buffer: &mut [u8], offset: usize) -> Result<usize, Box<dyn std::error::Error + Send>> {
+    fn serialize(
+        &self,
+        buffer: &mut [u8],
+        offset: usize,
+    ) -> Result<usize, Box<dyn std::error::Error + Send>> {
         let mut pos = offset;
-        
+
         // field 1: value (bytes)
         pos += crate::codec::encode_bytes_field(buffer, pos, 1, &self.value)?;
-        
+
         // field 2: timestamp (uint64, optional)
         if let Some(timestamp) = self.timestamp {
             pos += crate::codec::encode_uint64_field(buffer, pos, 2, timestamp)?;
         }
-        
+
         Ok(pos - offset)
     }
 
@@ -147,9 +155,9 @@ impl StreamRecordSerializable for StreamRecord {
 
 impl StreamRecord {
     /// Protocol Buffers deserialization
-    /// 
+    ///
     /// Decode from the specified position in the byte array, returns (StreamRecord, bytes consumed)
-    /// 
+    ///
     /// # Protocol Buffers protocol
     /// ```protobuf
     /// message StreamRecord {
@@ -157,19 +165,22 @@ impl StreamRecord {
     ///     uint64 timestamp = 2;  // Timestamp (optional, written if present)
     /// }
     /// ```
-    pub fn deserialize_protobuf(bytes: &[u8], offset: usize) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
-        use crate::codec::{decode_tag, decode_bytes_field, decode_uint64_field, WireType};
-        use crate::codec::decode_var_int64;
+    pub fn deserialize_protobuf(
+        bytes: &[u8],
+        offset: usize,
+    ) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
         use crate::codec::decode_byte_string;
-        
+        use crate::codec::decode_var_int64;
+        use crate::codec::{WireType, decode_bytes_field, decode_tag, decode_uint64_field};
+
         let mut pos = offset;
         let mut value = None;
         let mut timestamp = None;
-        
+
         while pos < bytes.len() {
             let (field_number, wire_type, tag_consumed) = decode_tag(bytes, pos)?;
             pos += tag_consumed;
-            
+
             match field_number {
                 1 => {
                     // field 1: value (bytes)
@@ -179,7 +190,8 @@ impl StreamRecord {
                 }
                 2 => {
                     // field 2: timestamp (uint64, optional)
-                    let (_, timestamp_value, consumed) = decode_uint64_field(bytes, pos - tag_consumed)?;
+                    let (_, timestamp_value, consumed) =
+                        decode_uint64_field(bytes, pos - tag_consumed)?;
                     timestamp = Some(timestamp_value);
                     pos = pos - tag_consumed + consumed;
                 }
@@ -211,31 +223,31 @@ impl StreamRecord {
                 }
             }
         }
-        
+
         let value = value.ok_or_else(|| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Missing field: value",
             )) as Box<dyn std::error::Error + Send>
         })?;
-        
-        Ok((StreamRecord {
-            value,
-            timestamp,
-        }, pos - offset))
+
+        Ok((StreamRecord { value, timestamp }, pos - offset))
     }
 }
 
 /// Deserialize StreamRecord (backward compatibility helper function)
-/// 
+///
 /// Decode from the specified position in the byte array, returns (StreamRecord, bytes consumed)
 #[deprecated(note = "Use StreamRecord::deserialize_protobuf instead")]
-pub fn deserialize_stream_record(bytes: &[u8], offset: usize) -> Result<(StreamRecord, usize), Box<dyn std::error::Error + Send>> {
+pub fn deserialize_stream_record(
+    bytes: &[u8],
+    offset: usize,
+) -> Result<(StreamRecord, usize), Box<dyn std::error::Error + Send>> {
     StreamRecord::deserialize_protobuf(bytes, offset)
 }
 
 /// StreamRecordType - StreamRecord type marker
-/// 
+///
 /// Used to identify the type of StreamRecord during serialization
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -261,4 +273,3 @@ impl StreamRecordType {
         self as u8
     }
 }
-

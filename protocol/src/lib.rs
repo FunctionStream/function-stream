@@ -14,11 +14,9 @@ pub mod service;
 pub use cli::function_stream_service_client;
 
 // Re-export client-specific types
-pub use cli::{
-    function_stream_service_client::FunctionStreamServiceClient,
-};
+pub use cli::function_stream_service_client::FunctionStreamServiceClient;
 
 // Re-export server-specific types
-pub use service::{
-    function_stream_service_server::{FunctionStreamService, FunctionStreamServiceServer},
+pub use service::function_stream_service_server::{
+    FunctionStreamService, FunctionStreamServiceServer,
 };

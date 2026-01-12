@@ -12,9 +12,11 @@ impl StartWasmTask {
 }
 
 impl Statement for StartWasmTask {
-    fn accept(&self, visitor: &dyn StatementVisitor, context: &StatementVisitorContext) -> StatementVisitorResult {
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
         visitor.visit_start_wasm_task(self, context)
     }
 }
-
-

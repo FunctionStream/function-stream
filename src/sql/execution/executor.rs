@@ -1,13 +1,12 @@
-use crate::sql::plan::{
-    PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult,
-    CreateWasmTaskPlan, DropWasmTaskPlan,
-    StartWasmTaskPlan, StopWasmTaskPlan, ShowWasmTasksPlan,
-};
 use crate::runtime::taskexecutor::TaskManager;
+use crate::sql::plan::{
+    CreateWasmTaskPlan, DropWasmTaskPlan, PlanNode, PlanVisitor, PlanVisitorContext,
+    PlanVisitorResult, ShowWasmTasksPlan, StartWasmTaskPlan, StopWasmTaskPlan,
+};
+use crate::sql::statement::ExecuteResult;
 use std::fmt;
 use std::fs;
 use std::sync::Arc;
-use crate::sql::statement::ExecuteResult;
 
 #[derive(Debug, Clone)]
 pub struct ExecuteError {
@@ -16,7 +15,9 @@ pub struct ExecuteError {
 
 impl ExecuteError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self {
+            message: message.into(),
+        }
     }
 }
 
@@ -36,16 +37,19 @@ impl Executor {
     pub fn new(task_manager: Arc<TaskManager>) -> Self {
         Self { task_manager }
     }
-    
+
     pub fn execute(&self, plan: &dyn PlanNode) -> Result<ExecuteResult, ExecuteError> {
         let exec_start = std::time::Instant::now();
         let context = PlanVisitorContext::new();
-        
+
         let visitor_result = plan.accept(self, &context);
-        
+
         let exec_elapsed = exec_start.elapsed().as_secs_f64();
-        log::info!("[Timing] Executor.execute (plan routing + execution): {:.3}s", exec_elapsed);
-        
+        log::info!(
+            "[Timing] Executor.execute (plan routing + execution): {:.3}s",
+            exec_elapsed
+        );
+
         match visitor_result {
             PlanVisitorResult::Execute(result) => result,
         }
@@ -53,21 +57,32 @@ impl Executor {
 }
 
 impl PlanVisitor for Executor {
-    fn visit_create_wasm_task(&self, plan: &CreateWasmTaskPlan, _context: &PlanVisitorContext) -> PlanVisitorResult {
+    fn visit_create_wasm_task(
+        &self,
+        plan: &CreateWasmTaskPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
         let start_time = std::time::Instant::now();
         log::info!("Executing CREATE WASMTASK (name will be read from config file)");
-        
+
         // 读取 WASM 文件
         let wasm_read_start = std::time::Instant::now();
         let wasm_bytes = match fs::read(&plan.wasm_path) {
             Ok(bytes) => bytes,
             Err(e) => {
-                return PlanVisitorResult::Execute(Err(ExecuteError::new(format!("Failed to read WASM file: {}: {}", plan.wasm_path, e))));
+                return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                    "Failed to read WASM file: {}: {}",
+                    plan.wasm_path, e
+                ))));
             }
         };
         let wasm_read_elapsed = wasm_read_start.elapsed().as_secs_f64();
-        log::info!("[Timing] WASM file read: {:.3}s (size: {} bytes)", wasm_read_elapsed, wasm_bytes.len());
-        
+        log::info!(
+            "[Timing] WASM file read: {:.3}s (size: {} bytes)",
+            wasm_read_elapsed,
+            wasm_bytes.len()
+        );
+
         // 读取配置文件（如果存在）
         let config_read_start = std::time::Instant::now();
         let config_bytes = match if let Some(ref config_path) = plan.config_path {
@@ -76,8 +91,11 @@ impl PlanVisitor for Executor {
                     let elapsed = config_read_start.elapsed().as_secs_f64();
                     log::info!("[Timing] Config file read: {:.3}s", elapsed);
                     Ok(bytes)
-                },
-                Err(e) => Err(ExecuteError::new(format!("Failed to read config file: {}: {}", config_path, e))),
+                }
+                Err(e) => Err(ExecuteError::new(format!(
+                    "Failed to read config file: {}: {}",
+                    config_path, e
+                ))),
             }
         } else {
             // 如果没有配置文件，创建一个包含任务名称和属性的默认配置
@@ -97,8 +115,11 @@ impl PlanVisitor for Executor {
                     let elapsed = config_read_start.elapsed().as_secs_f64();
                     log::info!("[Timing] Default config generation: {:.3}s", elapsed);
                     Ok(bytes)
-                },
-                Err(e) => Err(ExecuteError::new(format!("Failed to serialize default config: {}", e))),
+                }
+                Err(e) => Err(ExecuteError::new(format!(
+                    "Failed to serialize default config: {}",
+                    e
+                ))),
             }
         } {
             Ok(bytes) => bytes,
@@ -106,14 +127,17 @@ impl PlanVisitor for Executor {
                 return PlanVisitorResult::Execute(Err(e));
             }
         };
-        
+
         // 注册任务（name 从 YAML 配置中解析）
-        log::debug!("Registering task with config size={} bytes, wasm size={} bytes", 
-            config_bytes.len(), wasm_bytes.len());
+        log::debug!(
+            "Registering task with config size={} bytes, wasm size={} bytes",
+            config_bytes.len(),
+            wasm_bytes.len()
+        );
         let register_start = std::time::Instant::now();
-        
+
         if let Err(e) = self.task_manager.register_task(&config_bytes, &wasm_bytes) {
-            let error_msg = format!("Failed to register task (name read from config file)");
+            let error_msg = "Failed to register task (name read from config file)".to_string();
             log::error!("{}: {}", error_msg, e);
             log::error!("Error chain: {:?}", e);
             let mut full_error = format!("{}: {}", error_msg, e);
@@ -131,19 +155,25 @@ impl PlanVisitor for Executor {
             log::error!("Full error details:\n{}", full_error);
             return PlanVisitorResult::Execute(Err(ExecuteError::new(&full_error)));
         }
-        
+
         let register_elapsed = register_start.elapsed().as_secs_f64();
         log::info!("[Timing] Task registration: {:.3}s", register_elapsed);
-        
+
         let total_elapsed = start_time.elapsed().as_secs_f64();
         log::info!("[Timing] CREATE WASMTASK total: {:.3}s", total_elapsed);
-        
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok("WASMTASK created successfully (name from config file)")))
+
+        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(
+            "WASMTASK created successfully (name from config file)",
+        )))
     }
-    
-    fn visit_drop_wasm_task(&self, plan: &DropWasmTaskPlan, _context: &PlanVisitorContext) -> PlanVisitorResult {
+
+    fn visit_drop_wasm_task(
+        &self,
+        plan: &DropWasmTaskPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
         log::info!("Executing DROP WASMTASK: {}", plan.name);
-        
+
         // 如果 force=true，先停止任务
         if plan.force {
             let _ = self.task_manager.stop_task(&plan.name);
@@ -153,7 +183,10 @@ impl PlanVisitor for Executor {
             let status = match self.task_manager.get_task_status(&plan.name) {
                 Ok(s) => s,
                 Err(e) => {
-                    return PlanVisitorResult::Execute(Err(ExecuteError::new(format!("Task '{}' not found: {}", plan.name, e))));
+                    return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                        "Task '{}' not found: {}",
+                        plan.name, e
+                    ))));
                 }
             };
             if status.is_running() {
@@ -163,50 +196,87 @@ impl PlanVisitor for Executor {
                 ))));
             }
         }
-        
+
         // 删除任务
         if let Err(e) = self.task_manager.remove_task(&plan.name) {
-            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!("Failed to remove task: {}: {}", plan.name, e))));
+            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                "Failed to remove task: {}: {}",
+                plan.name, e
+            ))));
         }
-        
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!("WASMTASK '{}' dropped successfully", plan.name))))
+
+        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
+            "WASMTASK '{}' dropped successfully",
+            plan.name
+        ))))
     }
-    
-    fn visit_start_wasm_task(&self, plan: &StartWasmTaskPlan, _context: &PlanVisitorContext) -> PlanVisitorResult {
+
+    fn visit_start_wasm_task(
+        &self,
+        plan: &StartWasmTaskPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
         log::info!("Executing START WASMTASK: {}", plan.name);
-        
+
         if let Err(e) = self.task_manager.start_task(&plan.name) {
-            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!("Failed to start task: {}: {}", plan.name, e))));
+            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                "Failed to start task: {}: {}",
+                plan.name, e
+            ))));
         }
-        
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!("WASMTASK '{}' started successfully", plan.name))))
+
+        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
+            "WASMTASK '{}' started successfully",
+            plan.name
+        ))))
     }
-    
-    fn visit_stop_wasm_task(&self, plan: &StopWasmTaskPlan, _context: &PlanVisitorContext) -> PlanVisitorResult {
-        log::info!("Executing STOP WASMTASK: {} (graceful: {})", plan.name, plan.graceful);
-        
+
+    fn visit_stop_wasm_task(
+        &self,
+        plan: &StopWasmTaskPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        log::info!(
+            "Executing STOP WASMTASK: {} (graceful: {})",
+            plan.name,
+            plan.graceful
+        );
+
         if let Err(e) = self.task_manager.stop_task(&plan.name) {
-            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!("Failed to stop task: {}: {}", plan.name, e))));
+            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                "Failed to stop task: {}: {}",
+                plan.name, e
+            ))));
         }
-        
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!("WASMTASK '{}' stopped successfully", plan.name))))
+
+        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
+            "WASMTASK '{}' stopped successfully",
+            plan.name
+        ))))
     }
-    
-    fn visit_show_wasm_tasks(&self, _plan: &ShowWasmTasksPlan, _context: &PlanVisitorContext) -> PlanVisitorResult {
+
+    fn visit_show_wasm_tasks(
+        &self,
+        _plan: &ShowWasmTasksPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
         log::info!("Executing SHOW WASMTASKS");
-        
+
         let task_names = self.task_manager.list_tasks();
-        
-        let json_objects: Vec<String> = task_names.iter()
+
+        let json_objects: Vec<String> = task_names
+            .iter()
             .map(|name| {
-                let status_str = self.task_manager.get_task_status(name)
+                let status_str = self
+                    .task_manager
+                    .get_task_status(name)
                     .map(|s| format!("{:?}", s))
                     .unwrap_or_else(|_| "UNKNOWN".to_string());
                 format!(r#"{{"name":"{}","status":"{}"}}"#, name, status_str)
             })
             .collect();
         let data = format!("[{}]", json_objects.join(","));
-        
+
         PlanVisitorResult::Execute(Ok(ExecuteResult::ok_with_data(
             format!("{} task(s) found", task_names.len()),
             data,

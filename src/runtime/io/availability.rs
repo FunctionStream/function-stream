@@ -2,19 +2,19 @@
 //
 // Used for asynchronous data availability checking
 
-use std::sync::Arc;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 /// AvailabilityProvider - Availability provider interface
-/// 
+///
 /// Used for asynchronous data availability checking
 pub trait AvailabilityProvider: Send + Sync {
     /// Check if immediately available
     fn is_available(&self) -> bool;
 
     /// Get availability Future
-    /// 
+    ///
     /// The Future completes when data becomes available
     fn get_available_future(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }
@@ -32,7 +32,8 @@ impl SimpleAvailabilityProvider {
     }
 
     pub fn set_available(&self, available: bool) {
-        self.available.store(available, std::sync::atomic::Ordering::Relaxed);
+        self.available
+            .store(available, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -56,4 +57,3 @@ impl Default for SimpleAvailabilityProvider {
         Self::new()
     }
 }
-

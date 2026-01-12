@@ -4,7 +4,7 @@ use std::fmt;
 
 pub trait PlanOptimizer: fmt::Debug + Send + Sync {
     fn optimize(&self, plan: Box<dyn PlanNode>, analysis: &Analysis) -> Box<dyn PlanNode>;
-    
+
     fn name(&self) -> &str;
 }
 
@@ -15,7 +15,7 @@ impl PlanOptimizer for NoOpOptimizer {
     fn optimize(&self, plan: Box<dyn PlanNode>, _analysis: &Analysis) -> Box<dyn PlanNode> {
         plan
     }
-    
+
     fn name(&self) -> &str {
         "NoOpOptimizer"
     }
@@ -32,23 +32,23 @@ impl LogicalPlanner {
             optimizers: Vec::new(),
         }
     }
-    
+
     pub fn with_optimizers(optimizers: Vec<Box<dyn PlanOptimizer>>) -> Self {
         Self { optimizers }
     }
-    
+
     pub fn add_optimizer(&mut self, optimizer: Box<dyn PlanOptimizer>) {
         self.optimizers.push(optimizer);
     }
-    
+
     pub fn optimize(&self, plan: Box<dyn PlanNode>, analysis: &Analysis) -> Box<dyn PlanNode> {
         let mut optimized_plan = plan;
-        
+
         for optimizer in &self.optimizers {
             log::debug!("Applying optimizer: {}", optimizer.name());
             optimized_plan = optimizer.optimize(optimized_plan, analysis);
         }
-        
+
         optimized_plan
     }
 }
@@ -58,4 +58,3 @@ impl Default for LogicalPlanner {
         Self::new()
     }
 }
-

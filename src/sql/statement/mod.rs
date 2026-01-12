@@ -1,15 +1,15 @@
 mod create_wasm_task;
 mod drop_wasm_task;
+mod show_wasm_tasks;
 mod start_wasm_task;
 mod stop_wasm_task;
-mod show_wasm_tasks;
 mod visitor;
 
 pub use create_wasm_task::CreateWasmTask;
 pub use drop_wasm_task::DropWasmTask;
+pub use show_wasm_tasks::ShowWasmTasks;
 pub use start_wasm_task::StartWasmTask;
 pub use stop_wasm_task::StopWasmTask;
-pub use show_wasm_tasks::ShowWasmTasks;
 pub use visitor::{StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
 use std::fmt;
@@ -29,7 +29,7 @@ impl ExecuteResult {
             data: None,
         }
     }
-    
+
     pub fn ok_with_data(message: impl Into<String>, data: impl Into<String>) -> Self {
         Self {
             success: true,
@@ -37,7 +37,7 @@ impl ExecuteResult {
             data: Some(data.into()),
         }
     }
-    
+
     pub fn err(message: impl Into<String>) -> Self {
         Self {
             success: false,
@@ -48,5 +48,9 @@ impl ExecuteResult {
 }
 
 pub trait Statement: fmt::Debug + Send + Sync {
-    fn accept(&self, visitor: &dyn StatementVisitor, context: &StatementVisitorContext) -> StatementVisitorResult;
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
 }

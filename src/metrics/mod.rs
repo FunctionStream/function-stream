@@ -1,10 +1,9 @@
 // Metrics module for collecting and managing application metrics
 
 pub mod collector;
-pub mod types;
 pub mod registry;
+pub mod types;
 
 pub use collector::*;
-pub use types::*;
 pub use registry::*;
-
+pub use types::*;

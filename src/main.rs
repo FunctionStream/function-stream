@@ -1,10 +1,10 @@
-mod config;
-mod server;
-mod logging;
-mod sql;
-mod runtime;
-mod storage;
 mod codec;
+mod config;
+mod logging;
+mod runtime;
+mod server;
+mod sql;
+mod storage;
 
 use anyhow::{Context, Result};
 use tracing::info;
@@ -15,14 +15,14 @@ use tracing::info;
 async fn wait_for_shutdown_signal() -> anyhow::Result<String> {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{signal, SignalKind};
-        
-        let mut sigterm = signal(SignalKind::terminate())
-            .context("Failed to create SIGTERM signal handler")?;
-        let mut sigint = signal(SignalKind::interrupt())
-            .context("Failed to create SIGINT signal handler")?;
-        let mut sighup = signal(SignalKind::hangup())
-            .context("Failed to create SIGHUP signal handler")?;
+        use tokio::signal::unix::{SignalKind, signal};
+
+        let mut sigterm =
+            signal(SignalKind::terminate()).context("Failed to create SIGTERM signal handler")?;
+        let mut sigint =
+            signal(SignalKind::interrupt()).context("Failed to create SIGINT signal handler")?;
+        let mut sighup =
+            signal(SignalKind::hangup()).context("Failed to create SIGHUP signal handler")?;
 
         tokio::select! {
             _ = sigterm.recv() => {
@@ -42,7 +42,8 @@ async fn wait_for_shutdown_signal() -> anyhow::Result<String> {
 
     #[cfg(not(unix))]
     {
-        tokio::signal::ctrl_c().await
+        tokio::signal::ctrl_c()
+            .await
             .context("Failed to wait for Ctrl+C signal")?;
         tracing::info!("Received Ctrl+C signal, initiating graceful shutdown...");
         Ok("Ctrl+C".to_string())
@@ -50,42 +51,41 @@ async fn wait_for_shutdown_signal() -> anyhow::Result<String> {
 }
 
 /// 初始化所有核心组件
-/// 
+///
 /// 包括：
 /// - TaskManager（任务管理器）
 /// - 其他需要初始化的组件
-/// 
+///
 /// # 参数
 /// - `config`: 全局配置
-/// 
+///
 /// # 返回值
 /// - `Ok(())`: 初始化成功
 /// - `Err(...)`: 初始化失败
 fn initialize_components(config: &config::GlobalConfig) -> Result<()> {
     info!("Initializing core components...");
-    
+
     // 初始化 TaskManager
     info!("Initializing TaskManager...");
-    runtime::taskexecutor::TaskManager::init(config)
-        .context("Failed to initialize TaskManager")?;
+    runtime::taskexecutor::TaskManager::init(config).context("Failed to initialize TaskManager")?;
     info!("TaskManager initialized successfully");
-    
+
     // TODO: 初始化其他组件
     // - Metrics registry
     // - Resource manager
     // - 等等
-    
+
     info!("All core components initialized successfully");
     Ok(())
 }
 
 /// 启动 gRPC 服务器
-/// 
+///
 /// 在后台线程中启动 gRPC 服务器，并返回服务器句柄和通信通道。
-/// 
+///
 /// # 参数
 /// - `config`: 全局配置
-/// 
+///
 /// # 返回值
 /// - `Ok((server_handle, shutdown_tx, error_rx))`: 成功启动
 ///   - `server_handle`: 服务器线程句柄
@@ -106,17 +106,28 @@ fn start_server(
     let (rpc_threads, calculation_info) = if let Some(workers) = config.service.workers {
         (workers, format!("configured value: {}", workers))
     } else {
-        let multiplier = config.service.worker_multiplier.unwrap_or(default_multiplier);
+        let multiplier = config
+            .service
+            .worker_multiplier
+            .unwrap_or(default_multiplier);
         let threads = cpu_count * multiplier;
-        (threads, format!("CPU cores ({}) × multiplier ({}) = {}", cpu_count, multiplier, threads))
+        (
+            threads,
+            format!(
+                "CPU cores ({}) × multiplier ({}) = {}",
+                cpu_count, multiplier, threads
+            ),
+        )
     };
-    
-    info!("Starting gRPC server in background thread with {} RPC threads ({})...", 
-          rpc_threads, calculation_info);
-    
+
+    info!(
+        "Starting gRPC server in background thread with {} RPC threads ({})...",
+        rpc_threads, calculation_info
+    );
+
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
     let (error_tx, error_rx) = tokio::sync::oneshot::channel();
-    
+
     let config = config.clone();
     let thread_count = rpc_threads;
     let server_handle = std::thread::spawn(move || {
@@ -127,7 +138,7 @@ fn start_server(
             .enable_all()
             .build()
             .expect("Failed to create tokio runtime for server");
-        
+
         rt.block_on(async {
             if let Err(e) = server::start_server_with_shutdown(&config, shutdown_rx, None).await {
                 tracing::error!("Server runtime error: {}", e);
@@ -136,7 +147,7 @@ fn start_server(
             }
         });
     });
-    
+
     Ok((server_handle, shutdown_tx, error_rx))
 }
 
@@ -146,27 +157,27 @@ fn graceful_shutdown(
     shutdown_tx: tokio::sync::oneshot::Sender<()>,
 ) {
     tracing::info!("Shutting down service...");
-    
+
     // Step 1: Send shutdown signal to server
     tracing::info!("Sending shutdown signal to gRPC server...");
     if shutdown_tx.send(()).is_err() {
         tracing::warn!("Failed to send shutdown signal, server may have already stopped");
     }
-    
+
     // Step 2: Wait for server thread to finish
     tracing::info!("Waiting for gRPC server to stop...");
     if let Err(e) = server_handle.join() {
         tracing::error!("Error joining server thread: {:?}", e);
     }
-    
+
     // Step 3: Wait for ongoing requests to complete
     tracing::info!("Waiting for ongoing requests to complete...");
     std::thread::sleep(std::time::Duration::from_secs(1));
-    
+
     // Step 4: Final cleanup
     tracing::info!("Performing final cleanup...");
     // TODO: Add cleanup for other resources (runtime manager, metrics, etc.)
-    
+
     tracing::info!("Service shutdown complete. Goodbye!");
 }
 
@@ -177,15 +188,20 @@ fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to find or create data directory: {}", e))?;
     let conf_dir = config::find_or_create_conf_dir()
         .map_err(|e| anyhow::anyhow!("Failed to find or create conf directory: {}", e))?;
-    
+
     tracing::debug!("Using data directory: {}", data_dir.display());
     tracing::debug!("Using conf directory: {}", conf_dir.display());
 
     // Find and load configuration file from multiple locations
     let config = if let Some(config_path) = config::find_config_file("config.yaml") {
-    tracing::debug!("Loading configuration from: {}", config_path.display());
-        config::load_global_config(&config_path)
-            .map_err(|e| anyhow::anyhow!("Failed to load config file '{}': {}", config_path.display(), e))?
+        tracing::debug!("Loading configuration from: {}", config_path.display());
+        config::load_global_config(&config_path).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to load config file '{}': {}",
+                config_path.display(),
+                e
+            )
+        })?
     } else {
         tracing::info!("No config file found, using default configuration");
         config::GlobalConfig::default()
@@ -198,7 +214,8 @@ fn main() -> anyhow::Result<()> {
     info!("Starting function-stream service...");
 
     // Validate configuration
-    config.validate()
+    config
+        .validate()
         .map_err(|e| anyhow::anyhow!("Configuration validation failed: {}", e))?;
 
     info!(
@@ -215,8 +232,8 @@ fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to initialize components: {}", e))?;
 
     // Start gRPC server
-    let (server_handle, shutdown_tx, error_rx) = start_server(&config)
-        .map_err(|e| anyhow::anyhow!("Failed to start server: {}", e))?;
+    let (server_handle, shutdown_tx, error_rx) =
+        start_server(&config).map_err(|e| anyhow::anyhow!("Failed to start server: {}", e))?;
 
     info!("Service started successfully, waiting for requests...");
 
@@ -224,7 +241,7 @@ fn main() -> anyhow::Result<()> {
     // Create a tokio runtime for signal handling (main thread doesn't have one)
     let rt = tokio::runtime::Runtime::new()
         .context("Failed to create tokio runtime for signal handling")?;
-    
+
     let result = rt.block_on(async {
         tokio::select! {
             // Server error occurred
@@ -243,13 +260,13 @@ fn main() -> anyhow::Result<()> {
             }
         }
     });
-    
+
     match result {
         Ok(_) => {
             let signal_type = "shutdown signal";
             tracing::debug!("Shutdown triggered by: {}", signal_type);
-    // Perform graceful shutdown
-    graceful_shutdown(server_handle, shutdown_tx);
+            // Perform graceful shutdown
+            graceful_shutdown(server_handle, shutdown_tx);
         }
         Err(e) => {
             eprintln!("ERROR: {}", e);

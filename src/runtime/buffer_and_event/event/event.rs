@@ -5,7 +5,7 @@
 use std::fmt::Debug;
 
 /// EventType - Event type enumeration
-/// 
+///
 /// Used to identify different types of events, used for serialization and deserialization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -29,7 +29,6 @@ impl EventType {
     }
 }
 
-
 pub trait Event: Send + Sync + Debug {
     /// Get event type
     fn event_type(&self) -> EventType;
@@ -44,15 +43,19 @@ pub trait Event: Send + Sync + Debug {
     }
 
     /// Protocol Buffers serialization
-    /// 
+    ///
     /// Writes to the specified position in the buffer, returns the number of bytes written
-    /// 
+    ///
     /// # Protocol Buffers protocol
     /// All Events are serialized using Protocol Buffers format
-    fn serialize_protobuf(&self, buffer: &mut [u8], offset: usize) -> Result<usize, Box<dyn std::error::Error + Send>>;
+    fn serialize_protobuf(
+        &self,
+        buffer: &mut [u8],
+        offset: usize,
+    ) -> Result<usize, Box<dyn std::error::Error + Send>>;
 
     /// Get event size (bytes)
-    /// 
+    ///
     /// Used to estimate the size after serialization (Protocol Buffers format)
     fn size(&self) -> usize {
         self.protobuf_size()

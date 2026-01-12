@@ -1,3 +1,3 @@
 mod executor;
 
-pub use executor::{Executor, ExecuteError};
+pub use executor::{ExecuteError, Executor};

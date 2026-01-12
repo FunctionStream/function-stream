@@ -6,4 +6,3 @@ pub mod types;
 
 pub use manager::*;
 pub use types::*;
-

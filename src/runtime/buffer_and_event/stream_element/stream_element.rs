@@ -5,7 +5,7 @@
 use std::fmt::Debug;
 
 /// StreamElementType - Stream element type enumeration
-/// 
+///
 /// Used to identify different types of stream elements
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StreamElementType {
@@ -22,7 +22,7 @@ pub enum StreamElementType {
 }
 
 /// StreamElement - Base class for all stream elements
-/// 
+///
 /// Defines type checking and conversion methods for stream elements
 pub trait StreamElement: Send + Sync + Debug {
     /// Get stream element type
@@ -53,4 +53,3 @@ pub trait StreamElement: Send + Sync + Debug {
         None
     }
 }
-

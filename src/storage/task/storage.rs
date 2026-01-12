@@ -25,62 +25,62 @@ pub struct StoredTaskInfo {
 /// 任务存储接口
 pub trait TaskStorage: Send + Sync {
     /// 创建任务信息
-    /// 
+    ///
     /// # 参数
     /// - `task_info`: 任务信息
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(())`: 创建成功
     /// - `Err(...)`: 创建失败
     fn create_task(&self, task_info: &StoredTaskInfo) -> Result<()>;
 
     /// 更新任务状态（使用 merge 操作）
-    /// 
+    ///
     /// # 参数
     /// - `task_name`: 任务名称
     /// - `new_state`: 新状态
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(())`: 更新成功
     /// - `Err(...)`: 更新失败
     fn update_task_state(&self, task_name: &str, new_state: ComponentState) -> Result<()>;
 
     /// 更新任务检查点 ID（使用 merge 操作）
-    /// 
+    ///
     /// # 参数
     /// - `task_name`: 任务名称
     /// - `checkpoint_id`: 新的检查点 ID
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(())`: 更新成功
     /// - `Err(...)`: 更新失败
     fn update_task_checkpoint_id(&self, task_name: &str, checkpoint_id: Option<u64>) -> Result<()>;
 
     /// 删除任务信息
-    /// 
+    ///
     /// # 参数
     /// - `task_name`: 任务名称
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(())`: 删除成功
     /// - `Err(...)`: 删除失败
     fn delete_task(&self, task_name: &str) -> Result<()>;
 
     /// 加载任务信息
-    /// 
+    ///
     /// # 参数
     /// - `task_name`: 任务名称
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(TaskInfo)`: 加载成功
     /// - `Err(...)`: 加载失败（任务不存在等）
     fn load_task(&self, task_name: &str) -> Result<StoredTaskInfo>;
 
     /// 检查任务是否存在
-    /// 
+    ///
     /// # 参数
     /// - `task_name`: 任务名称
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(true)`: 任务存在
     /// - `Ok(false)`: 任务不存在

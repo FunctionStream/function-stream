@@ -9,6 +9,5 @@ mod input_source;
 mod input_source_provider;
 pub mod protocol;
 
-pub use input_source::{InputSource, InputSourceState, CONTROL_TASK_CHANNEL_CAPACITY};
+pub use input_source::{InputSource, InputSourceState};
 pub use input_source_provider::InputSourceProvider;
-

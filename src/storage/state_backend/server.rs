@@ -2,14 +2,16 @@
 //
 // 提供统一的状态存储管理服务
 
-use crate::storage::state_backend::error::BackendError;
-use crate::storage::state_backend::factory::{StateStoreFactory, FactoryType, get_factory_for_task};
-use crate::storage::state_backend::STATE_DIR_NAME;
 use crate::config::storage::StateStorageConfig;
+use crate::storage::state_backend::STATE_DIR_NAME;
+use crate::storage::state_backend::error::BackendError;
+use crate::storage::state_backend::factory::{
+    FactoryType, StateStoreFactory, get_factory_for_task,
+};
 use std::sync::Arc;
 
 /// 状态存储服务器
-/// 
+///
 /// 根据配置创建状态存储工厂
 pub struct StateStorageServer {
     /// 状态存储配置
@@ -18,10 +20,10 @@ pub struct StateStorageServer {
 
 impl StateStorageServer {
     /// 创建新的状态存储服务器
-    /// 
+    ///
     /// # 参数
     /// - `config`: 状态存储配置
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(StateStorageServer)`: 成功创建
     /// - `Err(BackendError)`: 创建失败
@@ -31,31 +33,31 @@ impl StateStorageServer {
             crate::config::storage::StateStorageType::Memory => FactoryType::Memory,
             crate::config::storage::StateStorageType::RocksDB => FactoryType::RocksDB,
         };
-        
+
         if factory_type == FactoryType::RocksDB && config.base_dir.is_none() {
             return Err(BackendError::Other(
-                "base_dir is required for RocksDB factory type".to_string()
+                "base_dir is required for RocksDB factory type".to_string(),
             ));
         }
 
         // 如果是 RocksDB，创建 base_dir/state/ 目录
-        if factory_type == FactoryType::RocksDB {
-            if let Some(ref base_dir) = config.base_dir {
+        if factory_type == FactoryType::RocksDB
+            && let Some(ref base_dir) = config.base_dir {
                 let state_dir = std::path::Path::new(base_dir).join(STATE_DIR_NAME);
-                std::fs::create_dir_all(&state_dir)
-                    .map_err(|e| BackendError::IoError(format!("Failed to create state directory: {}", e)))?;
+                std::fs::create_dir_all(&state_dir).map_err(|e| {
+                    BackendError::IoError(format!("Failed to create state directory: {}", e))
+                })?;
             }
-        }
 
         Ok(Self { config })
     }
 
     /// 创建状态存储工厂
-    /// 
+    ///
     /// # 参数
     /// - `task_name`: 任务名称
     /// - `created_at`: 创建时间（Unix 时间戳，秒）
-    /// 
+    ///
     /// # 返回值
     /// - `Ok(Arc<dyn StateStoreFactory>)`: 成功创建工厂
     /// - `Err(BackendError)`: 创建失败
@@ -68,29 +70,33 @@ impl StateStorageServer {
             crate::config::storage::StateStorageType::Memory => FactoryType::Memory,
             crate::config::storage::StateStorageType::RocksDB => FactoryType::RocksDB,
         };
-        
+
         // 转换 RocksDB 配置
         let rocksdb_config = if factory_type == FactoryType::RocksDB {
-            Some(crate::storage::state_backend::rocksdb_factory::RocksDBConfig::from(&self.config.rocksdb))
+            Some(
+                crate::storage::state_backend::rocksdb_factory::RocksDBConfig::from(
+                    &self.config.rocksdb,
+                ),
+            )
         } else {
             None
         };
-        
+
         // 构建 base_dir/state/ 路径
         let state_dir = if factory_type == FactoryType::RocksDB {
-            self.config.base_dir.as_ref()
-                .map(|base_dir| {
-                    std::path::Path::new(base_dir).join(STATE_DIR_NAME)
-                })
+            self.config
+                .base_dir
+                .as_ref()
+                .map(|base_dir| std::path::Path::new(base_dir).join(STATE_DIR_NAME))
         } else {
             None
         };
-        
+
         get_factory_for_task(
             factory_type,
             task_name,
             created_at,
-            state_dir.as_ref().map(|p| p.as_path()),
+            state_dir.as_deref(),
             rocksdb_config,
         )
     }

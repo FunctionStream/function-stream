@@ -9,7 +9,7 @@ impl Analysis {
     pub fn new(statement: Box<dyn Statement>) -> Self {
         Self { statement }
     }
-    
+
     pub fn statement(&self) -> &dyn Statement {
         self.statement.as_ref()
     }

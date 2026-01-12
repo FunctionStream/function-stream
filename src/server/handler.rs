@@ -1,8 +1,8 @@
 // Function Stream Service handler implementation
 
 use protocol::service::{
-    function_stream_service_server::FunctionStreamService, 
-    LoginRequest, LogoutRequest, SqlRequest, Response, StatusCode,
+    LoginRequest, LogoutRequest, Response, SqlRequest, StatusCode,
+    function_stream_service_server::FunctionStreamService,
 };
 
 use crate::sql::{Coordinator, SqlParser};
@@ -96,7 +96,11 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         if req.username == req.password {
             // Create session
             let session = self.create_session(req.username.clone()).await;
-            log::info!("Login successful: user_id={}, username={}", session.user_id, session.username);
+            log::info!(
+                "Login successful: user_id={}, username={}",
+                session.user_id,
+                session.username
+            );
 
             Ok(tonic::Response::new(Response {
                 status_code: StatusCode::Ok as i32,
@@ -135,7 +139,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
             data: None,
         }))
     }
-    
+
     async fn execute_sql(
         &self,
         request: tonic::Request<SqlRequest>,
@@ -144,7 +148,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let start_time = std::time::Instant::now();
         let req = request.into_inner();
         log::info!("Received SQL request: {}", req.sql);
-        
+
         // 解析阶段
         let parse_start = std::time::Instant::now();
         let stmt = match SqlParser::parse(&req.sql) {
@@ -152,11 +156,16 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
                 let parse_elapsed = parse_start.elapsed().as_secs_f64();
                 log::info!("[Timing] SQL parsing: {:.3}s", parse_elapsed);
                 stmt
-            },
+            }
             Err(e) => {
                 let parse_elapsed = parse_start.elapsed().as_secs_f64();
                 let total_elapsed = start_time.elapsed().as_secs_f64();
-                log::warn!("SQL parse error: {} (parse={:.3}s, total={:.3}s)", e, parse_elapsed, total_elapsed);
+                log::warn!(
+                    "SQL parse error: {} (parse={:.3}s, total={:.3}s)",
+                    e,
+                    parse_elapsed,
+                    total_elapsed
+                );
                 return Ok(tonic::Response::new(Response {
                     status_code: StatusCode::BadRequest as i32,
                     message: format!("Parse error: {}", e),
@@ -164,23 +173,23 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
                 }));
             }
         };
-        
+
         // 协调器执行阶段
         let coord_start = std::time::Instant::now();
         let result = self.coordinator.execute(stmt.as_ref());
         let coord_elapsed = coord_start.elapsed().as_secs_f64();
         log::info!("[Timing] Coordinator execution: {:.3}s", coord_elapsed);
-        
+
         // 计算总耗时（包括解析和执行）
         let elapsed = start_time.elapsed().as_secs_f64();
         log::info!("SQL request completed: total_elapsed={:.3}s", elapsed);
-        
+
         let status_code = if result.success {
             StatusCode::Ok
         } else {
             StatusCode::InternalServerError
         };
-        
+
         Ok(tonic::Response::new(Response {
             status_code: status_code as i32,
             message: result.message,
@@ -194,4 +203,3 @@ impl Default for FunctionStreamServiceImpl {
         Self::new()
     }
 }
-

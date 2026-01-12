@@ -1,15 +1,15 @@
 // WasmProcessor implementation
-// 
+//
 // This module provides a concrete implementation of the WasmProcessor trait
 // that can load and execute WebAssembly modules.
 
+use super::wasm_host::{HostState, Processor};
 use super::wasm_processor_trait::WasmProcessor;
-use super::wasm_host::{Processor, HostState};
 use crate::runtime::output::OutputSink;
-use wasmtime::Store;
+use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
-use std::cell::RefCell;
+use wasmtime::Store;
 
 /// Error types for WasmProcessor
 #[derive(Debug)]
@@ -30,9 +30,15 @@ impl fmt::Display for WasmProcessorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             WasmProcessorError::LoadError(msg) => write!(f, "Failed to load WASM module: {}", msg),
-            WasmProcessorError::InitError(msg) => write!(f, "Failed to initialize WASM module: {}", msg),
-            WasmProcessorError::ExecutionError(msg) => write!(f, "Failed to execute WASM function: {}", msg),
-            WasmProcessorError::ModuleNotFound(path) => write!(f, "WASM module not found: {}", path),
+            WasmProcessorError::InitError(msg) => {
+                write!(f, "Failed to initialize WASM module: {}", msg)
+            }
+            WasmProcessorError::ExecutionError(msg) => {
+                write!(f, "Failed to execute WASM function: {}", msg)
+            }
+            WasmProcessorError::ModuleNotFound(path) => {
+                write!(f, "WASM module not found: {}", path)
+            }
             WasmProcessorError::InvalidModule(msg) => write!(f, "Invalid WASM module: {}", msg),
         }
     }
@@ -75,12 +81,12 @@ unsafe impl Sync for WasmProcessorImpl {}
 
 impl WasmProcessorImpl {
     /// Create a new WasmProcessorImpl
-    /// 
+    ///
     /// # Arguments
     /// * `name` - Processor name/identifier
     /// * `wasm_path` - WASM module file path
     /// * `init_config` - Configuration passed to WASM fs_init function
-    /// 
+    ///
     /// # Returns
     /// A new WasmProcessorImpl instance (not initialized)
     pub fn new(
@@ -108,14 +114,14 @@ impl WasmProcessorImpl {
     }
 
     /// Initialize WasmHost (requires passing sinks, init_context and task_name)
-    /// 
+    ///
     /// This method should be called after init_with_context to initialize WasmHost
-    /// 
+    ///
     /// # Arguments
     /// - `output_sinks`: Output sink list
     /// - `init_context`: Initialization context
     /// - `task_name`: Task name
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())`: Success
     /// - `Err(...)`: Failure
@@ -127,12 +133,12 @@ impl WasmProcessorImpl {
     ) -> Result<(), Box<dyn Error + Send>> {
         let total_start = std::time::Instant::now();
         use super::wasm_host::create_wasm_host;
-        
+
         if self.processor.borrow().is_some() || self.store.borrow().is_some() {
             log::warn!("WasmHost for processor '{}' already initialized", self.name);
             return Ok(());
         }
-        
+
         log::info!(
             "Initializing WasmHost for processor '{}' with {} output sinks",
             self.name,
@@ -141,54 +147,75 @@ impl WasmProcessorImpl {
 
         // Read WASM bytes from file path
         let read_start = std::time::Instant::now();
-        let wasm_bytes = std::fs::read(&self.wasm_path)
-            .map_err(|e| -> Box<dyn Error + Send> {
-                Box::new(WasmProcessorError::LoadError(format!(
-                    "Failed to read WASM file {}: {}",
-                    self.wasm_path, e
-                )))
-            })?;
+        let wasm_bytes = std::fs::read(&self.wasm_path).map_err(|e| -> Box<dyn Error + Send> {
+            Box::new(WasmProcessorError::LoadError(format!(
+                "Failed to read WASM file {}: {}",
+                self.wasm_path, e
+            )))
+        })?;
         let read_elapsed = read_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_wasm_host - Read WASM file: {:.3}s (size: {} MB)", read_elapsed, wasm_bytes.len() / 1024 / 1024);
-        log::debug!("Creating WasmHost with {} bytes of WASM data from {}", wasm_bytes.len(), self.wasm_path);
-        
+        log::info!(
+            "[Timing] init_wasm_host - Read WASM file: {:.3}s (size: {} MB)",
+            read_elapsed,
+            wasm_bytes.len() / 1024 / 1024
+        );
+        log::debug!(
+            "Creating WasmHost with {} bytes of WASM data from {}",
+            wasm_bytes.len(),
+            self.wasm_path
+        );
+
         let create_start = std::time::Instant::now();
-        let (processor, store) = create_wasm_host(&wasm_bytes, output_sinks, init_context, task_name)
-            .map_err(|e| -> Box<dyn Error + Send> {
-                let error_msg = format!("Failed to create WasmHost: {}", e);
-                log::error!("{}", error_msg);
-                // Print full error chain
-                let mut full_error = error_msg.clone();
-                let mut source = e.source();
-                let mut depth = 0;
-                while let Some(err) = source {
-                    depth += 1;
-                    full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
-                    source = err.source();
-                    if depth > 10 {
-                        full_error.push_str("\n  ... (error chain too long, truncated)");
-                        break;
+        let (processor, store) =
+            create_wasm_host(&wasm_bytes, output_sinks, init_context, task_name).map_err(
+                |e| -> Box<dyn Error + Send> {
+                    let error_msg = format!("Failed to create WasmHost: {}", e);
+                    log::error!("{}", error_msg);
+                    // Print full error chain
+                    let mut full_error = error_msg.clone();
+                    let mut source = e.source();
+                    let mut depth = 0;
+                    while let Some(err) = source {
+                        depth += 1;
+                        full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
+                        source = err.source();
+                        if depth > 10 {
+                            full_error.push_str("\n  ... (error chain too long, truncated)");
+                            break;
+                        }
                     }
-                }
-                log::error!("Full error chain:\n{}", full_error);
-                Box::new(WasmProcessorError::InitError(full_error))
-            })?;
+                    log::error!("Full error chain:\n{}", full_error);
+                    Box::new(WasmProcessorError::InitError(full_error))
+                },
+            )?;
         let create_elapsed = create_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_wasm_host - create_wasm_host: {:.3}s", create_elapsed);
+        log::info!(
+            "[Timing] init_wasm_host - create_wasm_host: {:.3}s",
+            create_elapsed
+        );
 
         // Store Processor and Store separately
         let store_start = std::time::Instant::now();
         *self.processor.borrow_mut() = Some(processor);
         *self.store.borrow_mut() = Some(store);
         let store_elapsed = store_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_wasm_host - Store processor and store: {:.3}s", store_elapsed);
+        log::info!(
+            "[Timing] init_wasm_host - Store processor and store: {:.3}s",
+            store_elapsed
+        );
 
         // Call WASM fs_init function
         let init_start = std::time::Instant::now();
-        let config_list: Vec<(String, String)> = self.init_config.iter()
+        let config_list: Vec<(String, String)> = self
+            .init_config
+            .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        log::info!("Calling fs_init with {} config entries: {:?}", config_list.len(), config_list);
+        log::info!(
+            "Calling fs_init with {} config entries: {:?}",
+            config_list.len(),
+            config_list
+        );
 
         {
             let processor_ref = self.processor.borrow();
@@ -196,29 +223,42 @@ impl WasmProcessorImpl {
             let mut store_ref = self.store.borrow_mut();
             let store = store_ref.as_mut().unwrap();
 
-            processor.call_fs_init(store, &config_list)
+            processor
+                .call_fs_init(store, &config_list)
                 .map_err(|e| -> Box<dyn Error + Send> {
-                    Box::new(WasmProcessorError::InitError(format!("Failed to call fs_init: {}", e)))
+                    Box::new(WasmProcessorError::InitError(format!(
+                        "Failed to call fs_init: {}",
+                        e
+                    )))
                 })?;
         }
         let init_elapsed = init_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_wasm_host - call_fs_init: {:.3}s", init_elapsed);
+        log::info!(
+            "[Timing] init_wasm_host - call_fs_init: {:.3}s",
+            init_elapsed
+        );
 
         let total_elapsed = total_start.elapsed().as_secs_f64();
         log::info!("[Timing] init_wasm_host total: {:.3}s", total_elapsed);
-        log::info!("WasmHost initialized successfully for processor '{}' from {}", self.name, self.wasm_path);
+        log::info!(
+            "WasmHost initialized successfully for processor '{}' from {}",
+            self.name,
+            self.wasm_path
+        );
         Ok(())
     }
-
 }
 
 impl WasmProcessor for WasmProcessorImpl {
-    fn init_with_context(&mut self, _init_context: &crate::runtime::taskexecutor::InitContext) -> Result<(), Box<dyn Error + Send>> {
+    fn init_with_context(
+        &mut self,
+        _init_context: &crate::runtime::taskexecutor::InitContext,
+    ) -> Result<(), Box<dyn Error + Send>> {
         if self.initialized {
             log::warn!("WasmProcessor '{}' already initialized", self.name);
             return Ok(());
         }
-        
+
         log::info!(
             "Initializing WasmProcessor '{}' with WASM file: {}",
             self.name,
@@ -232,16 +272,19 @@ impl WasmProcessor for WasmProcessorImpl {
         self.initialized = true;
         self.is_healthy = true;
         self.error_count = 0;
-        log::info!("WasmProcessor '{}' initialized successfully (WasmHost will be initialized when sinks are set)", self.name);
+        log::info!(
+            "WasmProcessor '{}' initialized successfully (WasmHost will be initialized when sinks are set)",
+            self.name
+        );
         Ok(())
     }
 
     /// Process input data using the WASM module
-    /// 
+    ///
     /// # Arguments
     /// * `data` - Input data as bytes
     /// * `input_index` - Index of the input source (0-based)
-    /// 
+    ///
     /// # Note
     /// The actual processed data is sent via collector::emit in WASM
     fn process(&self, data: Vec<u8>, input_index: usize) -> Result<(), Box<dyn Error + Send>> {
@@ -253,27 +296,46 @@ impl WasmProcessor for WasmProcessorImpl {
 
         // Get mutable references to processor and store
         let processor_ref = self.processor.borrow();
-        let processor = processor_ref.as_ref().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
-        })?;
-        
+        let processor = processor_ref
+            .as_ref()
+            .ok_or_else(|| -> Box<dyn Error + Send> {
+                Box::new(WasmProcessorError::InitError(
+                    "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+                ))
+            })?;
+
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
         })?;
 
         // Call WASM process function
         // WIT: export fs-process: func(source-id: u32, data: list<u8>);
         let payload_str = String::from_utf8_lossy(&data);
-        log::info!("Calling fs_process: input_index={}, data_len={}, payload={}", input_index, data.len(), payload_str);
-        
+        log::info!(
+            "Calling fs_process: input_index={}, data_len={}, payload={}",
+            input_index,
+            data.len(),
+            payload_str
+        );
+
         let start = std::time::Instant::now();
-        processor.call_fs_process(store, input_index as u32, &data)
+        processor
+            .call_fs_process(store, input_index as u32, &data)
             .map_err(|e| -> Box<dyn Error + Send> {
-                Box::new(WasmProcessorError::ExecutionError(format!("Failed to call WASM process: {}", e)))
+                Box::new(WasmProcessorError::ExecutionError(format!(
+                    "Failed to call WASM process: {}",
+                    e
+                )))
             })?;
         let elapsed_us = start.elapsed().as_micros();
-        log::info!("fs_process completed: input_index={}, elapsed={}us", input_index, elapsed_us);
+        log::info!(
+            "fs_process completed: input_index={}, elapsed={}us",
+            input_index,
+            elapsed_us
+        );
 
         log::debug!(
             "WasmProcessor '{}' processed {} bytes from input {}",
@@ -285,13 +347,16 @@ impl WasmProcessor for WasmProcessorImpl {
         Ok(())
     }
 
-
     /// Process watermark
-    /// 
+    ///
     /// # Arguments
     /// * `timestamp` - Watermark timestamp
     /// * `input_index` - Index of the input source that generated the watermark (0-based)
-    fn process_watermark(&mut self, timestamp: u64, input_index: usize) -> Result<(), Box<dyn Error + Send>> {
+    fn process_watermark(
+        &mut self,
+        timestamp: u64,
+        input_index: usize,
+    ) -> Result<(), Box<dyn Error + Send>> {
         if !self.initialized {
             return Err(Box::new(WasmProcessorError::InitError(
                 "Processor not initialized. Call init_with_context() first.".to_string(),
@@ -300,20 +365,30 @@ impl WasmProcessor for WasmProcessorImpl {
 
         // Get mutable references to processor and store
         let processor_ref = self.processor.borrow();
-        let processor = processor_ref.as_ref().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
-        })?;
-        
+        let processor = processor_ref
+            .as_ref()
+            .ok_or_else(|| -> Box<dyn Error + Send> {
+                Box::new(WasmProcessorError::InitError(
+                    "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+                ))
+            })?;
+
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
         })?;
 
         // Call WASM process_watermark function
         // WIT: export fs-process-watermark: func(source-id: u32, watermark: u64);
-        processor.call_fs_process_watermark(store, input_index as u32, timestamp)
+        processor
+            .call_fs_process_watermark(store, input_index as u32, timestamp)
             .map_err(|e| -> Box<dyn Error + Send> {
-                Box::new(WasmProcessorError::ExecutionError(format!("Failed to call WASM process_watermark: {}", e)))
+                Box::new(WasmProcessorError::ExecutionError(format!(
+                    "Failed to call WASM process_watermark: {}",
+                    e
+                )))
             })?;
 
         // Update current watermark
@@ -354,20 +429,30 @@ impl WasmProcessor for WasmProcessorImpl {
 
         // Get mutable references to processor and store
         let processor_ref = self.processor.borrow();
-        let processor = processor_ref.as_ref().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
-        })?;
-        
+        let processor = processor_ref
+            .as_ref()
+            .ok_or_else(|| -> Box<dyn Error + Send> {
+                Box::new(WasmProcessorError::InitError(
+                    "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+                ))
+            })?;
+
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
         })?;
 
         // Call WASM take_checkpoint function
         // WIT: export fs-take-checkpoint: func(checkpoint-id: u64) -> list<u8>;
-        let checkpoint_data = processor.call_fs_take_checkpoint(store, checkpoint_id)
+        let checkpoint_data = processor
+            .call_fs_take_checkpoint(store, checkpoint_id)
             .map_err(|e| -> Box<dyn Error + Send> {
-                Box::new(WasmProcessorError::ExecutionError(format!("Failed to call WASM take_checkpoint: {}", e)))
+                Box::new(WasmProcessorError::ExecutionError(format!(
+                    "Failed to call WASM take_checkpoint: {}",
+                    e
+                )))
             })?;
 
         log::debug!(
@@ -452,17 +537,20 @@ impl WasmProcessor for WasmProcessorImpl {
     }
 
     /// Close the WASM processor and clean up resources
-    /// 
+    ///
     /// This method should:
     /// 1. Clean up any WASM module instances
     /// 2. Release any allocated resources
     /// 3. Finalize any pending checkpoints
-    /// 
+    ///
     /// # Returns
     /// Ok(()) if cleanup succeeds, or an error if it fails
     fn close(&mut self) -> Result<(), Box<dyn Error + Send>> {
         if !self.initialized {
-            log::warn!("WasmProcessor '{}' not initialized, nothing to close", self.name);
+            log::warn!(
+                "WasmProcessor '{}' not initialized, nothing to close",
+                self.name
+            );
             return Ok(());
         }
 
@@ -485,39 +573,47 @@ impl WasmProcessor for WasmProcessorImpl {
         log::info!("WasmProcessor '{}' closed successfully", self.name);
         Ok(())
     }
-    
+
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
-    
+
     /// Start all output sinks
     fn start_sinks(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
         })?;
-        
+
         let host_state = store.data_mut();
         for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
             if let Err(e) = sink.start() {
                 log::error!("Failed to start sink {}: {}", idx, e);
-                return Err(Box::new(WasmProcessorError::ExecutionError(
-                    format!("Failed to start sink {}: {}", idx, e)
-                )));
+                return Err(Box::new(WasmProcessorError::ExecutionError(format!(
+                    "Failed to start sink {}: {}",
+                    idx, e
+                ))));
             }
         }
-        
-        log::debug!("All {} sinks started successfully", host_state.output_sinks.len());
+
+        log::debug!(
+            "All {} sinks started successfully",
+            host_state.output_sinks.len()
+        );
         Ok(())
     }
-    
+
     /// Stop all output sinks
     fn stop_sinks(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
         })?;
-        
+
         let host_state = store.data_mut();
         for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
             if let Err(e) = sink.stop() {
@@ -525,60 +621,76 @@ impl WasmProcessor for WasmProcessorImpl {
                 // Continue stopping other sinks even if one fails
             }
         }
-        
+
         log::debug!("All {} sinks stopped", host_state.output_sinks.len());
         Ok(())
     }
-    
+
     /// Take checkpoint for all output sinks
     fn take_checkpoint_sinks(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
         })?;
-        
+
         let host_state = store.data_mut();
         for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
             if let Err(e) = sink.take_checkpoint(checkpoint_id) {
                 log::error!("Failed to checkpoint sink {}: {}", idx, e);
-                return Err(Box::new(WasmProcessorError::ExecutionError(
-                    format!("Failed to checkpoint sink {}: {}", idx, e)
-                )));
+                return Err(Box::new(WasmProcessorError::ExecutionError(format!(
+                    "Failed to checkpoint sink {}: {}",
+                    idx, e
+                ))));
             }
         }
-        
-        log::debug!("Checkpoint {} taken for all {} sinks", checkpoint_id, host_state.output_sinks.len());
+
+        log::debug!(
+            "Checkpoint {} taken for all {} sinks",
+            checkpoint_id,
+            host_state.output_sinks.len()
+        );
         Ok(())
     }
-    
+
     /// Finish checkpoint for all output sinks
     fn finish_checkpoint_sinks(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
         })?;
-        
+
         let host_state = store.data_mut();
         for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
             if let Err(e) = sink.finish_checkpoint(checkpoint_id) {
                 log::error!("Failed to finish checkpoint for sink {}: {}", idx, e);
-                return Err(Box::new(WasmProcessorError::ExecutionError(
-                    format!("Failed to finish checkpoint for sink {}: {}", idx, e)
-                )));
+                return Err(Box::new(WasmProcessorError::ExecutionError(format!(
+                    "Failed to finish checkpoint for sink {}: {}",
+                    idx, e
+                ))));
             }
         }
-        
-        log::debug!("Checkpoint {} finished for all {} sinks", checkpoint_id, host_state.output_sinks.len());
+
+        log::debug!(
+            "Checkpoint {} finished for all {} sinks",
+            checkpoint_id,
+            host_state.output_sinks.len()
+        );
         Ok(())
     }
-    
+
     /// Close all output sinks
     fn close_sinks(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError("WasmHost not initialized. Call init_wasm_host() first.".to_string()))
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
         })?;
-        
+
         let host_state = store.data_mut();
         for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
             if let Err(e) = sink.stop() {
@@ -589,7 +701,7 @@ impl WasmProcessor for WasmProcessorImpl {
                 // Continue closing other sinks even if one fails
             }
         }
-        
+
         log::debug!("All {} sinks closed", host_state.output_sinks.len());
         Ok(())
     }

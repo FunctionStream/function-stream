@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, Condvar};
+use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
 /// Default timeout (milliseconds)
@@ -40,9 +40,9 @@ impl TaskResult {
 }
 
 /// Task completion flag
-/// 
+///
 /// Used to track whether control tasks have completed processing
-/// 
+///
 /// Supports:
 /// - Blocking wait (using Condvar, default timeout 1 second)
 /// - Non-blocking check
@@ -74,7 +74,7 @@ impl TaskCompletionFlag {
     }
 
     /// Mark task as failed and notify all waiting threads
-    /// 
+    ///
     /// # Arguments
     /// - `error`: Error message
     pub fn mark_error(&self, error: String) {
@@ -130,12 +130,13 @@ impl TaskCompletionFlag {
     /// Get error message
     pub fn get_error(&self) -> Option<String> {
         self.result.lock().ok().and_then(|r| {
-            r.as_ref().and_then(|res| res.error_message().map(|s| s.to_string()))
+            r.as_ref()
+                .and_then(|res| res.error_message().map(|s| s.to_string()))
         })
     }
 
     /// Blocking wait for task completion (default timeout 1 second)
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())`: Task completed successfully
     /// - `Err(String)`: Task failed or timeout
@@ -144,10 +145,10 @@ impl TaskCompletionFlag {
     }
 
     /// Blocking wait for task completion (specified timeout)
-    /// 
+    ///
     /// # Arguments
     /// - `timeout`: Timeout duration
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())`: Task completed successfully
     /// - `Err(String)`: Task failed or timeout
@@ -159,14 +160,14 @@ impl TaskCompletionFlag {
 
         let (lock, cvar) = &*self.condvar;
         let completed = lock.lock().unwrap();
-        
+
         if *completed {
             return self.check_result();
         }
 
         // Use condition variable to block wait for notification
         let result = cvar.wait_timeout(completed, timeout).unwrap();
-        
+
         if *result.0 || self.is_completed() {
             self.check_result()
         } else {
@@ -184,7 +185,7 @@ impl TaskCompletionFlag {
     }
 
     /// Blocking wait for task completion (wait forever)
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())`: Task completed successfully
     /// - `Err(String)`: Task failed
@@ -195,7 +196,7 @@ impl TaskCompletionFlag {
 
         let (lock, cvar) = &*self.condvar;
         let mut completed = lock.lock().unwrap();
-        
+
         while !*completed && !self.is_completed() {
             completed = cvar.wait(completed).unwrap();
         }
@@ -218,12 +219,12 @@ mod tests {
     #[test]
     fn test_task_completion_success() {
         let flag = TaskCompletionFlag::new();
-        
+
         assert!(!flag.is_completed());
         assert!(!flag.is_success());
-        
+
         flag.mark_completed();
-        
+
         assert!(flag.is_completed());
         assert!(flag.is_success());
         assert!(!flag.is_error());
@@ -233,9 +234,9 @@ mod tests {
     #[test]
     fn test_task_completion_error() {
         let flag = TaskCompletionFlag::new();
-        
+
         flag.mark_error("Test error".to_string());
-        
+
         assert!(flag.is_completed());
         assert!(flag.is_error());
         assert!(!flag.is_success());
@@ -246,7 +247,7 @@ mod tests {
     #[test]
     fn test_task_completion_wait_timeout() {
         let flag = TaskCompletionFlag::new();
-        
+
         let result = flag.wait_timeout(Duration::from_millis(10));
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Task completion timeout");
@@ -256,16 +257,15 @@ mod tests {
     fn test_task_completion_cross_thread() {
         let flag = TaskCompletionFlag::new();
         let flag_clone = flag.clone();
-        
+
         let handle = thread::spawn(move || {
             thread::sleep(Duration::from_millis(50));
             flag_clone.mark_completed();
         });
-        
+
         let result = flag.wait_timeout(Duration::from_secs(1));
         assert!(result.is_ok());
-        
+
         handle.join().unwrap();
     }
 }
-

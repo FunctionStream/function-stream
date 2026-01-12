@@ -16,5 +16,3 @@ impl PlanNode for StartWasmTaskPlan {
         visitor.visit_start_wasm_task(self, context)
     }
 }
-
-

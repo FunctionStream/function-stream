@@ -3,25 +3,25 @@
 // Represents the processing status of input data
 
 /// DataInputStatus - Input status
-/// 
+///
 /// Enumeration type representing the processing status of input data
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataInputStatus {
     /// More data immediately available
     MoreAvailable,
-    
+
     /// No data currently, but will be available in the future
     NothingAvailable,
-    
+
     /// All persisted data has been successfully recovered
     EndOfRecovery,
-    
+
     /// Input stopped (stop-with-savepoint without drain)
     Stopped,
-    
+
     /// Input has reached end of data
     EndOfData,
-    
+
     /// Input has reached end of data and control events, will close soon
     EndOfInput,
 }
@@ -41,9 +41,7 @@ impl DataInputStatus {
     pub fn is_end(&self) -> bool {
         matches!(
             self,
-            DataInputStatus::EndOfData
-                | DataInputStatus::EndOfInput
-                | DataInputStatus::Stopped
+            DataInputStatus::EndOfData | DataInputStatus::EndOfInput | DataInputStatus::Stopped
         )
     }
 
@@ -55,4 +53,3 @@ impl DataInputStatus {
         )
     }
 }
-

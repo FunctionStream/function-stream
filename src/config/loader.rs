@@ -90,15 +90,30 @@ config:
         assert_eq!(result["config"]["port"], 3000);
 
         // Check deep nesting (3 levels)
-        assert_eq!(result["config"]["database"]["primary"]["host"], "db1.example.com");
+        assert_eq!(
+            result["config"]["database"]["primary"]["host"],
+            "db1.example.com"
+        );
         assert_eq!(result["config"]["database"]["primary"]["port"], 5432);
-        assert_eq!(result["config"]["database"]["primary"]["credentials"]["username"], "admin");
-        assert_eq!(result["config"]["database"]["primary"]["credentials"]["password"], "secret");
+        assert_eq!(
+            result["config"]["database"]["primary"]["credentials"]["username"],
+            "admin"
+        );
+        assert_eq!(
+            result["config"]["database"]["primary"]["credentials"]["password"],
+            "secret"
+        );
 
         // Check array nesting
-        assert_eq!(result["config"]["database"]["replica"][0]["host"], "db2.example.com");
+        assert_eq!(
+            result["config"]["database"]["replica"][0]["host"],
+            "db2.example.com"
+        );
         assert_eq!(result["config"]["database"]["replica"][0]["port"], 5433);
-        assert_eq!(result["config"]["database"]["replica"][1]["host"], "db3.example.com");
+        assert_eq!(
+            result["config"]["database"]["replica"][1]["host"],
+            "db3.example.com"
+        );
         assert_eq!(result["config"]["database"]["replica"][1]["port"], 5434);
     }
 
@@ -148,12 +163,16 @@ status: active
 }
 
 /// Load global configuration from file
-pub fn load_global_config<P: AsRef<std::path::Path>>(path: P) -> Result<crate::config::GlobalConfig, Box<dyn std::error::Error>> {
+pub fn load_global_config<P: AsRef<std::path::Path>>(
+    path: P,
+) -> Result<crate::config::GlobalConfig, Box<dyn std::error::Error>> {
     let value = read_yaml_file(path)?;
     crate::config::GlobalConfig::from_yaml_value(value)
 }
 /// Load global configuration from string
-pub fn load_global_config_from_str(content: &str) -> Result<crate::config::GlobalConfig, Box<dyn std::error::Error>> {
+pub fn load_global_config_from_str(
+    content: &str,
+) -> Result<crate::config::GlobalConfig, Box<dyn std::error::Error>> {
     let value = read_yaml_str(content)?;
     crate::config::GlobalConfig::from_yaml_value(value)
 }

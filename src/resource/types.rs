@@ -84,4 +84,3 @@ impl<T> ResourceWrapper<T> {
         self.metadata.last_accessed = std::time::SystemTime::now();
     }
 }
-

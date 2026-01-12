@@ -5,7 +5,7 @@
 use std::hash::Hash;
 
 /// KeySelection - Key selection interface
-/// 
+///
 /// Used for selecting and processing Keys in stream processing
 pub trait KeySelection<K>: Send + Sync
 where
@@ -25,7 +25,7 @@ where
 }
 
 /// MultipleInputKeySelection - Multiple input Key selection
-/// 
+///
 /// Used for Key selection in multi-input scenarios
 pub trait MultipleInputKeySelection<K>: KeySelection<K>
 where
@@ -42,7 +42,7 @@ where
 }
 
 /// SingleInputKeySelection - Single input Key selection
-/// 
+///
 /// Used for Key selection in single-input scenarios
 pub trait SingleInputKeySelection<K>: KeySelection<K>
 where
@@ -114,7 +114,10 @@ where
     }
 
     fn get_available_keys(&self) -> Vec<K> {
-        self.input_key_mapping.iter().map(|(_, k)| k.clone()).collect()
+        self.input_key_mapping
+            .iter()
+            .map(|(_, k)| k.clone())
+            .collect()
     }
 }
 
@@ -215,4 +218,3 @@ where
         None
     }
 }
-

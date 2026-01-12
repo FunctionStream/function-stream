@@ -2,13 +2,13 @@
 //
 // Provides various resources needed for task initialization, including state storage, task storage, thread pool, etc.
 
+use crate::runtime::processor::WASM::thread_pool::{TaskThreadPool, ThreadGroup};
 use crate::storage::state_backend::StateStorageServer;
 use crate::storage::task::TaskStorage;
-use crate::runtime::processor::WASM::thread_pool::{TaskThreadPool, ThreadGroup};
 use std::sync::{Arc, Mutex};
 
 /// Initialization context
-/// 
+///
 /// Contains various resources needed for task initialization
 #[derive(Clone)]
 pub struct InitContext {
@@ -24,12 +24,12 @@ pub struct InitContext {
 
 impl InitContext {
     /// Create a new initialization context
-    /// 
+    ///
     /// # Arguments
     /// - `state_storage_server`: State storage server
     /// - `task_storage`: Task storage instance
     /// - `thread_pool`: Task thread pool
-    /// 
+    ///
     /// # Returns
     /// New InitContext instance
     pub fn new(
@@ -46,9 +46,9 @@ impl InitContext {
     }
 
     /// Register a thread group
-    /// 
+    ///
     /// Components call this method during initialization to register their thread groups
-    /// 
+    ///
     /// # Arguments
     /// - `thread_group`: Thread group to register
     pub fn register_thread_group(&self, thread_group: ThreadGroup) {
@@ -57,7 +57,7 @@ impl InitContext {
     }
 
     /// Get all registered thread groups
-    /// 
+    ///
     /// # Returns
     /// All registered thread groups (will be removed from the registry)
     pub fn take_thread_groups(&self) -> Vec<ThreadGroup> {
@@ -65,4 +65,3 @@ impl InitContext {
         std::mem::take(&mut *registry)
     }
 }
-

@@ -2,12 +2,13 @@
 //
 // Manages selection logic for multiple input streams
 
-use std::sync::atomic::{AtomicU64, AtomicU8, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 /// InputSelection - Input selection
-/// 
+///
 /// Uses bitmask to manage selection state of multiple inputs
 #[derive(Debug, Clone, Copy)]
+#[derive(Default)]
 pub struct InputSelection {
     /// Selected input mask (each bit represents an input)
     selected_inputs_mask: u64,
@@ -59,14 +60,14 @@ impl InputSelection {
     }
 
     /// Fairly select next input index
-    /// 
+    ///
     /// Select next from available inputs to avoid input stream starvation
-    /// 
+    ///
     /// # Arguments
     /// - `selected_mask`: Selected input mask
     /// - `available_mask`: Available input mask
     /// - `last_read_index`: Last read input index
-    /// 
+    ///
     /// # Returns
     /// - Next input index, or `NONE_AVAILABLE` if no available input
     pub fn fair_select_next_index(
@@ -75,7 +76,7 @@ impl InputSelection {
         last_read_index: i32,
     ) -> i32 {
         let candidates = selected_mask & available_mask;
-        
+
         if candidates == 0 {
             return Self::NONE_AVAILABLE;
         }
@@ -105,16 +106,9 @@ impl InputSelection {
     }
 }
 
-impl Default for InputSelection {
-    fn default() -> Self {
-        Self {
-            selected_inputs_mask: 0,
-        }
-    }
-}
 
 /// InputSelectable - Selectable input interface
-/// 
+///
 /// Allows operators to customize input selection logic
 pub trait InputSelectable: Send + Sync {
     /// Get next input selection
@@ -135,9 +129,9 @@ enum OperatingMode {
 }
 
 /// MultipleInputSelectionHandler - Multiple input selection handler
-/// 
+///
 /// Manages selection logic for multiple input streams, decides next input to process
-/// 
+///
 /// Mainly used in StreamMultipleInputProcessor to select next available input index
 pub struct MultipleInputSelectionHandler {
     /// Optional input selector
@@ -163,7 +157,9 @@ impl MultipleInputSelectionHandler {
     pub const MAX_SUPPORTED_INPUT_COUNT: usize = 63; // Long.SIZE - 1
 
     /// Check supported input count
-    pub fn check_supported_input_count(input_count: usize) -> Result<(), Box<dyn std::error::Error + Send>> {
+    pub fn check_supported_input_count(
+        input_count: usize,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         if input_count > Self::MAX_SUPPORTED_INPUT_COUNT {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -194,7 +190,9 @@ impl MultipleInputSelectionHandler {
 
         Ok(Self {
             input_selectable,
-            selected_inputs_mask: AtomicU64::new(InputSelection::all(input_count).selected_inputs_mask()),
+            selected_inputs_mask: AtomicU64::new(
+                InputSelection::all(input_count).selected_inputs_mask(),
+            ),
             all_selected_mask,
             available_inputs_mask: AtomicU64::new(all_selected_mask),
             not_finished_inputs_mask: AtomicU64::new(all_selected_mask),
@@ -267,10 +265,10 @@ impl MultipleInputSelectionHandler {
                 self.calculate_overall_status(input_status)
             }
             _ => {
-                return Err(Box::new(std::io::Error::new(
+                Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     format!("Unsupported inputStatus: {:?}", input_status),
-                )) as Box<dyn std::error::Error + Send>);
+                )) as Box<dyn std::error::Error + Send>)
             }
         }
     }
@@ -280,8 +278,8 @@ impl MultipleInputSelectionHandler {
         let data_finished = self.data_finished_but_not_partition.load(Ordering::Relaxed);
         let not_finished = self.not_finished_inputs_mask.load(Ordering::Relaxed);
 
-        let all_data_inputs_finished = ((data_finished | !not_finished) & self.all_selected_mask)
-            == self.all_selected_mask;
+        let all_data_inputs_finished =
+            ((data_finished | !not_finished) & self.all_selected_mask) == self.all_selected_mask;
 
         if all_data_inputs_finished {
             self.set_operating_mode(OperatingMode::AllDataInputsFinished);
@@ -335,18 +333,13 @@ impl MultipleInputSelectionHandler {
         let available = self.available_inputs_mask.load(Ordering::Relaxed);
         let not_finished = self.not_finished_inputs_mask.load(Ordering::Relaxed);
 
-        InputSelection::fair_select_next_index(
-            selected,
-            available & not_finished,
-            last_read_index,
-        )
+        InputSelection::fair_select_next_index(selected, available & not_finished, last_read_index)
     }
 
     /// Select first input index
     pub fn select_first_input_index(&self) -> i32 {
         self.select_next_input_index(-1)
     }
-
 
     /// Unset available input
     fn unset_available(&self, input_index: usize) {
@@ -366,7 +359,8 @@ impl MultipleInputSelectionHandler {
     fn set_data_finished_but_not_partition(&self, input_index: usize) {
         let current = self.data_finished_but_not_partition.load(Ordering::Relaxed);
         let new = self.set_bit_mask(current, input_index);
-        self.data_finished_but_not_partition.store(new, Ordering::Relaxed);
+        self.data_finished_but_not_partition
+            .store(new, Ordering::Relaxed);
     }
 
     /// Unset unfinished input
@@ -375,7 +369,6 @@ impl MultipleInputSelectionHandler {
         let new = self.unset_bit_mask(current, input_index);
         self.not_finished_inputs_mask.store(new, Ordering::Relaxed);
     }
-
 
     /// Check if any input is available
     pub fn is_any_input_available(&self) -> bool {
@@ -410,7 +403,7 @@ impl MultipleInputSelectionHandler {
     }
 
     /// Check if should set availability for another input
-    /// 
+    ///
     /// If there are unset available inputs in selected inputs, return true
     pub fn should_set_available_for_another_input(&self) -> bool {
         let selected = self.selected_inputs_mask.load(Ordering::Relaxed);
@@ -471,12 +464,13 @@ impl MultipleInputSelectionHandler {
                 // Get selection from InputSelectable，but include inputs with finished data
                 if let Some(ref selectable) = self.input_selectable {
                     let selection = selectable.next_selection();
-                    let data_finished = self.data_finished_but_not_partition.load(Ordering::Relaxed);
-                    let mask = (selection.selected_inputs_mask() | data_finished) & self.all_selected_mask;
+                    let data_finished =
+                        self.data_finished_but_not_partition.load(Ordering::Relaxed);
+                    let mask =
+                        (selection.selected_inputs_mask() | data_finished) & self.all_selected_mask;
                     self.selected_inputs_mask.store(mask, Ordering::Relaxed);
                 }
             }
         }
     }
 }
-

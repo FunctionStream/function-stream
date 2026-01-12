@@ -35,14 +35,18 @@ impl Event for EndOfData {
     }
 
     /// Protocol Buffers serialization
-    /// 
+    ///
     /// # Protocol Buffers protocol
     /// ```protobuf
     /// message EndOfData {
     ///     uint32 mode = 1;  // 0=NoDrain, 1=Drain
     /// }
     /// ```
-    fn serialize_protobuf(&self, buffer: &mut [u8], offset: usize) -> Result<usize, Box<dyn std::error::Error + Send>> {
+    fn serialize_protobuf(
+        &self,
+        buffer: &mut [u8],
+        offset: usize,
+    ) -> Result<usize, Box<dyn std::error::Error + Send>> {
         let mode_value = match self.mode {
             StopMode::Drain => 1u32,
             StopMode::NoDrain => 0u32,
@@ -57,17 +61,21 @@ impl Event for EndOfData {
 
 impl EndOfData {
     /// Protocol Buffers deserialization
-    /// 
+    ///
     /// Decodes from the specified position in the byte array, returns (EndOfData, bytes consumed)
-    /// 
+    ///
     /// # Protocol Buffers protocol
     /// ```protobuf
     /// message EndOfData {
     ///     uint32 mode = 1;  // 0=NoDrain, 1=Drain
     /// }
     /// ```
-    pub fn deserialize_protobuf(bytes: &[u8], offset: usize) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
-        let (field_number, mode_value, consumed) = crate::codec::decode_uint32_field(bytes, offset)?;
+    pub fn deserialize_protobuf(
+        bytes: &[u8],
+        offset: usize,
+    ) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
+        let (field_number, mode_value, consumed) =
+            crate::codec::decode_uint32_field(bytes, offset)?;
         if field_number != 1 {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -87,4 +95,3 @@ impl EndOfData {
         Ok((EndOfData { mode }, consumed))
     }
 }
-

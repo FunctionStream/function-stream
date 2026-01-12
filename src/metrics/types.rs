@@ -148,4 +148,3 @@ impl MetricEntry {
         }
     }
 }
-

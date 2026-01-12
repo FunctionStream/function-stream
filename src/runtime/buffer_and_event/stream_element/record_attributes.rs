@@ -5,7 +5,7 @@
 use super::StreamElement;
 
 /// RecordAttributes - Record attributes
-/// 
+///
 /// Contains metadata attributes of records, such as whether it's backlog, etc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RecordAttributes {
@@ -42,14 +42,18 @@ impl StreamElement for RecordAttributes {
 
 impl RecordAttributes {
     /// Protocol Buffers serialization
-    /// 
+    ///
     /// # Protocol Buffers protocol
     /// ```protobuf
     /// message RecordAttributes {
     ///     bool is_backlog = 1;  // Whether processing backlog data
     /// }
     /// ```
-    pub fn serialize_protobuf(&self, buffer: &mut [u8], offset: usize) -> Result<usize, Box<dyn std::error::Error + Send>> {
+    pub fn serialize_protobuf(
+        &self,
+        buffer: &mut [u8],
+        offset: usize,
+    ) -> Result<usize, Box<dyn std::error::Error + Send>> {
         crate::codec::encode_bool_field(buffer, offset, 1, self.is_backlog)
     }
 
@@ -59,9 +63,12 @@ impl RecordAttributes {
     }
 
     /// Protocol Buffers deserialization
-    /// 
+    ///
     /// Decode from the specified position in the byte array, returns (RecordAttributes, bytes consumed)
-    pub fn deserialize_protobuf(bytes: &[u8], offset: usize) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
+    pub fn deserialize_protobuf(
+        bytes: &[u8],
+        offset: usize,
+    ) -> Result<(Self, usize), Box<dyn std::error::Error + Send>> {
         let (field_number, is_backlog, consumed) = crate::codec::decode_bool_field(bytes, offset)?;
         if field_number != 1 {
             return Err(Box::new(std::io::Error::new(
@@ -101,4 +108,3 @@ impl Default for RecordAttributesBuilder {
         Self::new()
     }
 }
-

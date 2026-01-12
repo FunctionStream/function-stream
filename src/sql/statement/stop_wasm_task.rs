@@ -12,9 +12,11 @@ impl StopWasmTask {
 }
 
 impl Statement for StopWasmTask {
-    fn accept(&self, visitor: &dyn StatementVisitor, context: &StatementVisitorContext) -> StatementVisitorResult {
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
         visitor.visit_stop_wasm_task(self, context)
     }
 }
-
-

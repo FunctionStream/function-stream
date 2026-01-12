@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use crate::runtime::taskexecutor::TaskManager;
 use crate::sql::analyze::Analyzer;
 use crate::sql::execution::Executor;
 use crate::sql::plan::{LogicalPlanVisitor, LogicalPlanner};
-use crate::sql::statement::{Statement, ExecuteResult};
-use crate::runtime::taskexecutor::TaskManager;
+use crate::sql::statement::{ExecuteResult, Statement};
 
 use super::execution_context::ExecutionContext;
 
@@ -21,7 +21,7 @@ impl Coordinator {
         let start_time = std::time::Instant::now();
         let context = ExecutionContext::new();
         let execution_id = context.execution_id;
-        
+
         log::info!(
             "[ExecutionStart] execution_id={}, statement={:?}",
             execution_id,
@@ -37,7 +37,9 @@ impl Coordinator {
                 let total_elapsed = start_time.elapsed().as_secs_f64();
                 log::error!(
                     "[ExecutionEnd] execution_id={}, error={}, total_elapsed={:.3}s",
-                    execution_id, e, total_elapsed
+                    execution_id,
+                    e,
+                    total_elapsed
                 );
                 return ExecuteResult::err(format!("Analyze error: {}", e));
             }
@@ -76,7 +78,9 @@ impl Coordinator {
                 let total_elapsed = start_time.elapsed().as_secs_f64();
                 log::error!(
                     "[ExecutionEnd] execution_id={}, error=Failed to get TaskManager: {}, total_elapsed={:.3}s",
-                    execution_id, e, total_elapsed
+                    execution_id,
+                    e,
+                    total_elapsed
                 );
                 return ExecuteResult::err(format!("Failed to get TaskManager: {}", e));
             }
@@ -96,7 +100,9 @@ impl Coordinator {
                 let total_elapsed = start_time.elapsed().as_secs_f64();
                 log::error!(
                     "[ExecutionEnd] execution_id={}, error={}, total_elapsed={:.3}s",
-                    execution_id, e, total_elapsed
+                    execution_id,
+                    e,
+                    total_elapsed
                 );
                 return ExecuteResult::err(format!("Execute error: {}", e));
             }
@@ -106,7 +112,7 @@ impl Coordinator {
             execution_id,
             exec_start.elapsed().as_secs_f64()
         );
-        
+
         let total_elapsed = start_time.elapsed().as_secs_f64();
         log::info!(
             "[ExecutionEnd] execution_id={}, success={}, total_elapsed={:.3}s",
@@ -114,7 +120,7 @@ impl Coordinator {
             result.success,
             total_elapsed
         );
-        
+
         result
     }
 
@@ -135,11 +141,11 @@ mod tests {
     use super::*;
     use crate::sql::statement::CreateWasmTask;
     use std::collections::HashMap;
-    
+
     #[test]
     fn test_coordinator_analyze_error() {
         let coordinator = Coordinator::new();
-        
+
         // Missing wasm-path - should return error in ExecuteResult, not panic
         let props = HashMap::new();
         let stmt = CreateWasmTask::new("my_task".to_string(), props);

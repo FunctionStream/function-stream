@@ -1,7 +1,7 @@
 // Configuration file path resolution
 
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 /// Find configuration file in multiple locations
 /// Priority order:
@@ -19,8 +19,8 @@ pub fn find_config_file(config_name: &str) -> Option<PathBuf> {
     }
 
     // 2. Check executable directory
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent() {
             // Check in executable directory/../conf (for distribution/functionstream/bin/../conf)
             if let Some(parent) = exe_dir.parent() {
                 let conf_dir_path = parent.join("conf").join(config_name);
@@ -36,24 +36,19 @@ pub fn find_config_file(config_name: &str) -> Option<PathBuf> {
             }
 
             // Check in executable directory/../conf
-            let conf_dir_path = exe_dir.parent()
-                .map(|p| p.join("conf").join(config_name));
-            if let Some(ref path) = conf_dir_path {
-                if path.exists() {
+            let conf_dir_path = exe_dir.parent().map(|p| p.join("conf").join(config_name));
+            if let Some(ref path) = conf_dir_path
+                && path.exists() {
                     return Some(path.clone());
                 }
-            }
 
             // Check in executable directory/..
-            let parent_path = exe_dir.parent()
-                .map(|p| p.join(config_name));
-            if let Some(ref path) = parent_path {
-                if path.exists() {
+            let parent_path = exe_dir.parent().map(|p| p.join(config_name));
+            if let Some(ref path) = parent_path
+                && path.exists() {
                     return Some(path.clone());
                 }
-            }
         }
-    }
 
     // 3. Check environment variable
     if let Ok(env_path) = std::env::var("FUNCTION_STREAM_CONFIG") {
@@ -81,8 +76,8 @@ pub fn find_or_create_data_dir() -> std::io::Result<PathBuf> {
     }
 
     // 2. Check executable directory
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent() {
             // Check in executable directory/../data (for distribution/functionstream/bin/../data)
             if let Some(parent) = exe_dir.parent() {
                 let data_dir = parent.join("data");
@@ -111,7 +106,6 @@ pub fn find_or_create_data_dir() -> std::io::Result<PathBuf> {
                 return Ok(parent_data);
             }
         }
-    }
 
     // Default: create in current working directory
     fs::create_dir_all(&cwd_data)?;
@@ -133,8 +127,8 @@ pub fn find_or_create_conf_dir() -> std::io::Result<PathBuf> {
     }
 
     // 2. Check executable directory
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent() {
             // Check in executable directory/../conf (for distribution/functionstream/bin/../conf)
             if let Some(parent) = exe_dir.parent() {
                 let conf_dir = parent.join("conf");
@@ -163,7 +157,6 @@ pub fn find_or_create_conf_dir() -> std::io::Result<PathBuf> {
                 return Ok(parent_conf);
             }
         }
-    }
 
     // Default: create in current working directory
     fs::create_dir_all(&cwd_conf)?;
@@ -185,8 +178,8 @@ pub fn find_or_create_logs_dir() -> std::io::Result<PathBuf> {
     }
 
     // 2. Check executable directory
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent() {
             // Check in executable directory/../logs (for distribution/functionstream/bin/../logs)
             if let Some(parent) = exe_dir.parent() {
                 let logs_dir = parent.join("logs");
@@ -215,10 +208,8 @@ pub fn find_or_create_logs_dir() -> std::io::Result<PathBuf> {
                 return Ok(parent_logs);
             }
         }
-    }
 
     // Default: create in current working directory
     fs::create_dir_all(&cwd_logs)?;
     Ok(cwd_logs)
 }
-

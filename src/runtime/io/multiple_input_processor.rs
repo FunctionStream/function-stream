@@ -4,14 +4,14 @@
 // Reference Flink's StreamMultipleInputProcessor implementation
 
 use crate::runtime::io::{
-    DataInputStatus, StreamInputProcessor, AvailabilityProvider,
-    input_selection::{MultipleInputSelectionHandler, InputSelection},
+    AvailabilityProvider, DataInputStatus, StreamInputProcessor,
+    input_selection::{InputSelection, MultipleInputSelectionHandler},
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 /// StreamMultipleInputProcessor - Multiple input stream processor
-/// 
+///
 /// Multiple input stream processor implementation for MultipleInputStreamOperator
 pub struct StreamMultipleInputProcessor {
     /// Input selection handler
@@ -46,7 +46,7 @@ impl StreamMultipleInputProcessor {
     }
 
     /// Select first input index to read
-    /// 
+    ///
     /// Note: The operator's first nextSelection() call must be executed after this operator is opened,
     /// to ensure any changes to input selection in its open() method take effect.
     fn select_first_reading_input_index(&mut self) -> i32 {
@@ -82,7 +82,7 @@ impl StreamMultipleInputProcessor {
     }
 
     /// Fully check and set availability
-    /// 
+    ///
     /// Check availability of all input processors and update input selection handler
     fn full_check_and_set_available(&self) {
         for i in 0..self.input_processors.len() {
@@ -103,11 +103,10 @@ impl StreamMultipleInputProcessor {
         let mut first_error: Option<Box<dyn std::error::Error + Send>> = None;
 
         for input in &mut self.input_processors {
-            if let Err(e) = input.close() {
-                if first_error.is_none() {
+            if let Err(e) = input.close()
+                && first_error.is_none() {
                     first_error = Some(e);
                 }
-            }
         }
 
         if let Some(e) = first_error {
@@ -137,10 +136,8 @@ impl StreamInputProcessor for StreamMultipleInputProcessor {
 
         let input_status = self.input_processors[reading_input_index as usize].process_input()?;
 
-        self.input_selection_handler.update_status_and_selection(
-            input_status,
-            reading_input_index as usize,
-        )
+        self.input_selection_handler
+            .update_status_and_selection(input_status, reading_input_index as usize)
     }
 
     fn prepare_snapshot(
@@ -165,7 +162,9 @@ impl AvailabilityProvider for StreamMultipleInputProcessor {
         self.availability_helper.is_available()
     }
 
-    fn get_available_future(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+    fn get_available_future(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         if self.input_selection_handler.is_any_input_available()
             || self.input_selection_handler.are_all_inputs_finished()
         {
@@ -178,7 +177,7 @@ impl AvailabilityProvider for StreamMultipleInputProcessor {
         let availability_helper = self.availability_helper.clone();
         let input_selection_handler = self.input_selection_handler.clone();
         let input_processors_len = self.input_processors.len();
-        
+
         // Collect Futures that need to wait
         let mut futures = Vec::new();
         for i in 0..input_processors_len {
@@ -206,7 +205,7 @@ impl AvailabilityProvider for StreamMultipleInputProcessor {
 }
 
 /// MultipleFuturesAvailabilityHelper - Multiple Future availability helper
-/// 
+///
 /// Used to wait for any one of multiple Futures to become available
 #[derive(Clone)]
 pub struct MultipleFuturesAvailabilityHelper {
@@ -226,13 +225,14 @@ impl MultipleFuturesAvailabilityHelper {
 
     /// Reset to unavailable state
     pub fn reset_to_unavailable(&self) {
-        self.any_available.store(false, std::sync::atomic::Ordering::Relaxed);
+        self.any_available
+            .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Combine Futures using anyOf logic
-    /// 
+    ///
     /// When any one Future completes, notify availability
-    /// 
+    ///
     /// Note: Due to Rust's async model limitations, using a simplified implementation here
     /// Actual implementation should wait for any Future to complete and set availability
     pub fn any_of(
@@ -249,11 +249,14 @@ impl MultipleFuturesAvailabilityHelper {
 
     /// Set an input as available
     pub fn set_available(&self) {
-        self.any_available.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.any_available
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Get combined availability Future
-    pub fn get_available_future(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+    pub fn get_available_future(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         let any_available = self.any_available.clone();
         Box::pin(async move {
             // Wait for any input to become available
@@ -266,11 +269,13 @@ impl MultipleFuturesAvailabilityHelper {
 
 impl AvailabilityProvider for MultipleFuturesAvailabilityHelper {
     fn is_available(&self) -> bool {
-        self.any_available.load(std::sync::atomic::Ordering::Relaxed)
+        self.any_available
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    fn get_available_future(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+    fn get_available_future(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         self.get_available_future()
     }
 }
-

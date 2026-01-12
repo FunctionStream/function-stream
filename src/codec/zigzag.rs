@@ -39,7 +39,7 @@ mod tests {
             (i32::MAX, u32::MAX - 1),
             (i32::MIN, u32::MAX),
         ];
-        
+
         for (original, encoded) in test_cases {
             assert_eq!(encode_zigzag32(original), encoded);
             assert_eq!(decode_zigzag32(encoded), original);
@@ -57,11 +57,10 @@ mod tests {
             (i64::MAX, u64::MAX - 1),
             (i64::MIN, u64::MAX),
         ];
-        
+
         for (original, encoded) in test_cases {
             assert_eq!(encode_zigzag64(original), encoded);
             assert_eq!(decode_zigzag64(encoded), original);
         }
     }
 }
-

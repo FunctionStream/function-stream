@@ -1,19 +1,18 @@
 // Library crate for function-stream
 
+pub mod codec;
 pub mod config;
-pub mod server;
+pub mod logging;
+pub mod metrics;
 pub mod resource;
 pub mod runtime;
-pub mod metrics;
-pub mod logging;
-pub mod codec;
+pub mod server;
 pub mod sql;
 pub mod storage;
 
+pub use codec::*;
 pub use config::*;
+pub use logging::*;
+pub use metrics::*;
 pub use resource::*;
 pub use runtime::*;
-pub use metrics::*;
-pub use logging::*;
-pub use codec::*;
-

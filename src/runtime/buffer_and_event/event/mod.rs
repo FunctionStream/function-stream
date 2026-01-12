@@ -11,8 +11,6 @@ mod event_serializer;
 mod end_of_data;
 
 pub use event::*;
-pub use event_serializer::*;
 
 // Export RuntimeEvent concrete types
-pub use end_of_data::{EndOfData, StopMode};
-
+pub use end_of_data::EndOfData;

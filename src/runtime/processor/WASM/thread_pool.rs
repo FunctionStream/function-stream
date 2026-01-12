@@ -3,16 +3,16 @@
 // Manages execution of multiple WasmTasks, each WasmTask executed by a dedicated thread.
 // References Flink's TaskExecutor design, ensuring correct thread creation, management and recycling.
 
-use crate::runtime::processor::WASM::wasm_task::WasmTask;
 use crate::runtime::common::ComponentState;
-use std::sync::{Arc, Mutex};
+use crate::runtime::processor::WASM::wasm_task::WasmTask;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Task thread pool
-/// 
+///
 /// Manages execution of multiple WasmTasks, each WasmTask executed by a dedicated thread.
 /// Responsible for task submission, cancellation, monitoring and thread recycling.
 pub struct TaskThreadPool {
@@ -32,7 +32,7 @@ pub enum ThreadGroupType {
     /// Input source thread group
     InputSource(usize), // index
     /// Output sink thread group
-    OutputSink(usize),  // index
+    OutputSink(usize), // index
     /// Cleanup thread
     Cleanup,
 }
@@ -64,13 +64,15 @@ impl ThreadInfo {
     /// Wait for thread to complete
     fn join(self) -> Result<(), Box<dyn std::error::Error>> {
         self.is_running.store(false, Ordering::Relaxed);
-        self.handle.join().map_err(|e| format!("Thread join error: {:?}", e))?;
+        self.handle
+            .join()
+            .map_err(|e| format!("Thread join error: {:?}", e))?;
         Ok(())
     }
 }
 
 /// Thread group information
-/// 
+///
 /// A thread group can contain multiple threads, for example:
 /// - InputSource thread group may contain multiple partition consumer threads
 /// - OutputSink thread group may contain multiple sending threads
@@ -113,9 +115,7 @@ impl ThreadGroup {
 
     /// Get number of running threads
     pub fn running_thread_count(&self) -> usize {
-        self.threads.iter()
-            .filter(|t| !t.is_finished())
-            .count()
+        self.threads.iter().filter(|t| !t.is_finished()).count()
     }
 
     /// Wait for all threads to complete
@@ -128,16 +128,24 @@ impl ThreadGroup {
     }
 
     /// Try to wait for all threads to complete (with timeout)
-    pub fn join_all_with_timeout(&mut self, timeout: Duration) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn join_all_with_timeout(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let start = std::time::Instant::now();
         self.is_running.store(false, Ordering::Relaxed);
-        
+
         let mut remaining_threads = std::mem::take(&mut self.threads);
         while !remaining_threads.is_empty() {
             if start.elapsed() > timeout {
-                return Err(format!("Timeout waiting for {} threads in group '{}'", remaining_threads.len(), self.group_name).into());
+                return Err(format!(
+                    "Timeout waiting for {} threads in group '{}'",
+                    remaining_threads.len(),
+                    self.group_name
+                )
+                .into());
             }
-            
+
             // Wait for finished threads
             remaining_threads.retain(|t| {
                 if t.is_finished() {
@@ -146,12 +154,12 @@ impl ThreadGroup {
                     true // Keep unfinished threads
                 }
             });
-            
+
             if !remaining_threads.is_empty() {
                 thread::sleep(Duration::from_millis(10));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -179,20 +187,23 @@ impl TaskHandle {
 
     /// Get main runloop thread group
     fn get_main_runloop_thread(&self) -> Option<&ThreadGroup> {
-        self.thread_groups.iter()
+        self.thread_groups
+            .iter()
             .find(|g| matches!(g.group_type, ThreadGroupType::MainRunloop))
     }
 
     /// Get all input source thread groups
     fn get_input_threads(&self) -> Vec<&ThreadGroup> {
-        self.thread_groups.iter()
+        self.thread_groups
+            .iter()
             .filter(|g| matches!(g.group_type, ThreadGroupType::InputSource(_)))
             .collect()
     }
 
     /// Get all output sink thread groups
     fn get_output_threads(&self) -> Vec<&ThreadGroup> {
-        self.thread_groups.iter()
+        self.thread_groups
+            .iter()
             .filter(|g| matches!(g.group_type, ThreadGroupType::OutputSink(_)))
             .collect()
     }
@@ -203,10 +214,16 @@ impl TaskHandle {
     }
 
     /// Wait for all thread groups to complete
-    fn join_all_threads(&mut self, timeout: Option<Duration>) -> Result<(), Box<dyn std::error::Error>> {
+    fn join_all_threads(
+        &mut self,
+        timeout: Option<Duration>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Wait for main runloop thread first
-        if let Some(main_thread) = self.thread_groups.iter_mut()
-            .find(|g| matches!(g.group_type, ThreadGroupType::MainRunloop)) {
+        if let Some(main_thread) = self
+            .thread_groups
+            .iter_mut()
+            .find(|g| matches!(g.group_type, ThreadGroupType::MainRunloop))
+        {
             if let Some(timeout) = timeout {
                 let _ = main_thread.join_all_with_timeout(timeout);
             } else {
@@ -238,9 +255,9 @@ impl TaskThreadPool {
     }
 
     /// Submit task
-    /// 
+    ///
     /// Submit WasmTask, start task thread, and start cleanup thread in background to monitor task completion and thread recycling
-    /// 
+    ///
     /// Note: Task should have been initialized via `init_with_context`, so thread group information can be correctly extracted
     pub fn submit(&self, task: Arc<Mutex<WasmTask>>) -> Result<String, Box<dyn std::error::Error>> {
         if self.shutdown.load(Ordering::Relaxed) {
@@ -272,10 +289,8 @@ impl TaskThreadPool {
             .map_err(|e| format!("Failed to spawn cleanup thread: {}", e))?;
 
         // Create cleanup thread group
-        let mut cleanup_thread_group = ThreadGroup::new(
-            ThreadGroupType::Cleanup,
-            format!("TaskCleanup-{}", task_id),
-        );
+        let mut cleanup_thread_group =
+            ThreadGroup::new(ThreadGroupType::Cleanup, format!("TaskCleanup-{}", task_id));
         cleanup_thread_group.add_thread(cleanup_thread, format!("TaskCleanup-{}", task_id));
 
         // Get thread group information from WasmTask
@@ -287,24 +302,24 @@ impl TaskThreadPool {
         // Save task handle
         let mut tasks = self.tasks.lock().unwrap();
         let mut handle = TaskHandle::new(task);
-        
+
         // Add all thread groups (including main runloop, inputs, outputs, etc.)
         if let Some(groups) = thread_groups {
             for group in groups {
                 handle.add_thread_group(group);
             }
         }
-        
+
         // Add cleanup thread group
         handle.add_thread_group(cleanup_thread_group);
-        
+
         tasks.insert(task_id.clone(), handle);
 
         Ok(task_id)
     }
 
     /// Cleanup task thread (executed in background thread)
-    /// 
+    ///
     /// This method is responsible for:
     /// 1. Wait for task completion (by monitoring state)
     /// 2. Wait and recycle task threads
@@ -335,7 +350,7 @@ impl TaskThreadPool {
         // Here we only need to wait for threads to end
         let mut attempts = 0;
         const MAX_ATTEMPTS: usize = 50; // 5 second timeout
-        
+
         loop {
             let task_guard = task_arc.lock().unwrap();
             let state = task_guard.get_state();
@@ -371,11 +386,11 @@ impl TaskThreadPool {
     pub fn cancel_task(&self, task_id: &str) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(task) = self.get_task(task_id) {
             let task_guard = task.lock().unwrap();
-            task_guard.cancel()
-                .map_err(|e| Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+            task_guard.cancel().map_err(|e| {
+                Box::new(std::io::Error::other(
                     format!("Failed to cancel task: {}", e),
-                )) as Box<dyn std::error::Error>)?;
+                )) as Box<dyn std::error::Error>
+            })?;
             Ok(())
         } else {
             Err(format!("Task {} not found", task_id).into())
@@ -395,7 +410,10 @@ impl TaskThreadPool {
     }
 
     /// Wait for all tasks to complete
-    pub fn wait_for_all_tasks(&self, timeout: Option<Duration>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn wait_for_all_tasks(
+        &self,
+        timeout: Option<Duration>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let start = std::time::Instant::now();
         loop {
             let count = self.task_count();
@@ -403,18 +421,17 @@ impl TaskThreadPool {
                 return Ok(());
             }
 
-            if let Some(timeout) = timeout {
-                if start.elapsed() > timeout {
+            if let Some(timeout) = timeout
+                && start.elapsed() > timeout {
                     return Err(format!("Timeout waiting for {} tasks to complete", count).into());
                 }
-            }
 
             thread::sleep(Duration::from_millis(100));
         }
     }
 
     /// Check and recycle all threads of completed tasks
-    /// 
+    ///
     /// Return number of recycled threads
     pub fn cleanup_finished_threads(&self) -> usize {
         let mut cleaned_count = 0;
@@ -425,13 +442,11 @@ impl TaskThreadPool {
         for task_id in task_ids {
             if let Some(task_arc) = self.get_task(&task_id) {
                 let task_guard = task_arc.lock().unwrap();
-                
+
                 // Check if task is completed
                 let state = task_guard.get_state();
-                let is_finished = matches!(
-                    state,
-                    ComponentState::Closed | ComponentState::Error { .. }
-                );
+                let is_finished =
+                    matches!(state, ComponentState::Closed | ComponentState::Error { .. });
 
                 if is_finished {
                     cleaned_count += 1;
@@ -444,7 +459,10 @@ impl TaskThreadPool {
     }
 
     /// Force recycle all threads (with timeout)
-    pub fn force_cleanup_all_threads(&self, timeout: Duration) -> Result<usize, Box<dyn std::error::Error>> {
+    pub fn force_cleanup_all_threads(
+        &self,
+        timeout: Duration,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
         let mut cleaned_count = 0;
         let tasks = self.tasks.lock().unwrap();
         let task_ids: Vec<String> = tasks.keys().cloned().collect();
@@ -509,14 +527,19 @@ impl TaskThreadPool {
     }
 
     /// Wait for all cleanup threads to complete
-    fn wait_for_cleanup_threads(&self, timeout: Duration) -> Result<(), Box<dyn std::error::Error>> {
+    fn wait_for_cleanup_threads(
+        &self,
+        timeout: Duration,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let start = std::time::Instant::now();
-        
+
         loop {
             let tasks = self.tasks.lock().unwrap();
             let all_cleanup_done = tasks.values().all(|handle| {
                 // Find cleanup thread group
-                handle.thread_groups.iter()
+                handle
+                    .thread_groups
+                    .iter()
                     .find(|g| matches!(g.group_type, ThreadGroupType::Cleanup))
                     .map(|g| g.is_finished())
                     .unwrap_or(true)
@@ -538,7 +561,7 @@ impl TaskThreadPool {
     /// Force shutdown thread pool (don't wait for task completion, but will try to recycle threads)
     pub fn shutdown_now(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
-        
+
         let task_ids: Vec<String> = self.get_all_task_ids();
         for task_id in task_ids {
             let _ = self.cancel_task(&task_id);
@@ -558,25 +581,23 @@ impl TaskThreadPool {
 
         for handle in tasks.values() {
             total_tasks += 1;
-            
+
             // Count thread group status
             let mut task_alive_threads = 0;
             let mut task_finished_threads = 0;
-            
+
             for thread_group in &handle.thread_groups {
                 let running = thread_group.running_thread_count();
                 let finished = thread_group.thread_count() - running;
                 task_alive_threads += running;
                 task_finished_threads += finished;
             }
-            
+
             // Check task state
             if let Ok(task_guard) = handle.task.try_lock() {
                 let state = task_guard.get_state();
-                let is_finished = matches!(
-                    state,
-                    ComponentState::Closed | ComponentState::Error { .. }
-                );
+                let is_finished =
+                    matches!(state, ComponentState::Closed | ComponentState::Error { .. });
 
                 if task_alive_threads > 0 {
                     alive_threads += task_alive_threads;
@@ -625,7 +646,8 @@ impl ThreadHealthStatus {
 
     /// Check if all threads have been recycled
     pub fn all_threads_recycled(&self) -> bool {
-        self.total_tasks == 0 || (self.alive_threads == 0 && self.finished_threads == self.total_tasks)
+        self.total_tasks == 0
+            || (self.alive_threads == 0 && self.finished_threads == self.total_tasks)
     }
 }
 
@@ -642,6 +664,7 @@ impl GlobalTaskThreadPool {
     /// Get or create global task thread pool
     pub fn get_or_create() -> Arc<TaskThreadPool> {
         static POOL: std::sync::OnceLock<Arc<TaskThreadPool>> = std::sync::OnceLock::new();
-        POOL.get_or_init(|| Arc::new(TaskThreadPool::default())).clone()
+        POOL.get_or_init(|| Arc::new(TaskThreadPool::default()))
+            .clone()
     }
 }

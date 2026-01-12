@@ -9,5 +9,3 @@ pub mod stream_element;
 
 pub use buffer_or_event::BufferOrEvent;
 // StreamRecord is now in the stream_element submodule, exported through stream_element
-pub use stream_element::StreamRecord;
-

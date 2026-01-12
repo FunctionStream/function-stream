@@ -10,9 +10,11 @@ impl ShowWasmTasks {
 }
 
 impl Statement for ShowWasmTasks {
-    fn accept(&self, visitor: &dyn StatementVisitor, context: &StatementVisitorContext) -> StatementVisitorResult {
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
         visitor.visit_show_wasm_tasks(self, context)
     }
 }
-
-

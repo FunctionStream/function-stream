@@ -12,12 +12,12 @@ pub struct SinkBuilder;
 
 impl SinkBuilder {
     /// Create Sink type task from YAML configuration
-    /// 
+    ///
     /// # Arguments
     /// - `task_name`: Task name
     /// - `yaml_value`: YAML configuration value (root-level configuration)
     /// - `wasm_path`: WASM module path (optional)
-    /// 
+    ///
     /// # Returns
     /// - `Ok(Arc<WasmTask>)`: Successfully created task (future support)
     /// - `Err(...)`: Currently not implemented, returns error
@@ -55,4 +55,3 @@ impl SinkBuilder {
         )) as Box<dyn std::error::Error + Send>)
     }
 }
-
