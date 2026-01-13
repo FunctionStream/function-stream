@@ -18,6 +18,7 @@
 ///
 /// Used to specify configuration type, supported values:
 /// - "processor": Processor type configuration
+/// - "python": Python runtime configuration
 /// - "source": Source type configuration (future support)
 /// - "sink": Sink type configuration (future support)
 pub const TYPE: &str = "type";
@@ -46,6 +47,9 @@ pub const OUTPUTS: &str = "outputs";
 pub mod type_values {
     /// Processor configuration type value
     pub const PROCESSOR: &str = "processor";
+
+    /// Python runtime configuration type value
+    pub const PYTHON: &str = "python";
 
     /// Source configuration type value (future support)
     pub const SOURCE: &str = "source";

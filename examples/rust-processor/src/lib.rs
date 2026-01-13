@@ -10,12 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Rust WASM Processor 示例
-// 这个示例展示了如何实现一个符合 WIT 定义的 processor world
-//
-// 使用 wasmtime-component-macro 来生成 Component Model 绑定
-// 这与 wasm_host.rs 中的 bindgen! 宏配置匹配
-
 use wasmtime::component::bindgen;
 
 // 生成 Component Model 绑定

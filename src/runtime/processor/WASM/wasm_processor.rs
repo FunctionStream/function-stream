@@ -21,7 +21,8 @@ use crate::runtime::output::OutputSink;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
-use wasmtime::Store;
+use std::sync::Arc;
+use wasmtime::{Store, Engine, component::Component};
 
 /// Error types for WasmProcessor
 #[derive(Debug)]
@@ -58,32 +59,20 @@ impl fmt::Display for WasmProcessorError {
 
 impl Error for WasmProcessorError {}
 
-/// WasmProcessor implementation that loads and executes WebAssembly modules
 pub struct WasmProcessorImpl {
-    /// WASM module file path
-    wasm_path: String,
-    /// Processor name/identifier
+    module_bytes: Vec<u8>,
     name: String,
-    /// WASM init config (passed to fs_init)
     init_config: std::collections::HashMap<String, String>,
-    /// Whether the processor has been initialized
     initialized: bool,
-    /// Current watermark timestamp
     current_watermark: Option<u64>,
-    /// Last checkpoint ID
     last_checkpoint_id: Option<u64>,
-    /// Health status
     is_healthy: bool,
-    /// Error count for health check
     error_count: u32,
-    /// WASM Processor (frequently called, stored separately)
-    /// Uses RefCell to allow getting mutable references in &self methods
-    /// Note: Since there is only one thread, using RefCell here is safe
     processor: RefCell<Option<Processor>>,
-    /// WASM Store (contains HostState, accessed less frequently)
-    /// Uses RefCell to allow getting mutable references in &self methods
-    /// Note: Since there is only one thread, using RefCell here is safe
     store: RefCell<Option<Store<HostState>>>,
+    custom_engine: Option<std::sync::Arc<wasmtime::Engine>>,
+    custom_component: Option<wasmtime::component::Component>,
+    use_custom_engine_and_component: bool,
 }
 
 // Since there is only one thread, we can safely implement Send + Sync
@@ -92,23 +81,14 @@ unsafe impl Send for WasmProcessorImpl {}
 unsafe impl Sync for WasmProcessorImpl {}
 
 impl WasmProcessorImpl {
-    /// Create a new WasmProcessorImpl
-    ///
-    /// # Arguments
-    /// * `name` - Processor name/identifier
-    /// * `wasm_path` - WASM module file path
-    /// * `init_config` - Configuration passed to WASM fs_init function
-    ///
-    /// # Returns
-    /// A new WasmProcessorImpl instance (not initialized)
     pub fn new(
         name: String,
-        wasm_path: String,
+        module_bytes: Vec<u8>,
         init_config: std::collections::HashMap<String, String>,
     ) -> Self {
         Self {
             name,
-            wasm_path,
+            module_bytes,
             init_config,
             initialized: false,
             current_watermark: None,
@@ -117,6 +97,33 @@ impl WasmProcessorImpl {
             error_count: 0,
             processor: RefCell::new(None),
             store: RefCell::new(None),
+            custom_engine: None,
+            custom_component: None,
+            use_custom_engine_and_component: false,
+        }
+    }
+
+    pub fn new_with_custom_engine_and_component(
+        name: String,
+        module_bytes: Vec<u8>,
+        init_config: std::collections::HashMap<String, String>,
+        custom_engine: Arc<Engine>,
+        custom_component: Component,
+    ) -> Self {
+        Self {
+            name,
+            module_bytes,
+            init_config,
+            initialized: false,
+            current_watermark: None,
+            last_checkpoint_id: None,
+            is_healthy: true,
+            error_count: 0,
+            processor: RefCell::new(None),
+            store: RefCell::new(None),
+            custom_engine: Some(custom_engine),
+            custom_component: Some(custom_component),
+            use_custom_engine_and_component: true,
         }
     }
 
@@ -143,7 +150,6 @@ impl WasmProcessorImpl {
         init_context: &crate::runtime::taskexecutor::InitContext,
         task_name: String,
     ) -> Result<(), Box<dyn Error + Send>> {
-        let total_start = std::time::Instant::now();
         use super::wasm_host::create_wasm_host;
 
         if self.processor.borrow().is_some() || self.store.borrow().is_some() {
@@ -157,33 +163,22 @@ impl WasmProcessorImpl {
             output_sinks.len()
         );
 
-        // Read WASM bytes from file path
-        let read_start = std::time::Instant::now();
-        let wasm_bytes = std::fs::read(&self.wasm_path).map_err(|e| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::LoadError(format!(
-                "Failed to read WASM file {}: {}",
-                self.wasm_path, e
-            )))
-        })?;
-        let read_elapsed = read_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_wasm_host - Read WASM file: {:.3}s (size: {} MB)",
-            read_elapsed,
-            wasm_bytes.len() / 1024 / 1024
-        );
-        log::debug!(
-            "Creating WasmHost with {} bytes of WASM data from {}",
-            wasm_bytes.len(),
-            self.wasm_path
-        );
-
-        let create_start = std::time::Instant::now();
-        let (processor, store) =
-            create_wasm_host(&wasm_bytes, output_sinks, init_context, task_name).map_err(
+        let (processor, store) = if self.use_custom_engine_and_component {
+            let engine = self.custom_engine.as_ref().ok_or_else(|| {
+                Box::new(WasmProcessorError::InitError(
+                    "use_custom_engine_and_component is true but custom_engine is None".to_string(),
+                )) as Box<dyn Error + Send>
+            })?;
+            let component = self.custom_component.as_ref().ok_or_else(|| {
+                Box::new(WasmProcessorError::InitError(
+                    "use_custom_engine_and_component is true but custom_component is None".to_string(),
+                )) as Box<dyn Error + Send>
+            })?;
+            use super::wasm_host::create_wasm_host_with_component;
+            create_wasm_host_with_component(engine, component, output_sinks, init_context, task_name).map_err(
                 |e| -> Box<dyn Error + Send> {
-                    let error_msg = format!("Failed to create WasmHost: {}", e);
+                    let error_msg = format!("Failed to create WasmHost with custom engine/component: {}", e);
                     log::error!("{}", error_msg);
-                    // Print full error chain
                     let mut full_error = error_msg.clone();
                     let mut source = e.source();
                     let mut depth = 0;
@@ -199,42 +194,58 @@ impl WasmProcessorImpl {
                     log::error!("Full error chain:\n{}", full_error);
                     Box::new(WasmProcessorError::InitError(full_error))
                 },
-            )?;
-        let create_elapsed = create_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_wasm_host - create_wasm_host: {:.3}s",
-            create_elapsed
-        );
+            )?
+        } else {
+            create_wasm_host(&self.module_bytes, output_sinks, init_context, task_name).map_err(
+                |e| -> Box<dyn Error + Send> {
+                    let error_msg = format!("Failed to create WasmHost: {}", e);
+                    log::error!("{}", error_msg);
+                    let mut full_error = error_msg.clone();
+                    let mut source = e.source();
+                    let mut depth = 0;
+                    while let Some(err) = source {
+                        depth += 1;
+                        full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
+                        source = err.source();
+                        if depth > 10 {
+                            full_error.push_str("\n  ... (error chain too long, truncated)");
+                            break;
+                        }
+                    }
+                    log::error!("Full error chain:\n{}", full_error);
+                    Box::new(WasmProcessorError::InitError(full_error))
+                },
+            )?
+        };
 
-        // Store Processor and Store separately
-        let store_start = std::time::Instant::now();
         *self.processor.borrow_mut() = Some(processor);
         *self.store.borrow_mut() = Some(store);
-        let store_elapsed = store_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_wasm_host - Store processor and store: {:.3}s",
-            store_elapsed
-        );
 
-        // Call WASM fs_init function
-        let init_start = std::time::Instant::now();
         let config_list: Vec<(String, String)> = self
             .init_config
             .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        log::info!(
-            "Calling fs_init with {} config entries: {:?}",
-            config_list.len(),
-            config_list
-        );
 
         {
             let processor_ref = self.processor.borrow();
             let processor = processor_ref.as_ref().unwrap();
+
+            if self.use_custom_engine_and_component {
+                let mut store_ref = self.store.borrow_mut();
+                let store = store_ref.as_mut().unwrap();
+                processor
+                    .call_fs_exec(store, &self.module_bytes)
+                    .map_err(|e| -> Box<dyn Error + Send> {
+                        Box::new(WasmProcessorError::InitError(format!(
+                            "Failed to call fs_exec: {}",
+                            e
+                        )))
+                    })?;
+            }
+
             let mut store_ref = self.store.borrow_mut();
             let store = store_ref.as_mut().unwrap();
-
             processor
                 .call_fs_init(store, &config_list)
                 .map_err(|e| -> Box<dyn Error + Send> {
@@ -244,18 +255,10 @@ impl WasmProcessorImpl {
                     )))
                 })?;
         }
-        let init_elapsed = init_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_wasm_host - call_fs_init: {:.3}s",
-            init_elapsed
-        );
 
-        let total_elapsed = total_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_wasm_host total: {:.3}s", total_elapsed);
         log::info!(
-            "WasmHost initialized successfully for processor '{}' from {}",
-            self.name,
-            self.wasm_path
+            "WasmHost initialized successfully for processor '{}'",
+            self.name
         );
         Ok(())
     }
@@ -272,9 +275,9 @@ impl WasmProcessor for WasmProcessorImpl {
         }
 
         log::info!(
-            "Initializing WasmProcessor '{}' with WASM file: {}",
+            "Initializing WasmProcessor '{}' with {} bytes of module data",
             self.name,
-            self.wasm_path
+            self.module_bytes.len()
         );
 
         // Note: WasmHost initialization requires output_sinks

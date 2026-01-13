@@ -10,9 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Task Storage Factory - 任务存储工厂
+// Task Storage Factory
 //
-// 提供创建任务存储实例的工厂方法，根据配置创建相应的存储实现
+// Provides factory methods for creating task storage instances based on configuration
 
 use super::rocksdb_storage::RocksDBTaskStorage;
 use super::storage::TaskStorage;
@@ -21,43 +21,41 @@ use crate::config::storage::{TaskStorageConfig, TaskStorageType};
 use anyhow::{Context, Result};
 use std::path::Path;
 
-/// 任务存储工厂
+/// Task storage factory
 pub struct TaskStorageFactory;
 
 impl TaskStorageFactory {
-    /// 根据配置创建任务存储实例
+    /// Create a task storage instance based on configuration
     ///
-    /// # 参数
-    /// - `config`: 任务存储配置
-    /// - `task_name`: 任务名称（用于构建默认路径）
+    /// # Arguments
+    /// - `config`: Task storage configuration
     ///
-    /// # 返回值
-    /// - `Ok(Box<dyn TaskStorage>)`: 成功创建存储实例
-    /// - `Err(...)`: 创建失败
+    /// # Returns
+    /// - `Ok(Box<dyn TaskStorage>)`: Successfully created storage instance
+    /// - `Err(...)`: Creation failed
     pub fn create_storage(
         config: &TaskStorageConfig,
-        task_name: &str,
     ) -> Result<Box<dyn TaskStorage>> {
         match config.storage_type {
             TaskStorageType::RocksDB => {
-                // 确定数据库路径
+                // Determine database path
                 let db_path = if let Some(ref path) = config.db_path {
-                    // 使用配置中指定的路径
+                    // Use the path specified in configuration
                     Path::new(path).to_path_buf()
                 } else {
-                    // 使用默认路径：data/task/{task_name}
+                    // Use default path: data/task
                     let data_dir = find_or_create_data_dir()
                         .context("Failed to find or create data directory")?;
-                    data_dir.join("task").join(task_name)
+                    data_dir.join("task")
                 };
 
-                // 确保目录存在
+                // Ensure directory exists
                 if let Some(parent) = db_path.parent() {
                     std::fs::create_dir_all(parent)
                         .context(format!("Failed to create directory: {:?}", parent))?;
                 }
 
-                // 创建 RocksDB 存储实例
+                // Create RocksDB storage instance
                 let storage = RocksDBTaskStorage::new(db_path, Some(&config.rocksdb))?;
                 Ok(Box::new(storage))
             }

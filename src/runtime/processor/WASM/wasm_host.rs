@@ -723,85 +723,24 @@ impl functionstream::core::collector::Host for HostState {
     }
 }
 
-pub fn create_wasm_host(
-    wasm_bytes: &[u8],
+pub fn create_wasm_host_with_component(
+    engine: &Engine,
+    component: &Component,
     output_sinks: Vec<Box<dyn OutputSink>>,
     init_context: &crate::runtime::taskexecutor::InitContext,
     task_name: String,
 ) -> anyhow::Result<(Processor, Store<HostState>)> {
-    let total_start = std::time::Instant::now();
+    let mut linker = Linker::new(engine);
 
-    // 1. Get global Engine (created on first call, reused afterwards)
-    let engine_start = std::time::Instant::now();
-    let engine = get_global_engine(wasm_bytes.len())?;
-    let engine_elapsed = engine_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Get Global Engine: {:.3}s",
-        engine_elapsed
-    );
-
-    // 2. Parse WASM Component
-    let parse_start = std::time::Instant::now();
-    log::info!(
-        "Parsing WASM component, size: {} MB",
-        wasm_bytes.len() / 1024 / 1024
-    );
-    log::debug!("Parsing WASM component, size: {} bytes", wasm_bytes.len());
-    let component = Component::from_binary(&engine, wasm_bytes).map_err(|e| {
-        let error_msg = format!("Failed to parse WebAssembly component: {}", e);
-        log::error!("{}", error_msg);
-        log::error!(
-            "WASM bytes preview (first 100 bytes): {:?}",
-            wasm_bytes.iter().take(100).collect::<Vec<_>>()
-        );
-        anyhow::anyhow!(error_msg)
-    })?;
-    let parse_elapsed = parse_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Parse WASM Component: {:.3}s",
-        parse_elapsed
-    );
-
-    // 3. Create Linker
-    let linker_start = std::time::Instant::now();
-    let mut linker = Linker::new(&engine);
-    let linker_elapsed = linker_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Create Linker: {:.3}s",
-        linker_elapsed
-    );
-
-    // 4. Add WASI to linker
-    let wasi_start = std::time::Instant::now();
     wasmtime_wasi::add_to_linker_sync(&mut linker)
         .map_err(|e| anyhow::anyhow!("Failed to add WASI to linker: {}", e))?;
-    let wasi_elapsed = wasi_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Add WASI to linker: {:.3}s",
-        wasi_elapsed
-    );
 
-    // 5. Link custom Host (closures and traits are all synchronous at this point)
-    let kv_start = std::time::Instant::now();
     functionstream::core::kv::add_to_linker(&mut linker, |s: &mut HostState| s)
         .map_err(|e| anyhow::anyhow!("Failed to add kv interface to linker: {}", e))?;
-    let kv_elapsed = kv_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Add kv interface to linker: {:.3}s",
-        kv_elapsed
-    );
 
-    let collector_start = std::time::Instant::now();
     functionstream::core::collector::add_to_linker(&mut linker, |s: &mut HostState| s)
         .map_err(|e| anyhow::anyhow!("Failed to add collector interface to linker: {}", e))?;
-    let collector_elapsed = collector_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Add collector interface to linker: {:.3}s",
-        collector_elapsed
-    );
 
-    // 6. Get created_at from task storage (may involve YAML read)
-    let load_task_start = std::time::Instant::now();
     let created_at = init_context
         .task_storage
         .load_task(&task_name)
@@ -813,28 +752,14 @@ pub fn create_wasm_host(
                 .unwrap()
                 .as_secs()
         });
-    let load_task_elapsed = load_task_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Load task from storage (YAML read): {:.3}s",
-        load_task_elapsed
-    );
 
-    // 7. Create state storage factory
-    let factory_start = std::time::Instant::now();
     let factory = init_context
         .state_storage_server
         .create_factory(task_name.clone(), created_at)
         .map_err(|e| anyhow::anyhow!("Failed to create state store factory: {}", e))?;
-    let factory_elapsed = factory_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Create state store factory: {:.3}s",
-        factory_elapsed
-    );
 
-    // 8. Create Store
-    let store_create_start = std::time::Instant::now();
     let mut store = Store::new(
-        &engine,
+        engine,
         HostState {
             wasi: WasiCtxBuilder::new().inherit_stdio().build(),
             table: ResourceTable::new(),
@@ -842,32 +767,37 @@ pub fn create_wasm_host(
             output_sinks,
         },
     );
-    let store_create_elapsed = store_create_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Create Store: {:.3}s",
-        store_create_elapsed
-    );
 
-    let instantiate_start = std::time::Instant::now();
-    log::debug!("Instantiating WASM component");
-    let processor = Processor::instantiate(&mut store, &component, &linker).map_err(|e| {
+    let processor = Processor::instantiate(&mut store, component, &linker).map_err(|e| {
         let error_msg = format!("Failed to instantiate WASM component: {}", e);
         log::error!("{}", error_msg);
-        // Try to get more detailed error information
         let mut detailed_msg = error_msg.clone();
         if let Some(source) = e.source() {
             detailed_msg.push_str(&format!(". Source: {}", source));
         }
         anyhow::anyhow!("{}", detailed_msg)
     })?;
-    let instantiate_elapsed = instantiate_start.elapsed().as_secs_f64();
-    log::info!(
-        "[Timing] create_wasm_host - Instantiate WASM component: {:.3}s",
-        instantiate_elapsed
-    );
-
-    let total_elapsed = total_start.elapsed().as_secs_f64();
-    log::info!("[Timing] create_wasm_host total: {:.3}s", total_elapsed);
 
     Ok((processor, store))
+}
+
+pub fn create_wasm_host(
+    wasm_bytes: &[u8],
+    output_sinks: Vec<Box<dyn OutputSink>>,
+    init_context: &crate::runtime::taskexecutor::InitContext,
+    task_name: String,
+) -> anyhow::Result<(Processor, Store<HostState>)> {
+    let engine = get_global_engine(wasm_bytes.len())?;
+
+    let component = Component::from_binary(&engine, wasm_bytes).map_err(|e| {
+        let error_msg = format!("Failed to parse WebAssembly component: {}", e);
+        log::error!("{}", error_msg);
+        log::error!(
+            "WASM bytes preview (first 100 bytes): {:?}",
+            wasm_bytes.iter().take(100).collect::<Vec<_>>()
+        );
+        anyhow::anyhow!(error_msg)
+    })?;
+
+    create_wasm_host_with_component(&engine, &component, output_sinks, init_context, task_name)
 }

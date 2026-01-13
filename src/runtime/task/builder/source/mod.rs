@@ -36,7 +36,7 @@ impl SourceBuilder {
     pub fn build(
         _task_name: String,
         yaml_value: &Value,
-        _wasm_path: String,
+        _module_bytes: Vec<u8>,
     ) -> Result<Arc<WasmTask>, Box<dyn std::error::Error + Send>> {
         // Validate configuration type
         let config_type = yaml_value

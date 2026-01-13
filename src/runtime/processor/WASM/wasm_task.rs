@@ -206,12 +206,6 @@ impl WasmTask {
         &mut self,
         init_context: &crate::runtime::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        let total_start = std::time::Instant::now();
-
-        // 从结构体中取出，准备移动到线程中
-        // 注意：这些字段在移动到线程后，结构体中会变为 None，但结构体本身仍然存在
-        // 由于这些字段在 init 后不再被访问，直接移动即可
-        let take_start = std::time::Instant::now();
         let mut inputs = self.inputs.take().ok_or_else(|| {
             Box::new(std::io::Error::other(
                 "inputs already moved to thread",
@@ -227,65 +221,26 @@ impl WasmTask {
                 "sinks already moved to thread",
             )) as Box<dyn std::error::Error + Send>
         })?;
-        let take_elapsed = take_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Take fields: {:.3}s",
-            take_elapsed
-        );
 
-        // 克隆 init_context 以便在闭包中使用
-        let clone_start = std::time::Instant::now();
         let init_context = init_context.clone();
-        let clone_elapsed = clone_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Clone context: {:.3}s",
-            clone_elapsed
-        );
 
-        // 初始化顺序：先 Sink，再 Processor，最后 Source
-        // 这样 Processor 在初始化时可以使用 Sinks 来创建 WasmHost
-
-        // 1. 先初始化所有 sinks
-        let sinks_init_start = std::time::Instant::now();
         for (idx, sink) in sinks.iter_mut().enumerate() {
-            let sink_start = std::time::Instant::now();
             if let Err(e) = sink.init_with_context(&init_context) {
                 log::error!("Failed to init sink {}: {}", idx, e);
                 return Err(Box::new(std::io::Error::other(
                     format!("Failed to init sink {}: {}", idx, e),
                 )));
             }
-            let sink_elapsed = sink_start.elapsed().as_secs_f64();
-            log::info!(
-                "[Timing] init_with_context - Init sink {}: {:.3}s",
-                idx,
-                sink_elapsed
-            );
         }
-        let sinks_init_elapsed = sinks_init_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Init all sinks: {:.3}s",
-            sinks_init_elapsed
-        );
 
-        // 2. 初始化 processor
-        let processor_init_start = std::time::Instant::now();
         if let Err(e) = processor.init_with_context(&init_context) {
             log::error!("Failed to init processor: {}", e);
             return Err(Box::new(std::io::Error::other(
                 format!("Failed to init processor: {}", e),
             )));
         }
-        let processor_init_elapsed = processor_init_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Init processor: {:.3}s",
-            processor_init_elapsed
-        );
 
-        // 2.1. 初始化 WasmHost（需要传入 sinks）
-        // 直接将 sinks 的所有权传递给 WasmHost（不克隆）
         use crate::runtime::processor::WASM::WasmProcessorImpl;
-        let wasm_host_init_start = std::time::Instant::now();
         if let Some(wasm_processor_impl) =
             processor.as_any_mut().downcast_mut::<WasmProcessorImpl>()
         {
@@ -302,40 +257,16 @@ impl WasmTask {
                 "Processor is not a WasmProcessorImpl, cannot initialize WasmHost",
             )));
         }
-        let wasm_host_init_elapsed = wasm_host_init_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Init WasmHost: {:.3}s",
-            wasm_host_init_elapsed
-        );
 
-        // 注意：sinks 的所有权已经移交给 WasmHost（在 Store<HostState> 中）
-        // runloop 线程不再需要 sinks，因为输出通过 WASM processor 内部的 collector 完成
-
-        // 3. 最后初始化所有 input sources
-        let inputs_init_start = std::time::Instant::now();
         for (idx, input) in inputs.iter_mut().enumerate() {
-            let input_start = std::time::Instant::now();
             if let Err(e) = input.init_with_context(&init_context) {
                 log::error!("Failed to init input {}: {}", idx, e);
                 return Err(Box::new(std::io::Error::other(
                     format!("Failed to init input {}: {}", idx, e),
                 )));
             }
-            let input_elapsed = input_start.elapsed().as_secs_f64();
-            log::info!(
-                "[Timing] init_with_context - Init input {}: {:.3}s",
-                idx,
-                input_elapsed
-            );
         }
-        let inputs_init_elapsed = inputs_init_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Init all inputs: {:.3}s",
-            inputs_init_elapsed
-        );
 
-        // 创建控制 channel
-        let channel_start = std::time::Instant::now();
         let (control_sender, control_receiver) = bounded(10);
         self.control_sender = Some(control_sender);
 
@@ -348,25 +279,11 @@ impl WasmTask {
             *self.termination_future.lock().unwrap() = Some(rx);
             _tx
         };
-        let channel_elapsed = channel_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Create channels: {:.3}s",
-            channel_elapsed
-        );
 
-        // 标记线程开始运行
-        let thread_prep_start = std::time::Instant::now();
         thread_running.store(true, Ordering::Relaxed);
         self.execution_state
             .store(ExecutionState::Initializing as u8, Ordering::Relaxed);
-        let thread_prep_elapsed = thread_prep_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Prepare thread state: {:.3}s",
-            thread_prep_elapsed
-        );
 
-        // 启动 runloop 线程，将所有数据 move 进去
-        let thread_spawn_start = std::time::Instant::now();
         let thread_handle = thread::Builder::new()
             .name(format!("stream-task-{}", task_name))
             .spawn(move || {
@@ -382,14 +299,8 @@ impl WasmTask {
                     format!("Failed to start task thread: {}", e),
                 )) as Box<dyn std::error::Error + Send>
             })?;
-        let thread_spawn_elapsed = thread_spawn_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Spawn thread: {:.3}s",
-            thread_spawn_elapsed
-        );
 
-        // 注册主 runloop 线程组
-        let register_start = std::time::Instant::now();
+
         use crate::runtime::processor::WASM::thread_pool::{ThreadGroup, ThreadGroupType};
         let mut main_runloop_group = ThreadGroup::new(
             ThreadGroupType::MainRunloop,
@@ -397,54 +308,21 @@ impl WasmTask {
         );
         main_runloop_group.add_thread(thread_handle, format!("stream-task-{}", self.task_name));
         init_context.register_thread_group(main_runloop_group);
-        let register_elapsed = register_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Register thread group: {:.3}s",
-            register_elapsed
-        );
 
-        let total_elapsed = total_start.elapsed().as_secs_f64();
-        log::info!("[Timing] init_with_context total: {:.3}s", total_elapsed);
-
-        // 从注册器中获取所有线程组（包括 inputs、processor、sinks、main runloop）
-        let take_groups_start = std::time::Instant::now();
         let thread_groups = init_context.take_thread_groups();
-        let take_groups_elapsed = take_groups_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Take thread groups: {:.3}s",
-            take_groups_elapsed
-        );
         log::info!(
             "WasmTask '{}' registered {} thread groups",
             self.task_name,
             thread_groups.len()
         );
 
-        // 存储线程组信息，以便在 TaskThreadPool::submit 中使用
-        let store_groups_start = std::time::Instant::now();
         self.thread_groups = Some(thread_groups);
-        let store_groups_elapsed = store_groups_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Store thread groups: {:.3}s",
-            store_groups_elapsed
-        );
 
-        let finalize_start = std::time::Instant::now();
-        self.task_thread = None; // 线程句柄已经移动到线程组中
+        self.task_thread = None;
         self.execution_state
             .store(ExecutionState::Running as u8, Ordering::Relaxed);
-        let finalize_elapsed = finalize_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] init_with_context - Finalize state: {:.3}s",
-            finalize_elapsed
-        );
 
-        let total_elapsed = total_start.elapsed().as_secs_f64();
-        log::info!(
-            "WasmTask initialized: {} (total init_with_context: {:.3}s)",
-            self.task_name,
-            total_elapsed
-        );
+        log::info!("WasmTask '{}' initialized", self.task_name);
         Ok(())
     }
 
@@ -460,7 +338,6 @@ impl WasmTask {
         let thread_start_time = std::time::Instant::now();
         use crossbeam_channel::select;
 
-        // 本地状态，无需同步
         let init_start = std::time::Instant::now();
         let mut state = TaskState::Initialized;
         let mut current_input_index: usize = 0;
@@ -1069,7 +946,6 @@ impl TaskLifecycle for WasmTask {
         &mut self,
         init_context: &crate::runtime::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 直接调用内部的 init_with_context 方法（线程池已包含在 InitContext 中）
         <WasmTask>::init_with_context(self, init_context)
     }
 

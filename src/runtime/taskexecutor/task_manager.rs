@@ -116,10 +116,9 @@ impl TaskManager {
 
         // Create task storage instance
         // TaskStorage uses task name as key, so one instance can manage all tasks
-        // If db_path is specified in config, use that path; otherwise use default path "data/task/shared"
-        // Note: "shared" is used as task name to build path, but this storage instance will actually manage all tasks
-        // Because TaskStorage uses task name as key, not database path
-        let task_storage = TaskStorageFactory::create_storage(&config.task_storage, "shared")?;
+        // If db_path is specified in config, use that path; otherwise use default path "data/task"
+        // TaskStorage uses task name as key, not database path
+        let task_storage = TaskStorageFactory::create_storage(&config.task_storage)?;
 
         Ok(Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -163,16 +162,13 @@ impl TaskManager {
     /// - `Ok(())`: Registration successful
     /// - `Err(...)`: Registration failed
     pub fn register_task(&self, config_bytes: &[u8], wasm_bytes: &[u8]) -> Result<()> {
-        let total_start = std::time::Instant::now();
         log::debug!(
             "Registering task: config size={} bytes, wasm size={} bytes",
             config_bytes.len(),
             wasm_bytes.len()
         );
 
-        // 1. Create TaskLifecycle using TaskBuilder
-        let step1_start = std::time::Instant::now();
-        log::debug!("Step 1: Creating task from YAML config and WASM bytes");
+        // Create TaskLifecycle using TaskBuilder
         let task = crate::runtime::task::TaskBuilder::from_yaml_config(config_bytes, wasm_bytes)
             .map_err(|e| {
                 let config_str = String::from_utf8_lossy(config_bytes);
@@ -186,22 +182,11 @@ impl TaskManager {
                     e
                 )
             })?;
-        let step1_elapsed = step1_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] Step 1 - TaskBuilder::from_yaml_config: {:.3}s",
-            step1_elapsed
-        );
 
-        // 2. Get task name
-        let step2_start = std::time::Instant::now();
+        // Get task name
         let task_name = task.get_name().to_string();
-        let step2_elapsed = step2_start.elapsed().as_secs_f64();
-        log::info!("[Timing] Step 2 - Get task name: {:.3}s", step2_elapsed);
-        log::debug!("Step 2: Task name extracted: '{}'", task_name);
 
-        // 3. Check if task already exists
-        let step3_start = std::time::Instant::now();
-        log::debug!("Step 3: Checking if task '{}' already exists", task_name);
+        // Check if task already exists
         {
             let map = self
                 .tasks
@@ -221,12 +206,8 @@ impl TaskManager {
                 ));
             }
         }
-        let step3_elapsed = step3_start.elapsed().as_secs_f64();
-        log::info!("[Timing] Step 3 - Check task exists: {:.3}s", step3_elapsed);
 
-        // 4. Add task to tasks map
-        let step4_start = std::time::Instant::now();
-        log::debug!("Step 4: Adding task '{}' to tasks map", task_name);
+        // Add task to tasks map
         let task_arc = {
             let mut map = self
                 .tasks
@@ -236,28 +217,16 @@ impl TaskManager {
             map.insert(task_name.clone(), task_arc.clone());
             task_arc
         };
-        let step4_elapsed = step4_start.elapsed().as_secs_f64();
-        log::info!("[Timing] Step 4 - Add to tasks map: {:.3}s", step4_elapsed);
 
-        // 5. Create initialization context (includes thread pool)
-        let step5_start = std::time::Instant::now();
-        log::debug!("Step 5: Creating init context for task '{}'", task_name);
+        // Create initialization context (includes thread pool)
         let init_context = InitContext::new(
             self.state_storage_server.clone(),
             self.task_storage.clone(),
             self.thread_pool.clone(),
         );
-        let step5_elapsed = step5_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] Step 5 - Create init context: {:.3}s",
-            step5_elapsed
-        );
 
-        // 6. Initialize task
-        let step6_start = std::time::Instant::now();
-        log::debug!("Step 6: Initializing task '{}' with context", task_name);
+        // Initialize task
         {
-            let lock_start = std::time::Instant::now();
             let mut task_guard = task_arc.write().map_err(|e| {
                 anyhow!(
                     "Lock poisoned when getting write lock for task '{}': {}",
@@ -265,10 +234,7 @@ impl TaskManager {
                     e
                 )
             })?;
-            let lock_elapsed = lock_start.elapsed().as_secs_f64();
-            log::info!("[Timing] Step 6a - Get write lock: {:.3}s", lock_elapsed);
 
-            let init_start = std::time::Instant::now();
             task_guard.init_with_context(&init_context).map_err(|e| {
                 log::error!("Failed to initialize task '{}'. Error: {}", task_name, e);
                 log::error!("Error chain: {:?}", e);
@@ -279,19 +245,16 @@ impl TaskManager {
                     e
                 )
             })?;
-            let init_elapsed = init_start.elapsed().as_secs_f64();
-            log::info!("[Timing] Step 6b - init_with_context: {:.3}s", init_elapsed);
-        }
-        let step6_elapsed = step6_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] Step 6 - Task initialization (total): {:.3}s",
-            step6_elapsed
-        );
 
-        let total_elapsed = total_start.elapsed().as_secs_f64();
-        log::info!("[Timing] register_task total: {:.3}s", total_elapsed);
+            task_guard.start().map_err(|e| {
+                log::error!("Failed to start task '{}'. Error: {}", task_name, e);
+                anyhow!("Failed to start task '{}': {}", task_name, e)
+            })?;
+        }
+
+
         log::info!(
-            "Manager: Task '{}' registered and initialized successfully.",
+            "Manager: Task '{}' registered, initialized and started successfully.",
             task_name
         );
         Ok(())
@@ -404,7 +367,7 @@ impl TaskManager {
         map.keys().cloned().collect()
     }
 
-    /// Remove task (must close first)
+    /// Remove task (will close first if not already closed)
     ///
     /// # Arguments
     /// - `name`: Task name
@@ -413,17 +376,22 @@ impl TaskManager {
     /// - `Ok(())`: Removal successful
     /// - `Err(...)`: Removal failed
     pub fn remove_task(&self, name: &str) -> Result<()> {
-        // Check task state
+        // Get task
         let task = self.get_task(name)?;
-        let task_guard = task.read().map_err(|_| anyhow!("Lock poisoned"))?;
-        let status = task_guard.get_state();
-
-        if !status.is_closed() {
-            return Err(anyhow!(
-                "Cannot remove task '{}' with status {}. Close it first.",
-                name,
-                status
-            ));
+        
+        // Close task if not already closed
+        {
+            let task_guard = task.read().map_err(|_| anyhow!("Lock poisoned"))?;
+            let status = task_guard.get_state();
+            drop(task_guard);
+            
+            if !status.is_closed() {
+                let mut task_guard = task.write().map_err(|_| anyhow!("Lock poisoned"))?;
+                task_guard.close().map_err(|e| {
+                    log::error!("Failed to close task '{}' before removal. Error: {}", name, e);
+                    anyhow!("Failed to close task '{}': {}", name, e)
+                })?;
+            }
         }
 
         // Remove from memory

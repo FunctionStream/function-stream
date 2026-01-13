@@ -10,9 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Processor Builder - Processor type task builder
+// Python Builder - Python runtime task builder
 //
-// Specifically handles building logic for Processor type configuration
+// Specifically handles building logic for Python runtime configuration
 
 use crate::runtime::input::{InputSource, InputSourceProvider};
 use crate::runtime::output::{OutputSink, OutputSinkProvider};
@@ -24,25 +24,14 @@ use crate::runtime::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskC
 use serde_yaml::Value;
 use std::sync::Arc;
 
-/// ProcessorBuilder - Processor type task builder
-pub struct ProcessorBuilder;
+pub struct PythonBuilder;
 
-impl ProcessorBuilder {
-    /// Create Processor type WasmTask from YAML configuration
-    ///
-    /// # Arguments
-    /// - `task_name`: Task name
-    /// - `yaml_value`: YAML configuration value (root-level configuration)
-    /// - `wasm_path`: WASM module path
-    ///
-    /// # Returns
-    /// - `Ok(Arc<WasmTask>)`: Successfully created WasmTask
-    /// - `Err(...)`: Creation failed
+impl PythonBuilder {
     pub fn build(
         task_name: String,
         yaml_value: &Value,
         module_bytes: Vec<u8>,
-    ) -> Result<Arc<WasmTask>, Box<dyn std::error::Error + Send>> {
+    ) -> Result<Box<dyn crate::runtime::task::TaskLifecycle>, Box<dyn std::error::Error + Send>> {
         let config_type = yaml_value
             .get(TYPE)
             .and_then(|v| v.as_str())
@@ -53,13 +42,13 @@ impl ProcessorBuilder {
                 )) as Box<dyn std::error::Error + Send>
             })?;
 
-        if config_type != type_values::PROCESSOR {
+        if config_type != type_values::PYTHON {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!(
                     "Invalid config type '{}', expected '{}'",
                     config_type,
-                    type_values::PROCESSOR
+                    type_values::PYTHON
                 ),
             )) as Box<dyn std::error::Error + Send>);
         }
@@ -73,7 +62,7 @@ impl ProcessorBuilder {
             .sum();
 
         log::info!(
-            "Parsed processor config: {} input groups ({} total inputs), {} outputs, processor: {}",
+            "Parsed python config: {} input groups ({} total inputs), {} outputs, processor: {}",
             task_config.input_groups.len(),
             total_inputs,
             task_config.outputs.len(),
@@ -113,17 +102,19 @@ impl ProcessorBuilder {
 
         let processor =
             Self::create_processor_from_config(&task_config.processor, module_bytes)?;
-        log::info!("Created WASM processor: {}", task_config.processor.name);
+        log::info!("Created Python processor: {}", task_config.processor.name);
 
         let task = WasmTask::new(environment, all_inputs, processor, outputs);
         let task = Arc::new(task);
 
         log::info!(
-            "WasmTask created successfully for processor task: {}",
+            "WasmTask created successfully for python task: {}",
             task_config.task_name
         );
 
-        Ok(task)
+        Ok(Box::new(Arc::try_unwrap(task).map_err(|_| -> Box<dyn std::error::Error + Send> {
+            Box::new(std::io::Error::other("Failed to unwrap Arc<WasmTask>"))
+        })?))
     }
 
     fn create_inputs_from_config(
@@ -146,10 +137,10 @@ impl ProcessorBuilder {
         Ok(Box::new(processor_impl))
     }
 
-    /// Create OutputSink instances from OutputConfig list
     fn create_outputs_from_config(
         outputs: &[OutputConfig],
     ) -> Result<Vec<Box<dyn OutputSink>>, Box<dyn std::error::Error + Send>> {
         OutputSinkProvider::from_output_configs(outputs)
     }
 }
+

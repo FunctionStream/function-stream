@@ -50,14 +50,13 @@ interface collector {
 world processor {
     import collector;
     import kv;
-    
-    // ✅ 根据 GitHub issue，给所有导出函数加 fs 前缀以避免与 libc.so 的函数名冲突
-    // 这样符号名称会变成 fs-init, fs-process, fs-close 等，避免与 libc.so 冲突
+
     export fs-init: func(config: list<tuple<string, string>>);
     export fs-process: func(source-id: u32, data: list<u8>);
     export fs-process-watermark: func(source-id: u32, watermark: u64);
     export fs-take-checkpoint: func(checkpoint-id: u64) -> list<u8>;
     export fs-check-heartbeat: func() -> bool;
     export fs-close: func();
-    export fs-exec-custom: func(payload: list<u8>) -> list<u8>;
+    export fs-exec: func(payload: list<u8>);
+    export fs-custom: func(payload: list<u8>) -> list<u8>;
 }

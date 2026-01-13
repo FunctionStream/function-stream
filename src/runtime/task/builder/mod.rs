@@ -19,6 +19,7 @@
 // - SinkBuilder: Sink type task builder (future support)
 
 mod processor;
+mod python;
 mod sink;
 mod source;
 mod task_builder;
