@@ -51,6 +51,45 @@ pub struct LogConfig {
     pub max_files: Option<u32>,
 }
 
+/// Python runtime configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PythonConfig {
+    /// Python WASM file path
+    /// Default: "python-runtime/functionstream-runtime/target/functionstream-runtime.wasm"
+    #[serde(default = "default_python_wasm_path")]
+    pub wasm_path: String,
+    /// Cache directory for precompiled components
+    /// Default: ".cache/python-wasm"
+    #[serde(default = "default_python_cache_dir")]
+    pub cache_dir: String,
+    /// Enable component caching
+    /// If true, precompiled components will be cached for faster loading
+    #[serde(default = "default_true")]
+    pub enable_cache: bool,
+}
+
+fn default_python_wasm_path() -> String {
+    "python-runtime/functionstream-runtime/target/functionstream-runtime.wasm".to_string()
+}
+
+fn default_python_cache_dir() -> String {
+    ".cache/python-wasm".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for PythonConfig {
+    fn default() -> Self {
+        Self {
+            wasm_path: default_python_wasm_path(),
+            cache_dir: default_python_cache_dir(),
+            enable_cache: true,
+        }
+    }
+}
+
 /// Global configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[derive(Default)]
@@ -59,6 +98,9 @@ pub struct GlobalConfig {
     pub service: ServiceConfig,
     /// Logging configuration
     pub logging: LogConfig,
+    /// Python runtime configuration
+    #[serde(default)]
+    pub python: PythonConfig,
     /// State storage configuration
     #[serde(default)]
     pub state_storage: crate::config::storage::StateStorageConfig,

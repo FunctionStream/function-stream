@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "functionstream-api"
+version = "0.0.1"
+description = "Function Stream API - Pure interface definitions"
+requires-python = ">=3.7"
+license = "Apache-2.0"
+authors = [
+    {name = "Function Stream Team"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "cloudpickle>=2.0.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["functionstream_api", "functionstream_api.store"]
+

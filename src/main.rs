@@ -82,6 +82,12 @@ fn initialize_components(config: &config::GlobalConfig) -> Result<()> {
     runtime::taskexecutor::TaskManager::init(config).context("Failed to initialize TaskManager")?;
     info!("TaskManager initialized successfully");
 
+    // 初始化 Python WASM Runtime
+    info!("Initializing Python WASM Runtime...");
+    runtime::processor::Python::PythonService::initialize(config)
+        .context("Failed to initialize Python WASM Runtime")?;
+    info!("Python WASM Runtime initialized successfully");
+
     // TODO: 初始化其他组件
     // - Metrics registry
     // - Resource manager

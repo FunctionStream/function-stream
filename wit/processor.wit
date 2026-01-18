@@ -54,7 +54,7 @@ world processor {
     export fs-init: func(config: list<tuple<string, string>>);
     export fs-process: func(source-id: u32, data: list<u8>);
     export fs-process-watermark: func(source-id: u32, watermark: u64);
-    export fs-take-checkpoint: func(checkpoint-id: u64) -> list<u8>;
+    export fs-take-checkpoint: func(checkpoint-id: u64);
     export fs-check-heartbeat: func() -> bool;
     export fs-close: func();
     export fs-exec: func(payload: list<u8>);

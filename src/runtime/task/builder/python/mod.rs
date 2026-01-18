@@ -19,6 +19,7 @@ use crate::runtime::output::{OutputSink, OutputSinkProvider};
 use crate::runtime::processor::WASM::wasm_processor::WasmProcessorImpl;
 use crate::runtime::processor::WASM::wasm_processor_trait::WasmProcessor;
 use crate::runtime::processor::WASM::wasm_task::{TaskEnvironment, WasmTask};
+use crate::runtime::processor::Python::get_python_engine_and_component;
 use crate::runtime::task::yaml_keys::{TYPE, type_values};
 use crate::runtime::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
 use serde_yaml::Value;
@@ -128,10 +129,22 @@ impl PythonBuilder {
         processor_config: &ProcessorConfig,
         module_bytes: Vec<u8>,
     ) -> Result<Box<dyn WasmProcessor>, Box<dyn std::error::Error + Send>> {
-        let processor_impl = WasmProcessorImpl::new(
+        // Get Python WASM engine and component for reuse
+        let (custom_engine, custom_component) = get_python_engine_and_component()
+            .map_err(|e| -> Box<dyn std::error::Error + Send> {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to get Python WASM engine and component: {}", e),
+                ))
+            })?;
+
+        // Clone the Component (Component implements Clone via Arc<ComponentInner>)
+        let processor_impl = WasmProcessorImpl::new_with_custom_engine_and_component(
             processor_config.name.clone(),
             module_bytes,
             processor_config.init_config.clone(),
+            custom_engine,
+            (*custom_component).clone(),
         );
 
         Ok(Box::new(processor_impl))

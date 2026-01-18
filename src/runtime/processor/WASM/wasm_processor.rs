@@ -461,7 +461,7 @@ impl WasmProcessor for WasmProcessorImpl {
 
         // Call WASM take_checkpoint function
         // WIT: export fs-take-checkpoint: func(checkpoint-id: u64) -> list<u8>;
-        let checkpoint_data = processor
+         processor
             .call_fs_take_checkpoint(store, checkpoint_id)
             .map_err(|e| -> Box<dyn Error + Send> {
                 Box::new(WasmProcessorError::ExecutionError(format!(
@@ -471,10 +471,9 @@ impl WasmProcessor for WasmProcessorImpl {
             })?;
 
         log::debug!(
-            "WasmProcessor '{}' checkpoint {} created with {} bytes of data",
+            "WasmProcessor '{}' checkpoint {} created",
             self.name,
-            checkpoint_id,
-            checkpoint_data.len()
+            checkpoint_id
         );
 
         // Store checkpoint metadata

@@ -13,3 +13,4 @@
 // Processor module
 
 pub mod WASM;
+pub mod Python;

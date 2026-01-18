@@ -1,6 +1,7 @@
 /data/**
 **/target/**
 .idea/
+**/.vscode/
 
 **.wasm
 
@@ -12,3 +13,10 @@ examples/go-processor/bindings/**
 examples/go-processor/build/**
 examples/python-processor/build/**
 examples/python-processor/dependencies/**
+
+
+# Python Runtime - Build artifacts and intermediate files
+python-runtime/**/bindings/
+python-runtime/**/dependencies/
+python-runtime/**/target/
+**/**.egg-info

@@ -16,6 +16,23 @@ logging:
   max_file_size: 100
   max_files: 5
 
+# Python Runtime Configuration
+# Python 运行时配置
+# 用于配置 Python WASM 运行时的相关参数
+python:
+  # Python WASM 文件路径
+  # 默认值: python-runtime/functionstream-runtime/target/functionstream-runtime.wasm
+  wasm_path: python-runtime/functionstream-runtime/target/functionstream-runtime.wasm
+  
+  # 预编译组件缓存目录
+  # 默认值: .cache/python-wasm
+  cache_dir: .cache/python-wasm
+  
+  # 是否启用组件缓存
+  # 如果为 true，预编译的组件将被缓存以加快后续加载速度
+  # 默认值: true
+  enable_cache: true
+
 # State Storage Configuration
 # 状态存储配置
 # 用于存储任务运行时的状态数据
