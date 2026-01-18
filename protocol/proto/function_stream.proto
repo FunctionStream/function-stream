@@ -74,6 +74,12 @@ message SqlRequest {
   string sql = 1;
 }
 
+// Create function request
+message CreateFunctionRequest {
+  bytes config_bytes = 1;
+  bytes wasm_bytes = 2;
+}
+
 // Function Stream service
 service FunctionStreamService {
   // Authentication methods
@@ -82,4 +88,7 @@ service FunctionStreamService {
   
   // SQL execution
   rpc ExecuteSql(SqlRequest) returns (Response);
+  
+  // Create function
+  rpc CreateFunction(CreateFunctionRequest) returns (Response);
 }
