@@ -61,7 +61,7 @@ message SqlRequest {
 // Create function request
 message CreateFunctionRequest {
   bytes config_bytes = 1;
-  bytes wasm_bytes = 2;
+  bytes function_bytes = 2;
 }
 
 // Function Stream service

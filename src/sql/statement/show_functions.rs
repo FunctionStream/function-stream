@@ -10,26 +10,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
-#[derive(Debug, Clone)]
-pub struct DropWasmTaskPlan {
-    pub name: String,
-    pub force: bool,
-}
+#[derive(Debug, Clone, Default)]
+pub struct ShowFunctions;
 
-impl DropWasmTaskPlan {
-    pub fn new(name: String) -> Self {
-        Self { name, force: false }
-    }
-
-    pub fn with_force(name: String, force: bool) -> Self {
-        Self { name, force }
+impl ShowFunctions {
+    pub fn new() -> Self {
+        Self
     }
 }
 
-impl PlanNode for DropWasmTaskPlan {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_drop_wasm_task(self, context)
+impl Statement for ShowFunctions {
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        visitor.visit_show_functions(self, context)
     }
 }

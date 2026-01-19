@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use super::{
-    CreateWasmTaskPlan, DropWasmTaskPlan, ShowWasmTasksPlan, StartWasmTaskPlan, StopWasmTaskPlan,
+    CreateFunctionPlan, DropFunctionPlan, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
 };
 
 /// Context passed to PlanVisitor methods
@@ -48,33 +48,33 @@ pub enum PlanVisitorResult {
 }
 
 pub trait PlanVisitor {
-    fn visit_create_wasm_task(
+    fn visit_create_function(
         &self,
-        plan: &CreateWasmTaskPlan,
+        plan: &CreateFunctionPlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 
-    fn visit_drop_wasm_task(
+    fn visit_drop_function(
         &self,
-        plan: &DropWasmTaskPlan,
+        plan: &DropFunctionPlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 
-    fn visit_start_wasm_task(
+    fn visit_start_function(
         &self,
-        plan: &StartWasmTaskPlan,
+        plan: &StartFunctionPlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 
-    fn visit_stop_wasm_task(
+    fn visit_stop_function(
         &self,
-        plan: &StopWasmTaskPlan,
+        plan: &StopFunctionPlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 
-    fn visit_show_wasm_tasks(
+    fn visit_show_functions(
         &self,
-        plan: &ShowWasmTasksPlan,
+        plan: &ShowFunctionsPlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 }

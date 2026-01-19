@@ -13,21 +13,22 @@
 use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
 #[derive(Debug, Clone)]
-pub struct DropWasmTask {
+pub struct StopFunction {
     pub name: String,
 }
 
-impl DropWasmTask {
+impl StopFunction {
     pub fn new(name: String) -> Self {
         Self { name }
     }
 }
-impl Statement for DropWasmTask {
+
+impl Statement for StopFunction {
     fn accept(
         &self,
         visitor: &dyn StatementVisitor,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        visitor.visit_drop_wasm_task(self, context)
+        visitor.visit_stop_function(self, context)
     }
 }

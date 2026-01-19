@@ -10,29 +10,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
 #[derive(Debug, Clone)]
-pub struct StopWasmTaskPlan {
+pub struct DropFunction {
     pub name: String,
-    pub graceful: bool,
 }
 
-impl StopWasmTaskPlan {
+impl DropFunction {
     pub fn new(name: String) -> Self {
-        Self {
-            name,
-            graceful: true,
-        }
-    }
-
-    pub fn with_graceful(name: String, graceful: bool) -> Self {
-        Self { name, graceful }
+        Self { name }
     }
 }
-
-impl PlanNode for StopWasmTaskPlan {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_stop_wasm_task(self, context)
+impl Statement for DropFunction {
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        visitor.visit_drop_function(self, context)
     }
 }

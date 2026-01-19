@@ -18,9 +18,8 @@ use protocol::service::{
 };
 
 use crate::sql::{Coordinator, SqlParser};
-use crate::sql::statement::CreateWasmTask;
+use crate::sql::statement::CreateFunction;
 use std::collections::HashMap;
-use uuid::Uuid;
 
 pub struct FunctionStreamServiceImpl {
     coordinator: Coordinator,
@@ -101,50 +100,20 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let start_time = std::time::Instant::now();
         let req = request.into_inner();
         log::info!(
-            "Received CreateFunction request: config_bytes size={}, wasm_bytes size={}",
+            "Received CreateFunction request: config_bytes size={}, function_bytes size={}",
             req.config_bytes.len(),
-            req.wasm_bytes.len()
+            req.function_bytes.len()
         );
 
-        // Convert bytes to path strings (assuming UTF-8 encoding)
-        let config_path = match String::from_utf8(req.config_bytes) {
-            Ok(path) => path,
-            Err(e) => {
-                log::error!("Failed to decode config_bytes as UTF-8: {}", e);
-                return Ok(tonic::Response::new(Response {
-                    status_code: StatusCode::BadRequest as i32,
-                    message: format!("Invalid config_path encoding: {}", e),
-                    data: None,
-                }));
-            }
+        // gRPC request sends actual file bytes (Bytes mode only)
+        let config_bytes = if !req.config_bytes.is_empty() {
+            Some(req.config_bytes)
+        } else {
+            None
         };
 
-        let wasm_path = match String::from_utf8(req.wasm_bytes) {
-            Ok(path) => path,
-            Err(e) => {
-                log::error!("Failed to decode wasm_bytes as UTF-8: {}", e);
-                return Ok(tonic::Response::new(Response {
-                    status_code: StatusCode::BadRequest as i32,
-                    message: format!("Invalid wasm_path encoding: {}", e),
-                    data: None,
-                }));
-            }
-        };
-
-        // Extract task name from config_path or wasm_path (default to UUID)
-        let task_name = std::path::Path::new(&config_path)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
-
-        // Build properties map with wasm-path and config-path
-        let mut properties = HashMap::new();
-        properties.insert("wasm-path".to_string(), wasm_path);
-        properties.insert("config-path".to_string(), config_path);
-
-        // Create CreateWasmTask statement
-        let stmt = CreateWasmTask::new(task_name.clone(), properties);
+        // Create CreateFunction statement from bytes (name will be generated in Plan phase)
+        let stmt = CreateFunction::from_bytes(req.function_bytes, config_bytes);
 
         // Execute using coordinator
         let coord_start = std::time::Instant::now();

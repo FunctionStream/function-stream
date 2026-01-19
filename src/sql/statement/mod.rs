@@ -10,18 +10,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod create_wasm_task;
-mod drop_wasm_task;
-mod show_wasm_tasks;
-mod start_wasm_task;
-mod stop_wasm_task;
+mod create_function;
+mod drop_function;
+mod show_functions;
+mod start_function;
+mod stop_function;
 mod visitor;
 
-pub use create_wasm_task::CreateWasmTask;
-pub use drop_wasm_task::DropWasmTask;
-pub use show_wasm_tasks::ShowWasmTasks;
-pub use start_wasm_task::StartWasmTask;
-pub use stop_wasm_task::StopWasmTask;
+pub use create_function::{CreateFunction, FunctionSource, ConfigSource};
+pub use drop_function::DropFunction;
+pub use show_functions::ShowFunctions;
+pub use start_function::StartFunction;
+pub use stop_function::StopFunction;
 pub use visitor::{StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
 use std::fmt;

@@ -12,12 +12,12 @@
 
 use crate::sql::analyze::analysis::Analysis;
 use crate::sql::plan::{
-    CreateWasmTaskPlan, DropWasmTaskPlan, PlanNode, ShowWasmTasksPlan, StartWasmTaskPlan,
-    StopWasmTaskPlan,
+    CreateFunctionPlan, DropFunctionPlan, PlanNode, ShowFunctionsPlan, StartFunctionPlan,
+    StopFunctionPlan,
 };
 use crate::sql::statement::{
-    CreateWasmTask, DropWasmTask, ShowWasmTasks, StartWasmTask, StatementVisitor,
-    StatementVisitorContext, StatementVisitorResult, StopWasmTask,
+    CreateFunction, DropFunction, ShowFunctions, StartFunction, StatementVisitor,
+    StatementVisitorContext, StatementVisitorResult, StopFunction,
 };
 
 #[derive(Debug, Default)]
@@ -42,54 +42,52 @@ impl LogicalPlanVisitor {
 }
 
 impl StatementVisitor for LogicalPlanVisitor {
-    fn visit_create_wasm_task(
+    fn visit_create_function(
         &self,
-        stmt: &CreateWasmTask,
+        stmt: &CreateFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        let wasm_path = stmt
-            .get_wasm_path()
-            .expect("wasm-path should be validated in analyzer");
-        let config_path = stmt.get_config_path();
-        let extra_props = stmt.get_extra_properties();
+        let function_source = stmt.get_function_source().clone();
+        let config_source = stmt.get_config_source().cloned();
+        let extra_props = stmt.get_extra_properties().clone();
 
-        StatementVisitorResult::Plan(Box::new(CreateWasmTaskPlan::new(
-            stmt.name.clone(),
-            wasm_path,
-            config_path,
+        // Name will be read from config file during execution
+        StatementVisitorResult::Plan(Box::new(CreateFunctionPlan::new(
+            function_source,
+            config_source,
             extra_props,
         )))
     }
 
-    fn visit_drop_wasm_task(
+    fn visit_drop_function(
         &self,
-        stmt: &DropWasmTask,
+        stmt: &DropFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        StatementVisitorResult::Plan(Box::new(DropWasmTaskPlan::new(stmt.name.clone())))
+        StatementVisitorResult::Plan(Box::new(DropFunctionPlan::new(stmt.name.clone())))
     }
 
-    fn visit_start_wasm_task(
+    fn visit_start_function(
         &self,
-        stmt: &StartWasmTask,
+        stmt: &StartFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        StatementVisitorResult::Plan(Box::new(StartWasmTaskPlan::new(stmt.name.clone())))
+        StatementVisitorResult::Plan(Box::new(StartFunctionPlan::new(stmt.name.clone())))
     }
 
-    fn visit_stop_wasm_task(
+    fn visit_stop_function(
         &self,
-        stmt: &StopWasmTask,
+        stmt: &StopFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        StatementVisitorResult::Plan(Box::new(StopWasmTaskPlan::new(stmt.name.clone())))
+        StatementVisitorResult::Plan(Box::new(StopFunctionPlan::new(stmt.name.clone())))
     }
 
-    fn visit_show_wasm_tasks(
+    fn visit_show_functions(
         &self,
-        _stmt: &ShowWasmTasks,
+        _stmt: &ShowFunctions,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        StatementVisitorResult::Plan(Box::new(ShowWasmTasksPlan::new()))
+        StatementVisitorResult::Plan(Box::new(ShowFunctionsPlan::new()))
     }
 }

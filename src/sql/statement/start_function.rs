@@ -10,33 +10,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod sql_parser;
+use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
-pub use sql_parser::SqlParser;
-
-#[derive(Debug)]
-pub struct ParseError {
-    pub message: String,
+#[derive(Debug, Clone)]
+pub struct StartFunction {
+    pub name: String,
 }
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Parse error: {}", self.message)
+impl StartFunction {
+    pub fn new(name: String) -> Self {
+        Self { name }
     }
 }
 
-impl std::error::Error for ParseError {}
-
-impl From<String> for ParseError {
-    fn from(message: String) -> Self {
-        ParseError { message }
-    }
-}
-
-impl ParseError {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
+impl Statement for StartFunction {
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        visitor.visit_start_function(self, context)
     }
 }

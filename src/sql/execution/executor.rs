@@ -12,8 +12,8 @@
 
 use crate::runtime::taskexecutor::TaskManager;
 use crate::sql::plan::{
-    CreateWasmTaskPlan, DropWasmTaskPlan, PlanNode, PlanVisitor, PlanVisitorContext,
-    PlanVisitorResult, ShowWasmTasksPlan, StartWasmTaskPlan, StopWasmTaskPlan,
+    CreateFunctionPlan, DropFunctionPlan, PlanNode, PlanVisitor, PlanVisitorContext,
+    PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
 };
 use crate::sql::statement::ExecuteResult;
 use std::fmt;
@@ -69,86 +69,57 @@ impl Executor {
 }
 
 impl PlanVisitor for Executor {
-    fn visit_create_wasm_task(
+    fn visit_create_function(
         &self,
-        plan: &CreateWasmTaskPlan,
+        plan: &CreateFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
         let start_time = std::time::Instant::now();
-        log::info!("Executing CREATE WASMTASK (name will be read from config file)");
+        log::info!("Executing CREATE FUNCTION (name will be read from config file)");
 
-        // 读取 WASM 文件
-        let wasm_read_start = std::time::Instant::now();
-        let wasm_bytes = match fs::read(&plan.wasm_path) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                    "Failed to read WASM file: {}: {}",
-                    plan.wasm_path, e
-                ))));
+        let function_bytes = match &plan.function_source {
+            crate::sql::statement::FunctionSource::Path(path) => {
+                match fs::read(path) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                            "Failed to read function file: {}: {}",
+                            path, e
+                        ))));
+                    }
+                }
             }
+            crate::sql::statement::FunctionSource::Bytes(bytes) => bytes.clone(),
         };
-        let wasm_read_elapsed = wasm_read_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] WASM file read: {:.3}s (size: {} bytes)",
-            wasm_read_elapsed,
-            wasm_bytes.len()
-        );
 
-        // 读取配置文件（如果存在）
-        let config_read_start = std::time::Instant::now();
-        let config_bytes = match if let Some(ref config_path) = plan.config_path {
-            match fs::read(config_path) {
-                Ok(bytes) => {
-                    let elapsed = config_read_start.elapsed().as_secs_f64();
-                    log::info!("[Timing] Config file read: {:.3}s", elapsed);
-                    Ok(bytes)
+        let config_bytes = match &plan.config_source {
+            Some(crate::sql::statement::ConfigSource::Path(path)) => {
+                match fs::read(path) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                            "Failed to read config file: {}: {}",
+                            path, e
+                        ))));
+                    }
                 }
-                Err(e) => Err(ExecuteError::new(format!(
-                    "Failed to read config file: {}: {}",
-                    config_path, e
-                ))),
             }
-        } else {
-            // 如果没有配置文件，创建一个包含任务名称和属性的默认配置
-            let mut config = std::collections::HashMap::new();
-            let default_name = std::path::Path::new(&plan.wasm_path)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("default-task")
-                .to_string();
-            config.insert("name".to_string(), default_name.clone());
-            for (k, v) in &plan.properties {
-                config.insert(k.clone(), v.clone());
-            }
-            match serde_yaml::to_string(&config) {
-                Ok(s) => {
-                    let bytes = s.into_bytes();
-                    let elapsed = config_read_start.elapsed().as_secs_f64();
-                    log::info!("[Timing] Default config generation: {:.3}s", elapsed);
-                    Ok(bytes)
-                }
-                Err(e) => Err(ExecuteError::new(format!(
-                    "Failed to serialize default config: {}",
-                    e
-                ))),
-            }
-        } {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                return PlanVisitorResult::Execute(Err(e));
+            Some(crate::sql::statement::ConfigSource::Bytes(bytes)) => bytes.clone(),
+            None => {
+                return PlanVisitorResult::Execute(Err(ExecuteError::new(
+                    "Config is required but not provided".to_string(),
+                )));
             }
         };
 
-        // 注册任务（name 从 YAML 配置中解析）
         log::debug!(
-            "Registering task with config size={} bytes, wasm size={} bytes",
+            "Registering task with config size={} bytes, function size={} bytes",
             config_bytes.len(),
-            wasm_bytes.len()
+            function_bytes.len()
         );
         let register_start = std::time::Instant::now();
 
-        if let Err(e) = self.task_manager.register_task(&config_bytes, &wasm_bytes) {
+        if let Err(e) = self.task_manager.register_task(&config_bytes, &function_bytes) {
             let error_msg = "Failed to register task (name read from config file)".to_string();
             log::error!("{}: {}", error_msg, e);
             log::error!("Error chain: {:?}", e);
@@ -172,26 +143,24 @@ impl PlanVisitor for Executor {
         log::info!("[Timing] Task registration: {:.3}s", register_elapsed);
 
         let total_elapsed = start_time.elapsed().as_secs_f64();
-        log::info!("[Timing] CREATE WASMTASK total: {:.3}s", total_elapsed);
+        log::info!("[Timing] CREATE FUNCTION total: {:.3}s", total_elapsed);
 
         PlanVisitorResult::Execute(Ok(ExecuteResult::ok(
-            "WASMTASK created successfully (name from config file)",
+            "FUNCTION created successfully (name from config file)",
         )))
     }
 
-    fn visit_drop_wasm_task(
+    fn visit_drop_function(
         &self,
-        plan: &DropWasmTaskPlan,
+        plan: &DropFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        log::info!("Executing DROP WASMTASK: {}", plan.name);
+        log::info!("Executing DROP FUNCTION: {}", plan.name);
 
-        // 如果 force=true，先停止任务
         if plan.force {
             let _ = self.task_manager.stop_task(&plan.name);
             let _ = self.task_manager.close_task(&plan.name);
         } else {
-            // 检查任务状态，如果正在运行则报错
             let status = match self.task_manager.get_task_status(&plan.name) {
                 Ok(s) => s,
                 Err(e) => {
@@ -209,7 +178,6 @@ impl PlanVisitor for Executor {
             }
         }
 
-        // 删除任务
         if let Err(e) = self.task_manager.remove_task(&plan.name) {
             return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
                 "Failed to remove task: {}: {}",
@@ -218,17 +186,17 @@ impl PlanVisitor for Executor {
         }
 
         PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
-            "WASMTASK '{}' dropped successfully",
+            "FUNCTION '{}' dropped successfully",
             plan.name
         ))))
     }
 
-    fn visit_start_wasm_task(
+    fn visit_start_function(
         &self,
-        plan: &StartWasmTaskPlan,
+        plan: &StartFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        log::info!("Executing START WASMTASK: {}", plan.name);
+        log::info!("Executing START FUNCTION: {}", plan.name);
 
         if let Err(e) = self.task_manager.start_task(&plan.name) {
             return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
@@ -238,18 +206,18 @@ impl PlanVisitor for Executor {
         }
 
         PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
-            "WASMTASK '{}' started successfully",
+            "FUNCTION '{}' started successfully",
             plan.name
         ))))
     }
 
-    fn visit_stop_wasm_task(
+    fn visit_stop_function(
         &self,
-        plan: &StopWasmTaskPlan,
+        plan: &StopFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
         log::info!(
-            "Executing STOP WASMTASK: {} (graceful: {})",
+            "Executing STOP FUNCTION: {} (graceful: {})",
             plan.name,
             plan.graceful
         );
@@ -262,17 +230,17 @@ impl PlanVisitor for Executor {
         }
 
         PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
-            "WASMTASK '{}' stopped successfully",
+            "FUNCTION '{}' stopped successfully",
             plan.name
         ))))
     }
 
-    fn visit_show_wasm_tasks(
+    fn visit_show_functions(
         &self,
-        _plan: &ShowWasmTasksPlan,
+        _plan: &ShowFunctionsPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        log::info!("Executing SHOW WASMTASKS");
+        log::info!("Executing SHOW FUNCTIONS");
 
         let task_names = self.task_manager.list_tasks();
 

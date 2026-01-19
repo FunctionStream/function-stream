@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{CreateWasmTask, DropWasmTask, ShowWasmTasks, StartWasmTask, StopWasmTask};
+use super::{CreateFunction, DropFunction, ShowFunctions, StartFunction, StopFunction};
 use crate::sql::plan::PlanNode;
 use crate::sql::statement::Statement;
 
@@ -50,33 +50,33 @@ pub enum StatementVisitorResult {
 }
 
 pub trait StatementVisitor {
-    fn visit_create_wasm_task(
+    fn visit_create_function(
         &self,
-        stmt: &CreateWasmTask,
+        stmt: &CreateFunction,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 
-    fn visit_drop_wasm_task(
+    fn visit_drop_function(
         &self,
-        stmt: &DropWasmTask,
+        stmt: &DropFunction,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 
-    fn visit_start_wasm_task(
+    fn visit_start_function(
         &self,
-        stmt: &StartWasmTask,
+        stmt: &StartFunction,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 
-    fn visit_stop_wasm_task(
+    fn visit_stop_function(
         &self,
-        stmt: &StopWasmTask,
+        stmt: &StopFunction,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 
-    fn visit_show_wasm_tasks(
+    fn visit_show_functions(
         &self,
-        stmt: &ShowWasmTasks,
+        stmt: &ShowFunctions,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 }

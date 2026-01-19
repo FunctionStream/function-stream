@@ -33,7 +33,7 @@ class FsClient:
     
     Example:
         >>> with FsClient(host="localhost", port=8080) as client:
-        ...     client.execute_sql("SHOW WASMTASKS")
+        ...     client.execute_sql("SHOW FUNCTIONS")
         ...     client.create_function("/path/to/config.yaml", "/path/to/module.wasm")
     """
 
@@ -118,14 +118,17 @@ class FsClient:
             raise _convert_grpc_error(e)
 
     def create_function(
-        self, config_path: str, wasm_path: str
+        self, function_source: str, config_source: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Create a function from config and WASM file paths.
+        Create a function.
+
+        `function_source` can be a file path (string containing '/' or '\' or '.') or raw bytes (string).
+        `config_source` can be a file path (string containing '/' or '\' or '.') or raw bytes (string).
 
         Args:
-            config_path: Path to configuration file (will be sent as UTF-8 bytes)
-            wasm_path: Path to WASM file (will be sent as UTF-8 bytes)
+            function_source: Source of the function (file path or raw string bytes).
+            config_source: Optional source of the configuration (file path or raw string bytes).
 
         Returns:
             Dictionary containing status_code, message, and optional data
@@ -136,13 +139,13 @@ class FsClient:
         """
         self._ensure_stub()
 
-        # Convert paths to UTF-8 bytes as expected by the server
-        config_bytes = config_path.encode("utf-8")
-        wasm_bytes = wasm_path.encode("utf-8")
+        # Convert sources to UTF-8 bytes
+        function_bytes = function_source.encode("utf-8")
+        config_bytes = config_source.encode("utf-8") if config_source else b""
 
         request = function_stream_pb2.CreateFunctionRequest(
+            function_bytes=function_bytes,
             config_bytes=config_bytes,
-            wasm_bytes=wasm_bytes,
         )
 
         try:

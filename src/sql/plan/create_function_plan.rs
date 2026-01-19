@@ -11,20 +11,32 @@
 // limitations under the License.
 
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+use crate::sql::statement::{ConfigSource, FunctionSource};
+use std::collections::HashMap;
 
-#[derive(Debug, Clone, Default)]
-pub struct ShowWasmTasksPlan {
-    pub filter: Option<String>,
+#[derive(Debug, Clone)]
+pub struct CreateFunctionPlan {
+    pub function_source: FunctionSource,
+    pub config_source: Option<ConfigSource>,
+    pub properties: HashMap<String, String>,
 }
 
-impl ShowWasmTasksPlan {
-    pub fn new() -> Self {
-        Self { filter: None }
+impl CreateFunctionPlan {
+    pub fn new(
+        function_source: FunctionSource,
+        config_source: Option<ConfigSource>,
+        properties: HashMap<String, String>,
+    ) -> Self {
+        Self {
+            function_source,
+            config_source,
+            properties,
+        }
     }
 }
 
-impl PlanNode for ShowWasmTasksPlan {
+impl PlanNode for CreateFunctionPlan {
     fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_show_wasm_tasks(self, context)
+        visitor.visit_create_function(self, context)
     }
 }

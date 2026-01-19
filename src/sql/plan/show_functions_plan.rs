@@ -10,25 +10,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
+use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
-#[derive(Debug, Clone)]
-pub struct StartWasmTask {
-    pub name: String,
+#[derive(Debug, Clone, Default)]
+pub struct ShowFunctionsPlan {
+    pub filter: Option<String>,
 }
 
-impl StartWasmTask {
-    pub fn new(name: String) -> Self {
-        Self { name }
+impl ShowFunctionsPlan {
+    pub fn new() -> Self {
+        Self { filter: None }
     }
 }
 
-impl Statement for StartWasmTask {
-    fn accept(
-        &self,
-        visitor: &dyn StatementVisitor,
-        context: &StatementVisitorContext,
-    ) -> StatementVisitorResult {
-        visitor.visit_start_wasm_task(self, context)
+impl PlanNode for ShowFunctionsPlan {
+    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
+        visitor.visit_show_functions(self, context)
     }
 }

@@ -13,8 +13,8 @@
 use super::Analysis;
 use crate::sql::coordinator::ExecutionContext;
 use crate::sql::statement::{
-    CreateWasmTask, DropWasmTask, ShowWasmTasks, StartWasmTask, Statement, StatementVisitor,
-    StatementVisitorContext, StatementVisitorResult, StopWasmTask,
+    CreateFunction, DropFunction, ShowFunctions, StartFunction, Statement, StatementVisitor,
+    StatementVisitorContext, StatementVisitorResult, StopFunction,
 };
 use std::fmt;
 
@@ -72,43 +72,47 @@ impl<'a> Analyzer<'a> {
 }
 
 impl StatementVisitor for Analyzer<'_> {
-    fn visit_create_wasm_task(
+    fn visit_create_function(
         &self,
-        stmt: &CreateWasmTask,
+        stmt: &CreateFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
+        // Function source is already validated during parsing (from_properties)
+        // So we just need to check if it exists
+        let _function_source = stmt.get_function_source();
+
         // Note: name is read from config file, not from SQL statement
         // So we don't validate name here - it will be validated when config file is read
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))
     }
 
-    fn visit_drop_wasm_task(
+    fn visit_drop_function(
         &self,
-        stmt: &DropWasmTask,
+        stmt: &DropFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))
     }
 
-    fn visit_start_wasm_task(
+    fn visit_start_function(
         &self,
-        stmt: &StartWasmTask,
+        stmt: &StartFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))
     }
 
-    fn visit_stop_wasm_task(
+    fn visit_stop_function(
         &self,
-        stmt: &StopWasmTask,
+        stmt: &StopFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))
     }
 
-    fn visit_show_wasm_tasks(
+    fn visit_show_functions(
         &self,
-        stmt: &ShowWasmTasks,
+        stmt: &ShowFunctions,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))

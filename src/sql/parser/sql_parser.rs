@@ -15,7 +15,7 @@ use pest_derive::Parser;
 
 use super::ParseError;
 use crate::sql::statement::{
-    CreateWasmTask, DropWasmTask, ShowWasmTasks, StartWasmTask, Statement, StopWasmTask,
+    CreateFunction, DropFunction, ShowFunctions, StartFunction, Statement, StopFunction,
 };
 use std::collections::HashMap;
 
@@ -54,7 +54,7 @@ impl SqlParser {
 
 fn handle_create_stmt(
     pair: pest::iterators::Pair<Rule>,
-) -> Result<Box<CreateWasmTask>, ParseError> {
+) -> Result<Box<CreateFunction>, ParseError> {
     let mut inner = pair.into_inner();
     // Note: name is read from config file, not from SQL statement
     // Pass empty string here, name will be read from config file later
@@ -63,29 +63,29 @@ fn handle_create_stmt(
         .map(parse_properties)
         .ok_or_else(|| ParseError::new("Missing WITH clause"))?;
 
-    Ok(Box::new(CreateWasmTask::new(String::new(), properties)))
+    Ok(Box::new(CreateFunction::from_properties(properties).map_err(|e| ParseError::from(e))?))
 }
 
-fn handle_drop_stmt(pair: pest::iterators::Pair<Rule>) -> Result<Box<DropWasmTask>, ParseError> {
+fn handle_drop_stmt(pair: pest::iterators::Pair<Rule>) -> Result<Box<DropFunction>, ParseError> {
     let mut inner = pair.into_inner();
     let name = inner.next().map(extract_string).unwrap_or_default();
-    Ok(Box::new(DropWasmTask::new(name)))
+    Ok(Box::new(DropFunction::new(name)))
 }
 
-fn handle_start_stmt(pair: pest::iterators::Pair<Rule>) -> Result<Box<StartWasmTask>, ParseError> {
+fn handle_start_stmt(pair: pest::iterators::Pair<Rule>) -> Result<Box<StartFunction>, ParseError> {
     let mut inner = pair.into_inner();
     let name = inner.next().map(extract_string).unwrap_or_default();
-    Ok(Box::new(StartWasmTask::new(name)))
+    Ok(Box::new(StartFunction::new(name)))
 }
 
-fn handle_stop_stmt(pair: pest::iterators::Pair<Rule>) -> Result<Box<StopWasmTask>, ParseError> {
+fn handle_stop_stmt(pair: pest::iterators::Pair<Rule>) -> Result<Box<StopFunction>, ParseError> {
     let mut inner = pair.into_inner();
     let name = inner.next().map(extract_string).unwrap_or_default();
-    Ok(Box::new(StopWasmTask::new(name)))
+    Ok(Box::new(StopFunction::new(name)))
 }
 
-fn handle_show_stmt(_pair: pest::iterators::Pair<Rule>) -> Result<Box<ShowWasmTasks>, ParseError> {
-    Ok(Box::new(ShowWasmTasks::new()))
+fn handle_show_stmt(_pair: pest::iterators::Pair<Rule>) -> Result<Box<ShowFunctions>, ParseError> {
+    Ok(Box::new(ShowFunctions::new()))
 }
 
 fn extract_string(pair: pest::iterators::Pair<Rule>) -> String {
@@ -166,61 +166,79 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_create_wasm_task() {
-        let sql = "CREATE WASMTASK WITH ('wasm-path'='./test.wasm', 'config-path'='./config.yml')";
+    fn test_create_function() {
+        let sql = "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
         let stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
-    fn test_create_wasm_task_minimal() {
-        let sql = "CREATE WASMTASK WITH ('wasm-path'='./processor.wasm')";
+    fn test_create_function_minimal() {
+        let sql = "CREATE FUNCTION WITH ('function_path'='./processor.wasm')";
+        let stmt = SqlParser::parse(sql).unwrap();
+    }
+
+    // Note: SQL only supports Path mode, not Bytes mode
+    // Bytes mode is only for gRPC requests
+
+    #[test]
+    fn test_drop_function() {
+        let sql = "DROP FUNCTION my_task";
         let stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
-    fn test_drop_wasm_task() {
-        let sql = "DROP WASMTASK my_task";
+    fn test_start_function() {
+        let sql = "START FUNCTION my_task";
         let stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
-    fn test_start_wasm_task() {
-        let sql = "START WASMTASK my_task";
+    fn test_stop_function() {
+        let sql = "STOP FUNCTION my_task";
         let stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
-    fn test_stop_wasm_task() {
-        let sql = "STOP WASMTASK my_task";
-        let stmt = SqlParser::parse(sql).unwrap();
-    }
-
-    #[test]
-    fn test_show_wasm_tasks() {
-        let sql = "SHOW WASMTASKS";
+    fn test_show_functions() {
+        let sql = "SHOW FUNCTIONS";
         let stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
     fn test_case_insensitive_keywords() {
-        let sql1 = "create wasmtask with ('wasm-path'='./test.wasm')";
+        let sql1 = "create function with ('function_path'='./test.wasm')";
         let stmt1 = SqlParser::parse(sql1).unwrap();
 
-        let sql2 = "Create WasmTask With ('wasm-path'='./test.wasm')";
+        let sql2 = "Create Function With ('Function_Path'='./test.wasm')";
         let stmt2 = SqlParser::parse(sql2).unwrap();
 
-        let sql3 = "show wasmtasks";
+        let sql3 = "show functions";
         let stmt3 = SqlParser::parse(sql3).unwrap();
 
-        let sql4 = "start wasmtask my_task";
+        let sql4 = "start function my_task";
         let stmt4 = SqlParser::parse(sql4).unwrap();
     }
 
     #[test]
+    fn test_case_insensitive_property_keys() {
+        let sql1 = "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
+        let stmt1 = SqlParser::parse(sql1).unwrap();
+
+        let sql2 = "CREATE FUNCTION WITH ('Function_Path'='./test.wasm', 'Config_Path'='./config.yml')";
+        let stmt2 = SqlParser::parse(sql2).unwrap();
+
+        let sql3 = "CREATE FUNCTION WITH ('FUNCTION_PATH'='./test.wasm', 'CONFIG_PATH'='./config.yml')";
+        let stmt3 = SqlParser::parse(sql3).unwrap();
+
+        // Note: SQL only supports Path mode (function_path, config_path)
+        // Bytes mode (function, config) is only for gRPC requests
+    }
+
+    #[test]
     fn test_with_extra_properties() {
-        let sql = r#"CREATE WASMTASK WITH (
-            'wasm-path'='./test.wasm',
-            'config-path'='./config.yml',
+        let sql = r#"CREATE FUNCTION WITH (
+            'function_path'='./test.wasm',
+            'config_path'='./config.yml',
             'parallelism'='4',
             'memory-limit'='256mb'
         )"#;

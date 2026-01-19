@@ -151,16 +151,16 @@ impl Default for Coordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sql::statement::CreateWasmTask;
+        use crate::sql::statement::CreateFunction;
     use std::collections::HashMap;
 
     #[test]
     fn test_coordinator_analyze_error() {
         let coordinator = Coordinator::new();
 
-        // Missing wasm-path - should return error in ExecuteResult, not panic
+        // Missing function - should return error in ExecuteResult, not panic
         let props = HashMap::new();
-        let stmt = CreateWasmTask::new("my_task".to_string(), props);
+        let stmt = CreateFunction::from_properties(props).unwrap();
         let result = coordinator.execute(&stmt as &dyn Statement);
         assert!(!result.success);
     }

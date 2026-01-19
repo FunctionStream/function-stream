@@ -54,7 +54,7 @@ from fs_client import FsClient
 
 with FsClient(host="localhost", port=8080) as client:
     # Execute SQL
-    response = client.execute_sql("SHOW WASMTASKS")
+    response = client.execute_sql("SHOW FUNCTIONS")
     print(response["message"])
     
     # Create function
@@ -126,7 +126,7 @@ from fs_client import FsClient, AuthenticationError, ServerError, ConnectionErro
 
 try:
     client = FsClient("localhost", 8080)
-    response = client.execute_sql("SHOW WASMTASKS")
+    response = client.execute_sql("SHOW FUNCTIONS")
 except ServerError as e:
     print(f"Server error: {e}")
 except ConnectionError:

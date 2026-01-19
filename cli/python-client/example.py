@@ -37,7 +37,7 @@ def main():
         try:
             # Execute SQL
             print("Executing SQL...")
-            response = client.execute_sql("SHOW WASMTASKS")
+            response = client.execute_sql("SHOW FUNCTIONS")
             print(f"Status: {response['status_code']}")
             print(f"Message: {response['message']}")
 

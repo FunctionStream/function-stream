@@ -98,7 +98,7 @@ impl Repl {
             .trim()
             .replace("        ", " ")
             .replace("  ", " ")
-            .replace("WASMTASKs", "WASMTASKS");
+            .replace("FUNCTIONs", "FUNCTIONS");
 
         if let Some(data_str) = data {
             let data_trimmed = data_str.trim();
@@ -498,11 +498,11 @@ impl Repl {
         println!("  exit, quit, q     - Exit the CLI");
         println!();
         println!("SQL Statements:");
-        println!("  CREATE WASMTASK <name> WITH (wasm-path='<path>', ...)");
-        println!("  DROP WASMTASK <name>");
-        println!("  START WASMTASK <name>");
-        println!("  STOP WASMTASK <name>");
-        println!("  SHOW WASMTASKS");
+        println!("  CREATE FUNCTION WITH (wasm-path='<path>', ...)");
+        println!("  DROP FUNCTION <name>");
+        println!("  START FUNCTION <name>");
+        println!("  STOP FUNCTION <name>");
+        println!("  SHOW FUNCTIONS");
         println!();
         println!("Multi-line Input:");
         println!("  - Press Enter to continue on next line");
@@ -514,15 +514,15 @@ impl Repl {
         println!("  - History is saved to .function-stream-cli-history");
         println!();
         println!("Examples:");
-        println!("  CREATE WASMTASK my_task WITH (wasm-path='./test.wasm')");
-        println!("  CREATE WASMTASK my_task WITH (");
+        println!("  CREATE FUNCTION WITH (wasm-path='./test.wasm')");
+        println!("  CREATE FUNCTION WITH (");
         println!("    wasm-path='./test.wasm',");
         println!("    config-path='./config.json'");
         println!("  )");
-        println!("  START WASMTASK my_task");
-        println!("  SHOW WASMTASKS");
-        println!("  STOP WASMTASK my_task");
-        println!("  DROP WASMTASK my_task");
+        println!("  START FUNCTION my_task");
+        println!("  SHOW FUNCTIONS");
+        println!("  STOP FUNCTION my_task");
+        println!("  DROP FUNCTION my_task");
         println!();
     }
 }
