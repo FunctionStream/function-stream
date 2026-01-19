@@ -13,7 +13,7 @@
 // REPL (Read-Eval-Print Loop) for interactive SQL execution
 
 use protocol::cli::{
-    function_stream_service_client::FunctionStreamServiceClient, LoginRequest, LogoutRequest,
+    function_stream_service_client::FunctionStreamServiceClient,
     SqlRequest,
 };
 use rustyline::error::ReadlineError;
@@ -21,15 +21,8 @@ use rustyline::{Config, DefaultEditor, EditMode};
 use std::io::{self, Write};
 use tonic::Request;
 
-#[derive(Debug, Clone)]
-pub struct Session {
-    pub username: String,
-    pub authenticated: bool,
-}
-
 pub struct Repl {
     client: Option<FunctionStreamServiceClient<tonic::transport::Channel>>,
-    session: Option<Session>,
     server_host: String,
     server_port: u16,
     editor: Option<DefaultEditor>,
@@ -52,7 +45,6 @@ impl Repl {
 
         Self {
             client: None,
-            session: None,
             server_host,
             server_port,
             editor,
@@ -63,55 +55,12 @@ impl Repl {
         format!("http://{}:{}", self.server_host, self.server_port)
     }
 
-    pub async fn authenticate(
-        &mut self,
-        username: String,
-        password: String,
-    ) -> Result<bool, String> {
+    pub async fn connect(&mut self) -> Result<(), String> {
         let addr = self.server_address();
-        let mut client = FunctionStreamServiceClient::connect(addr.clone())
+        let client = FunctionStreamServiceClient::connect(addr.clone())
             .await
             .map_err(|e| format!("Failed to connect to server {}: {}", addr, e))?;
-
-        let request = Request::new(LoginRequest {
-            username: username.clone(),
-            password: password.clone(),
-            timestamp: None,
-        });
-
-        match client.login(request).await {
-            Ok(response) => {
-                let resp = response.into_inner();
-                if resp.status_code == 200 {
-                    self.client = Some(client);
-                    self.session = Some(Session {
-                        username,
-                        authenticated: true,
-                    });
-                    Ok(true)
-                } else {
-                    Err(format!("Login failed: {}", resp.message))
-                }
-            }
-            Err(e) => Err(format!("Login error: {}", e)),
-        }
-    }
-
-    pub fn is_authenticated(&self) -> bool {
-        self.session.as_ref().map_or(false, |s| s.authenticated) && self.client.is_some()
-    }
-
-    pub fn username(&self) -> Option<&str> {
-        self.session.as_ref().map(|s| s.username.as_str())
-    }
-
-    pub async fn logout(&mut self) -> Result<(), String> {
-        if let Some(ref mut client) = self.client {
-            let request = Request::new(LogoutRequest {});
-            let _ = client.logout(request).await;
-        }
-        self.client = None;
-        self.session = None;
+        self.client = Some(client);
         Ok(())
     }
 
@@ -416,7 +365,7 @@ impl Repl {
         paren_count == 0 && !trimmed.ends_with('\\')
     }
 
-    fn read_multiline_sql(&mut self, _username: &str) -> io::Result<String> {
+    fn read_multiline_sql(&mut self) -> io::Result<String> {
         let mut lines = Vec::new();
         let mut is_first_line = true;
 
@@ -481,20 +430,20 @@ impl Repl {
         println!("Server: {}", self.server_address());
         println!();
 
-        if !self.is_authenticated() {
-            println!("Please authenticate first.");
-            println!("Usage: --username <username> --password <password>");
-            return Ok(());
+        if self.client.is_none() {
+            if let Err(e) = self.connect().await {
+                eprintln!("Failed to connect to server: {}", e);
+                return Err(io::Error::new(io::ErrorKind::ConnectionRefused, e));
+            }
         }
 
-        let username = self.username().unwrap_or("unknown").to_string();
-        println!("Welcome, {}!", username);
+        println!("Connected to server.");
         println!("Type SQL statements or 'exit'/'quit' to exit.");
         println!("Type 'help' for help.");
         println!();
 
         loop {
-            let input = match self.read_multiline_sql(&username) {
+            let input = match self.read_multiline_sql() {
                 Ok(input) => input,
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {
                     println!("\n(Use 'exit' or 'quit' to exit)");
@@ -523,14 +472,6 @@ impl Repl {
                     self.show_help();
                     continue;
                 }
-                "logout" => {
-                    if let Err(e) = self.logout().await {
-                        eprintln!("Logout error: {}", e);
-                    } else {
-                        println!("Logged out successfully.");
-                    }
-                    break;
-                }
                 _ => match self.execute_sql(&input).await {
                     Ok(result) => {
                         println!("{}", result);
@@ -555,7 +496,6 @@ impl Repl {
         println!("Available commands:");
         println!("  help, h          - Show this help message");
         println!("  exit, quit, q     - Exit the CLI");
-        println!("  logout           - Logout and exit");
         println!();
         println!("SQL Statements:");
         println!("  CREATE WASMTASK <name> WITH (wasm-path='<path>', ...)");
