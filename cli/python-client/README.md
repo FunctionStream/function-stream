@@ -121,13 +121,13 @@ Execute a SQL statement.
 
 **Raises:** `ServerError` if SQL execution fails (status_code >= 400)
 
-### `create_function_from_files(function_path, config_path=None)`
+### `create_function_from_files(function_path, config_path)`
 
 Create a function from file paths.
 
 **Parameters:**
 - `function_path`: Path to WASM file (will be read as binary)
-- `config_path`: Optional path to config file (will be read as binary)
+- `config_path`: Path to config file (will be read as binary)
 
 **Returns:** Parsed data (JSON if applicable, otherwise raw data). Returns `None` if no data field in response.
 
@@ -135,13 +135,13 @@ Create a function from file paths.
 - `FileNotFoundError`: If file does not exist
 - `ServerError`: If function creation fails (status_code >= 400)
 
-### `create_function_from_bytes(function_bytes, config_bytes=None)`
+### `create_function_from_bytes(function_bytes, config_bytes)`
 
 Create a function from bytes.
 
 **Parameters:**
 - `function_bytes`: WASM binary content
-- `config_bytes`: Optional config binary/string content (if str, will be encoded as UTF-8)
+- `config_bytes`: Config YAML string content (will be encoded as UTF-8)
 
 **Returns:** Parsed data (JSON if applicable, otherwise raw data). Returns `None` if no data field in response.
 

@@ -18,7 +18,7 @@ High-level wrapper around the generated gRPC stub.
 
 import grpc
 import json
-from typing import Optional, Any, Union
+from typing import Optional, Any
 
 from ._proto import function_stream_pb2, function_stream_pb2_grpc
 from .exceptions import ServerError, _convert_grpc_error
@@ -98,14 +98,14 @@ class FsClient:
     def create_function_from_files(
         self,
         function_path: str,
-        config_path: Optional[str] = None,
+        config_path: str,
     ) -> Any:
         """
         Create a function from file paths.
         
         Args:
             function_path: Path to WASM file (will be read as binary)
-            config_path: Optional path to config file (will be read as binary)
+            config_path: Path to config file (will be read as binary)
             
         Returns:
             Parsed data (JSON if applicable, otherwise raw data)
@@ -120,11 +120,9 @@ class FsClient:
         with open(function_path, "rb") as f:
             func_bytes = f.read()
 
-        # Read config file as binary (if provided)
-        conf_bytes = b""
-        if config_path:
-            with open(config_path, "rb") as f:
-                conf_bytes = f.read()
+        # Read config file as binary
+        with open(config_path, "rb") as f:
+            conf_bytes = f.read()
 
         request = function_stream_pb2.CreateFunctionRequest(
             function_bytes=func_bytes,
@@ -136,14 +134,14 @@ class FsClient:
     def create_function_from_bytes(
         self,
         function_bytes: bytes,
-        config_bytes: Optional[Union[bytes, str]] = None,
+        config_bytes: str,
     ) -> Any:
         """
         Create a function from bytes.
         
         Args:
             function_bytes: WASM binary content
-            config_bytes: Optional config binary/string content (if str, will be encoded as UTF-8)
+            config_bytes: Config YAML string content (will be encoded as UTF-8)
             
         Returns:
             Parsed data (JSON if applicable, otherwise raw data)
@@ -153,13 +151,8 @@ class FsClient:
             ServerError: If function creation fails (status_code >= 400)
             ClientError: For other client errors
         """
-        # Process config: if it's a string, encode as UTF-8; otherwise use as-is
-        conf_bytes = b""
-        if config_bytes:
-            if isinstance(config_bytes, str):
-                conf_bytes = config_bytes.encode("utf-8")
-            else:
-                conf_bytes = config_bytes
+        # Encode config YAML string as UTF-8 bytes
+        conf_bytes = config_bytes.encode("utf-8")
 
         request = function_stream_pb2.CreateFunctionRequest(
             function_bytes=function_bytes,
