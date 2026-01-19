@@ -21,8 +21,8 @@ logging:
 # 用于配置 Python WASM 运行时的相关参数
 python:
   # Python WASM 文件路径
-  # 默认值: python-runtime/functionstream-runtime/target/functionstream-runtime.wasm
-  wasm_path: python-runtime/functionstream-runtime/target/functionstream-runtime.wasm
+  # 默认值: python/functionstream-runtime/target/functionstream-runtime.wasm
+  wasm_path: python/functionstream-runtime/target/functionstream-runtime.wasm
   
   # 预编译组件缓存目录
   # 默认值: .cache/python-wasm

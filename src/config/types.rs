@@ -55,7 +55,7 @@ pub struct LogConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PythonConfig {
     /// Python WASM file path
-    /// Default: "python-runtime/functionstream-runtime/target/functionstream-runtime.wasm"
+    /// Default: "python/functionstream-runtime/target/functionstream-runtime.wasm"
     #[serde(default = "default_python_wasm_path")]
     pub wasm_path: String,
     /// Cache directory for precompiled components
@@ -69,7 +69,7 @@ pub struct PythonConfig {
 }
 
 fn default_python_wasm_path() -> String {
-    "python-runtime/functionstream-runtime/target/functionstream-runtime.wasm".to_string()
+    "python/functionstream-runtime/target/functionstream-runtime.wasm".to_string()
 }
 
 fn default_python_cache_dir() -> String {

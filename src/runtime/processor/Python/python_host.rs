@@ -28,7 +28,7 @@ static GLOBAL_PYTHON_COMPONENT: OnceLock<Arc<Component>> = OnceLock::new();
 /// Get the default Python WASM file path
 ///
 /// The path is relative to the project root:
-/// `python-runtime/functionstream-runtime/target/functionstream-runtime.wasm`
+/// `python/functionstream-runtime/target/functionstream-runtime.wasm`
 fn get_python_wasm_path() -> PathBuf {
     // Try to get project root from environment or use current directory
     let project_root = std::env::var("CARGO_MANIFEST_DIR")
@@ -48,7 +48,7 @@ fn get_python_wasm_path() -> PathBuf {
         });
 
     project_root
-        .join("python-runtime")
+        .join("../../../../python")
         .join("functionstream-runtime")
         .join("target")
         .join("functionstream-runtime.wasm")
@@ -85,7 +85,7 @@ fn load_python_wasm_bytes() -> anyhow::Result<Vec<u8>> {
     
     if !wasm_path.exists() {
         return Err(anyhow::anyhow!(
-            "Python WASM file not found at: {}. Please build it first with: cd python-runtime/functionstream-runtime && make build",
+            "Python WASM file not found at: {}. Please build it first with: cd python/functionstream-runtime && make build",
             wasm_path.display()
         ));
     }
@@ -195,7 +195,7 @@ fn save_precompiled_component(engine: &Engine, wasm_bytes: &[u8]) -> anyhow::Res
 ///
 /// The component is loaded from cache if available, otherwise compiled from the built-in WASM file path.
 /// If cache doesn't exist, the component is compiled and saved to cache for future use.
-/// The WASM file path is: `python-runtime/functionstream-runtime/target/functionstream-runtime.wasm`
+/// The WASM file path is: `python/functionstream-runtime/target/functionstream-runtime.wasm`
 /// The cache path is: `.cache/python-wasm/functionstream-runtime.cwasm`
 fn get_global_python_component() -> anyhow::Result<Arc<Component>> {
     if let Some(component) = GLOBAL_PYTHON_COMPONENT.get() {

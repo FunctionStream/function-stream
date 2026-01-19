@@ -60,26 +60,26 @@ def generate():
 
     print(f"\nGenerating code for {proto_file}...")
 
-    # 构造 protoc 命令参数
-    # 注意：mypy-protobuf 需要作为插件传递
-    args = [
-        "",
-        f"-I{proto_dir}",
-        f"--python_out={out_dir}",
-        f"--grpc_python_out={out_dir}",
-    ]
+        # 构造 protoc 命令参数
+        # 注意：mypy-protobuf 需要作为插件传递
+        args = [
+            "",
+            f"-I{proto_dir}",
+            f"--python_out={out_dir}",
+            f"--grpc_python_out={out_dir}",
+        ]
 
-    # 尝试添加 mypy 插件（如果可用）
-    try:
-        import mypy_protobuf
-        args.extend([
-            f"--mypy_out={out_dir}",
-            f"--mypy_grpc_out={out_dir}",
-        ])
-        print("  Using mypy-protobuf for type hints")
-    except ImportError:
-        print("  Warning: mypy-protobuf not installed, skipping .pyi generation")
-        print("  Install it with: pip install mypy-protobuf")
+        # 尝试添加 mypy 插件（如果可用）
+        try:
+            import mypy_protobuf
+            args.extend([
+                f"--mypy_out={out_dir}",
+                f"--mypy_grpc_out={out_dir}",
+            ])
+            print("  Using mypy-protobuf for type hints")
+        except ImportError:
+            print("  Warning: mypy-protobuf not installed, skipping .pyi generation")
+            print("  Install it with: pip install mypy-protobuf")
 
     args.append(source)
 

@@ -16,8 +16,8 @@ examples/python-processor/dependencies/**
 
 
 # Python Runtime - Build artifacts and intermediate files
-python-runtime/**/bindings/
-python-runtime/**/dependencies/
-python-runtime/**/target/
+python/**/bindings/
+python/**/dependencies/
+python/**/target/
 **/**.egg-info
 .cache/
