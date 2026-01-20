@@ -10,65 +10,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// gRPC server setup and management
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use anyhow::{Context, Result};
+use tokio::net::TcpListener;
+use tokio_stream::wrappers::TcpListenerStream;
+use tonic::transport::Server;
 
 use crate::config::GlobalConfig;
 use crate::server::FunctionStreamServiceImpl;
-use anyhow::Result;
+use crate::sql::Coordinator;
 use protocol::service::function_stream_service_server::FunctionStreamServiceServer;
-use std::net::SocketAddr;
-use tonic::transport::Server;
 
-/// Start the gRPC server with shutdown signal
 pub async fn start_server_with_shutdown(
     config: &GlobalConfig,
     shutdown_rx: tokio::sync::oneshot::Receiver<()>,
     ready_tx: Option<tokio::sync::oneshot::Sender<()>>,
 ) -> Result<()> {
-    let addr: SocketAddr = format!("{}:{}", config.service.host, config.service.port)
+    let addr_str = format!("{}:{}", config.service.host, config.service.port);
+    let addr: SocketAddr = addr_str
         .parse()
-        .map_err(|e| anyhow::anyhow!("Invalid address format: {}", e))?;
+        .with_context(|| format!("Invalid address format: {}", addr_str))?;
 
-    log::info!("Starting gRPC server on {}", addr);
+    let listener = TcpListener::bind(addr)
+        .await
+        .with_context(|| format!("Failed to bind to address: {}", addr))?;
 
-    // Create service implementation
-    let service_impl = FunctionStreamServiceImpl::new();
+    log::info!("gRPC server listening on {}", addr);
 
-    // Create gRPC server with shutdown signal
-    let server = Server::builder()
-        .add_service(FunctionStreamServiceServer::new(service_impl))
-        .serve_with_shutdown(addr, async {
-            shutdown_rx.await.ok();
-            log::info!("Shutdown signal received, stopping gRPC server...");
-        });
-
-    // Spawn server task and wait for it to bind to address
-    let server_handle = tokio::spawn(server);
-
-    // Wait a bit for server to bind, then notify ready
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-    // Notify that server is ready (after binding to address)
     if let Some(tx) = ready_tx {
         let _ = tx.send(());
     }
 
-    // Wait for server to run (this will block until server stops or errors)
-    server_handle
+    let coordinator = Arc::new(Coordinator::new());
+    let service_impl = FunctionStreamServiceImpl::new(coordinator);
+
+    let incoming = TcpListenerStream::new(listener);
+
+    Server::builder()
+        .add_service(FunctionStreamServiceServer::new(service_impl))
+        .serve_with_incoming_shutdown(incoming, async {
+            shutdown_rx.await.ok();
+            log::info!("Shutdown signal received, stopping gRPC server...");
+        })
         .await
-        .map_err(|e| anyhow::anyhow!("Server task error: {}", e))?
-        .map_err(|e| {
-            let error_msg = format!("{}", e);
-            // Check if it's a port binding error
-            if error_msg.contains("address already in use") 
-                || error_msg.contains("transport error")
-                || error_msg.contains("bind")
-                || error_msg.contains("EADDRINUSE") {
-                anyhow::anyhow!("Port {} is already in use. Please stop the existing server or use a different port. Error: {}", addr.port(), e)
-            } else {
-                anyhow::anyhow!("Server runtime error: {}", e)
-            }
-        })?;
+        .with_context(|| "gRPC server runtime error")?;
 
     log::info!("gRPC server stopped");
 

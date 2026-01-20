@@ -10,26 +10,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Function Stream Service handler implementation
+use std::sync::Arc;
+use std::time::Instant;
+
+use log::{error, info, warn};
+use tonic::{Request, Response as TonicResponse, Status};
 
 use protocol::service::{
-    CreateFunctionRequest, Response, SqlRequest, StatusCode,
-    function_stream_service_server::FunctionStreamService,
+    function_stream_service_server::FunctionStreamService, CreateFunctionRequest, Response,
+    SqlRequest, StatusCode,
 };
 
+use crate::sql::statement::{CreateFunction, Statement};
 use crate::sql::{Coordinator, SqlParser};
-use crate::sql::statement::CreateFunction;
-use std::collections::HashMap;
 
 pub struct FunctionStreamServiceImpl {
-    coordinator: Coordinator,
+    coordinator: Arc<Coordinator>,
 }
 
 impl FunctionStreamServiceImpl {
-    /// Create a new service instance
-    pub fn new() -> Self {
-        Self {
-            coordinator: Coordinator::new(),
+    pub fn new(coordinator: Arc<Coordinator>) -> Self {
+        Self { coordinator }
+    }
+
+    fn build_response(
+        status_code: StatusCode,
+        message: String,
+        data: Option<String>,
+    ) -> Response {
+        Response {
+            status_code: status_code as i32,
+            message,
+            data,
         }
     }
 }
@@ -38,109 +50,101 @@ impl FunctionStreamServiceImpl {
 impl FunctionStreamService for FunctionStreamServiceImpl {
     async fn execute_sql(
         &self,
-        request: tonic::Request<SqlRequest>,
-    ) -> Result<tonic::Response<Response>, tonic::Status> {
-        // 记录整个SQL请求的开始时间（包括解析和执行）
-        let start_time = std::time::Instant::now();
+        request: Request<SqlRequest>,
+    ) -> Result<TonicResponse<Response>, Status> {
+        let start_time = Instant::now();
         let req = request.into_inner();
-        log::info!("Received SQL request: {}", req.sql);
+        
+        info!("Received SQL request, length: {}", req.sql.len());
 
-        // 解析阶段
-        let parse_start = std::time::Instant::now();
+        let parse_start = Instant::now();
         let stmt = match SqlParser::parse(&req.sql) {
             Ok(stmt) => {
-                let parse_elapsed = parse_start.elapsed().as_secs_f64();
-                log::info!("[Timing] SQL parsing: {:.3}s", parse_elapsed);
+                info!("SQL parsed in {}ms", parse_start.elapsed().as_millis());
                 stmt
             }
             Err(e) => {
-                let parse_elapsed = parse_start.elapsed().as_secs_f64();
-                let total_elapsed = start_time.elapsed().as_secs_f64();
-                log::warn!(
-                    "SQL parse error: {} (parse={:.3}s, total={:.3}s)",
-                    e,
-                    parse_elapsed,
-                    total_elapsed
-                );
-                return Ok(tonic::Response::new(Response {
-                    status_code: StatusCode::BadRequest as i32,
-                    message: format!("Parse error: {}", e),
-                    data: None,
-                }));
+                warn!("SQL parse failed: {}, cost: {}ms", e, parse_start.elapsed().as_millis());
+                return Ok(TonicResponse::new(Self::build_response(
+                    StatusCode::BadRequest,
+                    format!("Parse error: {}", e),
+                    None,
+                )));
             }
         };
 
-        // 协调器执行阶段
-        let coord_start = std::time::Instant::now();
+        let exec_start = Instant::now();
         let result = self.coordinator.execute(stmt.as_ref());
-        let coord_elapsed = coord_start.elapsed().as_secs_f64();
-        log::info!("[Timing] Coordinator execution: {:.3}s", coord_elapsed);
-
-        // 计算总耗时（包括解析和执行）
-        let elapsed = start_time.elapsed().as_secs_f64();
-        log::info!("SQL request completed: total_elapsed={:.3}s", elapsed);
+        info!(
+            "Coordinator execution finished in {}ms",
+            exec_start.elapsed().as_millis()
+        );
 
         let status_code = if result.success {
             StatusCode::Ok
         } else {
+            error!("Execution failed: {}", result.message);
             StatusCode::InternalServerError
         };
 
-        Ok(tonic::Response::new(Response {
-            status_code: status_code as i32,
-            message: result.message,
-            data: result.data,
-        }))
+        info!("Total SQL request cost: {}ms", start_time.elapsed().as_millis());
+
+        Ok(TonicResponse::new(Self::build_response(
+            status_code,
+            result.message,
+            result.data,
+        )))
     }
 
     async fn create_function(
         &self,
-        request: tonic::Request<CreateFunctionRequest>,
-    ) -> Result<tonic::Response<Response>, tonic::Status> {
-        let start_time = std::time::Instant::now();
+        request: Request<CreateFunctionRequest>,
+    ) -> Result<TonicResponse<Response>, Status> {
+        let start_time = Instant::now();
         let req = request.into_inner();
-        log::info!(
-            "Received CreateFunction request: config_bytes size={}, function_bytes size={}",
+        info!(
+            "Received CreateFunction request. Config size: {}, Function size: {}",
             req.config_bytes.len(),
             req.function_bytes.len()
         );
 
-        // gRPC request sends actual file bytes (Bytes mode only)
         let config_bytes = if !req.config_bytes.is_empty() {
             Some(req.config_bytes)
         } else {
             None
         };
 
-        // Create CreateFunction statement from bytes (name will be generated in Plan phase)
         let stmt = CreateFunction::from_bytes(req.function_bytes, config_bytes);
 
-        // Execute using coordinator
-        let coord_start = std::time::Instant::now();
-        let result = self.coordinator.execute(&stmt as &dyn crate::sql::statement::Statement);
-        let coord_elapsed = coord_start.elapsed().as_secs_f64();
-        log::info!("[Timing] Coordinator execution: {:.3}s", coord_elapsed);
-
-        // Calculate total elapsed time
-        let elapsed = start_time.elapsed().as_secs_f64();
-        log::info!("CreateFunction completed: total_elapsed={:.3}s", elapsed);
+        let exec_start = Instant::now();
+        let result = self.coordinator.execute(&stmt as &dyn Statement);
+        info!(
+            "Coordinator execution finished in {}ms",
+            exec_start.elapsed().as_millis()
+        );
 
         let status_code = if result.success {
             StatusCode::Created
         } else {
+            error!("CreateFunction failed: {}", result.message);
             StatusCode::InternalServerError
         };
 
-        Ok(tonic::Response::new(Response {
-            status_code: status_code as i32,
-            message: result.message,
-            data: result.data,
-        }))
+        info!(
+            "Total CreateFunction request cost: {}ms",
+            start_time.elapsed().as_millis()
+        );
+
+        Ok(TonicResponse::new(Self::build_response(
+            status_code,
+            result.message,
+            result.data,
+        )))
     }
 }
 
 impl Default for FunctionStreamServiceImpl {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(Coordinator::new()))
     }
 }

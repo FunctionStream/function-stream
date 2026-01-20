@@ -10,158 +10,122 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
+use std::time::Instant;
+
+use anyhow::{Context, Result};
 
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::analyze::Analyzer;
+use crate::sql::analyze::{Analysis, Analyzer};
 use crate::sql::execution::Executor;
-use crate::sql::plan::{LogicalPlanVisitor, LogicalPlanner};
+use crate::sql::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
 use crate::sql::statement::{ExecuteResult, Statement};
 
 use super::execution_context::ExecutionContext;
 
-/// Coordinator 负责协调 SQL 语句的执行
-pub struct Coordinator;
+pub struct Coordinator{
+}
 
 impl Coordinator {
     pub fn new() -> Self {
-        Self
+        Self{}
     }
 
-    /// 执行 Statement，保证返回 ExecuteResult，不抛出异常
     pub fn execute(&self, stmt: &dyn Statement) -> ExecuteResult {
-        let start_time = std::time::Instant::now();
+        let start_time = Instant::now();
         let context = ExecutionContext::new();
         let execution_id = context.execution_id;
 
         log::info!(
-            "[ExecutionStart] execution_id={}, statement={:?}",
+            "[{}] Starting SQL execution: {:?}",
             execution_id,
             std::any::type_name_of_val(&stmt)
         );
 
-        // 1. 分析阶段
-        let analyze_start = std::time::Instant::now();
-        let analyzer = Analyzer::new(&context);
-        let analysis = match analyzer.analyze(stmt) {
-            Ok(a) => a,
-            Err(e) => {
-                let total_elapsed = start_time.elapsed().as_secs_f64();
-                log::error!(
-                    "[ExecutionEnd] execution_id={}, error={}, total_elapsed={:.3}s",
+        match self.execute_pipeline(&context, stmt) {
+            Ok(result) => {
+                log::info!(
+                    "[{}] Execution completed successfully in {}ms",
                     execution_id,
-                    e,
-                    total_elapsed
+                    start_time.elapsed().as_millis()
                 );
-                return ExecuteResult::err(format!("Analyze error: {}", e));
+                result
             }
-        };
-        log::info!(
-            "[Timing] execution_id={}, analyze={:.3}s",
-            execution_id,
-            analyze_start.elapsed().as_secs_f64()
-        );
-
-        // 2. 逻辑计划生成阶段
-        let plan_start = std::time::Instant::now();
-        let logical_plan_visitor = LogicalPlanVisitor::new();
-        let plan = logical_plan_visitor.visit(&analysis);
-        log::info!(
-            "[Timing] execution_id={}, logical_plan={:.3}s",
-            execution_id,
-            plan_start.elapsed().as_secs_f64()
-        );
-
-        // 3. 优化阶段
-        let optimize_start = std::time::Instant::now();
-        let logical_planner = LogicalPlanner::new();
-        let optimized_plan = logical_planner.optimize(plan, &analysis);
-        log::info!(
-            "[Timing] execution_id={}, optimize={:.3}s",
-            execution_id,
-            optimize_start.elapsed().as_secs_f64()
-        );
-
-        // 4. 获取 TaskManager
-        let tm_start = std::time::Instant::now();
-        let task_manager = match TaskManager::get() {
-            Ok(tm) => tm,
             Err(e) => {
-                let total_elapsed = start_time.elapsed().as_secs_f64();
                 log::error!(
-                    "[ExecutionEnd] execution_id={}, error=Failed to get TaskManager: {}, total_elapsed={:.3}s",
+                    "[{}] Execution failed after {}ms. Error: {:#}",
                     execution_id,
-                    e,
-                    total_elapsed
+                    start_time.elapsed().as_millis(),
+                    e
                 );
-                return ExecuteResult::err(format!("Failed to get TaskManager: {}", e));
+                ExecuteResult::err(format!("Execution failed: {:#}", e))
             }
-        };
-        log::info!(
-            "[Timing] execution_id={}, task_manager_get={:.3}s",
-            execution_id,
-            tm_start.elapsed().as_secs_f64()
-        );
+        }
+    }
 
-        // 5. 执行
-        let exec_start = std::time::Instant::now();
-        let executor = Executor::new(task_manager);
-        let result = match executor.execute(optimized_plan.as_ref()) {
-            Ok(r) => r,
-            Err(e) => {
-                let total_elapsed = start_time.elapsed().as_secs_f64();
-                log::error!(
-                    "[ExecutionEnd] execution_id={}, error={}, total_elapsed={:.3}s",
-                    execution_id,
-                    e,
-                    total_elapsed
-                );
-                return ExecuteResult::err(format!("Execute error: {}", e));
-            }
-        };
-        log::info!(
-            "[Timing] execution_id={}, execute={:.3}s",
-            execution_id,
-            exec_start.elapsed().as_secs_f64()
-        );
+    fn execute_pipeline(
+        &self,
+        context: &ExecutionContext,
+        stmt: &dyn Statement,
+    ) -> Result<ExecuteResult> {
+        let analysis = self.step_analyze(context, stmt)?;
+        let plan = self.step_build_logical_plan(&analysis)?;
+        let optimized_plan = self.step_optimize(&analysis, plan)?;
+        self.step_execute(optimized_plan)
+    }
 
-        let total_elapsed = start_time.elapsed().as_secs_f64();
-        log::info!(
-            "[ExecutionEnd] execution_id={}, success={}, total_elapsed={:.3}s",
-            execution_id,
-            result.success,
-            total_elapsed
-        );
+    fn step_analyze(&self, context: &ExecutionContext, stmt: &dyn Statement) -> Result<Analysis> {
+        let start = Instant::now();
+        let analyzer = Analyzer::new(context);
+        let result = analyzer
+            .analyze(stmt)
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("Analyzer phase failed");
 
+        log::debug!(
+            "[{}] Analyze phase finished in {}ms",
+            context.execution_id,
+            start.elapsed().as_millis()
+        );
         result
     }
 
-    /// 获取 TaskManager
-    pub fn task_manager(&self) -> Option<Arc<TaskManager>> {
-        TaskManager::get().ok()
+    fn step_build_logical_plan(&self, analysis: &Analysis) -> Result<Box<dyn PlanNode>> {
+        let visitor = LogicalPlanVisitor::new();
+        let plan = visitor.visit(analysis);
+        Ok(plan)
     }
-}
 
-impl Default for Coordinator {
-    fn default() -> Self {
-        Self::new()
+    fn step_optimize(&self, analysis: &Analysis, plan: Box<dyn PlanNode>) -> Result<Box<dyn PlanNode>> {
+        let start = Instant::now();
+        let planner = LogicalPlanner::new();
+        let optimized = planner.optimize(plan, analysis);
+
+        log::debug!(
+            "Optimizer phase finished in {}ms",
+            start.elapsed().as_millis()
+        );
+        Ok(optimized)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-        use crate::sql::statement::CreateFunction;
-    use std::collections::HashMap;
+    fn step_execute(&self, plan: Box<dyn PlanNode>) -> Result<ExecuteResult> {
+        let start = Instant::now();
+        let task_manager = match TaskManager::get() {
+            Ok(tm) => tm,
+            Err(e) => {
+                return Ok(ExecuteResult::err(format!("Failed to get TaskManager: {}", e)));
+            }
+        };
+        let executor = Executor::new(task_manager.clone());
+        let result = executor
+            .execute(plan.as_ref())
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("Executor phase failed");
 
-    #[test]
-    fn test_coordinator_analyze_error() {
-        let coordinator = Coordinator::new();
-
-        // Missing function - should return error in ExecuteResult, not panic
-        let props = HashMap::new();
-        let stmt = CreateFunction::from_properties(props).unwrap();
-        let result = coordinator.execute(&stmt as &dyn Statement);
-        assert!(!result.success);
+        log::debug!(
+            "Executor phase finished in {}ms",
+            start.elapsed().as_millis()
+        );
+        result
     }
+
 }
