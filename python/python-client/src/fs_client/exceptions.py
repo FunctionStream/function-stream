@@ -11,47 +11,130 @@
 # limitations under the License.
 
 """
-Custom exceptions for Function Stream Client
+Custom exceptions for Function Stream Client.
+
+This module maps gRPC status codes to semantic Python exceptions,
+allowing users to handle specific error cases (e.g., timeouts, auth failures)
+granularly.
 """
 
 import grpc
 from typing import Optional
 
 
-class ClientError(Exception):
-    """Base exception for all client errors"""
-    pass
-
-
-class ConnectionError(ClientError):
-    """Raised when connection to server fails"""
-    pass
-
-
-class ServerError(ClientError):
-    """Raised when server returns an error"""
-    def __init__(self, message: str, status_code: Optional[int] = None):
+class FsError(Exception):
+    """Base exception for all Function Stream errors."""
+    def __init__(self, message: str, original_exception: Optional[Exception] = None):
         super().__init__(message)
-        self.status_code = status_code
+        self.original_exception = original_exception
 
 
-def _convert_grpc_error(e: grpc.RpcError) -> ClientError:
+class ClientError(FsError):
     """
-    Convert gRPC error to appropriate client exception.
-    
-    Args:
-        e: gRPC RpcError
-        
-    Returns:
-        Appropriate ClientError subclass
+    Raised when the error originates from the client side.
+    Examples: File not found, invalid configuration, local validation failure.
+    """
+    pass
+
+
+class ServerError(FsError):
+    """
+    Base class for errors returned by the server.
+    This includes both business logic errors and gRPC protocol errors.
+    """
+    def __init__(self, message: str, status_code: Optional[int] = None, grpc_code: Optional[grpc.StatusCode] = None):
+        super().__init__(message)
+        self.status_code = status_code  # Business logic code (e.g., HTTP-like 400/500)
+        self.grpc_code = grpc_code      # gRPC protocol code (e.g., UNAVAILABLE)
+
+
+# --- Specific Network/Protocol Errors ---
+
+class NetworkError(ServerError):
+    """Raised when communication with the server fails (e.g., connection refused)."""
+    pass
+
+
+class TimeoutError(ServerError):
+    """Raised when the operation timed out."""
+    pass
+
+
+# --- Specific Business/Logic Errors (Mapped from gRPC Codes) ---
+
+class BadRequestError(ServerError):
+    """Raised when the arguments are invalid (INVALID_ARGUMENT)."""
+    pass
+
+
+class AuthenticationError(ServerError):
+    """Raised when the client is not authenticated (UNAUTHENTICATED)."""
+    pass
+
+
+class PermissionDeniedError(ServerError):
+    """Raised when the client does not have permission (PERMISSION_DENIED)."""
+    pass
+
+
+class NotFoundError(ServerError):
+    """Raised when a requested resource is not found (NOT_FOUND)."""
+    pass
+
+
+class ConflictError(ServerError):
+    """Raised when a resource already exists or state conflict occurs (ALREADY_EXISTS, ABORTED)."""
+    pass
+
+
+class ResourceExhaustedError(ServerError):
+    """Raised when the server is out of resources or quota (RESOURCE_EXHAUSTED)."""
+    pass
+
+
+class InternalServerError(ServerError):
+    """Raised when the server encountered an internal error (INTERNAL, DATA_LOSS, UNKNOWN)."""
+    pass
+
+
+# --- Mapping Logic ---
+
+_GRPC_CODE_TO_EXCEPTION = {
+    grpc.StatusCode.INVALID_ARGUMENT: BadRequestError,
+    grpc.StatusCode.OUT_OF_RANGE: BadRequestError,
+
+    grpc.StatusCode.UNAUTHENTICATED: AuthenticationError,
+    grpc.StatusCode.PERMISSION_DENIED: PermissionDeniedError,
+
+    grpc.StatusCode.NOT_FOUND: NotFoundError,
+
+    grpc.StatusCode.ALREADY_EXISTS: ConflictError,
+    grpc.StatusCode.ABORTED: ConflictError,
+
+    grpc.StatusCode.RESOURCE_EXHAUSTED: ResourceExhaustedError,
+
+    grpc.StatusCode.DEADLINE_EXCEEDED: TimeoutError,
+    grpc.StatusCode.UNAVAILABLE: NetworkError,
+
+    grpc.StatusCode.INTERNAL: InternalServerError,
+    grpc.StatusCode.DATA_LOSS: InternalServerError,
+    grpc.StatusCode.UNKNOWN: InternalServerError,
+    grpc.StatusCode.UNIMPLEMENTED: InternalServerError,
+}
+
+
+def _convert_grpc_error(e: grpc.RpcError) -> FsError:
+    """
+    Convert a gRPC RpcError into a semantic FsError subclass.
     """
     code = e.code()
-    details = e.details()
-    
-    if code == grpc.StatusCode.UNAVAILABLE:
-        return ConnectionError(f"Connection failed: {details}")
-    elif code == grpc.StatusCode.INTERNAL:
-        return ServerError(f"Server error: {details}", status_code=500)
-    else:
-        return ClientError(f"RPC error ({code}): {details}")
+    details = e.details() or "Unknown gRPC error"
 
+    # 1. Look up the specific exception class
+    exception_cls = _GRPC_CODE_TO_EXCEPTION.get(code, ServerError)
+
+    # 2. Create the exception message
+    message = f"{details} (gRPC code: {code.name if code else 'NONE'})"
+
+    # 3. Return the instance (caller should raise it)
+    return exception_cls(message, grpc_code=code)

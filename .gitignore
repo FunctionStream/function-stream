@@ -13,6 +13,7 @@ examples/go-processor/bindings/**
 examples/go-processor/build/**
 examples/python-processor/build/**
 examples/python-processor/dependencies/**
+python/python-client/src/fs_client/_proto/
 
 
 # Python Runtime - Build artifacts and intermediate files

@@ -1,6 +1,6 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# you may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
@@ -13,203 +13,168 @@
 """
 Function Stream gRPC Client
 
-High-level wrapper around the generated gRPC stub.
+This module provides a production-ready client for the Function Stream service.
+It handles connection management, error translation, logging, and type safety.
 """
 
+import logging
 import grpc
-import json
-from typing import Optional, Any
+from pathlib import Path
+from typing import Optional, Union, List, Dict, Type
 
 from ._proto import function_stream_pb2, function_stream_pb2_grpc
-from .exceptions import ServerError, _convert_grpc_error
+from .exceptions import (
+    ServerError, ClientError, _convert_grpc_error,
+    BadRequestError, AuthenticationError, PermissionDeniedError,
+    NotFoundError, ConflictError, ResourceExhaustedError, InternalServerError
+)
 
+logger = logging.getLogger(__name__)
 
 class FsClient:
     """
-    High-level client for Function Stream gRPC service.
-    
-    This client wraps the generated gRPC stub and provides a convenient
-    interface for interacting with the Function Stream service.
-    
-    Example:
-        >>> with FsClient(host="localhost", port=8080) as client:
-        ...     data = client.execute_sql("SHOW FUNCTIONS")
-        ...     client.create_function_from_bytes(b"wasm_bytes...", b"config_bytes")
-        ...     client.create_function_from_files("./app.wasm", "./config.yaml")
+    High-level, thread-safe client for Function Stream gRPC service.
     """
 
-    def __init__(
-        self,
-        host: str = "localhost",
-        port: int = 8080,
-        secure: bool = False,
-        channel: Optional[grpc.Channel] = None,
-        **kwargs
-    ):
-        """
-        Initialize the Function Stream client.
+    DEFAULT_TIMEOUT = 30.0
 
-        Args:
-            host: Server host address
-            port: Server port
-            secure: Whether to use TLS/SSL
-            channel: Optional gRPC channel (if None, creates a new channel)
-            **kwargs: Additional channel options (e.g., options for grpc.Channel)
-        """
+    DEFAULT_OPTIONS = [
+        ('grpc.keepalive_time_ms', 10000),
+        ('grpc.keepalive_timeout_ms', 5000),
+        ('grpc.keepalive_permit_without_calls', 1),
+        ('grpc.http2.max_pings_without_data', 0),
+    ]
+
+    # Mapping Business Status Codes (HTTP-like) to Python Exceptions
+    _STATUS_CODE_MAP: Dict[int, Type[ServerError]] = {
+        400: BadRequestError,
+        401: AuthenticationError,
+        403: PermissionDeniedError,
+        404: NotFoundError,
+        409: ConflictError,
+        429: ResourceExhaustedError,
+        500: InternalServerError,
+    }
+
+    def __init__(
+            self,
+            host: str = "localhost",
+            port: int = 8080,
+            secure: bool = False,
+            channel: Optional[grpc.Channel] = None,
+            options: Optional[List[tuple]] = None,
+            default_timeout: float = DEFAULT_TIMEOUT,
+    ):
         self.target = f"{host}:{port}"
-        
+        self.default_timeout = default_timeout
+        self._own_channel = False
+
         if channel:
             self._channel = channel
-            self._own_channel = False
+            logger.debug(f"Initialized FsClient with existing channel to {self.target}")
         else:
-            # Immediately initialize Channel to avoid lazy init complexity
+            base_options = list(self.DEFAULT_OPTIONS)
+            if options:
+                base_options.extend(options)
+
+            logger.info(f"Connecting to FunctionStream at {self.target} (secure={secure})...")
+
             if secure:
-                # Can be extended to load certificates
                 creds = grpc.ssl_channel_credentials()
-                self._channel = grpc.secure_channel(
-                    self.target, creds, options=kwargs.get("options", [])
-                )
+                self._channel = grpc.secure_channel(self.target, creds, options=base_options)
             else:
-                self._channel = grpc.insecure_channel(
-                    self.target, options=kwargs.get("options", [])
-                )
+                self._channel = grpc.insecure_channel(self.target, options=base_options)
+
             self._own_channel = True
 
         self._stub = function_stream_pb2_grpc.FunctionStreamServiceStub(self._channel)
 
-    def execute_sql(self, sql: str) -> Any:
-        """
-        Execute SQL and return the data directly.
-        
-        Args:
-            sql: SQL statement to execute
-            
-        Returns:
-            Parsed data (JSON if applicable, otherwise raw data)
-            Returns None if no data field in response
-            
-        Raises:
-            ServerError: If SQL execution fails (status_code >= 400)
-            ClientError: For other client errors
-        """
-        request = function_stream_pb2.SqlRequest(sql=sql)
-        return self._invoke(self._stub.ExecuteSql, request)
-
     def create_function_from_files(
-        self,
-        function_path: str,
-        config_path: str,
-    ) -> Any:
+            self,
+            function_path: Union[str, Path],
+            config_path: Union[str, Path],
+            timeout: Optional[float] = None,
+    ) -> bool:
         """
-        Create a function from file paths.
-        
-        Args:
-            function_path: Path to WASM file (will be read as binary)
-            config_path: Path to config file (will be read as binary)
-            
-        Returns:
-            Parsed data (JSON if applicable, otherwise raw data)
-            Returns None if no data field in response
-            
-        Raises:
-            FileNotFoundError: If file does not exist
-            ServerError: If function creation fails (status_code >= 400)
-            ClientError: For other client errors
+        Create a function by reading local files.
         """
-        # Read WASM file as binary
-        with open(function_path, "rb") as f:
-            func_bytes = f.read()
+        f_path = Path(function_path)
+        c_path = Path(config_path)
 
-        # Read config file as binary
-        with open(config_path, "rb") as f:
-            conf_bytes = f.read()
+        if not f_path.exists():
+            raise FileNotFoundError(f"WASM file not found: {f_path}")
+        if not c_path.exists():
+            raise FileNotFoundError(f"Config file not found: {c_path}")
 
+        logger.info(f"Creating function from files: wasm={f_path.name}, config={c_path.name}")
+
+        try:
+            func_bytes = f_path.read_bytes()
+            conf_bytes = c_path.read_bytes()
+        except OSError as e:
+            logger.error(f"Failed to read function files: {e}")
+            raise ClientError(f"File access error: {e}") from e
+
+        return self._create_function_internal(func_bytes, conf_bytes, timeout)
+
+    def create_function_from_bytes(
+            self,
+            function_bytes: bytes,
+            config_content: Union[str, bytes],
+            timeout: Optional[float] = None,
+    ) -> bool:
+        """
+        Create a function from in-memory bytes/strings.
+        """
+        if isinstance(config_content, str):
+            real_conf_bytes = config_content.encode("utf-8")
+        elif isinstance(config_content, bytes):
+            real_conf_bytes = config_content
+        else:
+            raise TypeError(f"config_content must be str or bytes, got {type(config_content)}")
+
+        logger.info("Creating function from in-memory bytes")
+        return self._create_function_internal(function_bytes, real_conf_bytes, timeout)
+
+    def _create_function_internal(self, func_bytes: bytes, conf_bytes: bytes, timeout: float) -> bool:
         request = function_stream_pb2.CreateFunctionRequest(
             function_bytes=func_bytes,
             config_bytes=conf_bytes,
         )
-        
-        return self._invoke(self._stub.CreateFunction, request)
+        self._invoke(self._stub.CreateFunction, request, timeout)
+        return True
 
-    def create_function_from_bytes(
-        self,
-        function_bytes: bytes,
-        config_bytes: str,
-    ) -> Any:
+    def _invoke(self, rpc_method, request, timeout: Optional[float]):
         """
-        Create a function from bytes.
-        
-        Args:
-            function_bytes: WASM binary content
-            config_bytes: Config YAML string content (will be encoded as UTF-8)
-            
-        Returns:
-            Parsed data (JSON if applicable, otherwise raw data)
-            Returns None if no data field in response
-            
-        Raises:
-            ServerError: If function creation fails (status_code >= 400)
-            ClientError: For other client errors
+        Generic gRPC invocation wrapper with Error Mapping.
         """
-        # Encode config YAML string as UTF-8 bytes
-        conf_bytes = config_bytes.encode("utf-8")
+        actual_timeout = timeout if timeout is not None else self.default_timeout
 
-        request = function_stream_pb2.CreateFunctionRequest(
-            function_bytes=function_bytes,
-            config_bytes=conf_bytes,
-        )
-        
-        return self._invoke(self._stub.CreateFunction, request)
-
-    def _invoke(self, func, request) -> Any:
-        """
-        Generic wrapper for gRPC calls to handle errors and parsing.
-        
-        Args:
-            func: gRPC stub method to call
-            request: Protobuf request message
-            
-        Returns:
-            Parsed data (JSON if applicable, otherwise raw data)
-            Returns None if no data field in response
-            
-        Raises:
-            ServerError: If status_code >= 400
-            ClientError: For other client errors
-        """
         try:
-            response = func(request)
-            
-            # Unified error checking
+            response = rpc_method(request, timeout=actual_timeout)
+
             if response.status_code >= 400:
-                raise ServerError(
-                    message=response.message,
-                    status_code=response.status_code
-                )
-            
-            # Success: return data directly (try JSON parsing)
-            if response.HasField("data") and response.data:
-                try:
-                    return json.loads(response.data)
-                except (json.JSONDecodeError, TypeError):
-                    return response.data
-            return None
+                error_msg = response.message or "Unknown server error"
+                logger.error(f"Server returned error: code={response.status_code}, msg={error_msg}")
+
+                # Automatically map status code to specific exception
+                exception_cls = self._STATUS_CODE_MAP.get(response.status_code, ServerError)
+                raise exception_cls(message=error_msg, status_code=response.status_code)
+
+            return response
 
         except grpc.RpcError as e:
-            raise _convert_grpc_error(e)
+            logger.error(f"gRPC call failed: {e.code()} - {e.details()}")
+            raise _convert_grpc_error(e) from e
 
     def close(self):
-        """Close the gRPC channel (if we own it)."""
-        if self._own_channel and self._channel is not None:
+        if self._own_channel and self._channel:
+            logger.debug("Closing gRPC channel")
             self._channel.close()
             self._channel = None
-            self._stub = None
 
     def __enter__(self):
-        """Context manager entry."""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
         self.close()
-
