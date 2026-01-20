@@ -2,6 +2,7 @@
 **/target/**
 .idea/
 **/.vscode/
+**/.venv/**
 
 **.wasm
 
@@ -14,6 +15,7 @@ examples/go-processor/build/**
 examples/python-processor/build/**
 examples/python-processor/dependencies/**
 python/python-client/src/fs_client/_proto/
+python/functionstream-api/build
 
 
 # Python Runtime - Build artifacts and intermediate files

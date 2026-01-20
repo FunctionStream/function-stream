@@ -6,325 +6,271 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on "AS IS" BASIS,
+# distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
 """
-构建脚本：将 functionstream-runtime 打包成 WASM 组件
+WASM Build Script for Function Stream Runtime.
 
-使用 componentize-py 将 Python 代码编译成 WebAssembly 组件
+This script compiles the Python runtime into a WebAssembly component using componentize-py.
+It handles dependency installation, WIT binding generation, and the final WASM compilation.
 """
 
 import os
 import sys
-import subprocess
 import shutil
+import logging
+import subprocess
 from pathlib import Path
+from typing import List, Optional
 
-# 获取脚本所在目录
+# --- Configuration ---
+
+# Paths (Relative to this script)
 SCRIPT_DIR = Path(__file__).parent.absolute()
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 WIT_DIR = PROJECT_ROOT / "wit"
-OUTPUT_DIR = SCRIPT_DIR / "target"
-WASM_OUTPUT = OUTPUT_DIR / "functionstream-runtime.wasm"
+WIT_FILE = WIT_DIR / "processor.wit"
+
+# Source & Artifact Paths
+SRC_DIR = SCRIPT_DIR / "src"
+DEPENDENCIES_DIR = SCRIPT_DIR / "dependencies"
+BINDINGS_DIR = SCRIPT_DIR / "bindings"
+TARGET_DIR = SCRIPT_DIR / "target"
+WASM_OUTPUT = TARGET_DIR / "functionstream-runtime.wasm"
+
+# Sibling Projects
+FS_API_DIR = SCRIPT_DIR.parent / "functionstream-api"
+
+# Component Configuration
+WORLD_NAME = "processor"
+MAIN_MODULE = "fs_runtime.runner"  # The entry point module
+
+# Logging Setup
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - [%(levelname)s] - %(message)s",
+    datefmt="%H:%M:%S"
+)
+logger = logging.getLogger("fs_wasm_builder")
 
 
-def check_dependencies():
-    """检查必要的依赖"""
-    # 检查 componentize-py（尝试多种方式）
-    found = False
-    componentize_cmd = None
-    
-    # 方法1: 直接调用 componentize-py（如果在 PATH 中）
-    try:
-        result = subprocess.run(
-            ["componentize-py", "--version"],
-            capture_output=True,
-            check=True,
-            timeout=5
-        )
-        componentize_cmd = ["componentize-py"]
-        found = True
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    
-    # 方法2: 查找用户 Python bin 目录中的 componentize-py
-    if not found:
+class BuildError(Exception):
+    """Custom exception for build failures."""
+    pass
+
+
+class WasmBuilder:
+    """Encapsulates the WASM build process lifecycle."""
+
+    def __init__(self):
+        self.python_exec = sys.executable
+        self.componentize_cmd = self._find_componentize_py()
+
+    def _find_componentize_py(self) -> str:
+        """
+        Locates the 'componentize-py' executable.
+        Prioritizes the active virtual environment, then system PATH.
+        """
+        # 1. Check current venv bin (Reliable method)
+        venv_bin = Path(sys.executable).parent
+        candidate = venv_bin / "componentize-py"
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+
+        # 2. Check standard PATH (Fallback)
+        path_cmd = shutil.which("componentize-py")
+        if path_cmd:
+            return path_cmd
+
+        logger.error("❌ 'componentize-py' not found.")
+        logger.info("Please install it in your environment: pip install componentize-py")
+        raise BuildError("Dependency missing: componentize-py")
+
+    def clean(self) -> None:
+        """
+        Cleans build artifacts and temporary directories.
+        CRITICAL: Removes 'bindings' to prevent 'File exists' errors.
+        """
+        logger.info("Cleaning build artifacts...")
+
+        dirs_to_clean = [TARGET_DIR, DEPENDENCIES_DIR, BINDINGS_DIR]
+
+        for d in dirs_to_clean:
+            if d.exists():
+                try:
+                    shutil.rmtree(d)
+                    logger.debug(f"Removed: {d}")
+                except OSError as e:
+                    logger.warning(f"Failed to remove {d}: {e}")
+
+        logger.info("✓ Clean completed.")
+
+    def prepare_dependencies(self) -> None:
+        """Installs local dependencies (functionstream-api) into a temp dir."""
+        logger.info("Preparing dependencies...")
+
+        if not FS_API_DIR.exists():
+            raise BuildError(f"functionstream-api source not found at: {FS_API_DIR}")
+
+        DEPENDENCIES_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Install fs-api to local dependencies folder using pip
+        cmd = [
+            self.python_exec, "-m", "pip", "install",
+            "--target", str(DEPENDENCIES_DIR),
+            str(FS_API_DIR)
+        ]
+
+        logger.debug(f"Exec: {' '.join(cmd)}")
         try:
-            import os
-            home = os.path.expanduser("~")
-            # 检查常见的 Python 版本路径
-            for py_version in ["3.9", "3.10", "3.11", "3.12"]:
-                bin_path = Path(home) / "Library" / "Python" / py_version / "bin" / "componentize-py"
-                if bin_path.exists() and bin_path.is_file():
-                    # 测试是否可执行
-                    try:
-                        result = subprocess.run(
-                            [str(bin_path), "--version"],
-                            capture_output=True,
-                            check=True,
-                            timeout=5
-                        )
-                        componentize_cmd = [str(bin_path)]
-                        found = True
-                        print(f"Found componentize-py at: {bin_path}")
-                        break
-                    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-                        continue
-        except Exception:
-            pass
-    
-    # 方法3: 如果安装了包但找不到命令，提示用户
-    if not found:
-        try:
-            result = subprocess.run(
-                ["python3", "-m", "pip", "show", "componentize-py"],
-                capture_output=True,
+            subprocess.run(
+                cmd,
                 check=True,
-                timeout=5
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
             )
-            # 包已安装但命令找不到
-            print("Warning: componentize-py is installed but command not found in PATH")
-            print("Please add Python bin directory to PATH:")
-            print("  export PATH=\"$HOME/Library/Python/3.9/bin:$PATH\"")
-            print("Or run the build script with the full path to componentize-py")
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-    
-    if not found:
-        print("Error: componentize-py not found")
-        print("Please install it:")
-        print("  python3 -m pip install componentize-py")
-        print("Then ensure it's in your PATH or add:")
-        print("  export PATH=\"$HOME/Library/Python/3.9/bin:$PATH\"")
-        sys.exit(1)
-    
-    return componentize_cmd
+            logger.info("✓ Dependencies prepared (fs-api installed).")
+        except subprocess.CalledProcessError as e:
+            logger.error("Failed to install dependencies.")
+            logger.error(f"STDERR: {e.stderr}")
+            raise BuildError("Dependency installation failed.")
 
+    def generate_bindings(self) -> None:
+        """Generates WIT bindings for reference/development."""
+        logger.info("Generating WIT bindings...")
 
-def ensure_dependencies():
-    """确保依赖包已安装到 dependencies 目录（供 componentize-py 使用）"""
-    # 创建 dependencies 目录
-    deps_dir = SCRIPT_DIR / "dependencies"
-    if deps_dir.exists():
-        shutil.rmtree(deps_dir)
-    deps_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 将 functionstream-api 安装到 dependencies 目录（而不是系统 site-packages）
-    # 这样 componentize-py 可以通过 -p 参数找到它
-    fs_api_dir = SCRIPT_DIR.parent / "functionstream-api"
-    if not fs_api_dir.exists():
-        print(f"Error: functionstream-api directory not found: {fs_api_dir}")
-        print("Please ensure functionstream-api exists at the expected location")
-        sys.exit(1)
-    
-    print(f"Installing functionstream-api to dependencies directory...")
-    try:
-        # 使用 --target 将 functionstream-api 安装到 dependencies 目录
-        result = subprocess.run(
-            ["python3", "-m", "pip", "install", "--target", str(deps_dir), str(fs_api_dir)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        print("✓ functionstream-api installed to dependencies directory")
-        return deps_dir
-    except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to install functionstream-api: {e}")
-        if e.stderr:
-            print("STDERR:", e.stderr)
-        sys.exit(1)
+        if not WIT_FILE.exists():
+            raise BuildError(f"WIT file not found: {WIT_FILE}")
 
+        # Ensure directory is fresh
+        BINDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
-def generate_bindings(componentize_cmd):
-    """生成 WIT 绑定代码并保存到 bindings 目录（作为参考保留）"""
-    print("Generating WIT bindings (for reference)...")
-    
-    # WIT 文件路径
-    wit_file = WIT_DIR / "processor.wit"
-    if not wit_file.exists():
-        print(f"Error: WIT file not found: {wit_file}")
-        sys.exit(1)
-    
-    # 绑定输出目录（保留作为参考，不删除）
-    bindings_dir = SCRIPT_DIR / "bindings"
-    # 注意：不删除现有目录，保留之前的绑定代码作为参考
-    # 如果需要重新生成，可以手动删除 bindings 目录
-    if not bindings_dir.exists():
-        bindings_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Creating bindings directory: {bindings_dir}")
-    else:
-        print(f"Bindings directory already exists: {bindings_dir}")
-        print("  (Keeping existing bindings as reference. Delete manually to regenerate.)")
-    
-    # 生成绑定命令
-    # 格式：componentize-py -d <wit-file> -w <world> bindings <output-dir>
-    cmd = componentize_cmd + [
-        "-d", str(wit_file),      # WIT 文件路径
-        "-w", "processor",        # world 名称
-        "bindings",               # bindings 子命令
-        str(bindings_dir),        # 输出目录
-    ]
-    
-    print(f"Running: {' '.join(cmd)}")
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=SCRIPT_DIR,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        if result.stdout:
-            print(result.stdout)
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
-        
-        if bindings_dir.exists() and any(bindings_dir.iterdir()):
-            print(f"✓ WIT bindings generated successfully!")
-            print(f"  Output: {bindings_dir}")
-            print(f"  You can now import from: bindings.wit_world.imports")
-            return bindings_dir
-        else:
-            print("⚠ Warning: Bindings directory is empty")
-            return None
-            
-    except subprocess.CalledProcessError as e:
-        print(f"⚠ Warning: Failed to generate bindings (exit code {e.returncode})")
-        if e.stdout:
-            print("STDOUT:", e.stdout)
-        if e.stderr:
-            print("STDERR:", e.stderr, file=sys.stderr)
-        print("Continuing with WASM build (bindings will be generated during componentize)...")
-        return None
-    except FileNotFoundError:
-        print("⚠ Warning: componentize-py not found for bindings generation")
-        print("Continuing with WASM build...")
-        return None
+        cmd = [
+            self.componentize_cmd,
+            "-d", str(WIT_FILE),
+            "-w", WORLD_NAME,
+            "bindings",
+            str(BINDINGS_DIR)
+        ]
 
+        logger.debug(f"Exec: {' '.join(cmd)}")
+        try:
+            subprocess.run(
+                cmd,
+                cwd=SCRIPT_DIR,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            logger.info(f"✓ Bindings generated at: {BINDINGS_DIR}")
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"Failed to generate bindings: {e.stderr}")
+            logger.warning("Continuing build process (bindings are optional for the artifact)...")
 
-def build_wasm(componentize_cmd, deps_dir):
-    """构建 WASM 组件"""
-    print("Building WASM component...")
-    
-    # 清理输出目录
-    if OUTPUT_DIR.exists():
-        shutil.rmtree(OUTPUT_DIR)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # WIT 文件路径
-    wit_file = WIT_DIR / "processor.wit"
-    if not wit_file.exists():
-        print(f"Error: WIT file not found: {wit_file}")
-        sys.exit(1)
-    
-    # 检查主模块文件（functionstream-runtime.runner 作为入口点）
-    main_module_file = SCRIPT_DIR / "src" / "functionstream-runtime" / "runner.py"
-    if not main_module_file.exists():
-        print(f"Error: Main module not found: {main_module_file}")
-        sys.exit(1)
-    
-    # 构建命令
-    # 格式：componentize-py -d <wit-file> -w <world> componentize --stub-wasi -p <python-path> <module-name> -o <output>
-    # 使用 functionstream-runtime.runner 作为主模块（包含 WitWorld 类）
-    main_module_name = "functionstream-runtime.runner"
-    
-    # 构建完整命令
-    # 使用 --python-path (-p) 指定多个路径：
-    # 1. dependencies 目录（包含 fs_api）
-    # 2. 当前目录（包含 main.py 和 functionstream-runtime）
-    cmd = componentize_cmd + [
-        "-d", str(wit_file),      # WIT 文件路径
-        "-w", "processor",        # world 名称
-        "componentize",
-        "--stub-wasi",
-        "-p", str(deps_dir),      # Python 路径 1：dependencies 目录（包含 fs_api）
-        "-p", str(SCRIPT_DIR / "src"),    # Python 路径 2：src 目录（包含 functionstream-runtime）
-        main_module_name,         # 主模块名称
-        "-o", str(WASM_OUTPUT),   # 输出文件
-    ]
-    
-    print(f"Running: {' '.join(cmd)}")
-    
-    # 不需要设置 PYTHONPATH，因为 fs_api 已经在当前目录中
-    env = os.environ.copy()
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=SCRIPT_DIR,
-            check=True,
-            capture_output=True,
-            text=True,
-            env=env
-        )
-        print(result.stdout)
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
-        
-        if WASM_OUTPUT.exists():
-            size = WASM_OUTPUT.stat().st_size / 1024
-            print(f"\n✓ Build successful!")
-            print(f"  Output: {WASM_OUTPUT}")
-            print(f"  Size: {size:.2f} KB")
-        else:
-            print("\n✗ Build failed: Output file not found")
+    def build_wasm(self) -> None:
+        """Compiles the Python code into a WASM component."""
+        logger.info("Compiling WASM component...")
+
+        TARGET_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Validate entry point existence
+        # Assumes structure: src/fs_runtime/runner.py
+        module_path = MAIN_MODULE.replace(".", "/") + ".py"
+        entry_file = SRC_DIR / module_path
+
+        if not entry_file.exists():
+            raise BuildError(f"Entry point not found: {entry_file}")
+
+        cmd = [
+            self.componentize_cmd,
+            "-d", str(WIT_FILE),
+            "-w", WORLD_NAME,
+            "componentize",
+            "--stub-wasi",
+            "-p", str(DEPENDENCIES_DIR), # Path 1: Pre-installed deps (fs-api)
+            "-p", str(SRC_DIR),          # Path 2: Runtime source code
+            MAIN_MODULE,                 # Entry module name
+            "-o", str(WASM_OUTPUT)
+        ]
+
+        logger.info("Executing componentize command...")
+        logger.debug(f"Command: {' '.join(cmd)}")
+
+        try:
+            # Inherit environment to keep PATH settings
+            env = os.environ.copy()
+
+            process = subprocess.run(
+                cmd,
+                cwd=SCRIPT_DIR,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env
+            )
+
+            # componentize-py outputs helpful info to stdout
+            if process.stdout:
+                logger.debug(process.stdout)
+
+            if WASM_OUTPUT.exists():
+                size_kb = WASM_OUTPUT.stat().st_size / 1024
+                logger.info(f"✓ WASM Build Successful!")
+                logger.info(f"  Output: {WASM_OUTPUT}")
+                logger.info(f"  Size:   {size_kb:.2f} KB")
+            else:
+                raise BuildError("Build command succeeded but output file is missing.")
+
+        except subprocess.CalledProcessError as e:
+            logger.error("WASM compilation failed.")
+            logger.error(f"STDOUT: {e.stdout}")
+            logger.error(f"STDERR: {e.stderr}")
+            raise BuildError("WASM compilation failed.")
+
+    def run(self) -> None:
+        """Main execution flow."""
+        print("=" * 60)
+        print("   Function Stream Runtime - WASM Builder")
+        print("=" * 60)
+
+        try:
+            # 1. Clean first (Fixes 'File exists' errors)
+            self.clean()
+
+            # 2. Prepare environment
+            self.prepare_dependencies()
+
+            # 3. Generate bindings (Optional but good for checking WIT)
+            self.generate_bindings()
+
+            # 4. Build actual artifact
+            self.build_wasm()
+
+            print("\n" + "=" * 60)
+            logger.info("Process completed successfully.")
+            print("=" * 60)
+
+        except BuildError as e:
+            logger.error(f"Build failed: {e}")
             sys.exit(1)
-            
-    except subprocess.CalledProcessError as e:
-        print(f"\n✗ Build failed with exit code {e.returncode}")
-        if e.stdout:
-            print("STDOUT:", e.stdout)
-        if e.stderr:
-            print("STDERR:", e.stderr, file=sys.stderr)
-        sys.exit(1)
-    except FileNotFoundError:
-        print("Error: componentize-py not found. Please install it:")
-        print("  pip install componentize-py")
-        sys.exit(1)
-    finally:
-        # 清理临时目录（可选，保留以便调试）
-        pass
+        except KeyboardInterrupt:
+            logger.error("Build interrupted.")
+            sys.exit(130)
+        except Exception as e:
+            logger.exception("Unexpected error occurred:")
+            sys.exit(1)
 
 
 def main():
-    """主函数"""
-    print("=" * 60)
-    print("Function Stream Runtime - WASM Build Script")
-    print("=" * 60)
-    print()
-    
-    # 检查 componentize-py
-    print("Checking componentize-py...")
-    componentize_cmd = check_dependencies()
-    print("✓ componentize-py found")
-    print()
-    
-    # 安装依赖到 dependencies 目录
-    print("Installing dependencies...")
-    deps_dir = ensure_dependencies()
-    print()
-    
-    # 生成 WIT 绑定代码（保存到 bindings 目录，供开发时查看）
-    print("Generating WIT bindings (for development reference)...")
-    bindings_dir = generate_bindings(componentize_cmd)
-    if bindings_dir:
-        print(f"✓ Bindings saved to: {bindings_dir}")
-        print("  You can now inspect the generated WIT bindings structure")
-    print()
-    
-    # 构建 WASM
-    build_wasm(componentize_cmd, deps_dir)
-    
-    print()
-    print("=" * 60)
-    print("Build completed successfully!")
-    print("=" * 60)
+    builder = WasmBuilder()
+    builder.run()
 
 
 if __name__ == "__main__":
     main()
-

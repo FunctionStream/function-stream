@@ -6,195 +6,206 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on "AS IS" BASIS,
+# distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
 """
-构建脚本：将 functionstream-api 打包成 Python 包
+Build script for Function Stream API Python Package.
 
-使用 setuptools 构建 wheel 和 source distribution
+This script handles the lifecycle of building the Python distribution artifacts
+(Wheel and Source Distribution) using modern Python packaging standards.
 """
 
-import os
 import sys
-import subprocess
 import shutil
+import logging
+import subprocess
+import importlib.util
 from pathlib import Path
+from typing import List, Optional
 
-# 获取脚本所在目录
+# --- Configuration ---
 SCRIPT_DIR = Path(__file__).parent.absolute()
-OUTPUT_DIR = SCRIPT_DIR / "dist"
+DIST_DIR = SCRIPT_DIR / "dist"
+BUILD_DIR = SCRIPT_DIR / "build"
+EGG_INFO_PATTERN = "*.egg-info"
+
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - [%(levelname)s] - %(message)s",
+    datefmt="%H:%M:%S"
+)
+logger = logging.getLogger("fs_builder")
 
 
-def check_dependencies():
-    """检查必要的依赖"""
-    # 检查 setuptools 和 wheel
-    try:
-        import setuptools
-        import wheel
-        print("✓ setuptools and wheel found")
-        return True
-    except ImportError:
-        print("Error: setuptools and wheel are required")
-        print("Please install them:")
-        print("  python3 -m pip install setuptools wheel")
-        sys.exit(1)
+class BuildError(Exception):
+    """Custom exception for build failures."""
+    pass
 
 
-def clean_build():
-    """清理之前的构建产物"""
-    print("Cleaning previous build artifacts...")
-    
-    dirs_to_clean = [
-        SCRIPT_DIR / "build",
-        SCRIPT_DIR / "dist",
-        SCRIPT_DIR / "*.egg-info",
-    ]
-    
-    for pattern in dirs_to_clean:
-        if "*" in str(pattern):
-            # 使用 glob 匹配
-            import glob
-            for path in glob.glob(str(pattern)):
-                path_obj = Path(path)
-                if path_obj.exists():
-                    if path_obj.is_dir():
-                        shutil.rmtree(path_obj)
-                    else:
-                        path_obj.unlink()
-        else:
-            if pattern.exists():
-                if pattern.is_dir():
-                    shutil.rmtree(pattern)
+class Builder:
+    """Encapsulates the build logic."""
+
+    def __init__(self, work_dir: Path):
+        self.work_dir = work_dir
+        self.dist_dir = work_dir / "dist"
+        self.python_exec = sys.executable
+
+    def check_environment(self) -> None:
+        """
+        Verifies that the build environment has necessary tools.
+        Raises BuildError if tools are missing.
+        """
+        logger.info("Checking build environment...")
+
+        required_modules = ["setuptools", "wheel", "build"]
+        missing = []
+
+        for mod in required_modules:
+            if importlib.util.find_spec(mod) is None:
+                missing.append(mod)
+
+        if missing:
+            logger.error(f"Missing build dependencies: {', '.join(missing)}")
+            logger.info("Please run: pip install --upgrade build setuptools wheel")
+            raise BuildError("Environment check failed.")
+
+        logger.info("✓ Environment check passed.")
+
+    def clean(self) -> None:
+        """
+        Cleans up previous build artifacts.
+        """
+        logger.info("Cleaning build artifacts...")
+
+        paths_to_clean: List[Path] = [
+            self.work_dir / "build",
+            self.work_dir / "dist",
+            ]
+
+        # Add egg-info directories
+        paths_to_clean.extend(self.work_dir.glob(EGG_INFO_PATTERN))
+
+        for path in paths_to_clean:
+            if not path.exists():
+                continue
+
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                    logger.debug(f"Removed directory: {path}")
                 else:
-                    pattern.unlink()
-    
-    print("✓ Clean completed")
+                    path.unlink()
+                    logger.debug(f"Removed file: {path}")
+            except OSError as e:
+                logger.warning(f"Failed to remove {path}: {e}")
 
+        logger.info("✓ Clean completed.")
 
-def build_package():
-    """构建 Python 包"""
-    print("Building Python package...")
-    
-    # 确保输出目录存在
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # 构建命令
-    cmd = [
-        sys.executable,
-        "-m",
-        "build",
-        "--outdir",
-        str(OUTPUT_DIR),
-    ]
-    
-    print(f"Running: {' '.join(cmd)}")
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=SCRIPT_DIR,
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        
-        if result.stdout:
-            print(result.stdout)
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
-        
-        # 列出构建产物
-        if OUTPUT_DIR.exists():
-            files = list(OUTPUT_DIR.glob("*"))
-            if files:
-                print(f"\n✓ Build successful!")
-                print(f"  Output directory: {OUTPUT_DIR}")
-                print(f"  Files:")
-                for f in sorted(files):
-                    size = f.stat().st_size / 1024
-                    print(f"    - {f.name} ({size:.2f} KB)")
-            else:
-                print("\n✗ Build failed: No output files found")
-                sys.exit(1)
-        else:
-            print("\n✗ Build failed: Output directory not found")
+    def build(self) -> None:
+        """
+        Executes the build process using the `build` module.
+        """
+        logger.info("Building Python package...")
+
+        self.dist_dir.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            self.python_exec, "-m", "build",
+            "--outdir", str(self.dist_dir)
+        ]
+
+        logger.info(f"Executing: {' '.join(cmd)}")
+
+        try:
+            # Run build command, capturing output but streaming it in case of error
+            process = subprocess.run(
+                cmd,
+                cwd=self.work_dir,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            logger.debug(process.stdout)
+
+        except subprocess.CalledProcessError as e:
+            logger.error("Build process failed.")
+            logger.error(f"STDOUT:\n{e.stdout}")
+            logger.error(f"STDERR:\n{e.stderr}")
+            raise BuildError("Build command failed.") from e
+
+        self._summarize_artifacts()
+
+    def _summarize_artifacts(self) -> None:
+        """Log the results of the build."""
+        if not self.dist_dir.exists():
+            raise BuildError("Dist directory was not created.")
+
+        artifacts = list(self.dist_dir.glob("*"))
+        if not artifacts:
+            raise BuildError("No artifacts found in dist directory.")
+
+        logger.info("✓ Build Successful! Generated artifacts:")
+        for artifact in sorted(artifacts):
+            size_kb = artifact.stat().st_size / 1024
+            logger.info(f"  - {artifact.name:<30} ({size_kb:.2f} KB)")
+
+    def verify(self) -> None:
+        """
+        Performs post-build verification.
+        """
+        logger.info("Verifying package artifacts...")
+
+        has_wheel = any(self.dist_dir.glob("*.whl"))
+        has_sdist = any(self.dist_dir.glob("*.tar.gz"))
+
+        if not has_wheel:
+            logger.warning("⚠️ No Wheel (.whl) file found.")
+        if not has_sdist:
+            logger.warning("⚠️ No Source Distribution (.tar.gz) found.")
+
+        if not (has_wheel or has_sdist):
+            raise BuildError("Verification failed: No valid artifacts generated.")
+
+        logger.info("✓ Verification passed.")
+
+    def run(self) -> None:
+        """Main execution flow."""
+        print("=" * 60)
+        print("   Function Stream API - Builder")
+        print("=" * 60)
+
+        try:
+            self.check_environment()
+            self.clean()
+            self.build()
+            self.verify()
+
+            print("\n" + "=" * 60)
+            logger.info("Process completed successfully.")
+            print("To install:")
+            print(f"  pip install {self.dist_dir}/*.whl")
+            print("=" * 60)
+
+        except BuildError as e:
+            logger.error(f"Build failed: {e}")
             sys.exit(1)
-            
-    except subprocess.CalledProcessError as e:
-        print(f"\n✗ Build failed with exit code {e.returncode}")
-        if e.stdout:
-            print("STDOUT:", e.stdout)
-        if e.stderr:
-            print("STDERR:", e.stderr, file=sys.stderr)
-        sys.exit(1)
-    except FileNotFoundError:
-        print("Error: build module not found. Please install build:")
-        print("  python3 -m pip install build")
-        sys.exit(1)
-
-
-def verify_package():
-    """验证构建的包"""
-    print("\nVerifying package...")
-    
-    # 检查 dist 目录中的文件
-    wheel_files = list(OUTPUT_DIR.glob("*.whl"))
-    sdist_files = list(OUTPUT_DIR.glob("*.tar.gz"))
-    
-    if not wheel_files and not sdist_files:
-        print("✗ No package files found")
-        return False
-    
-    print(f"✓ Found {len(wheel_files)} wheel file(s) and {len(sdist_files)} source distribution file(s)")
-    
-    # 尝试导入验证（可选）
-    try:
-        # 这里可以添加更多的验证逻辑
-        print("✓ Package verification passed")
-        return True
-    except Exception as e:
-        print(f"✗ Package verification failed: {e}")
-        return False
+        except KeyboardInterrupt:
+            logger.error("Build interrupted by user.")
+            sys.exit(130)
+        except Exception as e:
+            logger.exception("An unexpected error occurred:")
+            sys.exit(1)
 
 
 def main():
-    """主函数"""
-    print("=" * 60)
-    print("Function Stream API - Python Package Build Script")
-    print("=" * 60)
-    print()
-    
-    # 检查依赖
-    print("Checking dependencies...")
-    check_dependencies()
-    print()
-    
-    # 清理之前的构建
-    clean_build()
-    print()
-    
-    # 构建包
-    build_package()
-    print()
-    
-    # 验证包
-    verify_package()
-    print()
-    
-    print("=" * 60)
-    print("Build completed successfully!")
-    print("=" * 60)
-    print()
-    print("To install the package:")
-    print(f"  python3 -m pip install {OUTPUT_DIR}/*.whl")
-    print()
-    print("Or install from source:")
-    print(f"  python3 -m pip install -e {SCRIPT_DIR}")
+    builder = Builder(work_dir=SCRIPT_DIR)
+    builder.run()
 
 
 if __name__ == "__main__":
     main()
-
