@@ -13,7 +13,7 @@
 import cloudpickle
 from typing import Optional, List, Tuple, Dict
 
-from functionstream_api.driver import FSProcessorDriver
+from fs_api.driver import FSProcessorDriver
 
 from .store.fs_context import WitContext, convert_config_to_dict
 

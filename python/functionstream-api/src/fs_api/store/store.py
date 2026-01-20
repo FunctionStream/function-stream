@@ -11,7 +11,7 @@
 # limitations under the License.
 
 """
-functionstream_api.store.store
+fs_api.store.store
 
 WIT: resource kv.store
 """

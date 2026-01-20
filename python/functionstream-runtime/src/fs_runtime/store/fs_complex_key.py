@@ -13,10 +13,10 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from functionstream_api.store.complexkey import ComplexKey as ApiComplexKey
+    from fs_api.store.complexkey import ComplexKey as ApiComplexKey
     from wit_world.imports.kv import ComplexKey as WitComplexKey
 else:
-    from functionstream_api.store.complexkey import ComplexKey as ApiComplexKey
+    from fs_api.store.complexkey import ComplexKey as ApiComplexKey
     try:
         from wit_world.imports.kv import ComplexKey as WitComplexKey
     except (ImportError, AttributeError):
@@ -41,7 +41,7 @@ def api_to_wit(api_key: 'ApiComplexKey') -> 'WitComplexKey':
 
 
 def wit_to_api(wit_key: 'WitComplexKey') -> 'ApiComplexKey':
-    from functionstream_api.store.complexkey import ComplexKey
+    from fs_api.store.complexkey import ComplexKey
     
     if isinstance(wit_key, dict):
         return ComplexKey(

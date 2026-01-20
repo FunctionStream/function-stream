@@ -18,30 +18,35 @@
 
 # Project Metadata
 PROJECT_NAME := functionstream-api
-PACKAGE_NAME := functionstream_api
+PACKAGE_NAME := fs_api
 
-# Shell setup (Fail fast on errors)
+# Shell setup
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-# Paths
+# Directory paths
 mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
 current_dir := $(dir $(mkfile_path))
-PROJECT_ROOT := $(current_dir)
-DIST_DIR     := $(PROJECT_ROOT)/dist
-BUILD_DIR    := $(PROJECT_ROOT)/build
 
-# Virtual Environment Configuration
-VENV_DIR     := $(PROJECT_ROOT)../../.venv
+# [Standard Monorepo Roots]
+# SCRIPT_DIR: Current directory (.../python/functionstream-api)
+SCRIPT_DIR   := $(current_dir)
+# MONOREPO_ROOT: Grandparent directory (.../function-stream)
+MONOREPO_ROOT := $(abspath $(current_dir)/../..)
+
+# Output paths
+DIST_DIR     := $(SCRIPT_DIR)/dist
+BUILD_DIR    := $(SCRIPT_DIR)/build
+
+# Virtual Environment (Shared)
+VENV_DIR     := $(MONOREPO_ROOT)/.venv
 VENV_BIN     := $(VENV_DIR)/bin
 PYTHON       := $(VENV_BIN)/python
 PIP          := $(VENV_BIN)/pip
 TWINE        := $(VENV_BIN)/twine
 PYTEST       := $(VENV_BIN)/pytest
 
-
 # --- 2. Colors & Logging ---
-
 ifneq ($(shell test -t 0; echo $$?),0)
     color_reset :=
     color_green :=
@@ -64,66 +69,67 @@ define log_success
     @echo "$(color_green)[SUCCESS]$(color_reset) $1"
 endef
 
-define log_error
-    @echo "$(color_red)[ERROR]$(color_reset) $1"
-endef
-
 define log_warn
     @echo "$(color_yellow)[WARN]$(color_reset) $1"
 endef
 
 # --- 3. Targets ---
 
-.PHONY: all help venv install install-dev build clean test publish info uninstall
+.PHONY: all help venv install-deps install install-dev build clean test publish info uninstall
 
 # Default target
 all: build
 
-# Create virtual environment if it doesn't exist
+# Ensure venv exists (Check root)
 $(PYTHON):
-	$(call log_info, Creating virtual environment in .venv...)
-	@python3 -m venv $(VENV_DIR)
-	@$(PIP) install --upgrade pip setuptools wheel build twine pytest
+	$(call log_warn, Virtual environment not found at $(VENV_DIR))
+	$(call log_info, Please run 'python3 -m venv .venv' in the Monorepo root first.)
+	@exit 1
 
 venv: $(PYTHON)
 
-# Install package in standard mode (Release simulation)
-install: venv
+# [FIX] Explicitly install build tools (Idempotent)
+install-deps: venv
+	$(call log_info, Installing build dependencies...)
+	@$(PIP) install --upgrade pip setuptools wheel build twine pytest
+	@$(call log_success, Build dependencies installed.)
+
+# Install package (Release simulation)
+install: install-deps
 	$(call log_info, Installing $(PROJECT_NAME)...)
 	@$(PIP) install .
 	$(call log_success, Installation complete.)
-	@echo "Verify with: $(PYTHON) -c 'import $(PACKAGE_NAME); print($(PACKAGE_NAME).__file__)'"
 
 # Install in editable mode (Development)
-install-dev: venv
+install-dev: install-deps
 	$(call log_info, Installing $(PROJECT_NAME) in editable mode...)
-	@# Try installing with [dev] extras, fall back to standard editable
 	@$(PIP) install -e ".[dev]" || $(PIP) install -e .
 	$(call log_success, Editable installation complete.)
 
 # Build Source and Wheel distribution
-build: venv clean
+# [FIX] Added install-deps as a prerequisite
+build: install-deps clean
 	$(call log_info, Building distribution artifacts...)
 	@$(PYTHON) -m build
-	$(call log_info, Checking distribution artifacts with Twine...)
+	$(call log_info, Checking artifacts with Twine...)
 	@$(TWINE) check dist/*
 	$(call log_success, Build complete. Artifacts in 'dist/'.)
 
-# Publish to PyPI (Requires credentials)
+# Publish to PyPI
 publish: build
 	$(call log_warn, You are about to upload to PyPI.)
 	@$(TWINE) upload dist/*
 
 # Run tests
-test: venv
+test: install-deps
 	$(call log_info, Running tests...)
 	@if [ -d "tests" ]; then \
-    	$(PYTEST) tests/ -v; \
+		$(PYTEST) tests/ -v; \
 	else \
 		$(call log_warn, No 'tests' directory found. Skipping.); \
 	fi
 
-# Deep clean (Fixed the truncation here)
+# Deep clean
 clean:
 	$(call log_info, Cleaning build artifacts...)
 	@rm -rf $(DIST_DIR) $(BUILD_DIR)
@@ -136,38 +142,35 @@ clean:
 	@find . -type f -name "*.pyo" -delete
 	$(call log_success, Clean complete.)
 
-# Uninstall from venv
+# Uninstall
 uninstall:
 	$(call log_info, Uninstalling $(PROJECT_NAME)...)
 	@$(PIP) uninstall -y $(PROJECT_NAME) || true
 	$(call log_success, Uninstallation complete.)
 
-# Show environment info
+# Info
 info: venv
 	@echo "$(color_blue)Project Info:$(color_reset)"
 	@echo "  Name:    $(PROJECT_NAME)"
 	@echo "  Package: $(PACKAGE_NAME)"
-	@echo "  Root:    $(PROJECT_ROOT)"
-	@echo "  Python:  $(shell $(PYTHON) --version)"
 	@echo "  Venv:    $(VENV_DIR)"
+	@echo "  Python:  $(shell $(PYTHON) --version)"
 	@echo ""
-	@echo "$(color_blue)Installed Dependencies:$(color_reset)"
-	@$(PIP) list
+	@echo "$(color_blue)Installed Packages:$(color_reset)"
+	@$(PIP) list | grep -E "build|wheel|twine|$(PROJECT_NAME)"
 
-# Auto-generated help
+# Help
 help:
 	@echo "$(color_blue)$(PROJECT_NAME) Build System$(color_reset)"
-	@echo ""
-	@echo "Usage:"
-	@echo "  make $(color_green)<target>$(color_reset)"
+	@echo "Usage: make <target>"
 	@echo ""
 	@echo "Targets:"
 	@awk '/^[a-zA-Z\-\_0-9]+:/ { \
-        helpMessage = match(lastLine, /^# (.*)/); \
-        if (helpMessage) { \
-            helpCommand = substr($$1, 0, index($$1, ":")-1); \
-            helpMessage = substr(lastLine, RSTART + 2, RLENGTH); \
-            printf "  $(color_green)%-15s$(color_reset) %s\n", helpCommand, helpMessage; \
-        } \
-    } \
-    { lastLine = $$0 }' $(MAKEFILE_LIST)
+		helpMessage = match(lastLine, /^# (.*)/); \
+		if (helpMessage) { \
+			helpCommand = substr($$1, 0, index($$1, ":")-1); \
+			helpMessage = substr(lastLine, RSTART + 2, RLENGTH); \
+			printf "  $(color_green)%-15s$(color_reset) %s\n", helpCommand, helpMessage; \
+		} \
+	} \
+	{ lastLine = $$0 }' $(MAKEFILE_LIST)

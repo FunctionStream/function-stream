@@ -12,7 +12,7 @@
 
 from typing import TYPE_CHECKING
 
-from functionstream_api.store.error import (
+from fs_api.store.error import (
     KvError,
     KvNotFoundError,
     KvIOError,

@@ -12,7 +12,7 @@
 
 from typing import Optional, List, TYPE_CHECKING
 
-from functionstream_api.store import KvStore, ComplexKey, KvIterator
+from fs_api.store import KvStore, ComplexKey, KvIterator
 
 from .fs_error import wit_to_api_error
 from .fs_complex_key import api_to_wit
@@ -48,7 +48,7 @@ class FSStore(KvStore):
             return self._store.get_state(key)
         except Exception as e:
             api_error = wit_to_api_error(e)
-            from functionstream_api.store.error import KvNotFoundError
+            from fs_api.store.error import KvNotFoundError
             if isinstance(api_error, KvNotFoundError):
                 return None
             raise api_error
@@ -81,7 +81,7 @@ class FSStore(KvStore):
             return self._store.get(wit_key)
         except Exception as e:
             api_error = wit_to_api_error(e)
-            from functionstream_api.store.error import KvNotFoundError
+            from fs_api.store.error import KvNotFoundError
             if isinstance(api_error, KvNotFoundError):
                 return None
             raise api_error

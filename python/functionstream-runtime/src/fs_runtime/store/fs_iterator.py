@@ -12,8 +12,8 @@
 
 from typing import Optional, Tuple, TYPE_CHECKING
 
-from functionstream_api.store.iterator import KvIterator
-from functionstream_api.store.error import KvError
+from fs_api.store.iterator import KvIterator
+from fs_api.store.error import KvError
 
 from .fs_error import wit_to_api_error
 

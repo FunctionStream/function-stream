@@ -11,7 +11,7 @@
 # limitations under the License.
 
 """
-functionstream_api.context
+fs_api.context
 
 Context：上下文对象
 """

@@ -12,8 +12,8 @@
 
 from typing import List, Tuple, Dict
 
-from functionstream_api.context import Context
-from functionstream_api.store import KvStore
+from fs_api.context import Context
+from fs_api.store import KvStore
 
 from .fs_collector import emit, emit_watermark
 from .fs_store import FSStore
