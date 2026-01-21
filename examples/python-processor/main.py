@@ -12,143 +12,136 @@
 # limitations under the License.
 
 """
-Python WASM Processor Example
+Python Processor Example using Function Stream Python Client.
 
-componentize-py 会自动生成 WIT 绑定，导入路径是 wit_world.imports
+Defines a FSProcessorDriver implementation, serializes it with cloudpickle,
+and registers it with the server using create_function_from_bytes.
 """
 
+import argparse
 import json
-from typing import Dict, List, Tuple
+import logging
+from pathlib import Path
+from typing import Dict
 
-# 正确的导入路径：wit_world.imports（由 componentize-py 生成）
-from wit_world.imports import kv, collector
+import cloudpickle
+from fs_api import FSProcessorDriver, Context
+from fs_client.client import FsClient
 
-# Global state
-counter_map: Dict[str, int] = {}
-_store = None
-_total_processed: int = 0  # 总处理条数
-_emit_threshold: int = 6   # 每处理多少条数据 emit 一次
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - [%(levelname)s] - %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
-class WitWorld:
-    """实现 WIT processor world 的导出函数"""
-    
-    def fs_init(self, config: List[Tuple[str, str]]) -> None:
-        """
-        WIT: export fs-init: func(config: list<tuple<string, string>>);
-        """
-        global _store, counter_map, _total_processed, _emit_threshold
-        
-        # Initialize state
-        counter_map = {}
-        _total_processed = 0
-        
-        # Open state store using correct API: kv.Store(name)
-        try:
-            _store = kv.Store("counter-store")
-        except Exception as e:
-            _store = None
+class CounterProcessor(FSProcessorDriver):
+    def __init__(self) -> None:
+        self._counter_map: Dict[str, int] = {}
+        self._total_processed = 0
+        self._emit_threshold = 6
+        self._store_name = "counter-store"
 
-    def fs_process(self, source_id: int, data: bytes) -> None:
-        """
-        WIT: export fs-process: func(source-id: u32, data: list<u8>);
-        注意：data 是 bytes 类型
-        """
-        global counter_map, _store, _total_processed, _emit_threshold
-        
-        try:
-            # data 已经是 bytes 类型
-            input_str = data.decode('utf-8')
-            
-            # 增加总处理条数
-            _total_processed += 1
-            
-            # Get current count from store for this key
-            count = 0
-            if _store:
-                try:
-                    key_bytes = input_str.encode('utf-8')
-                    result = _store.get_state(key_bytes)
-                    if result is not None:
-                        count = int(result.decode('utf-8'))
-                except Exception:
-                    pass
-            
-            # Increment count for this key
-            count += 1
-            counter_map[input_str] = count
-            
-            # Store updated count
-            if _store:
-                try:
-                    key_bytes = input_str.encode('utf-8')
-                    value_bytes = str(count).encode('utf-8')
-                    _store.put_state(key_bytes, value_bytes)
-                except Exception:
-                    pass
-            
-            # 每处理 _emit_threshold 条数据就 emit 一次
-            if _total_processed % _emit_threshold == 0:
-                result_json = json.dumps({
-                    "total_processed": _total_processed,
-                    "counter_map": counter_map,
-                })
-                try:
-                    collector.emit(0, result_json.encode('utf-8'))
-                except Exception:
-                    pass
-                
-        except Exception:
-            pass
+    def init(self, ctx: Context, config: dict):
+        self._counter_map = {}
+        self._total_processed = 0
+        threshold = config.get("emit_threshold") if isinstance(config, dict) else None
+        if threshold is not None:
+            try:
+                self._emit_threshold = max(1, int(threshold))
+            except (TypeError, ValueError):
+                self._emit_threshold = 6
 
-    def fs_process_watermark(self, source_id: int, watermark: int) -> None:
-        """
-        WIT: export fs-process-watermark: func(source-id: u32, watermark: u64);
-        """
-        pass
+    def process(self, ctx: Context, source_id: int, data: bytes):
+        input_str = data.decode("utf-8", errors="ignore")
+        if not input_str:
+            return
 
-    def fs_take_checkpoint(self, checkpoint_id: int) -> bytes:
-        """
-        WIT: export fs-take-checkpoint: func(checkpoint-id: u64) -> list<u8>;
-        返回 bytes 类型
-        """
-        global counter_map
-        try:
-            return json.dumps(counter_map).encode('utf-8')
-        except Exception:
-            return b"{}"
+        self._total_processed += 1
+        store = ctx.getOrCreateKVStore(self._store_name)
 
-    def fs_check_heartbeat(self) -> bool:
-        """
-        WIT: export fs-check-heartbeat: func() -> bool;
-        """
+        count = 0
+        stored = store.get_state(input_str.encode("utf-8"))
+        if stored is not None:
+            try:
+                count = int(stored.decode("utf-8"))
+            except (TypeError, ValueError):
+                count = 0
+
+        count += 1
+        self._counter_map[input_str] = count
+        store.put_state(input_str.encode("utf-8"), str(count).encode("utf-8"))
+
+        if self._total_processed % self._emit_threshold == 0:
+            payload = json.dumps(
+                {
+                    "total_processed": self._total_processed,
+                    "counter_map": self._counter_map,
+                }
+            ).encode("utf-8")
+            ctx.emit(payload, 0)
+
+    def process_watermark(self, ctx: Context, source_id: int, watermark: int):
+        ctx.emit_watermark(watermark, 0)
+
+    def take_checkpoint(self, ctx: Context, checkpoint_id: int):
+        return None
+
+    def check_heartbeat(self, ctx: Context) -> bool:
         return True
 
-    def fs_close(self) -> None:
-        """
-        WIT: export fs-close: func();
-        """
-        global _store, counter_map, _total_processed
-        counter_map = {}
-        _store = None
-        _total_processed = 0
+    def close(self, ctx: Context):
+        self._counter_map = {}
+        self._total_processed = 0
 
-    def fs_exec_custom(self, payload: bytes) -> bytes:
-        """
-        WIT: export fs-exec-custom: func(payload: list<u8>) -> list<u8>;
-        payload 和返回值都是 bytes 类型
-        """
-        global counter_map, _total_processed
+    def custom(self, payload: bytes) -> bytes:
         try:
-            command = payload.decode('utf-8')
-            if command == "get_stats":
-                stats = {
-                    "counter_map": counter_map,
-                    "total_keys": len(counter_map),
-                    "total_processed": _total_processed,
+            command = payload.decode("utf-8") if payload else ""
+        except UnicodeDecodeError:
+            command = ""
+        if command == "get_stats":
+            return json.dumps(
+                {
+                    "total_processed": self._total_processed,
+                    "counter_map": self._counter_map,
                 }
-                return json.dumps(stats).encode('utf-8')
-            else:
-                return b'{"error": "Unknown command"}'
-        except Exception:
-            return b'{"error": "Execution failed"}'
+            ).encode("utf-8")
+        return b'{"error": "Unknown command"}'
+
+
+def _read_file_bytes(path: Path) -> bytes:
+    try:
+        return path.read_bytes()
+    except OSError as exc:
+        raise RuntimeError(f"Failed to read file: {path}") from exc
+
+
+def main() -> int:
+    script_dir = Path(__file__).resolve().parent
+    default_config = script_dir / "config.yaml"
+
+    parser = argparse.ArgumentParser(
+        description="Register Python Processor via Function Stream Python Client."
+    )
+    parser.add_argument("--host", default="localhost", help="Function Stream host")
+    parser.add_argument("--port", type=int, default=8080, help="Function Stream port")
+    parser.add_argument("--config", type=Path, default=default_config, help="Config YAML path")
+    args = parser.parse_args()
+
+    logger.info("Connecting to Function Stream at %s:%s", args.host, args.port)
+    logger.info("Config: %s", args.config)
+
+    processor = CounterProcessor()
+    processor_bytes = cloudpickle.dumps(processor)
+    config_bytes = _read_file_bytes(args.config)
+
+    with FsClient(host=args.host, port=args.port) as client:
+        client.create_function_from_bytes(processor_bytes, config_bytes)
+        logger.info("Python processor registered successfully.")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

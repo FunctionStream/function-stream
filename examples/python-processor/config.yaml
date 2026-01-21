@@ -1,5 +1,7 @@
 name: "python-processor-example"
-type: processor
+type: python
+init_config:
+  emit_threshold: "6"
 input-groups:
   - inputs:
       - input-type: kafka

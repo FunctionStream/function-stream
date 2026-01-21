@@ -21,14 +21,12 @@ __version__ = "0.0.1"
 from .client import FsClient
 from .exceptions import (
     ClientError,
-    ConnectionError,
     ServerError,
 )
 
 __all__ = [
     "FsClient",
     "ClientError",
-    "ConnectionError",
     "ServerError",
 ]
 
