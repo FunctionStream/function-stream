@@ -48,7 +48,7 @@ fn get_python_wasm_path() -> PathBuf {
         });
 
     project_root
-        .join("../../../../python")
+        .join("python")
         .join("functionstream-runtime")
         .join("target")
         .join("functionstream-runtime.wasm")

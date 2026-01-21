@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 #[cfg(feature = "incremental-cache")]
 use wasmtime::CacheStore;
-use wasmtime::{Config, Engine, OptLevel, Store, component::*};
+use wasmtime::{Config, Engine, OptLevel, Store, component::*, WasmBacktraceDetails};
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiView};
 
 // Global WASM Engine (thread-safe, shareable)
@@ -283,7 +283,8 @@ fn get_global_engine(_wasm_size: usize) -> anyhow::Result<Arc<Engine>> {
             log::info!("  Impact: All modules will be fully recompiled on each run");
         }
 
-        config.debug_info(false);
+        config.debug_info(true);
+        config.wasm_backtrace_details(WasmBacktraceDetails::Environment);
 
         // Enable cache to improve performance (if possible)
         // Note: Cache requires configuration, using default config here
@@ -761,7 +762,10 @@ pub fn create_wasm_host_with_component(
     let mut store = Store::new(
         engine,
         HostState {
-            wasi: WasiCtxBuilder::new().inherit_stdio().build(),
+            wasi: WasiCtxBuilder::new()
+                .inherit_stdio()
+                .inherit_env()
+                .inherit_args().build(),
             table: ResourceTable::new(),
             factory,
             output_sinks,
