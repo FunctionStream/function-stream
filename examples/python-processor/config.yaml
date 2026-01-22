@@ -2,6 +2,7 @@ name: "python-processor-example"
 type: python
 init_config:
   emit_threshold: "6"
+  class_name: "CounterProcessor"
 input-groups:
   - inputs:
       - input-type: kafka

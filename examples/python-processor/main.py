@@ -1,4 +1,3 @@
-
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -11,24 +10,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Python Processor Example using Function Stream Python Client.
-
-Defines a FSProcessorDriver implementation, serializes it with cloudpickle,
-and registers it with the server using create_function_from_bytes.
-"""
-
 import argparse
+import inspect
 import logging
 import sys
 from pathlib import Path
 
-import cloudpickle
-
 from fs_api import FSProcessorDriver, Context
 from fs_client.client import FsClient
 import processor_impl
-from serializer import serialize_by_value
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,9 +50,24 @@ def main() -> int:
     logger.info("Connecting to Function Stream at %s:%s", args.host, args.port)
     logger.info("Config: %s", args.config)
 
-    processor = processor_impl.CounterProcessor()
-    cloudpickle.register_pickle_by_value(sys.modules[processor_impl.__name__])
-    processor_bytes = serialize_by_value(processor)
+    processor_impl_file = Path(inspect.getfile(processor_impl))
+    logger.info("Reading processor implementation from: %s", processor_impl_file)
+
+    processor_bytes = _read_file_bytes(processor_impl_file)
+
+    class_name = None
+    for name, obj in inspect.getmembers(processor_impl):
+        if (inspect.isclass(obj) and 
+            issubclass(obj, FSProcessorDriver) and 
+            obj is not FSProcessorDriver):
+            class_name = name
+            break
+    
+    if not class_name:
+        raise RuntimeError("No FSProcessorDriver subclass found in processor_impl module")
+    
+    logger.info("Found processor class: %s", class_name)
+    
     config_bytes = _read_file_bytes(args.config)
 
     with FsClient(host=args.host, port=args.port) as client:

@@ -57,6 +57,6 @@ world processor {
     export fs-take-checkpoint: func(checkpoint-id: u64);
     export fs-check-heartbeat: func() -> bool;
     export fs-close: func();
-    export fs-exec: func(payload: list<u8>);
+    export fs-exec: func(class-name: string, payload: list<u8>);
     export fs-custom: func(payload: list<u8>) -> list<u8>;
 }

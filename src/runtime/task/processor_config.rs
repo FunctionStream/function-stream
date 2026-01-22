@@ -397,6 +397,13 @@ impl ProcessorConfig {
             );
         }
 
+        if let Some(init_config_val) = value.get("init_config") {
+            processor_value.insert(
+                serde_yaml::Value::String("init_config".to_string()),
+                init_config_val.clone(),
+            );
+        }
+
         // 从清理后的 Value 解析 ProcessorConfig
         let clean_value = serde_yaml::Value::Mapping(processor_value);
         let mut config: ProcessorConfig = serde_yaml::from_value(clean_value).map_err(

@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import cloudpickle
 from typing import Optional, List, Tuple, Dict
 
@@ -21,6 +22,26 @@ from .store.fs_context import WitContext, convert_config_to_dict
 _DRIVER: Optional[FSProcessorDriver] = None
 _CONTEXT: Optional[WitContext] = None
 
+def fs_exec(class_name: str, payload: bytes) -> None:
+
+    global _DRIVER
+
+    try:
+        code_def = payload.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError(f"Failed to decode payload as UTF-8 for class {class_name}")
+
+    exec(code_def, globals())
+
+    if class_name not in globals():
+        raise RuntimeError(f"Class '{class_name}' not found in executed code")
+    
+    ProcessorClass = globals()[class_name]
+
+    if not issubclass(ProcessorClass, FSProcessorDriver):
+        raise TypeError(f"Class '{class_name}' must be a subclass of FSProcessorDriver")
+
+    _DRIVER = ProcessorClass()
 
 class WitWorld:
     
@@ -89,21 +110,16 @@ class WitWorld:
         _DRIVER = None
         _CONTEXT = None
     
-    def fs_exec(self, payload: bytes) -> None:
-        global _DRIVER
-        
-        _DRIVER = cloudpickle.loads(payload)
-        
-        if not isinstance(_DRIVER, FSProcessorDriver):
-            raise TypeError("Payload is not a FSProcessorDriver instance")
+    def fs_exec(self, class_name: str, payload: bytes) -> None:
+        fs_exec(class_name, payload)
     
-    def fs_custom(self) -> bytes:
+    def fs_custom(self, payload: bytes) -> bytes:
         global _DRIVER, _CONTEXT
         
         if not _DRIVER or not _CONTEXT:
             raise RuntimeError("Driver or Context not initialized")
         
-        return _DRIVER.custom()
+        return _DRIVER.custom(payload)
 
 
 __all__ = ['WitWorld']

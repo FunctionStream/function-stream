@@ -234,12 +234,19 @@ impl WasmProcessorImpl {
             if self.use_custom_engine_and_component {
                 let mut store_ref = self.store.borrow_mut();
                 let store = store_ref.as_mut().unwrap();
+
+                let class_name = self.init_config
+                    .get("class_name")
+                    .or_else(|| self.init_config.get("processor_class"))
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| self.name.clone());
+                
                 processor
-                    .call_fs_exec(store, &self.module_bytes)
+                    .call_fs_exec(store, &class_name, &self.module_bytes)
                     .map_err(|e| -> Box<dyn Error + Send> {
                         Box::new(WasmProcessorError::InitError(format!(
-                            "Failed to call fs_exec: {}",
-                            e
+                            "Failed to call fs_exec with class_name '{}': {}",
+                            class_name, e
                         )))
                     })?;
             }

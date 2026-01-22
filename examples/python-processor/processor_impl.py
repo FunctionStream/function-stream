@@ -78,3 +78,4 @@ class CounterProcessor(FSProcessorDriver):
     def custom(self, payload: bytes) -> bytes:
         return b'{"error": "Unknown command"}'
 
+
