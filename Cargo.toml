@@ -15,12 +15,6 @@ edition = "2024"
 name = "function_stream"
 path = "src/lib.rs"
 
-
-#[[bin]]
-#name = "server"
-#path = "src/bin/server.rs"
-
-# 默认的 main.rs 作为库的示例
 [[bin]]
 name = "function-stream"
 path = "src/main.rs"

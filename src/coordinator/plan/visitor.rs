@@ -31,8 +31,8 @@ impl PlanVisitorContext {
     }
 }
 
-use crate::sql::execution::ExecuteError;
-use crate::sql::statement::ExecuteResult;
+use crate::coordinator::execution::ExecuteError;
+use crate::coordinator::statement::ExecuteResult;
 
 /// Result returned by PlanVisitor methods
 ///

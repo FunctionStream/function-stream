@@ -1,5 +1,5 @@
-# Codacy 配置文件
-# 忽略一些在重构阶段可以接受的警告
+# Codacy configuration file
+# Exclude some warnings that are acceptable during refactoring phase
 
 exclude_paths:
   - "target/**"
@@ -9,9 +9,8 @@ exclude_paths:
   - "README.md"
   - "cli/README.md"
 
-# 忽略一些代码质量检查（在重构阶段）
+# Exclude some code quality checks (during refactoring phase)
 exclude_patterns:
   - ".*unused.*"
   - ".*complexity.*"
   - ".*duplication.*"
-

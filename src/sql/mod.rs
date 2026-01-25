@@ -10,10 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod analyze;
-pub mod execution;
 pub mod parser;
-pub mod plan;
-pub mod statement;
 
 pub use parser::SqlParser;

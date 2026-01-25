@@ -10,8 +10,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod analyze;
 mod coordinator;
+mod execution;
 mod execution_context;
+mod plan;
+mod statement;
 
+pub use analyze::{Analysis, Analyzer};
 pub use coordinator::Coordinator;
+pub use execution::Executor;
 pub use execution_context::ExecutionContext;
+pub use plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
+pub use statement::{
+    CreateFunction, DropFunction, ExecuteResult, ShowFunctions, StartFunction, Statement,
+    StopFunction, ConfigSource, FunctionSource,
+};

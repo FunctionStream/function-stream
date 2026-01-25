@@ -15,10 +15,10 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::analyze::{Analysis, Analyzer};
-use crate::sql::execution::Executor;
-use crate::sql::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
-use crate::sql::statement::{ExecuteResult, Statement};
+use crate::coordinator::analyze::{Analysis, Analyzer};
+use crate::coordinator::execution::Executor;
+use crate::coordinator::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
+use crate::coordinator::statement::{ExecuteResult, Statement};
 
 use super::execution_context::ExecutionContext;
 

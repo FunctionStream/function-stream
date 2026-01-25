@@ -11,11 +11,11 @@
 // limitations under the License.
 
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::plan::{
+use crate::coordinator::plan::{
     CreateFunctionPlan, DropFunctionPlan, PlanNode, PlanVisitor, PlanVisitorContext,
     PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
 };
-use crate::sql::statement::ExecuteResult;
+use crate::coordinator::statement::ExecuteResult;
 use std::fmt;
 use std::fs;
 use std::sync::Arc;
@@ -78,7 +78,7 @@ impl PlanVisitor for Executor {
         log::info!("Executing CREATE FUNCTION (name will be read from config file)");
 
         let function_bytes = match &plan.function_source {
-            crate::sql::statement::FunctionSource::Path(path) => {
+            crate::coordinator::statement::FunctionSource::Path(path) => {
                 match fs::read(path) {
                     Ok(bytes) => bytes,
                     Err(e) => {
@@ -89,11 +89,11 @@ impl PlanVisitor for Executor {
                     }
                 }
             }
-            crate::sql::statement::FunctionSource::Bytes(bytes) => bytes.clone(),
+            crate::coordinator::statement::FunctionSource::Bytes(bytes) => bytes.clone(),
         };
 
         let config_bytes = match &plan.config_source {
-            Some(crate::sql::statement::ConfigSource::Path(path)) => {
+            Some(crate::coordinator::statement::ConfigSource::Path(path)) => {
                 match fs::read(path) {
                     Ok(bytes) => bytes,
                     Err(e) => {
@@ -104,7 +104,7 @@ impl PlanVisitor for Executor {
                     }
                 }
             }
-            Some(crate::sql::statement::ConfigSource::Bytes(bytes)) => bytes.clone(),
+            Some(crate::coordinator::statement::ConfigSource::Bytes(bytes)) => bytes.clone(),
             None => {
                 return PlanVisitorResult::Execute(Err(ExecuteError::new(
                     "Config is required but not provided".to_string(),

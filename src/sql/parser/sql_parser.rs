@@ -14,7 +14,7 @@ use pest::Parser;
 use pest_derive::Parser;
 
 use super::ParseError;
-use crate::sql::statement::{
+use crate::coordinator::{
     CreateFunction, DropFunction, ShowFunctions, StartFunction, Statement, StopFunction,
 };
 use std::collections::HashMap;

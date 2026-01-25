@@ -10,8 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::analyze::Analysis;
-use crate::sql::plan::PlanNode;
+use crate::coordinator::analyze::Analysis;
+use crate::coordinator::plan::PlanNode;
 use std::fmt;
 
 pub trait PlanOptimizer: fmt::Debug + Send + Sync {

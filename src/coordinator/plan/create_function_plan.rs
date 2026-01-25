@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-use crate::sql::statement::{ConfigSource, FunctionSource};
+use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

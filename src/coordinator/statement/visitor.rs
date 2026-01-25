@@ -11,8 +11,8 @@
 // limitations under the License.
 
 use super::{CreateFunction, DropFunction, ShowFunctions, StartFunction, StopFunction};
-use crate::sql::plan::PlanNode;
-use crate::sql::statement::Statement;
+use crate::coordinator::plan::PlanNode;
+use crate::coordinator::statement::Statement;
 
 /// Context passed to StatementVisitor methods
 ///

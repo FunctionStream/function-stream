@@ -10,12 +10,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::analyze::analysis::Analysis;
-use crate::sql::plan::{
+use crate::coordinator::analyze::analysis::Analysis;
+use crate::coordinator::plan::{
     CreateFunctionPlan, DropFunctionPlan, PlanNode, ShowFunctionsPlan, StartFunctionPlan,
     StopFunctionPlan,
 };
-use crate::sql::statement::{
+use crate::coordinator::statement::{
     CreateFunction, DropFunction, ShowFunctions, StartFunction, StatementVisitor,
     StatementVisitorContext, StatementVisitorResult, StopFunction,
 };

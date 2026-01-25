@@ -22,7 +22,7 @@ use protocol::service::{
 };
 
 use crate::coordinator::Coordinator;
-use crate::sql::statement::{CreateFunction, Statement};
+use crate::coordinator::{CreateFunction, Statement};
 use crate::sql::SqlParser;
 
 pub struct FunctionStreamServiceImpl {

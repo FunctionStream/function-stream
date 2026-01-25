@@ -12,7 +12,7 @@
 
 use super::Analysis;
 use crate::coordinator::ExecutionContext;
-use crate::sql::statement::{
+use crate::coordinator::statement::{
     CreateFunction, DropFunction, ShowFunctions, StartFunction, Statement, StatementVisitor,
     StatementVisitorContext, StatementVisitorResult, StopFunction,
 };
