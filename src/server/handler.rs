@@ -17,12 +17,12 @@ use log::{error, info, warn};
 use tonic::{Request, Response as TonicResponse, Status};
 
 use protocol::service::{
-    function_stream_service_server::FunctionStreamService, CreateFunctionRequest, Response,
-    SqlRequest, StatusCode,
+    function_stream_service_server::FunctionStreamService, CreateFunctionRequest,
+    CreatePythonFunctionRequest, Response, SqlRequest, StatusCode,
 };
 
 use crate::coordinator::Coordinator;
-use crate::coordinator::{CreateFunction, Statement};
+use crate::coordinator::{CreateFunction, CreatePythonFunction, PythonModule, Statement};
 use crate::sql::SqlParser;
 
 pub struct FunctionStreamServiceImpl {
@@ -133,6 +133,68 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
 
         info!(
             "Total CreateFunction request cost: {}ms",
+            start_time.elapsed().as_millis()
+        );
+
+        Ok(TonicResponse::new(Self::build_response(
+            status_code,
+            result.message,
+            result.data,
+        )))
+    }
+
+    async fn create_python_function(
+        &self,
+        request: Request<CreatePythonFunctionRequest>,
+    ) -> Result<TonicResponse<Response>, Status> {
+        let start_time = Instant::now();
+        let req = request.into_inner();
+        info!(
+            "Received CreatePythonFunction request. Class name: {}, Modules: {}",
+            req.class_name,
+            req.modules.len()
+        );
+
+        // Convert proto modules to PythonModule
+        let modules: Vec<crate::coordinator::PythonModule> = req
+            .modules
+            .into_iter()
+            .map(|m| crate::coordinator::PythonModule {
+                name: m.module_name,
+                bytes: m.module_bytes,
+            })
+            .collect();
+
+        if modules.is_empty() {
+            return Ok(TonicResponse::new(Self::build_response(
+                StatusCode::BadRequest,
+                "At least one module is required".to_string(),
+                None,
+            )));
+        }
+
+        let stmt = CreatePythonFunction::new(
+            req.class_name,
+            modules,
+            req.config_content,
+        );
+
+        let exec_start = Instant::now();
+        let result = self.coordinator.execute(&stmt as &dyn Statement);
+        info!(
+            "Coordinator execution finished in {}ms",
+            exec_start.elapsed().as_millis()
+        );
+
+        let status_code = if result.success {
+            StatusCode::Created
+        } else {
+            error!("CreatePythonFunction failed: {}", result.message);
+            StatusCode::InternalServerError
+        };
+
+        info!(
+            "Total CreatePythonFunction request cost: {}ms",
             start_time.elapsed().as_millis()
         );
 

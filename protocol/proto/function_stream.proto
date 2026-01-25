@@ -64,6 +64,19 @@ message CreateFunctionRequest {
   bytes function_bytes = 2;
 }
 
+// Python module information
+message PythonModule {
+  string module_name = 1;
+  bytes module_bytes = 2;
+}
+
+// Create Python function request (for creating Python function dynamically)
+message CreatePythonFunctionRequest {
+  string class_name = 1;
+  repeated PythonModule modules = 2;
+  string config_content = 3;
+}
+
 // Function Stream service
 service FunctionStreamService {
   // SQL execution
@@ -71,4 +84,7 @@ service FunctionStreamService {
   
   // Create function
   rpc CreateFunction(CreateFunctionRequest) returns (Response);
+  
+  // Create Python function dynamically
+  rpc CreatePythonFunction(CreatePythonFunctionRequest) returns (Response);
 }

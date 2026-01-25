@@ -12,8 +12,9 @@
 
 use crate::runtime::taskexecutor::TaskManager;
 use crate::coordinator::plan::{
-    CreateFunctionPlan, DropFunctionPlan, PlanNode, PlanVisitor, PlanVisitorContext,
-    PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
+    CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, PlanNode, PlanVisitor,
+    PlanVisitorContext, PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan,
+    StopFunctionPlan,
 };
 use crate::coordinator::statement::ExecuteResult;
 use std::fmt;
@@ -261,5 +262,41 @@ impl PlanVisitor for Executor {
             format!("{} task(s) found", task_names.len()),
             data,
         )))
+    }
+
+    fn visit_create_python_function(
+        &self,
+        plan: &CreatePythonFunctionPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        log::info!(
+            "Executing CREATE PYTHON FUNCTION: class_name='{}', modules={}, config_content length={}",
+            plan.class_name,
+            plan.modules.len(),
+            plan.config_content.len()
+        );
+
+        // Convert modules to the format expected by register_python_task
+        let modules: Vec<(String, Vec<u8>)> = plan
+            .modules
+            .iter()
+            .map(|m| (m.name.clone(), m.bytes.clone()))
+            .collect();
+
+        // Register Python task (similar to register_task)
+        match self.task_manager.register_python_task(plan.config_content.as_bytes(), &modules) {
+            Ok(()) => {
+                PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
+                    "Python function '{}' registered successfully",
+                    plan.class_name
+                ))))
+            }
+            Err(e) => {
+                PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                    "Failed to register Python function '{}': {}",
+                    plan.class_name, e
+                ))))
+            }
+        }
     }
 }

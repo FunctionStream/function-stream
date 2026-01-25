@@ -144,6 +144,52 @@ class FsClient:
         self._invoke(self._stub.CreateFunction, request, timeout)
         return True
 
+    def create_python_function(
+            self,
+            class_name: str,
+            modules: List[tuple[str, bytes]],
+            config_content: str,
+    ) -> bool:
+        """
+        Create Python function dynamically by loading Python modules.
+
+        Args:
+            class_name: Name of the Python class to load and instantiate
+            modules: List of tuples (module_name, module_bytes) containing Python module code
+            config_content: Configuration content as string
+
+        Returns:
+            True if successful
+
+        Raises:
+            ClientError: If the request fails
+        """
+        if not modules:
+            raise ValueError("At least one module is required")
+
+        logger.info(
+            f"Creating Python function: class_name='{class_name}', "
+            f"modules={len(modules)}"
+        )
+
+        # Convert modules to proto format
+        proto_modules = [
+            function_stream_pb2.PythonModule(
+                module_name=module_name,
+                module_bytes=module_bytes
+            )
+            for module_name, module_bytes in modules
+        ]
+
+        request = function_stream_pb2.CreatePythonFunctionRequest(
+            class_name=class_name,
+            modules=proto_modules,
+            config_content=config_content,
+        )
+
+        self._invoke(self._stub.CreatePythonFunction, request, None)
+        return True
+
     def _invoke(self, rpc_method, request, timeout: Optional[float]):
         """
         Generic gRPC invocation wrapper with Error Mapping.

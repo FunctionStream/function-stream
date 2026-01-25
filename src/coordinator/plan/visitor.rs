@@ -11,7 +11,8 @@
 // limitations under the License.
 
 use super::{
-    CreateFunctionPlan, DropFunctionPlan, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
+    CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, ShowFunctionsPlan,
+    StartFunctionPlan, StopFunctionPlan,
 };
 
 /// Context passed to PlanVisitor methods
@@ -75,6 +76,12 @@ pub trait PlanVisitor {
     fn visit_show_functions(
         &self,
         plan: &ShowFunctionsPlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_create_python_function(
+        &self,
+        plan: &CreatePythonFunctionPlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 }

@@ -12,12 +12,12 @@
 
 use crate::coordinator::analyze::analysis::Analysis;
 use crate::coordinator::plan::{
-    CreateFunctionPlan, DropFunctionPlan, PlanNode, ShowFunctionsPlan, StartFunctionPlan,
-    StopFunctionPlan,
+    CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, PlanNode, ShowFunctionsPlan,
+    StartFunctionPlan, StopFunctionPlan,
 };
 use crate::coordinator::statement::{
-    CreateFunction, DropFunction, ShowFunctions, StartFunction, StatementVisitor,
-    StatementVisitorContext, StatementVisitorResult, StopFunction,
+    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction,
+    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
 };
 
 #[derive(Debug, Default)]
@@ -89,5 +89,21 @@ impl StatementVisitor for LogicalPlanVisitor {
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Plan(Box::new(ShowFunctionsPlan::new()))
+    }
+
+    fn visit_create_python_function(
+        &self,
+        stmt: &CreatePythonFunction,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        let class_name = stmt.get_class_name().to_string();
+        let modules = stmt.get_modules().to_vec();
+        let config_content = stmt.get_config_content().to_string();
+
+        StatementVisitorResult::Plan(Box::new(CreatePythonFunctionPlan::new(
+            class_name,
+            modules,
+            config_content,
+        )))
     }
 }

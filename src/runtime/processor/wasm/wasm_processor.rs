@@ -60,7 +60,7 @@ impl fmt::Display for WasmProcessorError {
 impl Error for WasmProcessorError {}
 
 pub struct WasmProcessorImpl {
-    module_bytes: Vec<u8>,
+    modules: Vec<(String, Vec<u8>)>,
     name: String,
     init_config: std::collections::HashMap<String, String>,
     initialized: bool,
@@ -88,7 +88,7 @@ impl WasmProcessorImpl {
     ) -> Self {
         Self {
             name,
-            module_bytes,
+            modules: vec![(String::new(), module_bytes)],
             init_config,
             initialized: false,
             current_watermark: None,
@@ -105,14 +105,14 @@ impl WasmProcessorImpl {
 
     pub fn new_with_custom_engine_and_component(
         name: String,
-        module_bytes: Vec<u8>,
+        modules: &[(String, Vec<u8>)],
         init_config: std::collections::HashMap<String, String>,
         custom_engine: Arc<Engine>,
         custom_component: Component,
     ) -> Self {
         Self {
             name,
-            module_bytes,
+            modules: modules.to_vec(),
             init_config,
             initialized: false,
             current_watermark: None,
@@ -132,6 +132,59 @@ impl WasmProcessorImpl {
         &self.name
     }
 
+    /// Execute Python function by calling fs_exec
+    ///
+    /// # Arguments
+    /// * `class_name` - Name of the Python class to load
+    /// * `modules` - List of modules (name, bytes) to load
+    ///
+    /// # Returns
+    /// Ok(()) if execution succeeds, or an error if it fails
+    pub fn exec_python_function(
+        &self,
+        class_name: &str,
+        modules: &[(String, Vec<u8>)],
+    ) -> Result<(), Box<dyn Error + Send>> {
+        if !self.initialized {
+            return Err(Box::new(WasmProcessorError::InitError(
+                "Processor not initialized. Call init_with_context() first.".to_string(),
+            )));
+        }
+
+        let processor_ref = self.processor.borrow();
+        let processor = processor_ref
+            .as_ref()
+            .ok_or_else(|| -> Box<dyn Error + Send> {
+                Box::new(WasmProcessorError::InitError(
+                    "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+                ))
+            })?;
+
+        let mut store_ref = self.store.borrow_mut();
+        let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
+        })?;
+
+        log::info!(
+            "Calling fs_exec: class_name='{}', modules={}",
+            class_name,
+            modules.len()
+        );
+
+        processor
+            .call_fs_exec(store, class_name, modules)
+            .map_err(|e| -> Box<dyn Error + Send> {
+                Box::new(WasmProcessorError::ExecutionError(format!(
+                    "Failed to call fs_exec with class_name '{}': {}",
+                    class_name, e
+                )))
+            })?;
+
+        log::info!("fs_exec completed successfully for class '{}'", class_name);
+        Ok(())
+    }
 }
 
 impl WasmProcessor for WasmProcessorImpl {
@@ -144,10 +197,12 @@ impl WasmProcessor for WasmProcessorImpl {
             return Ok(());
         }
 
+        let total_bytes: usize = self.modules.iter().map(|(_, b)| b.len()).sum();
         log::info!(
-            "Initializing WasmProcessor '{}' with {} bytes of module data",
+            "Initializing WasmProcessor '{}' with {} bytes of module data ({} modules)",
             self.name,
-            self.module_bytes.len()
+            total_bytes,
+            self.modules.len()
         );
 
         // Note: WasmHost initialization requires output_sinks
@@ -510,7 +565,8 @@ impl WasmProcessor for WasmProcessorImpl {
                 },
             )?
         } else {
-            create_wasm_host(&self.module_bytes, output_sinks, init_context, task_name).map_err(
+            let first_bytes = self.modules.first().map(|(_, b)| b.as_slice()).unwrap_or(&[]);
+            create_wasm_host(first_bytes, output_sinks, init_context, task_name).map_err(
                 |e| -> Box<dyn Error + Send> {
                     let error_msg = format!("Failed to create WasmHost: {}", e);
                     log::error!("{}", error_msg);
@@ -554,12 +610,12 @@ impl WasmProcessor for WasmProcessorImpl {
                     .or_else(|| self.init_config.get("processor_class"))
                     .map(|s| s.clone())
                     .unwrap_or_else(|| self.name.clone());
-                
+
                 processor
-                    .call_fs_exec(store, &class_name, &self.module_bytes)
+                    .call_fs_exec(store, &class_name, &self.modules)
                     .map_err(|e| -> Box<dyn Error + Send> {
                         Box::new(WasmProcessorError::InitError(format!(
-                            "Failed to call fs_exec with class_name '{}': {}",
+                            "Failed to call fs_exec with class_name '{}' and modules: {}",
                             class_name, e
                         )))
                     })?;
@@ -709,5 +765,15 @@ impl WasmProcessor for WasmProcessorImpl {
 
         log::debug!("All {} sinks closed", host_state.output_sinks.len());
         Ok(())
+    }
+
+    /// Execute Python function dynamically
+    fn exec_python_function(
+        &self,
+        class_name: &str,
+        modules: &[(String, Vec<u8>)],
+    ) -> Result<(), Box<dyn Error + Send>> {
+        // Call the WasmProcessorImpl implementation
+        WasmProcessorImpl::exec_python_function(self, class_name, modules)
     }
 }

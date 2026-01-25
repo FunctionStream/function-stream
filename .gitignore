@@ -25,3 +25,4 @@ python/**/dependencies/
 python/**/target/
 **/**.egg-info
 .cache/
+/.cursor/worktrees.json

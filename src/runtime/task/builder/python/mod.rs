@@ -31,7 +31,7 @@ impl PythonBuilder {
     pub fn build(
         task_name: String,
         yaml_value: &Value,
-        module_bytes: Vec<u8>,
+        modules: &[(String, Vec<u8>)],
     ) -> Result<Box<dyn crate::runtime::task::TaskLifecycle>, Box<dyn std::error::Error + Send>> {
         let config_type = yaml_value
             .get(TYPE)
@@ -104,7 +104,7 @@ impl PythonBuilder {
         log::info!("Created {} output(s)", outputs.len());
 
         let processor =
-            Self::create_processor_from_config(&task_config.processor, module_bytes)?;
+            Self::create_processor_from_config(&task_config.processor, modules)?;
         log::info!("Created python processor: {}", task_config.processor.name);
 
         let task = WasmTask::new(environment, all_inputs, processor, outputs);
@@ -129,7 +129,7 @@ impl PythonBuilder {
 
     fn create_processor_from_config(
         processor_config: &ProcessorConfig,
-        module_bytes: Vec<u8>,
+        modules: &[(String, Vec<u8>)],
     ) -> Result<Box<dyn WasmProcessor>, Box<dyn std::error::Error + Send>> {
         // Get python wasm engine and component for reuse
         let (custom_engine, custom_component) = get_python_engine_and_component()
@@ -143,7 +143,7 @@ impl PythonBuilder {
         // Clone the Component (Component implements Clone via Arc<ComponentInner>)
         let processor_impl = WasmProcessorImpl::new_with_custom_engine_and_component(
             processor_config.name.clone(),
-            module_bytes,
+            modules,
             processor_config.init_config.clone(),
             custom_engine,
             (*custom_component).clone(),

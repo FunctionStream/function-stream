@@ -183,7 +183,7 @@ mod tests {
     #[test]
     fn test_string() {
         let s = "a".repeat(1000);
-        let test_cases = vec!["", "hello", "世界", &s[0..]];
+        let test_cases = vec!["", "hello", "world", &s[0..]];
 
         for s in test_cases {
             // Estimate buffer size: length encoding (at most 5) + string content

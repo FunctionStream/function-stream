@@ -11,6 +11,7 @@
 // limitations under the License.
 
 mod create_function_plan;
+mod create_python_function_plan;
 mod drop_function_plan;
 mod logical_plan_visitor;
 mod optimizer;
@@ -20,6 +21,7 @@ mod stop_function_plan;
 mod visitor;
 
 pub use create_function_plan::CreateFunctionPlan;
+pub use create_python_function_plan::CreatePythonFunctionPlan;
 pub use drop_function_plan::DropFunctionPlan;
 pub use logical_plan_visitor::LogicalPlanVisitor;
 pub use optimizer::LogicalPlanner;

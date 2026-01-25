@@ -10,40 +10,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Task Configuration - 任务配置结构体
-//
-// 定义 Input、Processor、Output 三个组件的配置结构体
+//! Task Configuration - Configuration structs for task components
+//!
+//! Defines configuration structures for Input, Processor, and Output components.
 
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashMap;
 
 // ============================================================================
-// YAML Configuration Examples (YAML 配置示例)
+// YAML Configuration Examples
 // ============================================================================
 
-/// YAML 配置示例
+/// YAML configuration examples
 ///
-/// 包含各种配置类型的完整 YAML 示例，用于文档和解析参考
+/// Contains complete YAML examples for various configuration types,
+/// used for documentation and parsing reference.
 pub mod yaml_examples {
-    /// Processor 类型配置的完整 YAML 示例
+    /// Complete YAML example for Processor type configuration
     ///
-    /// 这是一个完整的 Processor 配置文件示例，包含：
-    /// - name: 任务名称（根级别）
-    /// - type: 配置类型（根级别，值为 "processor"）
-    /// - input-groups: 输入组配置（支持多个输入组，每个组包含多个输入源）
-    /// - outputs: 输出配置（支持多个输出接收器）
+    /// This is a complete Processor configuration file example, containing:
+    /// - name: Task name (root level)
+    /// - type: Configuration type (root level, value is "processor")
+    /// - input-groups: Input group configuration (supports multiple input groups, each containing multiple input sources)
+    /// - outputs: Output configuration (supports multiple output sinks)
     ///
-    /// 注意：配置文件在根级别包含 `name` 和 `type` 字段，用于区分配置类型。
+    /// Note: The configuration file contains `name` and `type` fields at root level to distinguish configuration types.
     ///
-    /// # 示例
+    /// # Example
     ///
     /// ```yaml
     /// name: "my-task"
     /// type: processor
     ///
-    /// # input-groups 是一个数组，可以包含多个输入组
-    /// # 每个输入组包含多个输入源配置，支持同时从多个数据源读取数据
+    /// # input-groups is an array that can contain multiple input groups
+    /// # Each input group contains multiple input source configurations, supporting reading from multiple data sources simultaneously
     /// input-groups:
     ///   - inputs:
     ///       - input-type: kafka
@@ -57,8 +58,8 @@ pub mod yaml_examples {
     ///         partition: 0
     ///         group_id: "my-group"
     ///
-    /// # outputs 是一个数组，可以包含多个输出接收器配置
-    /// # 支持同时向多个数据源写入数据
+    /// # outputs is an array that can contain multiple output sink configurations
+    /// # Supports writing to multiple data sources simultaneously
     /// outputs:
     ///   - output-type: kafka
     ///     bootstrap_servers: "localhost:9092"
@@ -68,8 +69,8 @@ pub mod yaml_examples {
     pub const PROCESSOR_CONFIG_EXAMPLE: &str = r#"name: "my-task"
 type: processor
 
-# input-groups 是一个数组，可以包含多个输入组
-# 每个输入组包含多个输入源配置，支持同时从多个数据源读取数据
+# input-groups is an array that can contain multiple input groups
+# Each input group contains multiple input source configurations
 input-groups:
   - inputs:
       - input-type: kafka
@@ -83,83 +84,82 @@ input-groups:
         partition: 0
         group_id: "my-group"
 
-# outputs 是一个数组，可以包含多个输出接收器配置
-# 支持同时向多个数据源写入数据
+# outputs is an array that can contain multiple output sink configurations
 outputs:
   - output-type: kafka
     bootstrap_servers: "localhost:9092"
     topic: "output-topic"
     partition: 0"#;
 
-    /// Source 类型配置的完整 YAML 示例（未来支持）
+    /// Complete YAML example for Source type configuration (future support)
     ///
-    /// 这是一个 Source 配置示例，用于未来扩展。
+    /// This is a Source configuration example for future extension.
     ///
-    /// # 示例
+    /// # Example
     ///
     /// ```yaml
     /// name: "my-source"
     /// type: source
-    /// # Source 配置内容（待实现）
+    /// # Source configuration content (to be implemented)
     /// ```
     pub const SOURCE_CONFIG_EXAMPLE: &str = r#"name: "my-source"
 type: source
-# Source 配置内容（待实现）"#;
+# Source configuration content (to be implemented)"#;
 
-    /// Sink 类型配置的完整 YAML 示例（未来支持）
+    /// Complete YAML example for Sink type configuration (future support)
     ///
-    /// 这是一个 Sink 配置示例，用于未来扩展。
+    /// This is a Sink configuration example for future extension.
     ///
-    /// # 示例
+    /// # Example
     ///
     /// ```yaml
     /// name: "my-sink"
     /// type: sink
-    /// # Sink 配置内容（待实现）
+    /// # Sink configuration content (to be implemented)
     /// ```
     pub const SINK_CONFIG_EXAMPLE: &str = r#"name: "my-sink"
 type: sink
-# Sink 配置内容（待实现）"#;
+# Sink configuration content (to be implemented)"#;
 }
 
 // ============================================================================
-// Input Configuration (输入源配置)
+// Input Configuration
 // ============================================================================
 
-/// InputConfig - 输入源配置
+/// InputConfig - Input source configuration
 ///
-/// 支持多种输入源类型，每种类型有对应的配置结构
+/// Supports multiple input source types, each with its corresponding configuration structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "input-type", rename_all = "kebab-case")]
 pub enum InputConfig {
-    /// Kafka 输入源配置
+    /// Kafka input source configuration
     Kafka {
-        /// Kafka 服务器地址
+        /// Kafka server address
         bootstrap_servers: String,
-        /// 主题名称
+        /// Topic name
         topic: String,
-        /// 分区编号（可选，不指定时使用 subscribe 自动分配）
+        /// Partition number (optional, uses subscribe auto-assignment if not specified)
         #[serde(default)]
         partition: Option<u32>,
-        /// 消费者组 ID
+        /// Consumer group ID
         group_id: String,
-        /// 其他 Kafka 配置项（可选）
+        /// Additional Kafka configuration options (optional)
         #[serde(flatten)]
         extra: HashMap<String, String>,
     },
 }
 
 impl InputConfig {
-    /// 从 YAML Value 解析 InputConfig
+    /// Parse InputConfig from YAML Value
     ///
-    /// # 参数
-    /// - `value`: YAML Value 对象
+    /// # Arguments
+    /// - `value`: YAML Value object
     ///
-    /// # 返回值
-    /// - `Ok(InputConfig)`: 成功解析
-    /// - `Err(...)`: 解析失败
+    /// # Returns
+    /// - `Ok(InputConfig)`: Successfully parsed
+    /// - `Err(...)`: Parsing failed
     pub fn from_yaml_value(value: &Value) -> Result<Self, Box<dyn std::error::Error + Send>> {
-        // 先尝试使用 serde 反序列化
+        // Try to deserialize using serde
         let config: InputConfig = serde_yaml::from_value(value.clone()).map_err(
             |e| -> Box<dyn std::error::Error + Send> {
                 Box::new(std::io::Error::new(
@@ -171,7 +171,7 @@ impl InputConfig {
         Ok(config)
     }
 
-    /// 获取输入源类型名称
+    /// Get input source type name
     pub fn input_type(&self) -> &'static str {
         match self {
             InputConfig::Kafka { .. } => "kafka",
@@ -180,43 +180,43 @@ impl InputConfig {
 }
 
 // ============================================================================
-// Input Group Configuration (输入组配置)
+// Input Group Configuration
 // ============================================================================
 
-/// InputGroup - 输入组配置
+/// InputGroup - Input group configuration
 ///
-/// 一个输入组包含多个输入源配置。
-/// wasm 任务可以包含多个输入组，每个组可以包含多个输入源。
+/// An input group contains multiple input source configurations.
+/// A wasm task can contain multiple input groups, each group can contain multiple input sources.
 #[derive(Debug, Clone)]
 pub struct InputGroup {
-    /// 输入源配置列表
+    /// Input source configuration list
     ///
-    /// 一个输入组可以包含多个输入源，这些输入源会被组合在一起处理。
+    /// An input group can contain multiple input sources that are processed together.
     pub inputs: Vec<InputConfig>,
 }
 
 impl InputGroup {
-    /// 创建新的输入组
+    /// Create a new input group
     ///
-    /// # 参数
-    /// - `inputs`: 输入源配置列表
+    /// # Arguments
+    /// - `inputs`: Input source configuration list
     ///
-    /// # 返回值
-    /// - `InputGroup`: 创建的输入组
+    /// # Returns
+    /// - `InputGroup`: The created input group
     pub fn new(inputs: Vec<InputConfig>) -> Self {
         Self { inputs }
     }
 
-    /// 从 YAML Value 解析 InputGroup
+    /// Parse InputGroup from YAML Value
     ///
-    /// # 参数
-    /// - `value`: YAML Value 对象（应该是一个包含 inputs 数组的对象）
+    /// # Arguments
+    /// - `value`: YAML Value object (should be an object containing an inputs array)
     ///
-    /// # 返回值
-    /// - `Ok(InputGroup)`: 成功解析
-    /// - `Err(...)`: 解析失败
+    /// # Returns
+    /// - `Ok(InputGroup)`: Successfully parsed
+    /// - `Err(...)`: Parsing failed
     pub fn from_yaml_value(value: &Value) -> Result<Self, Box<dyn std::error::Error + Send>> {
-        // 如果 value 本身就是一个数组，直接解析为输入源列表
+        // If value itself is an array, parse directly as input source list
         if let Some(inputs_seq) = value.as_sequence() {
             let mut inputs = Vec::new();
             for (idx, input_value) in inputs_seq.iter().enumerate() {
@@ -257,7 +257,7 @@ impl InputGroup {
             return Ok(InputGroup::new(inputs));
         }
 
-        // 如果 value 是一个对象，尝试获取 inputs 字段
+        // If value is an object, try to get the inputs field
         if let Some(inputs_value) = value.get("inputs")
             && let Some(inputs_seq) = inputs_value.as_sequence() {
                 let mut inputs = Vec::new();
@@ -308,68 +308,69 @@ impl InputGroup {
 }
 
 // ============================================================================
-// Processor Configuration (处理器配置)
+// Processor Configuration
 // ============================================================================
 
-/// ProcessorConfig - 处理器配置
+/// ProcessorConfig - Processor configuration
 ///
-/// 包含处理器的基本信息
+/// Contains basic processor information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessorConfig {
-    /// 处理器名称
+    /// Processor name
     pub name: String,
-    /// wasm 模块字节（不在配置文件中，运行时设置）
+    /// WASM module bytes (not in config file, set at runtime)
     ///
-    /// 注意：此字段不会从配置文件序列化/反序列化，保证配置文件和 wasm 模块字节解耦
+    /// Note: This field is not serialized/deserialized from config file,
+    /// ensuring config file and wasm module bytes are decoupled.
     #[serde(skip)]
     pub wasm_bytes: Option<Vec<u8>>,
-    /// 是否使用内置 Event 序列化方式
+    /// Whether to use built-in Event serialization
     ///
-    /// 如果为 true，则使用系统内置的 Event 序列化方式
-    /// 如果为 false 或不设置，则使用默认序列化方式
+    /// If true, uses the system's built-in Event serialization method.
+    /// If false or not set, uses default serialization method.
     #[serde(default)]
     pub use_builtin_event_serialization: bool,
-    /// 是否启用 CheckPoint
+    /// Whether to enable CheckPoint
     ///
-    /// 如果为 true，则启用检查点功能
-    /// 如果为 false 或不设置，则不启用检查点
+    /// If true, enables checkpoint functionality.
+    /// If false or not set, checkpoints are disabled.
     #[serde(default)]
     pub enable_checkpoint: bool,
-    /// CheckPoint 时间间隔（秒）
+    /// CheckPoint time interval (seconds)
     ///
-    /// 检查点的时间间隔，最小值为 1 秒
-    /// 如果未设置或小于 1，则使用默认值 1 秒
+    /// Time interval for checkpoints, minimum value is 1 second.
+    /// If not set or less than 1, uses default value of 1 second.
     #[serde(default = "default_checkpoint_interval")]
     pub checkpoint_interval_seconds: u64,
-    /// wasm 初始化配置（可选）
+    /// WASM initialization configuration (optional)
     ///
-    /// 传递给 wasm 模块 fs_init 函数的配置参数
-    /// 如果不配置，则传递空 Map
+    /// Configuration parameters passed to wasm module's fs_init function.
+    /// If not configured, an empty Map is passed.
     #[serde(default)]
     pub init_config: HashMap<String, String>,
 }
 
-/// 默认检查点间隔（1 秒）
+/// Default checkpoint interval (1 second)
 fn default_checkpoint_interval() -> u64 {
     1
 }
 
 impl ProcessorConfig {
-    /// 从 YAML Value 解析 ProcessorConfig
+    /// Parse ProcessorConfig from YAML Value
     ///
-    /// # 参数
-    /// - `value`: YAML Value 对象（根级别的配置，包含 name、input-groups、outputs 等字段）
+    /// # Arguments
+    /// - `value`: YAML Value object (root level config containing name, input-groups, outputs, etc.)
     ///
-    /// # 返回值
-    /// - `Ok(ProcessorConfig)`: 成功解析
-    /// - `Err(...)`: 解析失败
+    /// # Returns
+    /// - `Ok(ProcessorConfig)`: Successfully parsed
+    /// - `Err(...)`: Parsing failed
     ///
-    /// 注意：需要从根级别配置中提取 processor 相关字段，忽略 `type`、`input-groups`、`outputs` 等字段。
+    /// Note: Extracts processor-related fields from root level config, ignoring `type`, `input-groups`, `outputs`, etc.
     pub fn from_yaml_value(value: &Value) -> Result<Self, Box<dyn std::error::Error + Send>> {
-        // 创建一个新的 Value，只包含 processor 相关字段，排除 type、input-groups、outputs 等
+        // Create a new Value containing only processor-related fields, excluding type, input-groups, outputs, etc.
         let mut processor_value = serde_yaml::Mapping::new();
 
-        // 复制 name 字段（如果存在）
+        // Copy name field (if exists)
         if let Some(name_val) = value.get("name") {
             processor_value.insert(
                 serde_yaml::Value::String("name".to_string()),
@@ -377,7 +378,7 @@ impl ProcessorConfig {
             );
         }
 
-        // 复制其他 processor 相关字段（如果存在）
+        // Copy other processor-related fields (if exist)
         if let Some(use_builtin) = value.get("use_builtin_event_serialization") {
             processor_value.insert(
                 serde_yaml::Value::String("use_builtin_event_serialization".to_string()),
@@ -404,7 +405,7 @@ impl ProcessorConfig {
             );
         }
 
-        // 从清理后的 Value 解析 ProcessorConfig
+        // Parse ProcessorConfig from cleaned Value
         let clean_value = serde_yaml::Value::Mapping(processor_value);
         let mut config: ProcessorConfig = serde_yaml::from_value(clean_value).map_err(
             |e| -> Box<dyn std::error::Error + Send> {
@@ -426,12 +427,12 @@ impl ProcessorConfig {
             },
         )?;
 
-        // 如果没有提供 name，使用默认值
+        // If name is not provided, use default value
         if config.name.is_empty() {
             config.name = "default-processor".to_string();
         }
 
-        // 验证并修正 checkpoint_interval_seconds（最小值为 1 秒）
+        // Validate and fix checkpoint_interval_seconds (minimum value is 1 second)
         if config.checkpoint_interval_seconds < 1 {
             config.checkpoint_interval_seconds = 1;
         }
@@ -439,48 +440,48 @@ impl ProcessorConfig {
         Ok(config)
     }
 
-    /// 设置 wasm 模块字节
+    /// Set WASM module bytes
     ///
-    /// # 参数
-    /// - `bytes`: wasm 模块字节
+    /// # Arguments
+    /// - `bytes`: WASM module bytes
     pub fn set_wasm_bytes(&mut self, bytes: Vec<u8>) {
         self.wasm_bytes = Some(bytes);
     }
 }
 
 // ============================================================================
-// Output Configuration (输出配置)
+// Output Configuration
 // ============================================================================
 
-/// OutputConfig - 输出配置
+/// OutputConfig - Output configuration
 ///
-/// 支持多种输出类型，每种类型有对应的配置结构
+/// Supports multiple output types, each with its corresponding configuration structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "output-type", rename_all = "kebab-case")]
 pub enum OutputConfig {
-    /// Kafka 输出接收器配置
+    /// Kafka output sink configuration
     Kafka {
-        /// Kafka 服务器地址
+        /// Kafka server address
         bootstrap_servers: String,
-        /// 主题名称
+        /// Topic name
         topic: String,
-        /// 分区编号
+        /// Partition number
         partition: u32,
-        /// 其他 Kafka 配置项（可选）
+        /// Additional Kafka configuration options (optional)
         #[serde(flatten)]
         extra: HashMap<String, String>,
     },
 }
 
 impl OutputConfig {
-    /// 从 YAML Value 解析 OutputConfig
+    /// Parse OutputConfig from YAML Value
     ///
-    /// # 参数
-    /// - `value`: YAML Value 对象
+    /// # Arguments
+    /// - `value`: YAML Value object
     ///
-    /// # 返回值
-    /// - `Ok(OutputConfig)`: 成功解析
-    /// - `Err(...)`: 解析失败
+    /// # Returns
+    /// - `Ok(OutputConfig)`: Successfully parsed
+    /// - `Err(...)`: Parsing failed
     pub fn from_yaml_value(value: &Value) -> Result<Self, Box<dyn std::error::Error + Send>> {
         let config: OutputConfig = serde_yaml::from_value(value.clone()).map_err(
             |e| -> Box<dyn std::error::Error + Send> {
@@ -493,7 +494,7 @@ impl OutputConfig {
         Ok(config)
     }
 
-    /// 获取输出类型名称
+    /// Get output type name
     pub fn output_type(&self) -> &'static str {
         match self {
             OutputConfig::Kafka { .. } => "kafka",
@@ -502,44 +503,46 @@ impl OutputConfig {
 }
 
 // ============================================================================
-// WasmTask Configuration (wasm 任务配置)
+// WasmTask Configuration
 // ============================================================================
 
-/// WasmTaskConfig - wasm 任务配置
+/// WasmTaskConfig - WASM task configuration
 ///
-/// 包含 Input、Processor、Output 三个组件的配置
+/// Contains configuration for Input, Processor, and Output components.
 #[derive(Debug, Clone)]
 pub struct WasmTaskConfig {
-    /// 任务名称
+    /// Task name
     pub task_name: String,
-    /// 输入组配置列表
+    /// Input group configuration list
     ///
-    /// 这是一个数组，可以包含多个输入组。
-    /// 每个输入组包含多个输入源配置，支持同时从多个数据源读取数据。
-    /// 例如：可以有多个输入组，每个组包含多个 Kafka topic 的输入源。
+    /// This is an array that can contain multiple input groups.
+    /// Each input group contains multiple input source configurations,
+    /// supporting reading from multiple data sources simultaneously.
+    /// For example: can have multiple input groups, each containing inputs from multiple Kafka topics.
     pub input_groups: Vec<InputGroup>,
-    /// 处理器配置
+    /// Processor configuration
     pub processor: ProcessorConfig,
-    /// 输出配置列表
+    /// Output configuration list
     ///
-    /// 这是一个数组，可以包含多个输出配置。
-    /// 每个输出配置代表一组输出，支持同时向多个数据源写入数据。
-    /// 例如：可以同时向多个 Kafka topic 写入数据。
+    /// This is an array that can contain multiple output configurations.
+    /// Each output configuration represents a set of outputs,
+    /// supporting writing to multiple data sources simultaneously.
+    /// For example: can write to multiple Kafka topics simultaneously.
     pub outputs: Vec<OutputConfig>,
 }
 
 impl WasmTaskConfig {
-    /// 从 YAML Value 解析 WasmTaskConfig
+    /// Parse WasmTaskConfig from YAML Value
     ///
-    /// # 参数
-    /// - `task_name`: 任务名称（如果配置中没有 name 字段，则使用此值）
-    /// - `value`: YAML Value 对象（根级别的配置，包含 name、type、input-groups、outputs 等）
+    /// # Arguments
+    /// - `task_name`: Task name (used if config doesn't have a name field)
+    /// - `value`: YAML Value object (root level config containing name, type, input-groups, outputs, etc.)
     ///
-    /// # 返回值
-    /// - `Ok(WasmTaskConfig)`: 成功解析
-    /// - `Err(...)`: 解析失败
+    /// # Returns
+    /// - `Ok(WasmTaskConfig)`: Successfully parsed
+    /// - `Err(...)`: Parsing failed
     ///
-    /// 配置格式：
+    /// Configuration format:
     /// ```yaml
     /// name: "my-task"
     /// type: processor
@@ -552,29 +555,29 @@ impl WasmTaskConfig {
     ) -> Result<Self, Box<dyn std::error::Error + Send>> {
         use crate::runtime::task::yaml_keys::{INPUT_GROUPS, INPUTS, NAME, OUTPUTS};
 
-        // 1. 获取配置中的 name（如果存在），否则使用传入的 task_name
+        // 1. Get name from config (if exists), otherwise use the passed task_name
         let config_name = value
             .get(NAME)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or(task_name);
 
-        // 2. 解析 Processor 配置（从根级别配置中提取 processor 相关字段）
-        // 注意：现在配置在根级别，ProcessorConfig 需要能够从根级别解析
+        // 2. Parse Processor config (extract processor-related fields from root level config)
+        // Note: Config is at root level, ProcessorConfig needs to parse from root level
         let mut processor = ProcessorConfig::from_yaml_value(value)?;
 
-        // 如果 ProcessorConfig 中的 name 为空，使用配置中的 name
+        // If ProcessorConfig name is empty, use config name
         if processor.name.is_empty() {
             processor.name = config_name.clone();
         }
 
-        // 3. 解析 Input Groups 配置
-        // 支持两种格式：
-        // 1. 直接是 inputs 数组（向后兼容，会被解析为单个输入组）
-        // 2. input-groups 数组，每个元素是一个输入组
+        // 3. Parse Input Groups config
+        // Supports two formats:
+        // 1. Direct inputs array (backward compatible, parsed as single input group)
+        // 2. input-groups array, each element is an input group
         let input_groups_value = value
             .get(INPUT_GROUPS)
-            .or_else(|| value.get(INPUTS)) // 向后兼容
+            .or_else(|| value.get(INPUTS)) // Backward compatible
             .ok_or_else(|| {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -611,8 +614,8 @@ impl WasmTaskConfig {
             )) as Box<dyn std::error::Error + Send>);
         }
 
-        // 解析每个输入组配置
-        // input-groups 是一个数组，每个元素代表一个输入组（包含多个输入源）
+        // Parse each input group config
+        // input-groups is an array, each element represents an input group (containing multiple input sources)
         let mut input_groups = Vec::new();
         for (group_idx, group_value) in input_groups_seq.iter().enumerate() {
             let input_group = InputGroup::from_yaml_value(group_value).map_err(
@@ -624,7 +627,7 @@ impl WasmTaskConfig {
                 },
             )?;
 
-            // 验证输入组不为空
+            // Validate input group is not empty
             if input_group.inputs.is_empty() {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -635,7 +638,7 @@ impl WasmTaskConfig {
             input_groups.push(input_group);
         }
 
-        // 4. 解析 Outputs 配置
+        // 4. Parse Outputs config
         let outputs_value = value.get(OUTPUTS).ok_or_else(|| {
             Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -669,11 +672,11 @@ impl WasmTaskConfig {
             )) as Box<dyn std::error::Error + Send>);
         }
 
-        // 解析每个输出配置
-        // outputs 是一个数组，每个元素代表一组输出配置
+        // Parse each output config
+        // outputs is an array, each element represents an output configuration
         let mut outputs = Vec::new();
         for (idx, output_value) in outputs_seq.iter().enumerate() {
-            // 尝试获取输出类型，用于更清晰的错误消息
+            // Try to get output type for clearer error message
             let output_type = output_value
                 .get("output-type")
                 .and_then(|v| v.as_str())
@@ -693,7 +696,7 @@ impl WasmTaskConfig {
                 },
             )?;
 
-            // 验证输出类型是否匹配
+            // Validate output type matches
             let parsed_type = output.output_type();
             if parsed_type != output_type && output_type != "unknown" {
                 return Err(Box::new(std::io::Error::new(

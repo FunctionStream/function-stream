@@ -151,4 +151,25 @@ pub trait TaskLifecycle: Send + Sync {
     fn is_error(&self) -> bool {
         self.get_state().is_error()
     }
+
+    /// Execute Python function dynamically
+    ///
+    /// This method calls fs_exec to load and execute Python code dynamically.
+    /// Default implementation returns an error indicating this is not supported.
+    ///
+    /// # Arguments
+    /// * `class_name` - Name of the Python class to load
+    /// * `modules` - List of modules (name, bytes) to load
+    ///
+    /// # Returns
+    /// Ok(()) if execution succeeds, or an error if it fails
+    fn exec_python_function(
+        &self,
+        _class_name: &str,
+        _modules: &[(String, Vec<u8>)],
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
+        Err(Box::new(std::io::Error::other(
+            "exec_python_function not supported by this task type",
+        )))
+    }
 }

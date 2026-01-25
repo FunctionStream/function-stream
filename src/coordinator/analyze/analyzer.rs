@@ -13,8 +13,8 @@
 use super::Analysis;
 use crate::coordinator::ExecutionContext;
 use crate::coordinator::statement::{
-    CreateFunction, DropFunction, ShowFunctions, StartFunction, Statement, StatementVisitor,
-    StatementVisitorContext, StatementVisitorResult, StopFunction,
+    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, Statement,
+    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
 };
 use std::fmt;
 
@@ -39,9 +39,7 @@ impl fmt::Display for AnalyzeError {
 
 impl std::error::Error for AnalyzeError {}
 
-/// Analyzer 负责语义分析
-///
-/// 类似 IoTDB 的 Analyzer 设计
+/// Analyzer performs semantic analysis
 pub struct Analyzer<'a> {
     #[allow(dead_code)]
     context: &'a ExecutionContext,
@@ -52,7 +50,7 @@ impl<'a> Analyzer<'a> {
         Self { context }
     }
 
-    /// 分析 Statement，返回 Analysis
+    /// Analyze Statement and return Analysis
     pub fn analyze(&self, stmt: &dyn Statement) -> Result<Analysis, AnalyzeError> {
         let visitor_context = StatementVisitorContext::Empty;
         let analyzed_stmt = match stmt.accept(self, &visitor_context) {
@@ -62,7 +60,7 @@ impl<'a> Analyzer<'a> {
         Ok(Analysis::new(analyzed_stmt))
     }
 
-    /// 静态方法：分析 Statement
+    /// Static method: analyze Statement
     pub fn analyze_statement(
         stmt: &dyn Statement,
         context: &ExecutionContext,
@@ -113,6 +111,14 @@ impl StatementVisitor for Analyzer<'_> {
     fn visit_show_functions(
         &self,
         stmt: &ShowFunctions,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_create_python_function(
+        &self,
+        stmt: &CreatePythonFunction,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))

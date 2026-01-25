@@ -10,9 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Task Storage module
-//
-// 提供任务信息的存储接口和实现
+//! Task Storage module
+//!
+//! Provides storage interface and implementation for task information.
 
 pub mod factory;
 mod rocksdb_storage;

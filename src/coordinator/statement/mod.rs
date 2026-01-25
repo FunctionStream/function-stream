@@ -11,6 +11,7 @@
 // limitations under the License.
 
 mod create_function;
+mod create_python_function;
 mod drop_function;
 mod show_functions;
 mod start_function;
@@ -18,6 +19,7 @@ mod stop_function;
 mod visitor;
 
 pub use create_function::{CreateFunction, FunctionSource, ConfigSource};
+pub use create_python_function::{CreatePythonFunction, PythonModule};
 pub use drop_function::DropFunction;
 pub use show_functions::ShowFunctions;
 pub use start_function::StartFunction;

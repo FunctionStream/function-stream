@@ -152,111 +152,64 @@ impl TaskManager {
         self.thread_pool.clone()
     }
 
-    /// Register task
-    ///
-    /// # Arguments
-    /// - `config_bytes`: Configuration file byte array (YAML format)
-    /// - `wasm_bytes`: wasm binary package byte array
-    ///
-    /// # Returns
-    /// - `Ok(())`: Registration successful
-    /// - `Err(...)`: Registration failed
-    pub fn register_task(&self, config_bytes: &[u8], wasm_bytes: &[u8]) -> Result<()> {
+    /// Register task from YAML config and module bytes
+    pub fn register_task(&self, config_bytes: &[u8], module_bytes: &[u8]) -> Result<()> {
         log::debug!(
-            "Registering task: config size={} bytes, wasm size={} bytes",
+            "Registering task: config={} bytes, module={} bytes",
             config_bytes.len(),
-            wasm_bytes.len()
+            module_bytes.len()
         );
 
-        // Create TaskLifecycle using TaskBuilder
-        let task = crate::runtime::task::TaskBuilder::from_yaml_config(config_bytes, wasm_bytes)
+        let task = crate::runtime::task::TaskBuilder::from_yaml_config(config_bytes, module_bytes)
             .map_err(|e| {
-                let config_str = String::from_utf8_lossy(config_bytes);
-                log::error!(
-                    "Failed to create task from config. Config preview (first 500 chars): {}",
-                    config_str.chars().take(500).collect::<String>()
-                );
-                anyhow!(
-                    "Failed to create task from config: {}. Error details: {}",
-                    e,
-                    e
-                )
+                let preview: String = String::from_utf8_lossy(config_bytes).chars().take(500).collect();
+                log::error!("Failed to create task. Config preview: {}", preview);
+                anyhow!("Failed to create task: {}", e)
             })?;
 
-        // Get task name
+        self.register_task_internal(task)
+    }
+
+    /// Internal method to register and start a task
+    fn register_task_internal(&self, task: Box<dyn crate::runtime::task::TaskLifecycle>) -> Result<()> {
         let task_name = task.get_name().to_string();
 
-        // Check if task already exists
+        // Check for duplicate
         {
-            let map = self
-                .tasks
-                .read()
-                .map_err(|_| anyhow!("Lock poisoned when reading tasks map"))?;
+            let map = self.tasks.read().map_err(|_| anyhow!("Lock poisoned"))?;
             if map.contains_key(&task_name) {
-                let existing_tasks: Vec<String> = map.keys().cloned().collect();
-                log::error!(
-                    "Task '{}' already exists. Existing tasks: {:?}",
-                    task_name,
-                    existing_tasks
-                );
-                return Err(anyhow!(
-                    "Task '{}' already exists. Existing tasks: {:?}",
-                    task_name,
-                    existing_tasks
-                ));
+                return Err(anyhow!("Task '{}' already exists", task_name));
             }
         }
 
-        // Add task to tasks map
+        // Add to map
         let task_arc = {
-            let mut map = self
-                .tasks
-                .write()
-                .map_err(|_| anyhow!("Lock poisoned when writing to tasks map"))?;
-            let task_arc = Arc::new(RwLock::new(task));
-            map.insert(task_name.clone(), task_arc.clone());
-            task_arc
+            let mut map = self.tasks.write().map_err(|_| anyhow!("Lock poisoned"))?;
+            let arc = Arc::new(RwLock::new(task));
+            map.insert(task_name.clone(), arc.clone());
+            arc
         };
 
-        // Create initialization context (includes thread pool)
+        // Initialize and start
         let init_context = InitContext::new(
             self.state_storage_server.clone(),
             self.task_storage.clone(),
             self.thread_pool.clone(),
         );
 
-        // Initialize task
         {
-            let mut task_guard = task_arc.write().map_err(|e| {
-                anyhow!(
-                    "Lock poisoned when getting write lock for task '{}': {}",
-                    task_name,
-                    e
-                )
+            let mut guard = task_arc.write().map_err(|_| anyhow!("Lock poisoned"))?;
+            guard.init_with_context(&init_context).map_err(|e| {
+                log::error!("Failed to initialize task '{}': {}", task_name, e);
+                anyhow!("Failed to initialize task '{}': {}", task_name, e)
             })?;
-
-            task_guard.init_with_context(&init_context).map_err(|e| {
-                log::error!("Failed to initialize task '{}'. Error: {}", task_name, e);
-                log::error!("Error chain: {:?}", e);
-                anyhow!(
-                    "Failed to initialize task '{}': {}. Full error: {:?}",
-                    task_name,
-                    e,
-                    e
-                )
-            })?;
-
-            task_guard.start().map_err(|e| {
-                log::error!("Failed to start task '{}'. Error: {}", task_name, e);
+            guard.start().map_err(|e| {
+                log::error!("Failed to start task '{}': {}", task_name, e);
                 anyhow!("Failed to start task '{}': {}", task_name, e)
             })?;
         }
 
-
-        log::info!(
-            "Manager: Task '{}' registered, initialized and started successfully.",
-            task_name
-        );
+        log::info!("Task '{}' registered and started successfully", task_name);
         Ok(())
     }
 
@@ -405,5 +358,32 @@ impl TaskManager {
 
         log::info!("Manager: Task '{}' removed.", name);
         Ok(())
+    }
+
+    /// Register Python function as a task (for fs-exec)
+    pub fn register_python_task(&self, config_bytes: &[u8], modules: &[(String, Vec<u8>)]) -> Result<()> {
+        #[cfg(feature = "python")]
+        {
+            log::debug!(
+                "Registering Python task: config={} bytes, modules={}",
+                config_bytes.len(),
+                modules.len()
+            );
+
+            let task = crate::runtime::task::TaskBuilder::from_python_config(config_bytes, modules)
+                .map_err(|e| {
+                    let preview: String = String::from_utf8_lossy(config_bytes).chars().take(500).collect();
+                    log::error!("Failed to create Python task. Config preview: {}", preview);
+                    anyhow!("Failed to create Python task: {}", e)
+                })?;
+
+            self.register_task_internal(task)
+        }
+
+        #[cfg(not(feature = "python"))]
+        {
+            let _ = (config_bytes, modules);
+            Err(anyhow!("Python feature is not enabled"))
+        }
     }
 }

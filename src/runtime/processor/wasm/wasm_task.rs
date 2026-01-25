@@ -45,6 +45,11 @@ enum TaskControlSignal {
         checkpoint_id: u64,
         completion_flag: TaskCompletionFlag,
     },
+    ExecPythonFunction {
+        class_name: String,
+        modules: Vec<(String, Vec<u8>)>,
+        completion_flag: TaskCompletionFlag,
+    },
     Close { completion_flag: TaskCompletionFlag },
 }
 
@@ -473,6 +478,33 @@ impl WasmTask {
                 ControlAction::Continue
             }
 
+            TaskControlSignal::ExecPythonFunction {
+                class_name,
+                modules,
+                completion_flag,
+            } => {
+                log::info!(
+                    "Executing Python function: class_name='{}', modules={} for task: {}",
+                    class_name,
+                    modules.len(),
+                    task_name
+                );
+
+                match processor.exec_python_function(&class_name, &modules) {
+                    Ok(()) => {
+                        log::info!("Python function executed successfully: {}", class_name);
+                        completion_flag.mark_completed();
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Failed to execute Python function: {}", e);
+                        log::error!("{} for task: {}", error_msg, task_name);
+                        completion_flag.mark_error(error_msg);
+                    }
+                }
+
+                ControlAction::Continue
+            }
+
             TaskControlSignal::Close { completion_flag } => {
                 log::info!("Closing task: {}", task_name);
                 *state = TaskState::Closing;
@@ -694,6 +726,32 @@ impl WasmTask {
         self.wait_with_retry(&completion_flag, "CheckpointFinish")
     }
 
+    pub fn exec_python_function(
+        &self,
+        class_name: String,
+        modules: Vec<(String, Vec<u8>)>,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
+        let completion_flag = TaskCompletionFlag::new();
+        if let Some(ref sender) = self.control_sender {
+            sender
+                .send(TaskControlSignal::ExecPythonFunction {
+                    class_name,
+                    modules,
+                    completion_flag: completion_flag.clone(),
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(
+                        format!("Failed to send exec_python_function signal: {}", e),
+                    )) as Box<dyn std::error::Error + Send>
+                })?;
+        } else {
+            return Err(Box::new(std::io::Error::other(
+                "Task is not initialized or control channel is not available",
+            )));
+        }
+        self.wait_with_retry(&completion_flag, "ExecPythonFunction")
+    }
+
     pub fn close(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
@@ -828,6 +886,14 @@ impl TaskLifecycle for WasmTask {
 
     fn get_name(&self) -> &str {
         &self.task_name
+    }
+
+    fn exec_python_function(
+        &self,
+        class_name: &str,
+        modules: &[(String, Vec<u8>)],
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
+        <WasmTask>::exec_python_function(self, class_name.to_string(), modules.to_vec())
     }
 }
 

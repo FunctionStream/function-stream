@@ -10,10 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// KafkaOutputSink - Kafka 输出接收器实现
-//
-// 实现向 Kafka 消息队列发送数据的 OutputSink
-// 使用 rdkafka 客户端库进行实际的 Kafka 生产
+//! KafkaOutputSink - Kafka output sink implementation
+//!
+//! Implements OutputSink for sending data to Kafka message queue.
+//! Uses rdkafka client library for actual Kafka production.
 
 use super::producer_config::KafkaProducerConfig;
 use crate::runtime::buffer_and_event::BufferOrEvent;
@@ -23,97 +23,97 @@ use rdkafka::producer::{BaseRecord, DefaultProducerContext, Producer, ThreadedPr
 use std::sync::Arc;
 use std::sync::Mutex;
 
-// ==================== 常量 ====================
+// ==================== Constants ====================
 
-/// 默认管道容量（定长管道的最大消息数）
+/// Default channel capacity (maximum messages in bounded channel)
 const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
 
-/// 单次批量消费的最大消息数（避免一直消费导致控制信号得不到处理）
+/// Maximum batch size per consume (prevents control signals from being blocked)
 const MAX_BATCH_CONSUME_SIZE: usize = 100;
 
-/// 默认 flush 超时时间（毫秒）
+/// Default flush timeout (milliseconds)
 const DEFAULT_FLUSH_TIMEOUT_MS: u64 = 5000;
 
-/// 控制操作超时时间（毫秒）
+/// Control operation timeout (milliseconds)
 const CONTROL_OPERATION_TIMEOUT_MS: u64 = 5000;
 
-/// 控制操作最大重试次数
+/// Maximum retries for control operations
 const CONTROL_OPERATION_MAX_RETRIES: u32 = 5;
 
-// ==================== 枚举定义 ====================
+// ==================== Enum Definitions ====================
 
-/// 接收器控制信号（控制层）
+/// Sink control signal (control layer)
 ///
-/// 每个信号都包含一个 `completion_flag`，用于追踪任务是否已完成
+/// Each signal includes a `completion_flag` to track task completion.
 #[derive(Debug, Clone)]
 enum SinkControlSignal {
-    /// 启动信号
+    /// Start signal
     Start { completion_flag: TaskCompletionFlag },
-    /// 停止信号
+    /// Stop signal
     Stop { completion_flag: TaskCompletionFlag },
-    /// 关闭信号
+    /// Close signal
     Close { completion_flag: TaskCompletionFlag },
-    /// 开始检查点信号
+    /// Begin checkpoint signal
     Checkpoint {
         checkpoint_id: u64,
         completion_flag: TaskCompletionFlag,
     },
-    /// 结束检查点信号
+    /// End checkpoint signal
     CheckpointFinish {
         checkpoint_id: u64,
         completion_flag: TaskCompletionFlag,
     },
-    /// 刷新信号
+    /// Flush signal
     Flush { completion_flag: TaskCompletionFlag },
 }
 
-/// 控制信号处理结果
+/// Control signal processing result
 enum ControlAction {
-    /// 继续运行（处理数据）
+    /// Continue running (process data)
     Continue,
-    /// 暂停（停止处理数据，阻塞等待控制信号）
+    /// Pause (stop processing data, block waiting for control signals)
     Pause,
-    /// 退出线程
+    /// Exit thread
     Exit,
 }
 
-// ==================== 结构体定义 ====================
+// ==================== Struct Definitions ====================
 
-/// KafkaOutputSink - Kafka 输出接收器
+/// KafkaOutputSink - Kafka output sink
 ///
-/// 使用独立的线程处理数据发送，内部有数据缓存 Channel
-/// 架构：
-/// - 主线程将数据放入 Channel
-/// - 发送线程从 Channel 消费数据并发送到 Kafka
-/// - 支持控制信号（停止、关闭、检查点）
-/// - 状态变更统一由 runloop 线程处理（除了 init）
+/// Uses a dedicated thread for data sending, with internal data cache Channel.
+/// Architecture:
+/// - Main thread puts data into Channel
+/// - Send thread consumes data from Channel and sends to Kafka
+/// - Supports control signals (stop, close, checkpoint)
+/// - State changes are managed uniformly by runloop thread (except init)
 pub struct KafkaOutputSink {
-    /// Kafka 配置
+    /// Kafka configuration
     config: KafkaProducerConfig,
-    /// 输出接收器 ID（从 0 开始，用于标识不同的输出接收器）
+    /// Output sink ID (starting from 0, identifies different output sinks)
     sink_id: usize,
-    /// 组件状态（共享，由 runloop 线程统一管理）
+    /// Component state (shared, managed uniformly by runloop thread)
     state: Arc<Mutex<ComponentState>>,
-    /// 数据发送线程
+    /// Data send thread
     send_thread: Option<std::thread::JoinHandle<()>>,
-    /// 数据缓存 Channel 发送端（主线程写入）
+    /// Data cache Channel sender (main thread writes)
     data_sender: Option<crossbeam_channel::Sender<BufferOrEvent>>,
-    /// 数据缓存 Channel 接收端（发送线程读取）
+    /// Data cache Channel receiver (send thread reads)
     data_receiver: Option<crossbeam_channel::Receiver<BufferOrEvent>>,
-    /// 控制信号 Channel 发送端
+    /// Control signal Channel sender
     control_sender: Option<crossbeam_channel::Sender<SinkControlSignal>>,
-    /// 控制信号 Channel 接收端
+    /// Control signal Channel receiver
     control_receiver: Option<crossbeam_channel::Receiver<SinkControlSignal>>,
 }
 
 impl KafkaOutputSink {
-    // ==================== 配置/构造 ====================
+    // ==================== Configuration/Construction ====================
 
-    /// 创建新的 Kafka 输出接收器
+    /// Create a new Kafka output sink
     ///
-    /// # 参数
-    /// - `config`: Kafka 配置
-    /// - `sink_id`: 输出接收器 ID（从 0 开始，用于标识不同的输出接收器）
+    /// # Arguments
+    /// - `config`: Kafka configuration
+    /// - `sink_id`: Output sink ID (starting from 0, identifies different output sinks)
     pub fn new(config: KafkaProducerConfig, sink_id: usize) -> Self {
         Self {
             config,
@@ -127,20 +127,20 @@ impl KafkaOutputSink {
         }
     }
 
-    /// 从配置创建
+    /// Create from configuration
     ///
-    /// # 参数
-    /// - `config`: Kafka 配置
-    /// - `sink_id`: 输出接收器 ID（从 0 开始，用于标识不同的输出接收器）
+    /// # Arguments
+    /// - `config`: Kafka configuration
+    /// - `sink_id`: Output sink ID (starting from 0, identifies different output sinks)
     pub fn from_config(config: KafkaProducerConfig, sink_id: usize) -> Self {
         Self::new(config, sink_id)
     }
 
-    // ==================== 超时重试辅助函数 ====================
+    // ==================== Timeout Retry Helper Functions ====================
 
-    /// 带超时重试的等待控制操作完成
+    /// Wait for control operation completion with timeout and retry
     ///
-    /// 等待 completion_flag 标记完成，并检查操作结果
+    /// Waits for completion_flag to be marked complete and checks operation result.
     fn wait_with_retry(
         &self,
         completion_flag: &TaskCompletionFlag,
@@ -151,7 +151,7 @@ impl KafkaOutputSink {
         for retry in 0..CONTROL_OPERATION_MAX_RETRIES {
             match completion_flag.wait_timeout(timeout) {
                 Ok(_) => {
-                    // 检查操作结果
+                    // Check operation result
                     if let Some(error) = completion_flag.get_error() {
                         return Err(Box::new(std::io::Error::other(
                             format!("{} failed: {}", operation_name, error),
@@ -180,7 +180,7 @@ impl KafkaOutputSink {
         )))
     }
 
-    /// flush 专用的超时重试等待，检查操作结果
+    /// Flush-specific timeout retry wait, checks operation result
     fn wait_flush_with_retry(
         &self,
         completion_flag: &TaskCompletionFlag,
@@ -190,7 +190,7 @@ impl KafkaOutputSink {
         for retry in 0..CONTROL_OPERATION_MAX_RETRIES {
             match completion_flag.wait_timeout(timeout) {
                 Ok(_) => {
-                    // 检查操作结果
+                    // Check operation result
                     if let Some(error) = completion_flag.get_error() {
                         return Err(Box::new(std::io::Error::other(
                             format!("Flush failed: {}", error),
@@ -218,14 +218,14 @@ impl KafkaOutputSink {
         )))
     }
 
-    // ==================== 发送线程主循环 ====================
+    // ==================== Send Thread Main Loop ====================
 
-    /// 发送线程主循环
+    /// Send thread main loop
     ///
-    /// 状态机驱动的事件循环：
-    /// - 运行状态：同时等待控制信号和数据
-    /// - 暂停状态：只阻塞等待控制信号
-    /// - 所有状态变更统一在此线程处理
+    /// State machine driven event loop:
+    /// - Running state: waits for both control signals and data
+    /// - Paused state: blocks waiting only for control signals
+    /// - All state changes are handled uniformly in this thread
     fn send_thread_loop(
         producer: ThreadedProducer<DefaultProducerContext>,
         data_receiver: crossbeam_channel::Receiver<BufferOrEvent>,
@@ -235,7 +235,7 @@ impl KafkaOutputSink {
     ) {
         use crossbeam_channel::select;
 
-        // 初始状态为暂停，等待 Start 信号
+        // Initial state is paused, waiting for Start signal
         let mut is_running = false;
         log::info!(
             "Send thread started (paused), waiting for start signal for topic: {}",
@@ -244,7 +244,7 @@ impl KafkaOutputSink {
 
         loop {
             if is_running {
-                // ========== 运行状态：同时等待控制信号和数据 ==========
+                // ========== Running state: wait for both control signals and data ==========
                 select! {
                     recv(control_receiver) -> result => {
                         match result {
@@ -267,11 +267,11 @@ impl KafkaOutputSink {
                     recv(data_receiver) -> result => {
                         match result {
                             Ok(data) => {
-                                // 发送当前消息
+                                // Send current message
                                 Self::send_message(&producer, data, &config);
 
-                                // 非阻塞地消费并发送更多数据，减少 select! 调度开销
-                                // 限制批次大小，确保控制信号能及时处理
+                                // Non-blocking consume and send more data, reduces select! scheduling overhead
+                                // Limit batch size to ensure control signals are processed in time
                                 let mut batch_count = 1;
                                 while batch_count < MAX_BATCH_CONSUME_SIZE {
                                     match data_receiver.try_recv() {
@@ -283,7 +283,7 @@ impl KafkaOutputSink {
                                     }
                                 }
 
-                                // 批量结束后 flush，确保消息发送到 Kafka
+                                // Flush after batch ends, ensures messages are sent to Kafka
                                 Self::flush_producer(&producer);
                             }
                             Err(_) => {
@@ -294,7 +294,7 @@ impl KafkaOutputSink {
                     }
                 }
             } else {
-                // ========== 暂停状态：只阻塞等待控制信号 ==========
+                // ========== Paused state: block waiting only for control signals ==========
                 match control_receiver.recv() {
                     Ok(signal) => {
                         match Self::handle_control_signal(
@@ -320,9 +320,9 @@ impl KafkaOutputSink {
         log::info!("Send thread exiting for topic: {}", config.topic);
     }
 
-    // ==================== 控制层函数 ====================
+    // ==================== Control Layer Functions ====================
 
-    /// 处理控制信号（在 runloop 线程中执行，统一管理状态变更和状态检查）
+    /// Handle control signal (executed in runloop thread, manages state changes and checks uniformly)
     fn handle_control_signal(
         signal: SinkControlSignal,
         producer: &ThreadedProducer<DefaultProducerContext>,
@@ -334,7 +334,7 @@ impl KafkaOutputSink {
 
         match signal {
             SinkControlSignal::Start { completion_flag } => {
-                // 只有 Initialized 或 Stopped 状态可以 Start
+                // Only Initialized or Stopped state can Start
                 if !matches!(
                     current_state,
                     ComponentState::Initialized | ComponentState::Stopped
@@ -350,12 +350,12 @@ impl KafkaOutputSink {
                 ControlAction::Continue
             }
             SinkControlSignal::Stop { completion_flag } => {
-                // 只有 Running 或 Checkpointing 状态可以 Stop
+                // Only Running or Checkpointing state can Stop
                 if !matches!(
                     current_state,
                     ComponentState::Running | ComponentState::Checkpointing
                 ) {
-                    // Stop 操作如果状态不对，静默成功（幂等）
+                    // Stop operation silently succeeds if state is wrong (idempotent)
                     log::debug!(
                         "Stop ignored in state: {:?} for topic: {}",
                         current_state,
@@ -370,7 +370,7 @@ impl KafkaOutputSink {
                 ControlAction::Pause
             }
             SinkControlSignal::Close { completion_flag } => {
-                // Close 可以在任何状态下执行
+                // Close can be executed in any state
                 log::info!("Sink close signal received for topic: {}", config.topic);
                 *state.lock().unwrap() = ComponentState::Closing;
                 Self::drain_remaining_data(producer, data_receiver, config);
@@ -383,7 +383,7 @@ impl KafkaOutputSink {
                 checkpoint_id,
                 completion_flag,
             } => {
-                // 只有 Running 状态可以 Checkpoint
+                // Only Running state can Checkpoint
                 if !matches!(current_state, ComponentState::Running) {
                     let error = format!("Cannot take checkpoint in state: {:?}", current_state);
                     log::error!("{} for topic: {}", error, config.topic);
@@ -405,7 +405,7 @@ impl KafkaOutputSink {
                 checkpoint_id,
                 completion_flag,
             } => {
-                // 只有 Checkpointing 状态可以 CheckpointFinish
+                // Only Checkpointing state can CheckpointFinish
                 if !matches!(current_state, ComponentState::Checkpointing) {
                     let error = format!("Cannot finish checkpoint in state: {:?}", current_state);
                     log::error!("{} for topic: {}", error, config.topic);
@@ -431,7 +431,7 @@ impl KafkaOutputSink {
         }
     }
 
-    /// 在关闭时，处理 data channel 中所有剩余的数据，防止泄漏
+    /// Drain all remaining data from data channel when closing, prevents leakage
     fn drain_remaining_data(
         producer: &ThreadedProducer<DefaultProducerContext>,
         data_receiver: &crossbeam_channel::Receiver<BufferOrEvent>,
@@ -439,7 +439,7 @@ impl KafkaOutputSink {
     ) {
         let mut drained_count = 0;
 
-        // 非阻塞地取出并发送所有剩余数据
+        // Non-blocking drain and send all remaining data
         while let Ok(data) = data_receiver.try_recv() {
             Self::send_message(producer, data, config);
             drained_count += 1;
@@ -454,23 +454,23 @@ impl KafkaOutputSink {
         }
     }
 
-    /// 刷新 Kafka Producer
+    /// Flush Kafka Producer
     fn flush_producer(producer: &ThreadedProducer<DefaultProducerContext>) {
         let _ = producer.flush(std::time::Duration::from_millis(DEFAULT_FLUSH_TIMEOUT_MS));
     }
 
-    // ==================== 数据层函数 ====================
+    // ==================== Data Layer Functions ====================
 
-    /// 发送单条消息
+    /// Send single message
     ///
-    /// ThreadedProducer 内部会自动批量处理，无需手动批量
+    /// ThreadedProducer handles batching internally, no manual batching needed.
     #[inline]
     fn send_message(
         producer: &ThreadedProducer<DefaultProducerContext>,
         data: BufferOrEvent,
         config: &KafkaProducerConfig,
     ) {
-        // 使用 into_buffer() 获取所有权，避免额外复制
+        // Use into_buffer() to take ownership, avoids extra copy
         if let Some(payload) = data.into_buffer() {
             let payload_str = String::from_utf8_lossy(&payload);
             log::info!(
@@ -498,7 +498,7 @@ impl KafkaOutputSink {
     }
 }
 
-// ==================== OutputSink Trait 实现 ====================
+// ==================== OutputSink Trait Implementation ====================
 
 impl OutputSink for KafkaOutputSink {
     // -------------------- init --------------------
@@ -507,12 +507,12 @@ impl OutputSink for KafkaOutputSink {
         &mut self,
         init_context: &crate::runtime::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // init_with_context 是唯一在调用者线程设置状态的方法（因为此时 runloop 线程还未启动）
+        // init_with_context is the only method that sets state in caller thread (runloop thread not started yet)
         if !matches!(*self.state.lock().unwrap(), ComponentState::Uninitialized) {
             return Ok(());
         }
 
-        // 验证配置
+        // Validate configuration
         if self.config.bootstrap_servers.is_empty() {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -526,13 +526,13 @@ impl OutputSink for KafkaOutputSink {
             )));
         }
 
-        // 创建 Channel
+        // Create Channels
         let (data_sender, data_receiver) = crossbeam_channel::bounded(DEFAULT_CHANNEL_CAPACITY);
         let (control_sender, control_receiver) = crossbeam_channel::bounded(10);
         self.data_sender = Some(data_sender);
         self.control_sender = Some(control_sender);
 
-        // 创建 Kafka 生产者并启动线程
+        // Create Kafka producer and start thread
         let producer = self.config.create_producer()?;
         let config_clone = self.config.clone();
         let state_clone = self.state.clone();
@@ -555,7 +555,7 @@ impl OutputSink for KafkaOutputSink {
                 ))
             })?;
 
-        // 注册线程组到 InitContext
+        // Register thread group to InitContext
         use crate::runtime::processor::wasm::thread_pool::{ThreadGroup, ThreadGroupType};
         let mut output_thread_group = ThreadGroup::new(
             ThreadGroupType::OutputSink(self.sink_id),
@@ -564,10 +564,10 @@ impl OutputSink for KafkaOutputSink {
         output_thread_group.add_thread(thread_handle, thread_name);
         init_context.register_thread_group(output_thread_group);
 
-        // 注意：线程句柄已经移动到线程组中，不再存储在 send_thread 中
-        // 在 close 时，需要通过 TaskHandle 来管理线程
+        // Note: thread handle has been moved to thread group, no longer stored in send_thread
+        // When closing, thread management is done through TaskHandle
         self.send_thread = None;
-        // init_with_context 是唯一在调用者线程设置状态的地方
+        // init_with_context is the only place that sets state in caller thread
         *self.state.lock().unwrap() = ComponentState::Initialized;
         log::info!(
             "KafkaOutputSink initialized: sink_id={}, topic={}",
@@ -580,8 +580,8 @@ impl OutputSink for KafkaOutputSink {
     // -------------------- start --------------------
 
     fn start(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 不在主线程判断状态，由 runloop 线程的 handle_control_signal 处理
-        // 发送信号给 runloop 线程，由 runloop 线程设置状态
+        // Don't check state in main thread, let runloop thread's handle_control_signal handle it
+        // Send signal to runloop thread, let runloop thread set state
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref control_sender) = self.control_sender {
             control_sender
@@ -595,7 +595,7 @@ impl OutputSink for KafkaOutputSink {
                 })?;
         }
 
-        // 带超时重试等待 runloop 线程处理完成
+        // Wait with timeout retry for runloop thread to complete
         self.wait_with_retry(&completion_flag, "Start")?;
 
         log::info!(
@@ -609,7 +609,7 @@ impl OutputSink for KafkaOutputSink {
     // -------------------- stop --------------------
 
     fn stop(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 不在主线程判断状态，由 runloop 线程的 handle_control_signal 处理
+        // Don't check state in main thread, let runloop thread's handle_control_signal handle it
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref control_sender) = self.control_sender {
             control_sender
@@ -623,7 +623,7 @@ impl OutputSink for KafkaOutputSink {
                 })?;
         }
 
-        // 带超时重试等待 runloop 线程处理完成
+        // Wait with timeout retry for runloop thread to complete
         self.wait_with_retry(&completion_flag, "Stop")?;
 
         log::info!(
@@ -640,7 +640,7 @@ impl OutputSink for KafkaOutputSink {
         &mut self,
         checkpoint_id: u64,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 不在主线程判断状态，由 runloop 线程的 handle_control_signal 处理
+        // Don't check state in main thread, let runloop thread's handle_control_signal handle it
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref control_sender) = self.control_sender {
             let signal = SinkControlSignal::Checkpoint {
@@ -671,7 +671,7 @@ impl OutputSink for KafkaOutputSink {
         &mut self,
         checkpoint_id: u64,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 不在主线程判断状态，由 runloop 线程的 handle_control_signal 处理
+        // Don't check state in main thread, let runloop thread's handle_control_signal handle it
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref control_sender) = self.control_sender {
             let signal = SinkControlSignal::CheckpointFinish {
@@ -687,7 +687,7 @@ impl OutputSink for KafkaOutputSink {
                 })?;
         }
 
-        // 带超时重试等待 runloop 线程处理完成
+        // Wait with timeout retry for runloop thread to complete
         self.wait_with_retry(&completion_flag, "CheckpointFinish")?;
 
         log::info!(
@@ -702,28 +702,28 @@ impl OutputSink for KafkaOutputSink {
     // -------------------- close --------------------
 
     fn close(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 状态检查（只读）
+        // State check (read only)
         if matches!(*self.state.lock().unwrap(), ComponentState::Closed) {
             return Ok(());
         }
 
-        // 发送信号给 runloop 线程，由 runloop 线程设置状态
+        // Send signal to runloop thread, let runloop thread set state
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref control_sender) = self.control_sender {
             let signal = SinkControlSignal::Close {
                 completion_flag: completion_flag.clone(),
             };
             if control_sender.send(signal).is_ok() {
-                // 带超时重试等待 runloop 线程处理完成
-                // Close 操作允许失败（可能线程已退出），所以忽略错误
+                // Wait with timeout retry for runloop thread to complete
+                // Close operation allows failure (thread may have exited), so ignore errors
                 let _ = self.wait_with_retry(&completion_flag, "Close");
             }
         }
 
-        // 注意：线程句柄已经移动到线程组中，由 TaskHandle 统一管理
-        // 这里不再需要 join，线程组会在 TaskHandle 中统一等待
+        // Note: thread handle has been moved to thread group, managed uniformly by TaskHandle
+        // No need to join here, thread group will wait uniformly in TaskHandle
 
-        // 清理资源
+        // Clean up resources
         self.data_sender.take();
         self.data_receiver.take();
         self.control_sender.take();
@@ -740,7 +740,7 @@ impl OutputSink for KafkaOutputSink {
     // -------------------- collect --------------------
 
     fn collect(&mut self, data: BufferOrEvent) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 打印当前状态
+        // Print current state
         let state = self.state.lock().unwrap().clone();
         let data_sender_exists = self.data_sender.is_some();
         log::info!(
@@ -751,8 +751,8 @@ impl OutputSink for KafkaOutputSink {
             data_sender_exists
         );
 
-        // 不在主线程判断状态，直接发送数据到 channel
-        // 如果 runloop 没有在运行，数据会被积压在 channel 中
+        // Don't check state in main thread, send data directly to channel
+        // If runloop is not running, data will be queued in channel
         if let Some(ref sender) = self.data_sender {
             sender
                 .send(data)
@@ -784,7 +784,7 @@ impl OutputSink for KafkaOutputSink {
     // -------------------- flush --------------------
 
     fn flush(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 状态检查：如果已关闭，直接返回错误
+        // State check: if already closed, return error directly
         if matches!(*self.state.lock().unwrap(), ComponentState::Closed) {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotConnected,
@@ -792,7 +792,7 @@ impl OutputSink for KafkaOutputSink {
             )));
         }
 
-        // 发送信号给 runloop 线程，由 runloop 线程处理
+        // Send signal to runloop thread, let runloop thread handle it
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref control_sender) = self.control_sender {
             control_sender
@@ -806,7 +806,7 @@ impl OutputSink for KafkaOutputSink {
                 })?;
         }
 
-        // 带超时重试等待 runloop 线程处理完成
+        // Wait with timeout retry for runloop thread to complete
         self.wait_with_retry(&completion_flag, "Flush")?;
 
         log::info!(
@@ -820,8 +820,8 @@ impl OutputSink for KafkaOutputSink {
     // -------------------- box_clone --------------------
 
     fn box_clone(&self) -> Box<dyn OutputSink> {
-        // 创建一个新的 KafkaOutputSink，使用相同的配置和 sink_id
-        // 注意：克隆的 sink 是未初始化的，需要调用 init_with_context
+        // Create a new KafkaOutputSink with the same config and sink_id
+        // Note: cloned sink is uninitialized, needs to call init_with_context
         Box::new(KafkaOutputSink::new(self.config.clone(), self.sink_id))
     }
 }

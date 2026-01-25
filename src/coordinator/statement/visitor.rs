@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{CreateFunction, DropFunction, ShowFunctions, StartFunction, StopFunction};
+use super::{CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, StopFunction};
 use crate::coordinator::plan::PlanNode;
 use crate::coordinator::statement::Statement;
 
@@ -77,6 +77,12 @@ pub trait StatementVisitor {
     fn visit_show_functions(
         &self,
         stmt: &ShowFunctions,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_create_python_function(
+        &self,
+        stmt: &CreatePythonFunction,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 }

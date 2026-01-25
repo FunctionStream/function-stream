@@ -23,6 +23,6 @@ pub use execution::Executor;
 pub use execution_context::ExecutionContext;
 pub use plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
 pub use statement::{
-    CreateFunction, DropFunction, ExecuteResult, ShowFunctions, StartFunction, Statement,
-    StopFunction, ConfigSource, FunctionSource,
+    CreateFunction, CreatePythonFunction, DropFunction, ExecuteResult, ShowFunctions,
+    StartFunction, Statement, StopFunction, ConfigSource, FunctionSource, PythonModule,
 };

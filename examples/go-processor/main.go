@@ -138,8 +138,12 @@ func FsClose() {
 	}
 }
 
-// WIT: export fs-exec: func(class-name: string, payload: list<u8>);
-func FsExec(className string, payload cm.List[uint8]) {
+// WIT: export fs-exec: func(class-name: string, modules: list<tuple<module-name: string, module-bytes: list<u8>>>);
+// Note: The actual type will be determined by the WIT binding generator.
+// For now, using a placeholder that matches the WIT signature.
+func FsExec(className string, modules cm.List[[2]interface{}]) {
+	// modules[0] should be string (module-name)
+	// modules[1] should be cm.List[uint8] (module-bytes)
 }
 
 // WIT: export fs-custom: func(payload: list<u8>) -> list<u8>;

@@ -23,26 +23,71 @@ from .store.fs_context import WitContext, convert_config_to_dict
 _DRIVER: Optional[FSProcessorDriver] = None
 _CONTEXT: Optional[WitContext] = None
 
-def fs_exec(class_name: str, payload: bytes) -> None:
+def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
 
     global _DRIVER
 
     try:
-        code_def = payload.decode("utf-8")
-    except UnicodeDecodeError:
-        raise ValueError(f"Failed to decode payload as UTF-8 for class {class_name}")
+        import importlib.util
+        import sys
+        
+        # Load all modules in order
+        loaded_modules = {}
+        for module_name, module_bytes in modules:
+            # Decode module bytes to string (assuming UTF-8 encoding)
+            try:
+                module_source = module_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ValueError(f"Failed to decode module_bytes as UTF-8 for module '{module_name}'")
+            
+            # Create a module spec from the module name
+            spec = importlib.util.spec_from_loader(module_name, loader=None)
+            if spec is None:
+                raise RuntimeError(f"Failed to create module spec for {module_name}")
+            
+            # Create the module
+            module = importlib.util.module_from_spec(spec)
+            
+            # Execute the module source code
+            code = compile(module_source, f"<{module_name}>", "exec")
+            exec(code, module.__dict__)
+            
+            # Add the module to sys.modules
+            sys.modules[module_name] = module
+            loaded_modules[module_name] = module
+        
+        # Try to find the class in all loaded modules
+        ProcessorClass = None
+        found_in_module = None
+        
+        # First, try to find in the last module (most likely location)
+        if modules:
+            last_module_name = modules[-1][0]
+            if last_module_name in loaded_modules:
+                module = loaded_modules[last_module_name]
+                if hasattr(module, class_name):
+                    ProcessorClass = getattr(module, class_name)
+                    found_in_module = last_module_name
+        
+        # If not found, search in all modules
+        if ProcessorClass is None:
+            for module_name, module in loaded_modules.items():
+                if hasattr(module, class_name):
+                    ProcessorClass = getattr(module, class_name)
+                    found_in_module = module_name
+                    break
+        
+        if ProcessorClass is None:
+            module_names = [name for name, _ in modules]
+            raise RuntimeError(f"Class '{class_name}' not found in any of the loaded modules: {module_names}")
+        
+        if not issubclass(ProcessorClass, FSProcessorDriver):
+            raise TypeError(f"Class '{class_name}' must be a subclass of FSProcessorDriver")
 
-    exec(code_def, globals())
-
-    if class_name not in globals():
-        raise RuntimeError(f"Class '{class_name}' not found in executed code")
-    
-    ProcessorClass = globals()[class_name]
-
-    if not issubclass(ProcessorClass, FSProcessorDriver):
-        raise TypeError(f"Class '{class_name}' must be a subclass of FSProcessorDriver")
-
-    _DRIVER = ProcessorClass()
+        _DRIVER = ProcessorClass()
+        
+    except Exception as e:
+        raise RuntimeError(f"Failed to load class '{class_name}' from modules: {e}") from e
 
 class WitWorld:
     
@@ -111,8 +156,8 @@ class WitWorld:
         _DRIVER = None
         _CONTEXT = None
     
-    def fs_exec(self, class_name: str, payload: bytes) -> None:
-        fs_exec(class_name, payload)
+    def fs_exec(self, class_name: str, modules: List[Tuple[str, bytes]]) -> None:
+        fs_exec(class_name, modules)
     
     def fs_custom(self, payload: bytes) -> bytes:
         global _DRIVER, _CONTEXT
