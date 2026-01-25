@@ -13,7 +13,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use rdkafka::config::ClientConfig;
-use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
+use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::{BorrowedMessage, Message};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::util::Timeout;
@@ -142,12 +142,12 @@ async fn run_producer(config: AppConfig) -> Result<()> {
             .await;
 
         match delivery_status {
-            Ok((partition, offset)) => {
+            Ok(delivery) => {
                 // Log progress every 1000 messages to reduce noise
                 if (i + 1) % 1000 == 0 {
                     info!(
                         "✓ Produced [{}/{}] -> Partition: {}, Offset: {}",
-                        i + 1, config.msg_count, partition, offset
+                        i + 1, config.msg_count, delivery.partition, delivery.offset
                     );
                 }
             }
