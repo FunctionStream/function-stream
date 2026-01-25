@@ -10,13 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Task Builder - Build WASM Task from configuration
+// Task Builder - Build wasm Task from configuration
 //
 // Provides factory methods to create complete WasmTask from YAML configuration
 // Calls corresponding builders based on configuration type (Processor, Source, Sink)
 
 use crate::runtime::task::TaskLifecycle;
 use crate::runtime::task::builder::processor::ProcessorBuilder;
+#[cfg(feature = "python")]
 use crate::runtime::task::builder::python::PythonBuilder;
 use crate::runtime::task::builder::sink::SinkBuilder;
 use crate::runtime::task::builder::source::SourceBuilder;
@@ -24,35 +25,9 @@ use crate::runtime::task::yaml_keys::{NAME, TYPE, type_values};
 use serde_yaml::Value;
 use std::sync::Arc;
 
-/// TaskBuilder - Build WasmTask from configuration
-///
-/// Calls corresponding builders based on configuration type (Processor, Source, Sink)
 pub struct TaskBuilder;
 
 impl TaskBuilder {
-    /// Create TaskLifecycle from configuration byte array
-    ///
-    /// Based on the `type` field in the configuration file, calls the corresponding builder:
-    /// - `processor`: Calls `ProcessorBuilder`
-    /// - `source`: Calls `SourceBuilder` (future support)
-    /// - `sink`: Calls `SinkBuilder` (future support)
-    ///
-    /// # Arguments
-    /// - `config_bytes`: Configuration file byte array (YAML format)
-    /// - `wasm_bytes`: WASM binary package byte array
-    ///
-    /// # Returns
-    /// - `Ok(Box<dyn TaskLifecycle>)`: Successfully created TaskLifecycle
-    /// - `Err(...)`: Creation failed
-    /// Create TaskLifecycle from YAML configuration
-    ///
-    /// # Arguments
-    /// - `config_bytes`: Configuration file byte array (YAML format)
-    /// - `wasm_bytes`: WASM binary package byte array
-    ///
-    /// # Returns
-    /// - `Ok(Box<dyn TaskLifecycle>)`: Successfully created TaskLifecycle
-    /// - `Err(...)`: Creation failed
     pub fn from_yaml_config(
         config_bytes: &[u8],
         wasm_bytes: &[u8],
@@ -133,6 +108,7 @@ impl TaskBuilder {
             type_values::SINK => {
                 Self::build_sink_task(task_name.clone(), &yaml_value, module_bytes)?
             }
+            #[cfg(feature = "python")]
             type_values::PYTHON => {
                 Self::build_python_task(task_name.clone(), &yaml_value, module_bytes)?
             }
@@ -197,7 +173,7 @@ impl TaskBuilder {
         })?))
     }
 
-
+    #[cfg(feature = "python")]
     fn build_python_task(
         task_name: String,
         yaml_value: &Value,

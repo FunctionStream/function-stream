@@ -16,9 +16,9 @@
 
 use crate::runtime::input::{InputSource, InputSourceProvider};
 use crate::runtime::output::{OutputSink, OutputSinkProvider};
-use crate::runtime::processor::WASM::wasm_processor::WasmProcessorImpl;
-use crate::runtime::processor::WASM::wasm_processor_trait::WasmProcessor;
-use crate::runtime::processor::WASM::wasm_task::{TaskEnvironment, WasmTask};
+use crate::runtime::processor::wasm::wasm_processor::WasmProcessorImpl;
+use crate::runtime::processor::wasm::wasm_processor_trait::WasmProcessor;
+use crate::runtime::processor::wasm::wasm_task::{TaskEnvironment, WasmTask};
 use crate::runtime::task::yaml_keys::{TYPE, type_values};
 use crate::runtime::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
 use serde_yaml::Value;
@@ -33,7 +33,7 @@ impl ProcessorBuilder {
     /// # Arguments
     /// - `task_name`: Task name
     /// - `yaml_value`: YAML configuration value (root-level configuration)
-    /// - `wasm_path`: WASM module path
+    /// - `wasm_path`: wasm module path
     ///
     /// # Returns
     /// - `Ok(Arc<WasmTask>)`: Successfully created WasmTask
@@ -80,7 +80,9 @@ impl ProcessorBuilder {
             task_config.processor.name
         );
 
-        let environment = TaskEnvironment::new(task_config.task_name.clone());
+        let environment = TaskEnvironment {
+            task_name: task_config.task_name.clone(),
+        };
 
         let mut all_inputs = Vec::new();
         for (group_idx, input_group) in task_config.input_groups.iter().enumerate() {
@@ -113,7 +115,7 @@ impl ProcessorBuilder {
 
         let processor =
             Self::create_processor_from_config(&task_config.processor, module_bytes)?;
-        log::info!("Created WASM processor: {}", task_config.processor.name);
+        log::info!("Created wasm processor: {}", task_config.processor.name);
 
         let task = WasmTask::new(environment, all_inputs, processor, outputs);
         let task = Arc::new(task);

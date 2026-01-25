@@ -51,11 +51,9 @@ base64 = "0.22"
 wasmtime-wasi = "28.0"
 rocksdb = { version = "0.21", features = ["multi-threaded-cf"] }
 tokio-stream = "0.1.18"
+lru = "0.12"
 
 [features]
-# 默认开启的特性列表（如果你希望默认就开启增量编译，就把 "incremental-cache" 写在这里）
-default = ["incremental-cache"]
-
-# 定义 "incremental-cache" 特性
-# 当你开启这个特性时，它会自动开启 wasmtime 的 "incremental-cache"
+default = ["incremental-cache", "python"]
 incremental-cache = ["wasmtime/incremental-cache"]
+python = []

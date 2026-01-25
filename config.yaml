@@ -17,89 +17,103 @@ logging:
   max_files: 5
 
 # Python Runtime Configuration
-# Python 运行时配置
-# 用于配置 Python WASM 运行时的相关参数
+# Configuration for python wasm runtime parameters
 python:
-  # Python WASM 文件路径
-  # 默认值: python/functionstream-runtime/target/functionstream-runtime.wasm
-  wasm_path: python/functionstream-runtime/target/functionstream-runtime.wasm
+  # Path to python wasm file
+  # Default: data/cache/python-runner/functionstream-python-runtime.wasm
+  wasm_path: data/cache/python-runner/functionstream-python-runtime.wasm
   
-  # 预编译组件缓存目录
-  # 默认值: .cache/python-wasm
-  cache_dir: .cache/python-wasm
+  # Pre-compiled component cache directory
+  # Default: data/cache/python-runner
+  cache_dir: data/cache/python-runner
   
-  # 是否启用组件缓存
-  # 如果为 true，预编译的组件将被缓存以加快后续加载速度
-  # 默认值: true
+  # Enable component caching
+  # If true, pre-compiled components will be cached to speed up subsequent loads
+  # Default: true
   enable_cache: true
 
+# WASM Runtime Configuration
+# Configuration for wasm incremental compilation cache parameters
+wasm:
+  # Incremental compilation cache directory
+  # Default: .cache/wasm-incremental
+  cache_dir: .cache/wasm-incremental
+  
+  # Enable incremental compilation cache
+  # If true, compiled wasm modules will be cached to speed up subsequent compilations
+  # Default: true
+  enable_cache: true
+  
+  # Maximum cache size (bytes)
+  # Default: 100MB (104857600 bytes)
+  # When cache exceeds this size, least recently used items will be evicted
+  max_cache_size: 104857600
+
 # State Storage Configuration
-# 状态存储配置
-# 用于存储任务运行时的状态数据
+# Used to store runtime state data for tasks
 state_storage:
-  # 存储类型：memory（内存）或 rocksdb（持久化）
-  # 默认值：memory
+  # Storage type: memory or rocksdb (persistent)
+  # Default: memory
   storage_type: rocksdb
   
-  # 基础目录路径（仅当 storage_type 为 rocksdb 时使用）
-  # 最终路径格式：{base_dir}/state/{task_name}-{created_at}
-  # 例如：如果 base_dir 为 "data"，任务名为 "my_task"，创建时间为 1234567890
-  # 则完整路径为：data/state/my_task-1234567890
-  # 默认值：data
+  # Base directory path (only used when storage_type is rocksdb)
+  # Final path format: {base_dir}/state/{task_name}-{created_at}
+  # Example: if base_dir is "data", task name is "my_task", created_at is 1234567890
+  # then full path is: data/state/my_task-1234567890
+  # Default: data
   base_dir: data
   
-  # RocksDB 配置（仅当 storage_type 为 rocksdb 时使用）
+  # RocksDB configuration (only used when storage_type is rocksdb)
   rocksdb:
-    # 最大打开文件数（可选）
-    # 默认值：None（使用 RocksDB 默认值）
+    # Maximum number of open files (optional)
+    # Default: None (uses RocksDB default)
     max_open_files: 1000
     
-    # 写缓冲区大小（字节）（可选）
-    # 默认值：None（使用 RocksDB 默认值）
-    # 示例：67108864 表示 64MB
+    # Write buffer size in bytes (optional)
+    # Default: None (uses RocksDB default)
+    # Example: 67108864 represents 64MB
     write_buffer_size: 67108864
     
-    # 最大写缓冲区数量（可选）
-    # 默认值：None（使用 RocksDB 默认值）
+    # Maximum number of write buffers (optional)
+    # Default: None (uses RocksDB default)
     max_write_buffer_number: 3
     
-    # 目标文件大小基数（字节）（可选）
-    # 默认值：None（使用 RocksDB 默认值）
-    # 示例：67108864 表示 64MB
+    # Target file size base in bytes (optional)
+    # Default: None (uses RocksDB default)
+    # Example: 67108864 represents 64MB
     target_file_size_base: 67108864
     
-    # Level 0 最大字节数（字节）（可选）
-    # 默认值：None（使用 RocksDB 默认值）
-    # 示例：268435456 表示 256MB
+    # Maximum bytes for level base in bytes (optional)
+    # Default: None (uses RocksDB default)
+    # Example: 268435456 represents 256MB
     max_bytes_for_level_base: 268435456
 
 # Task Storage Configuration
-# 任务存储配置
-# 用于存储任务的元数据（任务名称、WASM 字节、配置字节、状态、创建时间等）
+# Used to store task metadata (task name, wasm bytes, config bytes, status, created_at, etc.)
 task_storage:
-  # 存储类型：rocksdb（持久化）
-  # 默认值：rocksdb
+  # Storage type: rocksdb (persistent)
+  # Default: rocksdb
   storage_type: rocksdb
   
-  # 数据库路径（可选）
-  # 如果为 null 或未指定，则使用默认路径：data/task/{task_name}
-  # 例如：如果任务名为 "my_task"，则默认路径为 data/task/my_task
-  # 如果指定了路径，则使用指定的路径
+  # Database path (optional)
+  # If null or not specified, uses default path: data/task/{task_name}
+  # Example: if task name is "my_task", default path is data/task/my_task
+  # If a path is specified, uses the specified path
   db_path: null
   
-  # RocksDB 配置
+  # RocksDB configuration
   rocksdb:
-    # 最大打开文件数（可选）
+    # Maximum number of open files (optional)
     max_open_files: 1000
     
-    # 写缓冲区大小（字节）（可选）
+    # Write buffer size in bytes (optional)
     write_buffer_size: 67108864
     
-    # 最大写缓冲区数量（可选）
+    # Maximum number of write buffers (optional)
     max_write_buffer_number: 3
     
-    # 目标文件大小基数（字节）（可选）
+    # Target file size base in bytes (optional)
     target_file_size_base: 67108864
     
-    # Level 0 最大字节数（字节）（可选）
+    # Maximum bytes for level base in bytes (optional)
     max_bytes_for_level_base: 268435456

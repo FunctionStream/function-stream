@@ -10,23 +10,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Memory State Store - 内存状态存储实现
-//
-// 基于 HashMap 实现 StateStore 接口
-
 use crate::storage::state_backend::error::BackendError;
 use crate::storage::state_backend::store::{StateIterator, StateStore};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-/// 内存状态存储
+/// Memory state store
 pub struct MemoryStateStore {
-    /// 内部存储
+    /// Internal storage
     storage: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
 }
 
 impl MemoryStateStore {
-    /// 创建新的内存状态存储
+    /// Create a new memory state store
     pub fn new() -> Self {
         Self {
             storage: Arc::new(Mutex::new(HashMap::new())),
@@ -99,13 +95,11 @@ impl StateStore for MemoryStateStore {
             &key_group, &key, &namespace, &user_key,
         );
 
-        // 获取现有值
         let existing = self.get_state(key_bytes.clone())?;
 
-        // 简单的合并策略：将新值追加到现有值后面（用分隔符）
         let merged = if let Some(existing_value) = existing {
             let mut result = existing_value;
-            result.push(b'\0'); // 使用 null 字节作为分隔符
+            result.push(b'\0');
             result.extend_from_slice(&value);
             result
         } else {
@@ -136,7 +130,6 @@ impl StateStore for MemoryStateStore {
     }
 
     fn scan(&self, prefix: Vec<u8>) -> Result<Box<dyn StateIterator>, BackendError> {
-        // 获取所有匹配前缀的键值对
         let storage = self
             .storage
             .lock()
@@ -156,7 +149,7 @@ impl StateStore for MemoryStateStore {
     }
 }
 
-/// 内存状态迭代器
+/// Memory state iterator
 struct MemoryStateIterator {
     pairs: Arc<Mutex<Vec<(Vec<u8>, Vec<u8>)>>>,
     index: Arc<Mutex<usize>>,

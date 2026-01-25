@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Go WASM Processor 构建脚本
-# 将 Go 代码编译为 WASM Component，并生成 YAML 配置文件
+# Go wasm Processor 构建脚本
+# 将 Go 代码编译为 wasm Component，并生成 YAML 配置文件
 
 set -e
 
@@ -57,14 +57,14 @@ fi
        mkdir -p "$TMP_DIR"
        mkdir -p "$DEPS_DIR"
 
-# 步骤 2: 使用 TinyGo 编译为 WASM
+# 步骤 2: 使用 TinyGo 编译为 wasm
 echo -e "${GREEN}Step 2: Compiling Go to WASM (using TinyGo)...${NC}"
 
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WIT_FILE="$PROJECT_ROOT/wit/processor.wit"
 COMPONENT_FILE="$OUTPUT_DIR/processor.wasm"
 
-# 使用 TinyGo 编译为 WASM（core 模块）
+# 使用 TinyGo 编译为 wasm（core 模块）
 echo "  Compiling with TinyGo (target: wasi)..."
 CORE_WASM="$TMP_DIR/processor-core.wasm"
 tinygo build -target wasi -o "$CORE_WASM" main.go
@@ -146,7 +146,7 @@ fi
 
 # 3.3: 转换为 Component Model（最终输出）
 echo "  Converting to Component Model..."
-# 使用 --realloc-via-memory-grow 选项，因为 TinyGo 生成的 WASM 缺少 cabi_realloc 导出
+# 使用 --realloc-via-memory-grow 选项，因为 TinyGo 生成的 wasm 缺少 cabi_realloc 导出
 wasm-tools component new "$EMBEDDED_WASM" \
     --adapt wasi_snapshot_preview1="$WASI_ADAPTER_FILE" \
     --realloc-via-memory-grow \

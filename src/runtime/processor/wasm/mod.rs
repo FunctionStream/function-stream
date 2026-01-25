@@ -10,15 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Python Processor module
-//
-// This module provides a Python-specific processor implementation
-// that wraps the WASM processor for executing Python code compiled to WASM.
-
-pub mod python_host;
-pub mod python_service;
-
-// Re-export commonly used types
-pub use python_host::get_python_engine_and_component;
-pub use python_service::PythonService;
-
+pub mod thread_pool;
+pub mod wasm_cache;
+pub mod wasm_host;
+pub mod wasm_processor;
+pub mod wasm_processor_trait;
+pub mod wasm_task;

@@ -10,20 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// State Backend Error - 状态存储后端错误类型
-//
-// 定义状态存储后端操作中可能出现的错误
-
-/// 状态存储后端错误
+/// State backend error
 #[derive(Debug, Clone)]
 pub enum BackendError {
-    /// 键不存在
+    /// Key not found
     KeyNotFound(String),
-    /// IO 错误
+    /// IO error
     IoError(String),
-    /// 序列化错误
+    /// Serialization error
     SerializationError(String),
-    /// 其他错误
+    /// Other error
     Other(String),
 }
 

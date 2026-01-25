@@ -12,10 +12,10 @@
 # limitations under the License.
 
 """
-Build script for Function Stream API Python Package.
+Build script for Function Stream API python Package.
 
-This script handles the lifecycle of building the Python distribution artifacts
-(Wheel and Source Distribution) using modern Python packaging standards.
+This script handles the lifecycle of building the python distribution artifacts
+(Wheel and Source Distribution) using modern python packaging standards.
 """
 
 import sys
@@ -109,7 +109,7 @@ class Builder:
         """
         Executes the build process using the `build` module.
         """
-        logger.info("Building Python package...")
+        logger.info("Building python package...")
 
         self.dist_dir.mkdir(parents=True, exist_ok=True)
 

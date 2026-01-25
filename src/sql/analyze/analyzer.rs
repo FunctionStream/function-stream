@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use super::Analysis;
-use crate::sql::coordinator::ExecutionContext;
+use crate::coordinator::ExecutionContext;
 use crate::sql::statement::{
     CreateFunction, DropFunction, ShowFunctions, StartFunction, Statement, StatementVisitor,
     StatementVisitorContext, StatementVisitorResult, StopFunction,

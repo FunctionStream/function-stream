@@ -45,7 +45,7 @@ class FsClient:
         ('grpc.http2.max_pings_without_data', 0),
     ]
 
-    # Mapping Business Status Codes (HTTP-like) to Python Exceptions
+    # Mapping Business Status Codes (HTTP-like) to python Exceptions
     _STATUS_CODE_MAP: Dict[int, Type[ServerError]] = {
         400: BadRequestError,
         401: AuthenticationError,

@@ -19,8 +19,8 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;
 
 use crate::config::GlobalConfig;
+use crate::coordinator::Coordinator;
 use crate::server::FunctionStreamServiceImpl;
-use crate::sql::Coordinator;
 use protocol::service::function_stream_service_server::FunctionStreamServiceServer;
 
 pub async fn start_server_with_shutdown(

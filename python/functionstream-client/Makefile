@@ -105,7 +105,7 @@ proto: venv
 	@# Ensure output directory exists and is a package
 	@mkdir -p $(PROTO_OUT_DIR)
 	@touch $(PROTO_OUT_DIR)/__init__.py
-	@# Delegate to the Python script, but ensure it runs in the venv
+	@# Delegate to the python script, but ensure it runs in the venv
 	@$(PYTHON) scripts/codegen.py
 	$(call log_success, Proto code generated.)
 

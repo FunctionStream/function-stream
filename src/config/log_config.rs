@@ -10,12 +10,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Server module for function-stream
+use serde::{Deserialize, Serialize};
 
-mod handler;
-mod initializer;
-mod service;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogConfig {
+    pub level: String,
+    pub format: String,
+    pub file_path: Option<String>,
+    pub max_file_size: Option<u64>,
+    pub max_files: Option<u32>,
+}
 
-pub use handler::FunctionStreamServiceImpl;
-pub use initializer::register_components;
-pub use service::start_server_with_shutdown;
+impl Default for LogConfig {
+    fn default() -> Self {
+        Self {
+            level: "info".to_string(),
+            format: "json".to_string(),
+            file_path: Some("logs/app.log".to_string()),
+            max_file_size: Some(100),
+            max_files: Some(5),
+        }
+    }
+}

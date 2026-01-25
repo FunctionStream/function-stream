@@ -10,14 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// WasmTask - WASM 任务实现
-//
-// 架构设计：
-// - 专门的 runloop 线程持有所有数据（inputs, processor, sinks），不需要锁
-// - 控制信号通过 channel 传递，不用原子变量
-// - 状态由 runloop 线程统一管理
-// - 热点路径（process_input）没有锁和原子变量操作
-
 use super::thread_pool::{TaskThreadPool, ThreadGroup};
 use super::wasm_processor_trait::WasmProcessor;
 use crate::runtime::buffer_and_event::BufferOrEvent;
@@ -32,55 +24,36 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-/// 控制操作超时（毫秒）
 const CONTROL_OPERATION_TIMEOUT_MS: u64 = 5000;
-/// 最大重试次数
 const CONTROL_OPERATION_MAX_RETRIES: u32 = 3;
-/// 数据处理批次大小
 const MAX_BATCH_SIZE: usize = 100;
 
-/// 流任务环境配置
 #[derive(Clone, Debug)]
 pub struct TaskEnvironment {
     pub task_name: String,
 }
 
-impl TaskEnvironment {
-    pub fn new(task_name: String) -> Self {
-        Self { task_name }
-    }
-}
-
-/// 任务控制信号
 enum TaskControlSignal {
-    /// 启动任务
     Start { completion_flag: TaskCompletionFlag },
-    /// 停止任务
     Stop { completion_flag: TaskCompletionFlag },
-    /// 取消任务
     Cancel { completion_flag: TaskCompletionFlag },
-    /// 开始检查点
     Checkpoint {
         checkpoint_id: u64,
         completion_flag: TaskCompletionFlag,
     },
-    /// 完成检查点
     CheckpointFinish {
         checkpoint_id: u64,
         completion_flag: TaskCompletionFlag,
     },
-    /// 关闭任务
     Close { completion_flag: TaskCompletionFlag },
 }
 
-/// runloop 线程的控制动作
 enum ControlAction {
     Continue,
     Pause,
     Exit,
 }
 
-/// 任务状态（仅在 runloop 线程内使用，不需要同步）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TaskState {
     Uninitialized,
@@ -93,24 +66,15 @@ enum TaskState {
     Failed,
 }
 
-/// 执行状态（用于线程管理）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionState {
-    /// 任务已创建
     Created,
-    /// 正在部署
     Deploying,
-    /// 正在初始化
     Initializing,
-    /// 正在运行
     Running,
-    /// 已完成
     Finished,
-    /// 正在取消
     Canceling,
-    /// 已取消
     Canceled,
-    /// 已失败
     Failed,
 }
 
@@ -131,48 +95,23 @@ impl ExecutionState {
 }
 
 pub struct WasmTask {
-    /// 任务名称
     task_name: String,
-    /// 环境配置
     environment: TaskEnvironment,
-    /// 输入源列表（在 init 后移动到线程中）
     inputs: Option<Vec<Box<dyn InputSource>>>,
-    /// 处理器（在 init 后移动到线程中）
     processor: Option<Box<dyn WasmProcessor>>,
-    /// 输出接收器列表（在 init 后移动到线程中）
     sinks: Option<Vec<Box<dyn OutputSink>>>,
-    /// 共享状态（用于外部查询，runloop 线程更新）
     state: Arc<Mutex<ComponentState>>,
-    /// 控制信号发送端
     control_sender: Option<Sender<TaskControlSignal>>,
-    /// runloop 线程句柄
     task_thread: Option<JoinHandle<()>>,
-    /// 线程池引用
     thread_pool: Option<Arc<TaskThreadPool>>,
-    /// 线程组信息（在 init_with_context 中收集）
     thread_groups: Option<Vec<ThreadGroup>>,
-    /// 执行状态（用于线程管理）
     execution_state: Arc<AtomicU8>,
-    /// 失败原因
     failure_cause: Arc<Mutex<Option<String>>>,
-    /// 线程是否还在运行的标志（通过原子变量跟踪）
     thread_running: Arc<AtomicBool>,
-    /// 终止 Future（用于等待任务完成）
     termination_future: Arc<Mutex<Option<mpsc::Receiver<ExecutionState>>>>,
 }
 
 impl WasmTask {
-    /// 创建新的流任务
-    ///
-    /// # 参数
-    /// - `environment`: 任务环境配置
-    /// - `inputs`: 输入源列表
-    /// - `processor`: 处理器
-    /// - `sinks`: 输出接收器列表
-    ///
-    /// # 返回值
-    /// - `Ok(WasmTask)`: 成功创建的任务
-    /// - `Err(...)`: 创建失败
     pub fn new(
         environment: TaskEnvironment,
         inputs: Vec<Box<dyn InputSource>>,
@@ -198,10 +137,6 @@ impl WasmTask {
         }
     }
 
-    /// 初始化任务（启动 runloop 线程）
-    ///
-    /// # 参数
-    /// - `init_context`: 初始化上下文（包含线程池）
     pub fn init_with_context(
         &mut self,
         init_context: &crate::runtime::taskexecutor::InitContext,
@@ -240,21 +175,10 @@ impl WasmTask {
             )));
         }
 
-        use crate::runtime::processor::WASM::WasmProcessorImpl;
-        if let Some(wasm_processor_impl) =
-            processor.as_any_mut().downcast_mut::<WasmProcessorImpl>()
-        {
-            if let Err(e) =
-                wasm_processor_impl.init_wasm_host(sinks, &init_context, self.task_name.clone())
-            {
-                log::error!("Failed to init WasmHost: {}", e);
-                return Err(Box::new(std::io::Error::other(
-                    format!("Failed to init WasmHost: {}", e),
-                )));
-            }
-        } else {
+        if let Err(e) = processor.init_wasm_host(sinks, &init_context, self.task_name.clone()) {
+            log::error!("Failed to init WasmHost: {}", e);
             return Err(Box::new(std::io::Error::other(
-                "Processor is not a WasmProcessorImpl, cannot initialize WasmHost",
+                format!("Failed to init WasmHost: {}", e),
             )));
         }
 
@@ -289,7 +213,6 @@ impl WasmTask {
             .spawn(move || {
                 Self::task_thread_loop(task_name, inputs, processor, control_receiver, state);
 
-                // 线程结束时更新状态
                 execution_state.store(ExecutionState::Finished as u8, Ordering::Relaxed);
                 thread_running.store(false, Ordering::Relaxed);
                 let _ = termination_tx.send(ExecutionState::Finished);
@@ -301,7 +224,7 @@ impl WasmTask {
             })?;
 
 
-        use crate::runtime::processor::WASM::thread_pool::{ThreadGroup, ThreadGroupType};
+        use crate::runtime::processor::wasm::thread_pool::{ThreadGroup, ThreadGroupType};
         let mut main_runloop_group = ThreadGroup::new(
             ThreadGroupType::MainRunloop,
             format!("MainRunloop-{}", self.task_name),
@@ -326,8 +249,6 @@ impl WasmTask {
         Ok(())
     }
 
-    // ==================== runloop 线程主循环 ====================
-
     fn task_thread_loop(
         task_name: String,
         mut inputs: Vec<Box<dyn InputSource>>,
@@ -348,7 +269,6 @@ impl WasmTask {
             init_elapsed
         );
 
-        // 更新共享状态
         let lock_start = std::time::Instant::now();
         *shared_state.lock().unwrap() = ComponentState::Initialized;
         let lock_elapsed = lock_start.elapsed().as_secs_f64();
@@ -366,7 +286,6 @@ impl WasmTask {
 
         loop {
             if is_running {
-                // ========== 运行状态：优先处理控制信号，然后处理数据 ==========
                 select! {
                     recv(control_receiver) -> result => {
                         match result {
@@ -391,7 +310,6 @@ impl WasmTask {
                         }
                     }
                     default => {
-                        // 没有控制信号，处理数据
                         Self::process_batch(
                             &mut inputs,
                             &mut processor,
@@ -400,7 +318,6 @@ impl WasmTask {
                     }
                 }
             } else {
-                // ========== 暂停状态：只阻塞等待控制信号 ==========
                 match control_receiver.recv() {
                     Ok(signal) => {
                         match Self::handle_control_signal(
@@ -424,14 +341,10 @@ impl WasmTask {
             }
         }
 
-        // 线程退出，清理资源
         Self::cleanup_resources(&mut inputs, &mut processor, &task_name);
         log::info!("Task thread exiting: {}", task_name);
     }
 
-    // ==================== 控制信号处理 ====================
-
-    /// 处理控制信号（在 runloop 线程中执行）
     fn handle_control_signal(
         signal: TaskControlSignal,
         state: &mut TaskState,
@@ -451,14 +364,12 @@ impl WasmTask {
 
                 log::info!("Starting task: {}", task_name);
 
-                // 启动所有输入源（组件已经在 init_with_context 中初始化过了）
                 for (idx, input) in inputs.iter_mut().enumerate() {
                     if let Err(e) = input.start() {
                         log::error!("Failed to start input {}: {}", idx, e);
                     }
                 }
 
-                // 通过 WASM processor 启动所有输出 sinks
                 if let Err(e) = processor.start_sinks() {
                     log::error!("Failed to start sinks: {}", e);
                 }
@@ -472,14 +383,12 @@ impl WasmTask {
             TaskControlSignal::Stop { completion_flag } => {
                 log::info!("Stopping task: {}", task_name);
 
-                // 停止所有输入源
                 for (idx, input) in inputs.iter_mut().enumerate() {
                     if let Err(e) = input.stop() {
                         log::warn!("Failed to stop input {}: {}", idx, e);
                     }
                 }
 
-                // 通过 WASM processor 停止所有输出 sinks
                 if let Err(e) = processor.stop_sinks() {
                     log::warn!("Failed to stop sinks: {}", e);
                 }
@@ -517,14 +426,12 @@ impl WasmTask {
                 *state = TaskState::Checkpointing;
                 *shared_state.lock().unwrap() = ComponentState::Checkpointing;
 
-                // 触发所有输入源的检查点
                 for (idx, input) in inputs.iter_mut().enumerate() {
                     if let Err(e) = input.take_checkpoint(checkpoint_id) {
                         log::error!("Failed to checkpoint input {}: {}", idx, e);
                     }
                 }
 
-                // 通过 WASM processor 触发所有输出 sinks 的检查点
                 if let Err(e) = processor.take_checkpoint_sinks(checkpoint_id) {
                     log::error!("Failed to checkpoint sinks: {}", e);
                 }
@@ -550,14 +457,12 @@ impl WasmTask {
                     task_name
                 );
 
-                // 完成所有输入源的检查点
                 for (idx, input) in inputs.iter_mut().enumerate() {
                     if let Err(e) = input.finish_checkpoint(checkpoint_id) {
                         log::error!("Failed to finish checkpoint for input {}: {}", idx, e);
                     }
                 }
 
-                // 通过 WASM processor 完成所有输出 sinks 的检查点
                 if let Err(e) = processor.finish_checkpoint_sinks(checkpoint_id) {
                     log::error!("Failed to finish checkpoint for sinks: {}", e);
                 }
@@ -573,7 +478,6 @@ impl WasmTask {
                 *state = TaskState::Closing;
                 *shared_state.lock().unwrap() = ComponentState::Closing;
 
-                // 资源会在线程退出时清理
                 *state = TaskState::Closed;
                 *shared_state.lock().unwrap() = ComponentState::Closed;
                 completion_flag.mark_completed();
@@ -582,11 +486,6 @@ impl WasmTask {
         }
     }
 
-    // ==================== 数据处理（热点路径，无锁无原子操作）====================
-
-    /// 批量处理数据
-    ///
-    /// 这是热点路径，没有任何锁或原子变量操作
     #[inline]
     fn process_batch(
         inputs: &mut Vec<Box<dyn InputSource>>,
@@ -600,9 +499,7 @@ impl WasmTask {
 
         let mut batch_count = 0;
 
-        // 批量处理，减少调度开销
         while batch_count < MAX_BATCH_SIZE {
-            // 轮询所有输入源
             let mut found_data = false;
 
             for _ in 0..input_count {
@@ -615,9 +512,9 @@ impl WasmTask {
                         found_data = true;
                         Self::process_single_record(data, processor, input_idx);
                         batch_count += 1;
-                        break; // 处理一条后继续下一轮
+                        break;
                     }
-                    Ok(None) => continue, // 没有数据，尝试下一个输入
+                    Ok(None) => continue,
                     Err(e) => {
                         log::error!("Error reading input: {}", e);
                         continue;
@@ -626,13 +523,11 @@ impl WasmTask {
             }
 
             if !found_data {
-                // 所有输入都没有数据，让出 CPU
                 break;
             }
         }
     }
 
-    /// 处理单条记录
     #[inline]
     fn process_single_record(
         data: BufferOrEvent,
@@ -644,21 +539,17 @@ impl WasmTask {
         }
 
         if let Some(buffer_bytes) = data.get_buffer() {
-            // 通过处理器处理数据
             if let Err(e) = processor.process(buffer_bytes.to_vec(), input_index) {
                 log::error!("Processor error from input {}: {}", input_index, e);
             }
         }
     }
 
-    // ==================== 资源清理 ====================
-
     fn cleanup_resources(
         inputs: &mut Vec<Box<dyn InputSource>>,
         processor: &mut Box<dyn WasmProcessor>,
         task_name: &str,
     ) {
-        // 关闭所有输入源
         for (idx, input) in inputs.iter_mut().enumerate() {
             if let Err(e) = input.stop() {
                 log::warn!("Failed to stop input {} for {}: {}", idx, task_name, e);
@@ -668,20 +559,15 @@ impl WasmTask {
             }
         }
 
-        // 通过 WASM processor 关闭所有输出 sinks
         if let Err(e) = processor.close_sinks() {
             log::warn!("Failed to close sinks for {}: {}", task_name, e);
         }
 
-        // 关闭处理器
         if let Err(e) = processor.close() {
             log::warn!("Failed to close processor for {}: {}", task_name, e);
         }
     }
 
-    // ==================== 公共控制方法（主线程调用）====================
-
-    /// 等待控制操作完成
     fn wait_with_retry(
         &self,
         completion_flag: &TaskCompletionFlag,
@@ -720,7 +606,6 @@ impl WasmTask {
         )))
     }
 
-    /// 启动任务
     pub fn start(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
@@ -737,7 +622,6 @@ impl WasmTask {
         self.wait_with_retry(&completion_flag, "Start")
     }
 
-    /// 停止任务
     pub fn stop(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
@@ -754,7 +638,6 @@ impl WasmTask {
         self.wait_with_retry(&completion_flag, "Stop")
     }
 
-    /// 取消任务
     pub fn cancel(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
@@ -771,7 +654,6 @@ impl WasmTask {
         self.wait_with_retry(&completion_flag, "Cancel")
     }
 
-    /// 开始检查点
     pub fn take_checkpoint(
         &self,
         checkpoint_id: u64,
@@ -792,7 +674,6 @@ impl WasmTask {
         self.wait_with_retry(&completion_flag, "Checkpoint")
     }
 
-    /// 完成检查点
     pub fn finish_checkpoint(
         &self,
         checkpoint_id: u64,
@@ -813,7 +694,6 @@ impl WasmTask {
         self.wait_with_retry(&completion_flag, "CheckpointFinish")
     }
 
-    /// 关闭任务
     pub fn close(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let completion_flag = TaskCompletionFlag::new();
         if let Some(ref sender) = self.control_sender {
@@ -823,9 +703,6 @@ impl WasmTask {
             let _ = self.wait_with_retry(&completion_flag, "Close");
         }
 
-        // 注意：线程句柄已经移动到线程组中，由 TaskHandle 统一管理
-        // 这里不再需要 join，线程组会在 TaskHandle 中统一等待
-        // 如果 task_thread 还存在（旧代码路径），则 join 它
         if let Some(handle) = self.task_thread.take()
             && let Err(e) = handle.join() {
                 log::warn!("Task thread join error: {:?}", e);
@@ -836,35 +713,22 @@ impl WasmTask {
         Ok(())
     }
 
-    // ==================== 状态查询 ====================
-
-    /// 获取当前状态
     pub fn get_state(&self) -> ComponentState {
         self.state.lock().unwrap().clone()
     }
 
-    /// 检查是否正在运行
     pub fn is_running(&self) -> bool {
         matches!(self.get_state(), ComponentState::Running)
     }
 
-    /// 获取任务名称
     pub fn get_name(&self) -> &str {
         &self.task_name
     }
 
-    /// 获取线程组信息（用于 TaskThreadPool::submit）
-    ///
-    /// # 返回值
-    /// - `Some(Vec<ThreadGroup>)`: 线程组信息（会从 WasmTask 中移除）
-    /// - `None`: 没有线程组信息
     pub fn take_thread_groups(&mut self) -> Option<Vec<ThreadGroup>> {
         self.thread_groups.take()
     }
 
-    // ==================== 线程管理方法 ====================
-
-    /// 等待任务完成
     pub fn wait_for_completion(&self) -> Result<ExecutionState, Box<dyn std::error::Error>> {
         if let Some(rx) = self.termination_future.lock().unwrap().take() {
             rx.recv()
@@ -874,22 +738,18 @@ impl WasmTask {
         }
     }
 
-    /// 获取执行状态
     pub fn get_execution_state(&self) -> ExecutionState {
         ExecutionState::from_u8(self.execution_state.load(Ordering::Relaxed))
     }
 
-    /// 获取失败原因
     pub fn get_failure_cause(&self) -> Option<String> {
         self.failure_cause.lock().unwrap().clone()
     }
 
-    /// 检查线程是否还在运行
     pub fn is_thread_alive(&self) -> bool {
         self.thread_running.load(Ordering::Relaxed)
     }
 
-    /// 等待线程完成（用于测试和调试）
     pub fn join_thread(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(handle) = self.task_thread.take() {
             handle
@@ -899,38 +759,32 @@ impl WasmTask {
         Ok(())
     }
 
-    /// 尝试等待线程完成（非阻塞检查）
     pub fn try_join_thread(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        // 检查线程是否还在运行
         if !self.thread_running.load(Ordering::Relaxed) {
-            // 线程已结束，尝试 join
             if let Some(handle) = self.task_thread.take() {
                 handle
                     .join()
                     .map_err(|e| format!("Thread join error: {:?}", e))?;
                 return Ok(true);
             }
-            return Ok(true); // 没有线程句柄，认为已完成
+            return Ok(true);
         }
-        Ok(false) // 线程还在运行
+        Ok(false)
     }
 
-    /// 强制等待线程完成（带超时）
     pub fn wait_thread_with_timeout(
         &mut self,
         timeout: Duration,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let start = std::time::Instant::now();
 
-        // 等待线程结束标志
         while self.thread_running.load(Ordering::Relaxed) {
             if start.elapsed() > timeout {
-                return Ok(false); // 超时
+                return Ok(false);
             }
             thread::sleep(Duration::from_millis(10));
         }
 
-        // 线程已结束，join 它
         if let Some(handle) = self.task_thread.take() {
             handle
                 .join()
@@ -950,12 +804,10 @@ impl TaskLifecycle for WasmTask {
     }
 
     fn start(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 使用完全限定语法调用原有的 start 方法，避免递归
         <WasmTask>::start(self)
     }
 
     fn stop(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 使用完全限定语法调用原有的 stop 方法
         <WasmTask>::stop(self)
     }
 
@@ -963,17 +815,14 @@ impl TaskLifecycle for WasmTask {
         &mut self,
         checkpoint_id: u64,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 使用完全限定语法调用原有的 take_checkpoint 方法
         <WasmTask>::take_checkpoint(self, checkpoint_id)
     }
 
     fn close(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // 使用完全限定语法调用原有的 close 方法
         <WasmTask>::close(self)
     }
 
     fn get_state(&self) -> ComponentState {
-        // 使用完全限定语法调用原有的 get_state 方法
         <WasmTask>::get_state(self)
     }
 

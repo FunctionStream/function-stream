@@ -556,7 +556,7 @@ impl OutputSink for KafkaOutputSink {
             })?;
 
         // 注册线程组到 InitContext
-        use crate::runtime::processor::WASM::thread_pool::{ThreadGroup, ThreadGroupType};
+        use crate::runtime::processor::wasm::thread_pool::{ThreadGroup, ThreadGroupType};
         let mut output_thread_group = ThreadGroup::new(
             ThreadGroupType::OutputSink(self.sink_id),
             format!("OutputSink-{}", self.sink_id),

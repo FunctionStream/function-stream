@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Processor module
+pub mod wasm;
 
-pub mod WASM;
-pub mod Python;
+#[cfg(feature = "python")]
+pub mod python;

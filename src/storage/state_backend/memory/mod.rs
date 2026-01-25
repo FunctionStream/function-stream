@@ -10,12 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Server module for function-stream
+pub mod factory;
+pub mod store;
 
-mod handler;
-mod initializer;
-mod service;
-
-pub use handler::FunctionStreamServiceImpl;
-pub use initializer::register_components;
-pub use service::start_server_with_shutdown;
+pub use factory::MemoryStateStoreFactory;

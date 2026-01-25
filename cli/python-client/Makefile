@@ -1,4 +1,4 @@
-# Makefile for Function Stream Python Client
+# Makefile for Function Stream python Client
 
 PROJECT_NAME := functionstream-client
 PACKAGE_NAME := fs_client

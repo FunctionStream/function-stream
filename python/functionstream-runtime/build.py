@@ -12,10 +12,10 @@
 # limitations under the License.
 
 """
-WASM Build Script for Function Stream Runtime.
+wasm Build Script for Function Stream Runtime.
 
-This script compiles the Python runtime into a WebAssembly component using componentize-py.
-It handles dependency installation, WIT binding generation, and the final WASM compilation.
+This script compiles the python runtime into a WebAssembly component using componentize-py.
+It handles dependency installation, WIT binding generation, and the final wasm compilation.
 """
 
 import os
@@ -39,7 +39,7 @@ SRC_DIR = SCRIPT_DIR / "src"
 DEPENDENCIES_DIR = SCRIPT_DIR / "dependencies"
 BINDINGS_DIR = SCRIPT_DIR / "bindings"
 TARGET_DIR = SCRIPT_DIR / "target"
-WASM_OUTPUT = TARGET_DIR / "functionstream-runtime.wasm"
+WASM_OUTPUT = TARGET_DIR / "functionstream-python-runtime.wasm"
 
 # Sibling Projects
 FS_API_DIR = SCRIPT_DIR.parent / "functionstream-api"
@@ -63,7 +63,7 @@ class BuildError(Exception):
 
 
 class WasmBuilder:
-    """Encapsulates the WASM build process lifecycle."""
+    """Encapsulates the wasm build process lifecycle."""
 
     def __init__(self):
         self.python_exec = sys.executable
@@ -173,8 +173,8 @@ class WasmBuilder:
             logger.warning("Continuing build process (bindings are optional for the artifact)...")
 
     def build_wasm(self) -> None:
-        """Compiles the Python code into a WASM component."""
-        logger.info("Compiling WASM component...")
+        """Compiles the python code into a wasm component."""
+        logger.info("Compiling wasm component...")
 
         TARGET_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -221,22 +221,22 @@ class WasmBuilder:
 
             if WASM_OUTPUT.exists():
                 size_kb = WASM_OUTPUT.stat().st_size / 1024
-                logger.info(f"✓ WASM Build Successful!")
+                logger.info(f"✓ wasm Build Successful!")
                 logger.info(f"  Output: {WASM_OUTPUT}")
                 logger.info(f"  Size:   {size_kb:.2f} KB")
             else:
                 raise BuildError("Build command succeeded but output file is missing.")
 
         except subprocess.CalledProcessError as e:
-            logger.error("WASM compilation failed.")
+            logger.error("wasm compilation failed.")
             logger.error(f"STDOUT: {e.stdout}")
             logger.error(f"STDERR: {e.stderr}")
-            raise BuildError("WASM compilation failed.")
+            raise BuildError("wasm compilation failed.")
 
     def run(self) -> None:
         """Main execution flow."""
         print("=" * 60)
-        print("   Function Stream Runtime - WASM Builder")
+        print("   Function Stream Runtime - wasm Builder")
         print("=" * 60)
 
         try:

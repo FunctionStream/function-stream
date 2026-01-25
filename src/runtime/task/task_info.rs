@@ -82,12 +82,12 @@ pub mod config_keys {
     /// System will read configuration file from this path.
     pub const SINK_CONFIG_PATH: &str = "sink_config_path";
 
-    /// WASM module path key name
+    /// wasm module path key name
     ///
-    /// Stores path to WASM module file.
+    /// Stores path to wasm module file.
     /// This is an optional field, if not provided, empty string is used.
     ///
-    /// Note: wasm_path is not in configuration file, ensuring decoupling between configuration file and WASM module path.
+    /// Note: wasm_path is not in configuration file, ensuring decoupling between configuration file and wasm module path.
     pub const WASM_PATH: &str = "wasm_path";
 
     /// Get corresponding configuration path key name based on configuration type
@@ -127,8 +127,8 @@ pub mod config_keys {
 ///   - Specify path to Sink type configuration file (YAML format)
 ///   - System will read configuration file from this path
 ///
-/// - `config_keys::WASM_PATH` ("wasm_path"): WASM module path (optional)
-///   - Specify path to WASM module file
+/// - `config_keys::WASM_PATH` ("wasm_path"): wasm module path (optional)
+///   - Specify path to wasm module file
 ///   - If not provided, empty string will be used
 ///
 /// # Examples
@@ -153,7 +153,7 @@ pub struct TaskInfo {
     /// - `config_keys::PROCESSOR_CONFIG_PATH`: Processor configuration file path (required)
     /// - `config_keys::SOURCE_CONFIG_PATH`: Source configuration file path (optional, future support)
     /// - `config_keys::SINK_CONFIG_PATH`: Sink configuration file path (optional, future support)
-    /// - `config_keys::WASM_PATH`: WASM module path (optional)
+    /// - `config_keys::WASM_PATH`: wasm module path (optional)
     pub config: HashMap<String, String>,
 }
 

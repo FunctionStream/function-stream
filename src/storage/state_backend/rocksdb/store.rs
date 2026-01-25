@@ -10,47 +10,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// RocksDB State Store - RocksDB 状态存储实现
-//
-// 基于 RocksDB 实现 StateStore 接口，支持列族和优化操作
-
 use crate::storage::state_backend::error::BackendError;
 use crate::storage::state_backend::key_builder::{build_key, increment_key, is_all_0xff};
 use crate::storage::state_backend::store::{StateIterator, StateStore};
 use rocksdb::{DB, IteratorMode, WriteBatch};
 use std::sync::{Arc, Mutex};
 
-/// RocksDB 状态存储
+/// RocksDB state store
 pub struct RocksDBStateStore {
-    /// RocksDB 数据库实例
+    /// RocksDB database instance
     db: Arc<DB>,
-    /// 列族名称（如果使用列族）
+    /// Column family name (if using column family)
     ///
-    /// 使用 MultiThreaded 模式时，每次操作时通过名称获取句柄
-    /// 这样避免了生命周期和指针的问题
+    /// In MultiThreaded mode, get handle by name for each operation
+    /// This avoids lifetime and pointer issues
     column_family_name: Option<String>,
 }
 
 impl RocksDBStateStore {
-    /// 从工厂创建新的状态存储实例
+    /// Create a new state store instance from factory
     ///
-    /// # 参数
-    /// - `db`: 数据库实例
-    /// - `column_family`: 可选的列族名称
+    /// # Arguments
+    /// - `db`: database instance
+    /// - `column_family`: optional column family name
     ///
-    /// # 返回值
-    /// - `Ok(Box<dyn StateStore>)`: 成功创建
-    /// - `Err(BackendError)`: 创建失败
+    /// # Returns
+    /// - `Ok(Box<dyn StateStore>)`: successfully created
+    /// - `Err(BackendError)`: creation failed
     ///
-    /// 注意：调用方应确保列族已经存在（工厂会自动创建）
+    /// Note: Caller should ensure the column family already exists (factory will create it automatically)
     pub fn new_with_factory(
         db: Arc<DB>,
         column_family: Option<String>,
     ) -> Result<Box<dyn StateStore>, BackendError> {
-        // 验证列族存在（如果指定了非默认列族）
         let cf_name = if let Some(ref cf_name) = column_family {
             if cf_name != "default" {
-                // 验证列族存在
                 if db.cf_handle(cf_name).is_none() {
                     return Err(BackendError::Other(format!(
                         "Column family '{}' does not exist. This should not happen as factory should create it.",
@@ -71,30 +65,28 @@ impl RocksDBStateStore {
         }))
     }
 
-    /// 打开 RocksDB 存储（静态方法，简化版本）
+    /// Open RocksDB store (static method, simplified version)
     ///
-    /// # 参数
-    /// - `name`: 数据库路径
+    /// # Arguments
+    /// - `name`: database path
     ///
-    /// # 返回值
-    /// - `Ok(Box<dyn StateStore>)`: 成功打开
-    /// - `Err(BackendError)`: 打开失败
+    /// # Returns
+    /// - `Ok(Box<dyn StateStore>)`: successfully opened
+    /// - `Err(BackendError)`: open failed
     pub fn open<P: AsRef<std::path::Path>>(name: P) -> Result<Box<dyn StateStore>, BackendError> {
         let path = name.as_ref();
 
-        // 创建 RocksDB 选项
         let mut opts = rocksdb::Options::default();
         opts.create_if_missing(true);
         opts.set_merge_operator_associative("appendOp", merge_operator);
 
-        // 打开数据库
         let db = DB::open(&opts, path)
             .map_err(|e| BackendError::IoError(format!("Failed to open RocksDB: {}", e)))?;
 
         Self::new_with_factory(Arc::new(db), None)
     }
 
-    /// 使用列族进行操作的辅助方法
+    /// Helper method for operations using column family
     fn put_cf(&self, key: &[u8], value: &[u8]) -> Result<(), BackendError> {
         if let Some(ref cf_name) = self.column_family_name {
             let cf = self.db.cf_handle(cf_name).ok_or_else(|| {
@@ -167,7 +159,7 @@ impl RocksDBStateStore {
     }
 }
 
-/// Merge 操作符：追加操作
+/// Merge operator: append operation
 fn merge_operator(
     _new_key: &[u8],
     existing_val: Option<&[u8]>,
@@ -177,12 +169,10 @@ fn merge_operator(
 
     let mut buf = Vec::new();
 
-    // 先写入所有操作数
     for operand in operands {
         buf.write_all(operand).ok()?;
     }
 
-    // 然后追加现有值（如果存在）
     if let Some(existing) = existing_val {
         buf.write_all(existing).ok()?;
     }
@@ -210,7 +200,6 @@ impl StateStore for RocksDBStateStore {
     ) -> Result<Vec<Vec<u8>>, BackendError> {
         let mut keys = Vec::new();
 
-        // 创建迭代器
         let iter = if let Some(ref cf_name) = self.column_family_name {
             let cf = self.db.cf_handle(cf_name).ok_or_else(|| {
                 BackendError::Other(format!("Column family '{}' not found", cf_name))
@@ -258,9 +247,7 @@ impl StateStore for RocksDBStateStore {
             return Err(BackendError::Other("Empty prefix not allowed".to_string()));
         }
 
-        // 检查是否是全 0xFF 前缀（特殊处理）
         if is_all_0xff(&prefix) {
-            // 使用迭代器删除
             let iter = if let Some(ref cf_name) = self.column_family_name {
                 let cf = self.db.cf_handle(cf_name).ok_or_else(|| {
                     BackendError::Other(format!("Column family '{}' not found", cf_name))
@@ -306,12 +293,9 @@ impl StateStore for RocksDBStateStore {
             return Ok(count);
         }
 
-        // 使用范围删除（更高效）
         let end_key = increment_key(&prefix);
         self.delete_range_cf(&prefix, &end_key)?;
 
-        // 计算删除的数量（需要迭代统计，或者返回估计值）
-        // 为了简化，这里返回 0，实际实现可能需要统计
         Ok(0)
     }
 
@@ -326,41 +310,37 @@ impl StateStore for RocksDBStateStore {
     }
 }
 
-/// RocksDB 状态迭代器
+/// RocksDB state iterator
 ///
-/// 直接使用 RocksDB 的原生迭代器，不将所有数据加载到内存
-/// 使用内部状态跟踪当前迭代位置
+/// Uses RocksDB's native iterator directly without loading all data into memory
+/// Uses internal state to track current iteration position
 struct RocksDBStateIterator {
-    /// RocksDB 数据库实例
+    /// RocksDB database instance
     db: Arc<DB>,
-    /// 列族名称（如果使用列族）
+    /// Column family name (if using column family)
     column_family_name: Option<String>,
-    /// 前缀（用于过滤）
+    /// Prefix (for filtering)
     prefix: Vec<u8>,
-    /// 当前缓存的键值对（用于 has_next 检查）
+    /// Currently cached key-value pair (for has_next check)
     current: Arc<Mutex<Option<(Vec<u8>, Vec<u8>)>>>,
-    /// 上次访问的最后一个键（用于从上次位置继续）
+    /// Last accessed key (for continuing from last position)
     last_key: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
 impl RocksDBStateIterator {
-    /// 查找下一个匹配的项
+    /// Find the next matching item
     fn find_next(&self) -> Result<Option<(Vec<u8>, Vec<u8>)>, BackendError> {
         let last_key = self
             .last_key
             .lock()
             .map_err(|e| BackendError::Other(format!("Lock error: {}", e)))?;
 
-        // 确定迭代的起始位置
         let start_key = if let Some(ref last) = *last_key {
-            // 从上次的位置之后开始（排除上次的键）
             IteratorMode::From(last.as_slice(), rocksdb::Direction::Forward)
         } else {
-            // 从前缀开始
             IteratorMode::From(&self.prefix, rocksdb::Direction::Forward)
         };
 
-        // 创建迭代器
         let iter = if let Some(ref cf_name) = self.column_family_name {
             let cf = self.db.cf_handle(cf_name).ok_or_else(|| {
                 BackendError::Other(format!("Column family '{}' not found", cf_name))
@@ -370,20 +350,17 @@ impl RocksDBStateIterator {
             self.db.iterator(start_key)
         };
 
-        // 查找下一个匹配前缀的项
         for item in iter {
             let (key, value) =
                 item.map_err(|e| BackendError::IoError(format!("RocksDB iterator error: {}", e)))?;
             let key_slice = key.as_ref();
 
-            // 跳过上次的键（如果存在）
             if let Some(ref last) = *last_key
                 && key_slice <= last.as_slice() {
                     continue;
                 }
 
             if key_slice.starts_with(&self.prefix) {
-                // 更新 last_key
                 drop(last_key);
                 let mut last_key = self
                     .last_key
@@ -392,7 +369,6 @@ impl RocksDBStateIterator {
                 *last_key = Some(key.to_vec());
                 return Ok(Some((key.to_vec(), value.to_vec())));
             } else if key_slice > self.prefix.as_slice() {
-                // 键已经超过前缀范围，没有更多匹配的项
                 break;
             }
         }
@@ -403,7 +379,6 @@ impl RocksDBStateIterator {
 
 impl StateIterator for RocksDBStateIterator {
     fn has_next(&mut self) -> Result<bool, BackendError> {
-        // 如果已经有缓存的项，直接返回 true
         {
             let current = self
                 .current
@@ -414,7 +389,6 @@ impl StateIterator for RocksDBStateIterator {
             }
         }
 
-        // 尝试查找下一个项
         if let Some(pair) = self.find_next()? {
             let mut current = self
                 .current
@@ -428,7 +402,6 @@ impl StateIterator for RocksDBStateIterator {
     }
 
     fn next(&mut self) -> Result<Option<(Vec<u8>, Vec<u8>)>, BackendError> {
-        // 先检查是否有缓存的项
         {
             let mut current = self
                 .current
@@ -439,7 +412,6 @@ impl StateIterator for RocksDBStateIterator {
             }
         }
 
-        // 从迭代器获取下一个项
         self.find_next()
     }
 }

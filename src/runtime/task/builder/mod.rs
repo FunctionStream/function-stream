@@ -19,6 +19,7 @@
 // - SinkBuilder: Sink type task builder (future support)
 
 mod processor;
+#[cfg(feature = "python")]
 mod python;
 mod sink;
 mod source;

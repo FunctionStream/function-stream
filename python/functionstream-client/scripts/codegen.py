@@ -12,7 +12,7 @@
 # limitations under the License.
 
 """
-Industrial-grade Protobuf/gRPC Code Generator for Python.
+Industrial-grade Protobuf/gRPC Code Generator for python.
 """
 
 import sys
@@ -163,7 +163,7 @@ def main():
     default_out_dir = project_root / "src" / "fs_client" / "_proto"
 
     parser = argparse.ArgumentParser(
-        description="Generate Python code from Proto files."
+        description="Generate python code from Proto files."
     )
     parser.add_argument(
         "--proto-root",
@@ -175,7 +175,7 @@ def main():
         "--out-dir",
         type=Path,
         default=default_out_dir,
-        help="Output directory for generated Python code",
+        help="Output directory for generated python code",
     )
     parser.add_argument(
         "files",

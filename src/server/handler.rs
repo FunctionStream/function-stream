@@ -21,8 +21,9 @@ use protocol::service::{
     SqlRequest, StatusCode,
 };
 
+use crate::coordinator::Coordinator;
 use crate::sql::statement::{CreateFunction, Statement};
-use crate::sql::{Coordinator, SqlParser};
+use crate::sql::SqlParser;
 
 pub struct FunctionStreamServiceImpl {
     coordinator: Arc<Coordinator>,

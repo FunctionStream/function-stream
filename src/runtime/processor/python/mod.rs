@@ -10,12 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Server module for function-stream
+// python Processor module
+//
+// This module provides a python-specific processor implementation
+// that wraps the wasm processor for executing python code compiled to wasm.
 
-mod handler;
-mod initializer;
-mod service;
+pub mod python_host;
+pub mod python_service;
 
-pub use handler::FunctionStreamServiceImpl;
-pub use initializer::register_components;
-pub use service::start_server_with_shutdown;
+pub use python_host::{get_python_engine_and_component, initialize_config};
+pub use python_service::PythonService;
+

@@ -186,7 +186,7 @@ impl InputConfig {
 /// InputGroup - 输入组配置
 ///
 /// 一个输入组包含多个输入源配置。
-/// WASM 任务可以包含多个输入组，每个组可以包含多个输入源。
+/// wasm 任务可以包含多个输入组，每个组可以包含多个输入源。
 #[derive(Debug, Clone)]
 pub struct InputGroup {
     /// 输入源配置列表
@@ -318,9 +318,9 @@ impl InputGroup {
 pub struct ProcessorConfig {
     /// 处理器名称
     pub name: String,
-    /// WASM 模块字节（不在配置文件中，运行时设置）
+    /// wasm 模块字节（不在配置文件中，运行时设置）
     ///
-    /// 注意：此字段不会从配置文件序列化/反序列化，保证配置文件和 WASM 模块字节解耦
+    /// 注意：此字段不会从配置文件序列化/反序列化，保证配置文件和 wasm 模块字节解耦
     #[serde(skip)]
     pub wasm_bytes: Option<Vec<u8>>,
     /// 是否使用内置 Event 序列化方式
@@ -341,9 +341,9 @@ pub struct ProcessorConfig {
     /// 如果未设置或小于 1，则使用默认值 1 秒
     #[serde(default = "default_checkpoint_interval")]
     pub checkpoint_interval_seconds: u64,
-    /// WASM 初始化配置（可选）
+    /// wasm 初始化配置（可选）
     ///
-    /// 传递给 WASM 模块 fs_init 函数的配置参数
+    /// 传递给 wasm 模块 fs_init 函数的配置参数
     /// 如果不配置，则传递空 Map
     #[serde(default)]
     pub init_config: HashMap<String, String>,
@@ -439,10 +439,10 @@ impl ProcessorConfig {
         Ok(config)
     }
 
-    /// 设置 WASM 模块字节
+    /// 设置 wasm 模块字节
     ///
     /// # 参数
-    /// - `bytes`: WASM 模块字节
+    /// - `bytes`: wasm 模块字节
     pub fn set_wasm_bytes(&mut self, bytes: Vec<u8>) {
         self.wasm_bytes = Some(bytes);
     }
@@ -502,10 +502,10 @@ impl OutputConfig {
 }
 
 // ============================================================================
-// WasmTask Configuration (WASM 任务配置)
+// WasmTask Configuration (wasm 任务配置)
 // ============================================================================
 
-/// WasmTaskConfig - WASM 任务配置
+/// WasmTaskConfig - wasm 任务配置
 ///
 /// 包含 Input、Processor、Output 三个组件的配置
 #[derive(Debug, Clone)]

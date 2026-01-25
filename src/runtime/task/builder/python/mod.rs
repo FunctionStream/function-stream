@@ -10,16 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Python Builder - Python runtime task builder
+// python Builder - python runtime task builder
 //
-// Specifically handles building logic for Python runtime configuration
+// Specifically handles building logic for python runtime configuration
 
 use crate::runtime::input::{InputSource, InputSourceProvider};
 use crate::runtime::output::{OutputSink, OutputSinkProvider};
-use crate::runtime::processor::WASM::wasm_processor::WasmProcessorImpl;
-use crate::runtime::processor::WASM::wasm_processor_trait::WasmProcessor;
-use crate::runtime::processor::WASM::wasm_task::{TaskEnvironment, WasmTask};
-use crate::runtime::processor::Python::get_python_engine_and_component;
+use crate::runtime::processor::wasm::wasm_processor::WasmProcessorImpl;
+use crate::runtime::processor::wasm::wasm_processor_trait::WasmProcessor;
+use crate::runtime::processor::wasm::wasm_task::{TaskEnvironment, WasmTask};
+use crate::runtime::processor::python::get_python_engine_and_component;
 use crate::runtime::task::yaml_keys::{TYPE, type_values};
 use crate::runtime::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
 use serde_yaml::Value;
@@ -70,7 +70,9 @@ impl PythonBuilder {
             task_config.processor.name
         );
 
-        let environment = TaskEnvironment::new(task_config.task_name.clone());
+        let environment = TaskEnvironment {
+            task_name: task_config.task_name.clone(),
+        };
 
         let mut all_inputs = Vec::new();
         for (group_idx, input_group) in task_config.input_groups.iter().enumerate() {
@@ -103,7 +105,7 @@ impl PythonBuilder {
 
         let processor =
             Self::create_processor_from_config(&task_config.processor, module_bytes)?;
-        log::info!("Created Python processor: {}", task_config.processor.name);
+        log::info!("Created python processor: {}", task_config.processor.name);
 
         let task = WasmTask::new(environment, all_inputs, processor, outputs);
         let task = Arc::new(task);
@@ -129,12 +131,12 @@ impl PythonBuilder {
         processor_config: &ProcessorConfig,
         module_bytes: Vec<u8>,
     ) -> Result<Box<dyn WasmProcessor>, Box<dyn std::error::Error + Send>> {
-        // Get Python WASM engine and component for reuse
+        // Get python wasm engine and component for reuse
         let (custom_engine, custom_component) = get_python_engine_and_component()
             .map_err(|e| -> Box<dyn std::error::Error + Send> {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Failed to get Python WASM engine and component: {}", e),
+                    format!("Failed to get python wasm engine and component: {}", e),
                 ))
             })?;
 

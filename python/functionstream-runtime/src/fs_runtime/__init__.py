@@ -11,7 +11,7 @@
 # limitations under the License.
 
 """
-functionstream-runtime (WASM 内核 & WIT 实现)
+functionstream-runtime (wasm 内核 & WIT 实现)
 
 包含真实 WIT 绑定，只存在于服务端
 """

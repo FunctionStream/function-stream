@@ -14,7 +14,7 @@
 //
 // Specifically handles building logic for Source type configuration (future support)
 
-use crate::runtime::processor::WASM::wasm_task::WasmTask;
+use crate::runtime::processor::wasm::wasm_task::WasmTask;
 use crate::runtime::task::yaml_keys::{TYPE, type_values};
 use serde_yaml::Value;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ impl SourceBuilder {
     /// # Arguments
     /// - `task_name`: Task name
     /// - `yaml_value`: YAML configuration value (root-level configuration)
-    /// - `wasm_path`: WASM module path (optional)
+    /// - `wasm_path`: wasm module path (optional)
     ///
     /// # Returns
     /// - `Ok(Arc<WasmTask>)`: Successfully created task (future support)

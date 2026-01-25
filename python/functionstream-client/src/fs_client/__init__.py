@@ -11,7 +11,7 @@
 # limitations under the License.
 
 """
-Function Stream Python Client
+Function Stream python Client
 
 A high-level gRPC client library for interacting with the Function Stream service.
 """

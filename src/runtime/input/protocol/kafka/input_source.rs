@@ -618,7 +618,7 @@ impl InputSource for KafkaInputSource {
             })?;
 
         // Register thread group to InitContext
-        use crate::runtime::processor::WASM::thread_pool::{ThreadGroup, ThreadGroupType};
+        use crate::runtime::processor::wasm::thread_pool::{ThreadGroup, ThreadGroupType};
         let mut input_thread_group = ThreadGroup::new(
             ThreadGroupType::InputSource(self.group_id),
             format!("InputSource-g{}-i{}", self.group_id, self.input_id),

@@ -12,11 +12,11 @@
 
 // TaskManager - Task manager
 //
-// Manages WASM-based task lifecycle, including configuration parsing, file persistence, concurrency control and state transitions.
+// Manages wasm-based task lifecycle, including configuration parsing, file persistence, concurrency control and state transitions.
 
 use crate::config::GlobalConfig;
 use crate::runtime::common::ComponentState;
-use crate::runtime::processor::WASM::thread_pool::{GlobalTaskThreadPool, TaskThreadPool};
+use crate::runtime::processor::wasm::thread_pool::{GlobalTaskThreadPool, TaskThreadPool};
 use crate::runtime::task::TaskLifecycle;
 use crate::runtime::taskexecutor::init_context::InitContext;
 use crate::storage::state_backend::StateStorageServer;
@@ -156,7 +156,7 @@ impl TaskManager {
     ///
     /// # Arguments
     /// - `config_bytes`: Configuration file byte array (YAML format)
-    /// - `wasm_bytes`: WASM binary package byte array
+    /// - `wasm_bytes`: wasm binary package byte array
     ///
     /// # Returns
     /// - `Ok(())`: Registration successful

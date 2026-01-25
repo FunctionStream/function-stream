@@ -26,16 +26,16 @@ impl PythonService {
     /// Initialize Python WASM runtime with configuration
     ///
     /// This method:
-    /// 1. Loads the Python WASM component from the configured path
-    /// 2. Initializes the engine and component for use
-    /// 3. Uses configuration from GlobalConfig if provided
+    /// 1. Initializes the configuration for Python host
+    /// 2. Validates that the WASM file exists at the configured path
+    /// 3. Loads and compiles the Python WASM component (or loads from cache)
     ///
     /// # Arguments
     /// - `config`: Global configuration containing Python runtime settings
     ///
     /// # Returns
     /// - `Ok(())`: Initialization successful
-    /// - `Err(...)`: Initialization failed
+    /// - `Err(...)`: Initialization failed (e.g., WASM file not found)
     pub fn initialize(config: &GlobalConfig) -> Result<()> {
         info!("Initializing Python WASM runtime...");
 
@@ -47,6 +47,11 @@ impl PythonService {
             python_config.cache_dir,
             python_config.enable_cache
         );
+
+        // Initialize configuration for Python host
+        // This validates the WASM file exists and stores the configuration
+        super::python_host::initialize_config(python_config)
+            .context("Failed to initialize Python host configuration")?;
 
         // Pre-initialize the Python WASM engine and component
         // This will load and compile the WASM component, or load from cache if available
@@ -60,14 +65,15 @@ impl PythonService {
 
     /// Initialize Python WASM runtime with default configuration
     ///
-    /// This is a convenience method that uses default configuration values
+    /// This is a convenience method that uses default configuration values.
+    /// Default WASM path: data/cache/python-runner/functionstream-python-runtime.wasm
+    /// Default cache directory: data/cache/python-runner
     ///
     /// # Returns
     /// - `Ok(())`: Initialization successful
-    /// - `Err(...)`: Initialization failed
+    /// - `Err(...)`: Initialization failed (e.g., WASM file not found at default path)
     pub fn initialize_with_defaults() -> Result<()> {
         let config = GlobalConfig::default();
         Self::initialize(&config)
     }
 }
-

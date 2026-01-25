@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Rust WASM Processor 构建脚本
-# 将 Rust 代码编译为 WASM Component
+# Rust wasm Processor 构建脚本
+# 将 Rust 代码编译为 wasm Component
 
 set -e
 
@@ -34,7 +34,7 @@ fi
 OUTPUT_DIR="build"
 mkdir -p "$OUTPUT_DIR"
 
-# 编译 Rust 代码为 WASM Component
+# 编译 Rust 代码为 wasm Component
 echo -e "${GREEN}Compiling Rust to WASM Component...${NC}"
 cargo build --target wasm32-wasip1 --release
 
@@ -43,7 +43,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 复制生成的 WASM 文件
+# 复制生成的 wasm 文件
 WASM_FILE="target/wasm32-wasip1/release/rust_processor.wasm"
 if [ ! -f "$WASM_FILE" ]; then
     # 尝试查找实际的输出文件名

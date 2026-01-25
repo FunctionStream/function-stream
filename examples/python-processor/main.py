@@ -40,7 +40,7 @@ def main() -> int:
     default_config = script_dir / "config.yaml"
 
     parser = argparse.ArgumentParser(
-        description="Register Python Processor via Function Stream Python Client."
+        description="Register python Processor via Function Stream python Client."
     )
     parser.add_argument("--host", default="localhost", help="Function Stream host")
     parser.add_argument("--port", type=int, default=8080, help="Function Stream port")
@@ -72,7 +72,7 @@ def main() -> int:
 
     with FsClient(host=args.host, port=args.port) as client:
         client.create_function_from_bytes(processor_bytes, config_bytes)
-        logger.info("Python processor registered successfully.")
+        logger.info("python processor registered successfully.")
 
     return 0
 

@@ -10,11 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod thread_pool;
-pub mod wasm_host;
-pub mod wasm_processor;
-pub mod wasm_processor_trait;
-pub mod wasm_task;
+pub mod factory;
+pub mod store;
 
-// Re-export commonly used types
-pub use wasm_processor::WasmProcessorImpl;
+pub use factory::{RocksDBConfig, RocksDBStateStoreFactory};

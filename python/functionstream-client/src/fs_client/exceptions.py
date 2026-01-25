@@ -13,7 +13,7 @@
 """
 Custom exceptions for Function Stream Client.
 
-This module maps gRPC status codes to semantic Python exceptions,
+This module maps gRPC status codes to semantic python exceptions,
 allowing users to handle specific error cases (e.g., timeouts, auth failures)
 granularly.
 """

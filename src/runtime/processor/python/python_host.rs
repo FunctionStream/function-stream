@@ -12,11 +12,13 @@
 
 // Python WASM Host
 //
-// This module provides Python-specific WASM host implementation
-// that manages a global engine and component for Python WASM runtime
+// This module provides python-specific wasm host implementation
+// that manages a global engine and component for python wasm runtime.
+// Configuration is used to specify paths instead of hardcoding.
 
+use crate::config::PythonConfig;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use wasmtime::{Engine, component::Component};
 
 // Global Python WASM Engine (thread-safe, shareable)
@@ -25,67 +27,79 @@ static GLOBAL_PYTHON_ENGINE: OnceLock<Arc<Engine>> = OnceLock::new();
 // Global Python WASM Component (thread-safe, shareable)
 static GLOBAL_PYTHON_COMPONENT: OnceLock<Arc<Component>> = OnceLock::new();
 
-/// Get the default Python WASM file path
+// Global Python Configuration (initialized once)
+static GLOBAL_PYTHON_CONFIG: OnceLock<RwLock<PythonConfig>> = OnceLock::new();
+
+/// Initialize the Python host with configuration
 ///
-/// The path is relative to the project root:
-/// `python/functionstream-runtime/target/functionstream-runtime.wasm`
-fn get_python_wasm_path() -> PathBuf {
-    // Try to get project root from environment or use current directory
-    let project_root = std::env::var("CARGO_MANIFEST_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            // If CARGO_MANIFEST_DIR is not set, try to find project root by going up
-            let mut current = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            loop {
-                if current.join("Cargo.toml").exists() || current.join("wit").exists() {
-                    break;
-                }
-                if !current.pop() {
-                    break;
+/// This must be called before `get_python_engine_and_component`.
+/// The configuration specifies paths for WASM file and cache directory.
+///
+/// # Arguments
+/// - `config`: Python runtime configuration
+///
+/// # Returns
+/// - `Ok(())`: Initialization successful
+/// - `Err(...)`: Configuration already set or validation failed
+pub fn initialize_config(config: &PythonConfig) -> anyhow::Result<()> {
+    // Validate wasm_path exists
+    let wasm_path = PathBuf::from(&config.wasm_path);
+    if !wasm_path.exists() {
+        return Err(anyhow::anyhow!(
+            "Python WASM file not found at: {}. Please ensure the file exists or build it first with: cd python/functionstream-runtime && make build",
+            wasm_path.display()
+        ));
+    }
+
+    // Store configuration
+    match GLOBAL_PYTHON_CONFIG.set(RwLock::new(config.clone())) {
+        Ok(_) => {
+            log::info!(
+                "[Python Host] Configuration initialized: wasm_path={}, cache_dir={}, enable_cache={}",
+                config.wasm_path,
+                config.cache_dir,
+                config.enable_cache
+            );
+            Ok(())
+        }
+        Err(_) => {
+            // Configuration already set, check if it matches
+            if let Some(existing) = GLOBAL_PYTHON_CONFIG.get() {
+                let existing_config = existing.read().map_err(|e| {
+                    anyhow::anyhow!("Failed to read existing configuration: {}", e)
+                })?;
+                if existing_config.wasm_path == config.wasm_path 
+                    && existing_config.cache_dir == config.cache_dir 
+                    && existing_config.enable_cache == config.enable_cache {
+                    log::debug!("[Python Host] Configuration already set with same values");
+                    return Ok(());
                 }
             }
-            current
-        });
-
-    project_root
-        .join("python")
-        .join("functionstream-runtime")
-        .join("target")
-        .join("functionstream-runtime.wasm")
+            Err(anyhow::anyhow!(
+                "Python host configuration has already been initialized with different values"
+            ))
+        }
+    }
 }
 
-/// Get the cache directory for precompiled components
-fn get_cache_dir() -> PathBuf {
-    let project_root = std::env::var("CARGO_MANIFEST_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            let mut current = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            loop {
-                if current.join("Cargo.toml").exists() || current.join("wit").exists() {
-                    break;
-                }
-                if !current.pop() {
-                    break;
-                }
-            }
-            current
-        });
-
-    project_root.join(".cache").join("python-wasm")
+/// Get the current Python configuration
+///
+/// Returns the default configuration if not explicitly initialized.
+fn get_config() -> PythonConfig {
+    GLOBAL_PYTHON_CONFIG
+        .get()
+        .and_then(|lock| lock.read().ok())
+        .map(|config| config.clone())
+        .unwrap_or_else(PythonConfig::default)
 }
 
-/// Get the cache file path for precompiled Python WASM component
-fn get_cache_file_path() -> PathBuf {
-    get_cache_dir().join("functionstream-runtime.cwasm")
-}
-
-/// Load Python WASM bytes from the default path
-fn load_python_wasm_bytes() -> anyhow::Result<Vec<u8>> {
-    let wasm_path = get_python_wasm_path();
+/// Load Python WASM bytes from the configured path
+fn load_python_wasm_bytes(config: &PythonConfig) -> anyhow::Result<Vec<u8>> {
+    let wasm_path = config.wasm_path_buf();
     
     if !wasm_path.exists() {
         return Err(anyhow::anyhow!(
-            "Python WASM file not found at: {}. Please build it first with: cd python/functionstream-runtime && make build",
+            "Python WASM file not found at: {}. Please ensure the file exists or build it first with: cd python/functionstream-runtime && make build",
             wasm_path.display()
         ));
     }
@@ -131,10 +145,16 @@ fn get_global_python_engine() -> anyhow::Result<Arc<Engine>> {
 }
 
 /// Load precompiled component from cache if available
-fn load_precompiled_component(engine: &Engine) -> Option<Component> {
-    let cache_path = get_cache_file_path();
+fn load_precompiled_component(engine: &Engine, config: &PythonConfig) -> Option<Component> {
+    if !config.enable_cache {
+        log::debug!("[Python Host] Component caching is disabled");
+        return None;
+    }
+
+    let cache_path = config.cwasm_cache_path();
     
     if !cache_path.exists() {
+        log::debug!("[Python Host] No cached component found at: {}", cache_path.display());
         return None;
     }
 
@@ -163,9 +183,13 @@ fn load_precompiled_component(engine: &Engine) -> Option<Component> {
 }
 
 /// Save precompiled component to cache
-fn save_precompiled_component(engine: &Engine, wasm_bytes: &[u8]) -> anyhow::Result<PathBuf> {
-    let cache_dir = get_cache_dir();
-    let cache_path = get_cache_file_path();
+fn save_precompiled_component(engine: &Engine, wasm_bytes: &[u8], config: &PythonConfig) -> anyhow::Result<PathBuf> {
+    if !config.enable_cache {
+        return Err(anyhow::anyhow!("Component caching is disabled"));
+    }
+
+    let cache_dir = config.cache_dir_buf();
+    let cache_path = config.cwasm_cache_path();
 
     // Create cache directory if it doesn't exist
     std::fs::create_dir_all(&cache_dir).map_err(|e| {
@@ -193,14 +217,15 @@ fn save_precompiled_component(engine: &Engine, wasm_bytes: &[u8]) -> anyhow::Res
 
 /// Get or create global Python WASM Component
 ///
-/// The component is loaded from cache if available, otherwise compiled from the built-in WASM file path.
-/// If cache doesn't exist, the component is compiled and saved to cache for future use.
-/// The WASM file path is: `python/functionstream-runtime/target/functionstream-runtime.wasm`
-/// The cache path is: `.cache/python-wasm/functionstream-runtime.cwasm`
+/// The component is loaded from cache if available, otherwise compiled from the WASM file.
+/// If cache doesn't exist and caching is enabled, the component is compiled and saved to cache.
+/// Configuration paths are used instead of hardcoded paths.
 fn get_global_python_component() -> anyhow::Result<Arc<Component>> {
     if let Some(component) = GLOBAL_PYTHON_COMPONENT.get() {
         return Ok(Arc::clone(component));
     }
+
+    let config = get_config();
 
     let component = GLOBAL_PYTHON_COMPONENT.get_or_init(|| {
         let component_start = std::time::Instant::now();
@@ -209,15 +234,15 @@ fn get_global_python_component() -> anyhow::Result<Arc<Component>> {
         });
 
         // Try to load precompiled component from cache first
-        if let Some(precompiled) = load_precompiled_component(&engine) {
+        if let Some(precompiled) = load_precompiled_component(&engine, &config) {
             let component_elapsed = component_start.elapsed().as_secs_f64();
             log::info!("[Python Host] Precompiled component loaded from cache: {:.3}s", component_elapsed);
             return Arc::new(precompiled);
         }
 
         // Cache doesn't exist or is invalid, compile from WASM file
-        log::info!("[Python Host] Loading Python WASM component from built-in path...");
-        let wasm_bytes = load_python_wasm_bytes().unwrap_or_else(|e| {
+        log::info!("[Python Host] Loading Python WASM component from: {}", config.wasm_path);
+        let wasm_bytes = load_python_wasm_bytes(&config).unwrap_or_else(|e| {
             panic!("Failed to load Python WASM bytes: {}", e);
         });
 
@@ -238,9 +263,11 @@ fn get_global_python_component() -> anyhow::Result<Arc<Component>> {
                    wasm_bytes.len() / 1024);
 
         // Save precompiled component to cache for future use
-        if let Err(e) = save_precompiled_component(&engine, &wasm_bytes) {
-            log::warn!("[Python Host] Failed to save precompiled component to cache: {}", e);
-            log::warn!("[Python Host] Component will be recompiled on next run");
+        if config.enable_cache {
+            if let Err(e) = save_precompiled_component(&engine, &wasm_bytes, &config) {
+                log::warn!("[Python Host] Failed to save precompiled component to cache: {}", e);
+                log::warn!("[Python Host] Component will be recompiled on next run");
+            }
         }
 
         let component_elapsed = component_start.elapsed().as_secs_f64();
@@ -255,10 +282,13 @@ fn get_global_python_component() -> anyhow::Result<Arc<Component>> {
 /// Get global Python WASM Engine and Component
 ///
 /// This function returns both the engine and component, ensuring they are initialized.
-/// The component is loaded from the built-in path on first call.
+/// The component is loaded from the configured path on first call.
+///
+/// # Important
+/// Call `initialize_config` before this function to set custom paths.
+/// If not called, default configuration will be used.
 pub fn get_python_engine_and_component() -> anyhow::Result<(Arc<Engine>, Arc<Component>)> {
     let engine = get_global_python_engine()?;
     let component = get_global_python_component()?;
     Ok((engine, component))
 }
-

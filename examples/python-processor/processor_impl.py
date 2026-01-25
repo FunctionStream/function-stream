@@ -11,56 +11,79 @@
 # limitations under the License.
 
 import json
+import time
 from typing import Dict
 
 from fs_api import FSProcessorDriver, Context
 
-
 class CounterProcessor(FSProcessorDriver):
+    """
+    Real-time Counter Processor.
+    Function: Updates state and emits a snapshot for EVERY single message processed.
+    """
     def __init__(self) -> None:
         self._counter_map: Dict[str, int] = {}
-        self._total_processed = 0
-        self._emit_threshold = 6
-        self._store_name = "counter-store"
+        self._total_processed: int = 0
+        self._store_name: str = "counter-store"
+        self._key_prefix: str = ""
 
-    def init(self, ctx: Context, config: dict):
+    def init(self, ctx: Context, config: dict) -> None:
+        """Initialize the processor."""
         self._counter_map = {}
         self._total_processed = 0
-        threshold = config.get("emit_threshold") if isinstance(config, dict) else None
-        if threshold is not None:
-            try:
-                self._emit_threshold = max(1, int(threshold))
-            except (TypeError, ValueError):
-                self._emit_threshold = 6
 
-    def process(self, ctx: Context, source_id: int, data: bytes):
-        input_str = data.decode("utf-8", errors="ignore")
-        if not input_str:
-            return
+        # Safe configuration parsing
+        if isinstance(config, dict):
+            # Parse Key prefix
+            self._key_prefix = str(config.get("key_prefix", ""))
 
-        self._total_processed += 1
-        store = ctx.getOrCreateKVStore(self._store_name)
+    def process(self, ctx: Context, source_id: int, data: bytes) -> None:
+        """Core processing logic: One input -> One output."""
+        try:
+            # 1. Decode data
+            input_str = data.decode("utf-8", errors="replace").strip()
+            if not input_str:
+                return
 
-        count = 0
-        stored = store.get_state(input_str.encode("utf-8"))
-        if stored is not None:
-            try:
-                count = int(stored.decode("utf-8"))
-            except (TypeError, ValueError):
-                count = 0
+            self._total_processed += 1
 
-        count += 1
-        self._counter_map[input_str] = count
-        store.put_state(input_str.encode("utf-8"), str(count).encode("utf-8"))
+            # 2. State Management (Load -> Modify -> Store)
+            store = ctx.getOrCreateKVStore(self._store_name)
 
-        if self._total_processed % self._emit_threshold == 0:
-            payload = json.dumps(
-                {
-                    "total_processed": self._total_processed,
-                    "counter_map": self._counter_map,
-                }
-            ).encode("utf-8")
-            ctx.emit(payload, 0)
+            full_key = f"{self._key_prefix}{input_str}"
+            store_key_bytes = full_key.encode("utf-8")
+
+            current_count = 0
+            stored_val = store.get_state(store_key_bytes)
+
+            if stored_val:
+                try:
+                    current_count = int(stored_val.decode("utf-8"))
+                except ValueError:
+                    current_count = 0
+
+            new_count = current_count + 1
+
+            # Update memory and persistence
+            self._counter_map[input_str] = new_count
+            store.put_state(store_key_bytes, str(new_count).encode("utf-8"))
+
+            # 3. Trigger Output Emission
+            # REQUIREMENT: Emit output for every single message processed
+            self._emit_snapshot(ctx)
+
+        except Exception as e:
+            raise e
+
+    def _emit_snapshot(self, ctx: Context):
+        """Helper: Serialize and emit current state."""
+        output_payload = {
+            "total_processed": self._total_processed,
+            "counter_map": self._counter_map
+        }
+
+        payload_bytes = json.dumps(output_payload).encode("utf-8")
+        ctx.emit(payload_bytes, 0)
 
     def process_watermark(self, ctx: Context, source_id: int, watermark: int):
         ctx.emit_watermark(watermark, 0)

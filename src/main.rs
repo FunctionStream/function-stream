@@ -12,6 +12,7 @@
 
 mod codec;
 mod config;
+mod coordinator;
 mod logging;
 mod runtime;
 mod server;
@@ -20,7 +21,6 @@ mod storage;
 
 use anyhow::{Context, Result};
 use std::thread;
-use std::time::Duration;
 use tokio::sync::oneshot;
 
 pub struct ServerHandle {
@@ -78,20 +78,6 @@ async fn wait_for_signal() -> Result<String> {
             .context("Failed to listen for Ctrl+C")?;
         Ok("Ctrl+C".to_string())
     }
-}
-
-fn initialize_components(config: &config::GlobalConfig) -> Result<()> {
-    log::info!("Initializing core system components...");
-
-    runtime::taskexecutor::TaskManager::init(config)
-        .context("TaskManager initialization failed")?;
-    log::info!("TaskManager initialized.");
-
-    runtime::processor::Python::PythonService::initialize(config)
-        .context("Python Runtime initialization failed")?;
-    log::info!("Python WASM Runtime initialized.");
-
-    Ok(())
 }
 
 fn spawn_server_thread(config: config::GlobalConfig) -> Result<ServerHandle> {
@@ -186,7 +172,9 @@ fn main() -> Result<()> {
     );
 
     // 2. Component Initialization
-    initialize_components(&config)?;
+    let registry = server::register_components();
+    registry.initialize_all(&config)
+        .context("Component initialization failed")?;
 
     // 3. Server Startup
     let mut server_handle = spawn_server_thread(config.clone())?;

@@ -32,7 +32,10 @@ MONOREPO_ROOT := $(abspath $(current_dir)/../..)
 
 # Output paths
 OUTPUT_DIR   := $(SCRIPT_DIR)/target
-WASM_OUTPUT  := $(OUTPUT_DIR)/functionstream-runtime.wasm
+WASM_OUTPUT  := $(OUTPUT_DIR)/functionstream-python-runtime.wasm
+
+# Cache directory for distribution
+CACHE_DIR    := $(MONOREPO_ROOT)/data/cache/python-runner
 
 # [FIX 2] Virtual Environment (Located at Monorepo Root)
 VENV_DIR     := $(MONOREPO_ROOT)/.venv
@@ -89,7 +92,7 @@ install-deps: venv
 	@$(PIP) install -e $(PYTHON_ROOT)/functionstream-api
 	@$(call log_success, Dependencies installed.)
 
-# Build the WASM component
+# Build the wasm component
 build: venv
 	@# Check if componentize-py is installed
 	@if [ ! -f "$(COMPONENTIZE)" ]; then \
@@ -103,6 +106,9 @@ build: venv
 	@if [ -f "$(WASM_OUTPUT)" ]; then \
 		echo "$(color_green)[SUCCESS]$(color_reset) Build complete: $(WASM_OUTPUT)"; \
 		ls -lh $(WASM_OUTPUT); \
+		mkdir -p $(CACHE_DIR); \
+		cp $(WASM_OUTPUT) $(CACHE_DIR)/; \
+		echo "$(color_green)[SUCCESS]$(color_reset) Copied to: $(CACHE_DIR)/functionstream-python-runtime.wasm"; \
 	else \
 		echo "$(color_red)[ERROR]$(color_reset) Build failed: Output file missing"; \
 		exit 1; \

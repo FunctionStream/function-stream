@@ -16,12 +16,12 @@
 // for WebAssembly-based data processors in the stream processing system.
 
 use crate::runtime::taskexecutor::InitContext;
-use std::any::Any;
+use crate::runtime::output::OutputSink;
 
-/// WASM Processor trait
+/// wasm Processor trait
 ///
 /// This trait defines the interface for processing data using WebAssembly modules.
-/// Implementations should load and execute WASM modules to process stream data.
+/// Implementations should load and execute wasm modules to process stream data.
 pub trait WasmProcessor: Send + Sync {
     /// Process input data
     ///
@@ -30,7 +30,7 @@ pub trait WasmProcessor: Send + Sync {
     /// * `input_index` - Index of the input source (0-based)
     ///
     /// # Note
-    /// The actual processed data is sent via collector::emit in WASM
+    /// The actual processed data is sent via collector::emit in wasm
     fn process(
         &self,
         data: Vec<u8>,
@@ -62,7 +62,7 @@ pub trait WasmProcessor: Send + Sync {
     /// Initialize processor with initialization context
     ///
     /// This method should:
-    /// 1. Load the WASM module from the file system
+    /// 1. Load the wasm module from the file system
     /// 2. Validate the module
     /// 3. Prepare the module for execution
     ///
@@ -76,10 +76,30 @@ pub trait WasmProcessor: Send + Sync {
         init_context: &InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
+    /// Initialize WasmHost with output sinks
+    ///
+    /// This method should be called after init_with_context to initialize WasmHost with output sinks.
+    ///
+    /// # Arguments
+    /// - `output_sinks`: Output sink list
+    /// - `init_context`: Initialization context
+    /// - `task_name`: Task name
+    ///
+    /// # Returns
+    /// Ok(()) if initialization succeeds, or an error if it fails
+    fn init_wasm_host(
+        &mut self,
+        _output_sinks: Vec<Box<dyn OutputSink>>,
+        _init_context: &InitContext,
+        _task_name: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
+        Ok(())
+    }
+
     /// Take a checkpoint
     ///
     /// This method should:
-    /// 1. Save the current state of the WASM module
+    /// 1. Save the current state of the wasm module
     /// 2. Save any internal state (watermark, buffers, etc.)
     /// 3. Persist the checkpoint to storage
     ///
@@ -122,7 +142,7 @@ pub trait WasmProcessor: Send + Sync {
     ///
     /// This method should:
     /// 1. Load checkpoint data from storage
-    /// 2. Restore WASM module state
+    /// 2. Restore wasm module state
     /// 3. Restore internal state (watermark, buffers, etc.)
     /// 4. Reinitialize the processor with restored state
     ///
@@ -144,7 +164,7 @@ pub trait WasmProcessor: Send + Sync {
     ///
     /// This method should check the health status of the processor,
     /// including whether it's initialized, if there are any errors,
-    /// and if the WASM module is functioning correctly.
+    /// and if the wasm module is functioning correctly.
     ///
     /// # Returns
     /// `true` if the processor is healthy, `false` otherwise
@@ -156,7 +176,7 @@ pub trait WasmProcessor: Send + Sync {
     /// Close the processor and clean up resources
     ///
     /// This method should:
-    /// 1. Clean up any WASM module instances
+    /// 1. Clean up any wasm module instances
     /// 2. Release any allocated resources
     /// 3. Finalize any pending checkpoints
     ///
@@ -234,7 +254,4 @@ pub trait WasmProcessor: Send + Sync {
         // Default implementation: do nothing
         Ok(())
     }
-
-    /// Get a mutable reference to the underlying Any type for downcasting
-    fn as_any_mut(&mut self) -> &mut dyn Any;
 }

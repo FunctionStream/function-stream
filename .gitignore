@@ -3,6 +3,7 @@
 .idea/
 **/.vscode/
 **/.venv/**
+dist/**
 
 **.wasm
 
@@ -18,7 +19,7 @@ python/functionstream-client/src/fs_client/_proto/
 python/functionstream-api/build
 
 
-# Python Runtime - Build artifacts and intermediate files
+# python Runtime - Build artifacts and intermediate files
 python/**/bindings/
 python/**/dependencies/
 python/**/target/
