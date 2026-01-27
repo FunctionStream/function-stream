@@ -80,10 +80,8 @@ def main() -> int:
     # Build modules list: (module_name, module_bytes)
     # Use the module name "processor_impl" (without .py extension)
     module_name = processor_impl_file.stem  # "processor_impl"
-    byte = cloudpickle.dumps(processor_impl.CounterProcessor())
 
-
-    modules = [serializer.serialize_by_value(processor_impl.CounterProcessor())]
+    modules = [(module_name,processor_source_bytes)]
     
     logger.info("Prepared modules: %s (size: %d bytes)", module_name, len(processor_source_bytes))
 
