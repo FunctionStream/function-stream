@@ -3,7 +3,6 @@ members = [
     ".",
     "protocol",
     "cli/cli",
-    "cli/rust-client",
 ]
 
 [package]

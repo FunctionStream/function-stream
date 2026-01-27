@@ -2378,19 +2378,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-client"
-version = "0.1.0"
-dependencies = [
- "clap",
- "function-stream",
- "protocol",
- "rustyline",
- "rustyline-derive",
- "tokio",
- "tonic",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
