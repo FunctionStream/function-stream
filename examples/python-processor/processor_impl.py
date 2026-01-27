@@ -11,7 +11,6 @@
 # limitations under the License.
 
 import json
-import time
 from typing import Dict
 
 from fs_api import FSProcessorDriver, Context

@@ -13,12 +13,16 @@
 import argparse
 import inspect
 import logging
+import pickletools
 import sys
 from pathlib import Path
+
+import cloudpickle
 
 from fs_api import FSProcessorDriver, Context
 from fs_client.client import FsClient
 import processor_impl
+import serializer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,7 +57,8 @@ def main() -> int:
     processor_impl_file = Path(inspect.getfile(processor_impl))
     logger.info("Reading processor implementation from: %s", processor_impl_file)
 
-    processor_bytes = _read_file_bytes(processor_impl_file)
+    # Read Python source code as UTF-8 bytes
+    processor_source_bytes = _read_file_bytes(processor_impl_file)
 
     class_name = None
     for name, obj in inspect.getmembers(processor_impl):
@@ -68,10 +73,22 @@ def main() -> int:
     
     logger.info("Found processor class: %s", class_name)
     
+    # Read config file and convert to string
     config_bytes = _read_file_bytes(args.config)
+    config_content = config_bytes.decode("utf-8")
+    
+    # Build modules list: (module_name, module_bytes)
+    # Use the module name "processor_impl" (without .py extension)
+    module_name = processor_impl_file.stem  # "processor_impl"
+    byte = cloudpickle.dumps(processor_impl.CounterProcessor())
+
+
+    modules = [serializer.serialize_by_value(processor_impl.CounterProcessor())]
+    
+    logger.info("Prepared modules: %s (size: %d bytes)", module_name, len(processor_source_bytes))
 
     with FsClient(host=args.host, port=args.port) as client:
-        client.create_function_from_bytes(processor_bytes, config_bytes)
+        client.create_python_function(class_name, modules, config_content)
         logger.info("python processor registered successfully.")
 
     return 0

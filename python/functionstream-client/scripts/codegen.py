@@ -22,7 +22,7 @@ import logging
 import argparse
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # Configure Logging
 logging.basicConfig(
@@ -83,7 +83,9 @@ class CodeGenerator:
             f"--grpc_python_out={self.output_dir}",
         ]
 
-        if self._has_mypy_protobuf():
+        plugin_path = self._resolve_protoc_gen_mypy()
+        if plugin_path is not None:
+            args.append(f"--plugin=protoc-gen-mypy={plugin_path}")
             args.extend(
                 [
                     f"--mypy_out={self.output_dir}",
@@ -100,15 +102,27 @@ class CodeGenerator:
         return args
 
     @staticmethod
-    def _has_mypy_protobuf() -> bool:
-        """Checks if mypy-protobuf is installed."""
-        if shutil.which("protoc-gen-mypy") is not None:
-            return True
-        try:
-            import mypy_protobuf  # noqa: F401
-            return True
-        except ImportError:
-            return False
+    def _resolve_protoc_gen_mypy() -> Optional[str]:
+        """
+        Resolves the protoc-gen-mypy executable path.
+        Protoc looks for plugins via PATH; when run from make/CI, venv bin may
+        not be on PATH. Prefer the executable next to sys.executable, then PATH.
+        """
+        import sys as _sys
+
+        # 1. Same dir as current Python (venv bin when run via make)
+        bin_dir = Path(_sys.executable).resolve().parent
+        for name in ("protoc-gen-mypy", "protoc-gen-mypy.exe"):
+            candidate = bin_dir / name
+            if candidate.exists() and (candidate.is_file() or candidate.is_symlink()):
+                return str(candidate)
+
+        # 2. On PATH
+        which = shutil.which("protoc-gen-mypy")
+        if which:
+            return which
+
+        return None
 
     def _fix_imports(self):
         """

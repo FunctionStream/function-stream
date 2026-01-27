@@ -3,7 +3,7 @@
 .idea/
 **/.vscode/
 **/.venv/**
-dist/**
+**/dist/**
 
 **.wasm
 

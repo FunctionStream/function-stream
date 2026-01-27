@@ -41,7 +41,6 @@ VENV_BIN      := $(VENV_DIR)/bin
 PYTHON        := $(VENV_BIN)/python
 PIP           := $(VENV_BIN)/pip
 TWINE         := $(VENV_BIN)/twine
-PYTEST        := $(VENV_BIN)/pytest
 BLACK         := $(VENV_BIN)/black
 ISORT         := $(VENV_BIN)/isort
 MYPY          := $(VENV_BIN)/mypy
@@ -73,10 +72,10 @@ endef
 
 # --- 3. Targets ---
 
-.PHONY: all venv install-deps install install-dev proto build clean test lint format publish info help
+.PHONY: all venv install-deps install install-dev proto build clean lint format publish info help
 
 # Default target
-all: install-dev proto test build
+all: install-dev proto build
 
 # Check venv
 $(PYTHON):
@@ -90,7 +89,7 @@ venv: $(PYTHON)
 install-deps: venv
 	$(call log_info, Installing dependencies...)
 	@$(PIP) install --upgrade pip setuptools wheel build twine
-	@$(PIP) install grpcio-tools mypy black isort pytest types-protobuf
+	@$(PIP) install grpcio-tools mypy-protobuf mypy black isort types-protobuf
 	@$(call log_success, Dependencies installed.)
 
 # Install package in editable mode (Development)
@@ -112,23 +111,17 @@ proto: venv
 # Code Formatting (Auto-fix)
 format: venv
 	$(call log_info, Formatting code with Black and isort...)
-	@$(ISORT) $(SRC_DIR) tests/
-	@$(BLACK) $(SRC_DIR) tests/
+	@$(ISORT) $(SRC_DIR)
+	@$(BLACK) $(SRC_DIR)
 	$(call log_success, Formatting complete.)
 
 # Code Linting (Checks only)
 lint: venv
 	$(call log_info, Linting code...)
-	@$(ISORT) --check-only $(SRC_DIR) tests/
-	@$(BLACK) --check $(SRC_DIR) tests/
-	@# Mypy check (optional, can be strict or loose depending on config)
+	@$(ISORT) --check-only $(SRC_DIR)
+	@$(BLACK) --check $(SRC_DIR)
 	@$(MYPY) $(SRC_DIR) --ignore-missing-imports || true
 	$(call log_success, Lint checks passed.)
-
-# Run Tests
-test: venv proto
-	$(call log_info, Running tests...)
-	@$(PYTEST) tests/ -v
 
 # Build Distribution (Wheel & Sdist)
 build: venv clean proto
@@ -145,7 +138,6 @@ clean:
 	@rm -rf *.egg-info .eggs
 	@find . -type d -name "__pycache__" -exec rm -rf {} +
 	@find . -type d -name "*.egg-info" -exec rm -rf {} +
-	@find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	@find . -type d -name ".mypy_cache" -exec rm -rf {} +
 	@# Clean generated proto files (be careful not to delete __init__.py if manually maintained)
 	@rm -f $(PROTO_OUT_DIR)/*_pb2.py

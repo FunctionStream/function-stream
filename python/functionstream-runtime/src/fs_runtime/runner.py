@@ -13,6 +13,10 @@
 import json
 import cloudpickle
 import time
+import importlib.util
+import sys
+import abc
+import fs_api
 from typing import Optional, List, Tuple, Dict
 
 from fs_api.driver import FSProcessorDriver
@@ -28,8 +32,6 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
     global _DRIVER
 
     try:
-        import importlib.util
-        import sys
         
         # Load all modules in order
         loaded_modules = {}
@@ -39,12 +41,12 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
                 module_source = module_bytes.decode("utf-8")
             except UnicodeDecodeError:
                 raise ValueError(f"Failed to decode module_bytes as UTF-8 for module '{module_name}'")
-            
+
             # Create a module spec from the module name
             spec = importlib.util.spec_from_loader(module_name, loader=None)
             if spec is None:
                 raise RuntimeError(f"Failed to create module spec for {module_name}")
-            
+
             # Create the module
             module = importlib.util.module_from_spec(spec)
             

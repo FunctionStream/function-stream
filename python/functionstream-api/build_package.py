@@ -16,6 +16,11 @@ Build script for Function Stream API python Package.
 
 This script handles the lifecycle of building the python distribution artifacts
 (Wheel and Source Distribution) using modern python packaging standards.
+
+Note: This file is named build_package.py (not build.py) on purpose. A local
+build.py would shadow the PyPA "build" module when running "python -m build",
+causing infinite recursion. Use "python build_package.py" for this script, or
+"python -m build" / "make build" for the standard build.
 """
 
 import sys
@@ -107,35 +112,41 @@ class Builder:
 
     def build(self) -> None:
         """
-        Executes the build process using the `build` module.
+        Executes the build process using the PyPA `build` module.
+        Runs from work_dir.parent with work_dir as srcdir so that a local build.py
+        in work_dir cannot shadow "python -m build", avoiding infinite recursion.
         """
         logger.info("Building python package...")
 
         self.dist_dir.mkdir(parents=True, exist_ok=True)
 
+        # 从上级目录运行，并显式传入项目路径，避免本目录内的 build.py 遮住 PyPA 的 build
         cmd = [
             self.python_exec, "-m", "build",
-            "--outdir", str(self.dist_dir)
+            "--outdir", str(self.dist_dir),
+            str(self.work_dir),
         ]
+        run_cwd = self.work_dir.parent  # 不能是 work_dir，否则 "python -m build" 会加载本地 build.py 导致死循环
 
         logger.info(f"Executing: {' '.join(cmd)}")
 
         try:
-            # Run build command, capturing output but streaming it in case of error
-            process = subprocess.run(
+            # 使用 inherit（stdout/stderr=None）避免 PIPE 缓冲满导致子进程阻塞或超时
+            subprocess.run(
                 cmd,
-                cwd=self.work_dir,
+                cwd=run_cwd,
                 check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                stdout=None,
+                stderr=None,
             )
-            logger.debug(process.stdout)
-
         except subprocess.CalledProcessError as e:
             logger.error("Build process failed.")
-            logger.error(f"STDOUT:\n{e.stdout}")
-            logger.error(f"STDERR:\n{e.stderr}")
+            # 使用 inherit 时无捕获内容，提示用户查看上方终端输出
+            if e.stdout or e.stderr:
+                logger.error(f"STDOUT:\n{e.stdout}")
+                logger.error(f"STDERR:\n{e.stderr}")
+            else:
+                logger.error("See terminal output above for details.")
             raise BuildError("Build command failed.") from e
 
         self._summarize_artifacts()
