@@ -19,7 +19,9 @@ use crate::runtime::common::ComponentState;
 use crate::runtime::processor::wasm::thread_pool::{GlobalTaskThreadPool, TaskThreadPool};
 use crate::runtime::task::TaskLifecycle;
 use crate::runtime::taskexecutor::init_context::InitContext;
+use crate::runtime::task::TaskBuilder;
 use crate::storage::state_backend::StateStorageServer;
+use crate::storage::task::storage::StoredTaskInfo;
 use crate::storage::task::{TaskStorage, TaskStorageFactory};
 use anyhow::{Context, Result, anyhow};
 use std::collections::HashMap;
@@ -64,12 +66,73 @@ impl TaskManager {
         let manager =
             Arc::new(Self::init_task_manager(config).context("Failed to initialize TaskManager")?);
 
+        // Recover persisted tasks from task storage
+        manager.recover_tasks().context("Failed to recover tasks")?;
+
         // Set global instance
         GLOBAL_TASK_MANAGER
             .set(manager)
             .map_err(|_| anyhow!("Failed to set global TaskManager instance"))?;
 
         Ok(())
+    }
+
+    /// Recover persisted tasks from task storage
+    ///
+    /// Called during init after task manager is created. Lists all task names from storage,
+    /// loads each task info, rebuilds the task from config and module bytes, then registers
+    /// and starts it. Tasks that fail to recover are logged and skipped.
+    ///
+    /// # Returns
+    /// - `Ok(())`: Recovery completed (individual task failures are logged only)
+    /// - `Err(...)`: Fatal error (e.g. failed to list tasks)
+    fn recover_tasks(&self) -> Result<()> {
+        let names = self
+            .task_storage
+            .list_tasks()
+            .context("Failed to list persisted tasks")?;
+
+        for name in names {
+            if let Err(e) = self.recover_one_task(&name) {
+                log::error!("Failed to recover task '{}': {}", name, e);
+                // Continue with other tasks
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Recover a single task by name from task storage
+    fn recover_one_task(&self, task_name: &str) -> Result<()> {
+        // Skip if already in memory (e.g. duplicate in storage)
+        {
+            let map = self.tasks.read().map_err(|_| anyhow!("Lock poisoned"))?;
+            if map.contains_key(task_name) {
+                log::debug!("Task '{}' already loaded, skip recovery", task_name);
+                return Ok(());
+            }
+        }
+
+        let stored = self
+            .task_storage
+            .load_task(task_name)
+            .context("Failed to load task info")?;
+
+        let task = Self::build_task_from_stored(&stored)?;
+        self.register_task_internal(task)?;
+        log::info!("Recovered task '{}'", task_name);
+        Ok(())
+    }
+
+    /// Build TaskLifecycle from stored task info (config + wasm bytes)
+    fn build_task_from_stored(stored: &StoredTaskInfo) -> Result<Box<dyn TaskLifecycle>> {
+        let module_bytes = stored
+            .wasm_bytes
+            .as_deref()
+            .unwrap_or_default();
+        TaskBuilder::from_yaml_config(&stored.config_bytes, module_bytes).map_err(|e| {
+            anyhow!("Failed to build task from stored info: {}", e)
+        })
     }
 
     /// Get global task manager instance

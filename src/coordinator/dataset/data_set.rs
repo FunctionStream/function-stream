@@ -10,13 +10,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Library crate for function-stream
+use std::sync::Arc;
 
-pub mod codec;
-pub mod config;
-pub mod coordinator;
-pub mod logging;
-pub mod runtime;
-pub mod server;
-pub mod sql;
-pub mod storage;
+use arrow_array::RecordBatch;
+use arrow_schema::Schema;
+
+/// Create an empty RecordBatch (0 columns, 0 rows).
+pub fn empty_record_batch() -> RecordBatch {
+    RecordBatch::new_empty(Arc::new(Schema::empty()))
+}
+
+/// DataSet interface: conversion to Arrow RecordBatch.
+pub trait DataSet: Send + Sync {
+    /// Convert to RecordBatch.
+    fn to_record_batch(&self) -> RecordBatch;
+}
+
+impl DataSet for RecordBatch {
+    fn to_record_batch(&self) -> RecordBatch {
+        self.clone()
+    }
+}

@@ -37,4 +37,7 @@ pub trait TaskStorage: Send + Sync {
     fn load_task(&self, task_name: &str) -> Result<StoredTaskInfo>;
 
     fn task_exists(&self, task_name: &str) -> Result<bool>;
+
+    /// List all persisted task names (for recovery).
+    fn list_tasks(&self) -> Result<Vec<String>>;
 }

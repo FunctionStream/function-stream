@@ -18,7 +18,7 @@ use super::storage::{StoredTaskInfo, TaskStorage};
 use crate::config::storage::RocksDBStorageConfig;
 use crate::runtime::common::ComponentState;
 use anyhow::{Context, Result};
-use rocksdb::{ColumnFamilyDescriptor, DB, MergeOperands, Options};
+use rocksdb::{ColumnFamilyDescriptor, IteratorMode, DB, MergeOperands, Options};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
@@ -278,6 +278,19 @@ impl TaskStorage for RocksDBTaskStorage {
             Ok(None) => Ok(false),
             Err(e) => Err(anyhow::anyhow!("Failed to check task existence: {}", e)),
         }
+    }
+
+    fn list_tasks(&self) -> Result<Vec<String>> {
+        let cf = self.get_cf();
+        let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
+        let mut names = Vec::new();
+        for item in iter {
+            let (key, _) = item.context("RocksDB iterator error")?;
+            if let Ok(name) = std::str::from_utf8(&key) {
+                names.push(name.to_string());
+            }
+        }
+        Ok(names)
     }
 }
 

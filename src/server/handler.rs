@@ -13,6 +13,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use arrow_ipc::writer::StreamWriter;
 use log::{error, info, warn};
 use tonic::{Request, Response as TonicResponse, Status};
 
@@ -22,7 +23,7 @@ use protocol::service::{
 };
 
 use crate::coordinator::Coordinator;
-use crate::coordinator::{CreateFunction, CreatePythonFunction, PythonModule, Statement};
+use crate::coordinator::{CreateFunction, CreatePythonFunction, DataSet, Statement};
 use crate::sql::SqlParser;
 
 pub struct FunctionStreamServiceImpl {
@@ -37,13 +38,24 @@ impl FunctionStreamServiceImpl {
     fn build_response(
         status_code: StatusCode,
         message: String,
-        data: Option<String>,
+        data: Option<Vec<u8>>,
     ) -> Response {
         Response {
             status_code: status_code as i32,
             message,
             data,
         }
+    }
+
+    fn data_set_to_ipc_bytes(ds: &dyn DataSet) -> Option<Vec<u8>> {
+        let batch = ds.to_record_batch();
+        let mut buf = Vec::new();
+        {
+            let mut writer = StreamWriter::try_new(&mut buf, &batch.schema()).ok()?;
+            writer.write(&batch).ok()?;
+            writer.finish().ok()?;
+        }
+        Some(buf)
     }
 }
 
@@ -93,7 +105,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         Ok(TonicResponse::new(Self::build_response(
             status_code,
             result.message,
-            result.data,
+            result
+                .data
+                .as_ref()
+                .and_then(|ds| Self::data_set_to_ipc_bytes(ds.as_ref())),
         )))
     }
 
@@ -139,7 +154,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         Ok(TonicResponse::new(Self::build_response(
             status_code,
             result.message,
-            result.data,
+            result
+                .data
+                .as_ref()
+                .and_then(|ds| Self::data_set_to_ipc_bytes(ds.as_ref())),
         )))
     }
 
@@ -201,7 +219,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         Ok(TonicResponse::new(Self::build_response(
             status_code,
             result.message,
-            result.data,
+            result
+                .data
+                .as_ref()
+                .and_then(|ds| Self::data_set_to_ipc_bytes(ds.as_ref())),
         )))
     }
 }

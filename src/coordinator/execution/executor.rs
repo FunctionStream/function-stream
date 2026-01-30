@@ -17,6 +17,10 @@ use crate::coordinator::plan::{
     StopFunctionPlan,
 };
 use crate::coordinator::statement::ExecuteResult;
+use arrow_array::StringArray;
+use arrow_schema::{DataType, Field, Schema};
+
+use crate::coordinator::RecordBatch;
 use std::fmt;
 use std::fs;
 use std::sync::Arc;
@@ -244,24 +248,35 @@ impl PlanVisitor for Executor {
         log::info!("Executing SHOW FUNCTIONS");
 
         let task_names = self.task_manager.list_tasks();
-
-        let json_objects: Vec<String> = task_names
+        let names: Vec<&str> = task_names.iter().map(|s| s.as_str()).collect();
+        let statuses: Vec<String> = task_names
             .iter()
             .map(|name| {
-                let status_str = self
-                    .task_manager
+                self.task_manager
                     .get_task_status(name)
                     .map(|s| format!("{:?}", s))
-                    .unwrap_or_else(|_| "UNKNOWN".to_string());
-                format!(r#"{{"name":"{}","status":"{}"}}"#, name, status_str)
+                    .unwrap_or_else(|_| "UNKNOWN".to_string())
             })
             .collect();
-        let data = format!("[{}]", json_objects.join(","));
+        let status_refs: Vec<&str> = statuses.iter().map(|s| s.as_str()).collect();
 
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok_with_data(
-            format!("{} task(s) found", task_names.len()),
-            data,
-        )))
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("name", DataType::Utf8, false),
+            Field::new("status", DataType::Utf8, false),
+        ]));
+        let name_array = Arc::new(StringArray::from(names));
+        let status_array = Arc::new(StringArray::from(status_refs));
+
+        match RecordBatch::try_new(schema, vec![name_array, status_array]) {
+            Ok(batch) => PlanVisitorResult::Execute(Ok(ExecuteResult::ok_with_data(
+                format!("{} task(s) found", task_names.len()),
+                batch,
+            ))),
+            Err(e) => PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
+                "SHOW FUNCTIONS failed: {}",
+                e
+            )))),
+        }
     }
 
     fn visit_create_python_function(

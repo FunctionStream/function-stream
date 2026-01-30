@@ -10,16 +10,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// REPL (Read-Eval-Print Loop) for interactive SQL execution
-
-use protocol::cli::{
-    function_stream_service_client::FunctionStreamServiceClient,
-    SqlRequest,
+use arrow_array::{
+    Array, BooleanArray, Float32Array, Float64Array, Int32Array, Int64Array, StringArray,
 };
+use arrow_ipc::reader::StreamReader;
+use arrow_schema::DataType;
+use comfy_table::presets::UTF8_FULL;
+use comfy_table::{Cell, Color, Table};
+use protocol::cli::{function_stream_service_client::FunctionStreamServiceClient, SqlRequest};
 use rustyline::error::ReadlineError;
 use rustyline::{Config, DefaultEditor, EditMode};
-use std::io::{self, Write};
+use std::io::{self, Cursor, Write};
 use tonic::Request;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ReplError {
+    #[error("RPC error: {0}")]
+    Rpc(#[from] tonic::Status),
+    #[error("Connection failed: {0}")]
+    Connection(String),
+    #[error("Internal error: {0}")]
+    Internal(String),
+    #[error("IO error: {0}")]
+    Io(#[from] io::Error),
+}
 
 pub struct Repl {
     client: Option<FunctionStreamServiceClient<tonic::transport::Channel>>,
@@ -35,13 +49,10 @@ impl Repl {
             .edit_mode(EditMode::Emacs)
             .build();
 
-        let editor = match DefaultEditor::with_config(config) {
-            Ok(mut ed) => {
-                let _ = ed.load_history(".function-stream-cli-history");
-                Some(ed)
-            }
-            Err(_) => None,
-        };
+        let editor = DefaultEditor::with_config(config).ok().map(|mut ed| {
+            let _ = ed.load_history(".function-stream-cli-history");
+            ed
+        });
 
         Self {
             client: None,
@@ -51,478 +62,249 @@ impl Repl {
         }
     }
 
-    pub fn server_address(&self) -> String {
+    fn server_address(&self) -> String {
         format!("http://{}:{}", self.server_host, self.server_port)
     }
 
-    pub async fn connect(&mut self) -> Result<(), String> {
+    pub async fn connect(&mut self) -> Result<(), ReplError> {
         let addr = self.server_address();
         let client = FunctionStreamServiceClient::connect(addr.clone())
             .await
-            .map_err(|e| format!("Failed to connect to server {}: {}", addr, e))?;
+            .map_err(|e| ReplError::Connection(format!("Connect failed to {}: {}", addr, e)))?;
         self.client = Some(client);
         Ok(())
     }
 
-    pub async fn execute_sql(&mut self, sql: &str) -> Result<String, String> {
+    pub async fn execute_sql(&mut self, sql: &str) -> Result<(), ReplError> {
         let client = self
             .client
             .as_mut()
-            .ok_or_else(|| "Not connected to server".to_string())?;
+            .ok_or_else(|| ReplError::Connection("Client not connected".to_string()))?;
 
-        let request = Request::new(SqlRequest {
-            sql: sql.to_string(),
-        });
+        let response = client
+            .execute_sql(Request::new(SqlRequest {
+                sql: sql.to_string(),
+            }))
+            .await?
+            .into_inner();
 
-        match client.execute_sql(request).await {
-            Ok(response) => {
-                let resp = response.into_inner();
-                if resp.status_code == 200 {
-                    let formatted = self.format_output(&resp.message, resp.data.as_deref());
-                    Ok(formatted)
-                } else {
-                    Err(format!(
-                        "Error (status {}): {}",
-                        resp.status_code, resp.message
-                    ))
-                }
-            }
-            Err(e) => Err(format!("Execution error: {}", e)),
-        }
-    }
-
-    fn format_output(&self, message: &str, data: Option<&str>) -> String {
-        let mut output = String::new();
-
-        let clean_message = message
-            .trim()
-            .replace("        ", " ")
-            .replace("  ", " ")
-            .replace("FUNCTIONs", "FUNCTIONS");
-
-        if let Some(data_str) = data {
-            let data_trimmed = data_str.trim();
-            if data_trimmed == "[]" {
-                if !clean_message.is_empty() {
-                    output.push_str(&clean_message);
-                }
-                return output;
-            }
+        // 1. Handle non-success status codes immediately
+        if response.status_code != 200 {
+            eprintln!("Error ({}): {}", response.status_code, response.message);
+            return Ok(());
         }
 
-        if !clean_message.is_empty() {
-            output.push_str(&clean_message);
+        // 2. Print the operational message (e.g., "CREATE FUNCTION successful")
+        let clean_msg = response.message.trim();
+        if !clean_msg.is_empty() {
+            println!("{}", clean_msg);
         }
 
-        if let Some(data_str) = data {
-            let data_trimmed = data_str.trim();
-            if !data_trimmed.is_empty() && data_trimmed != "[]" {
-                if data_trimmed.starts_with('[') && data_trimmed.ends_with(']') {
-                    if let Ok(formatted) = self.format_json_array(data_trimmed) {
-                        if !formatted.is_empty() {
-                            if !output.is_empty() {
-                                output.push_str("\n");
-                            }
-                            output.push_str(&formatted);
-                        }
-                    } else {
-                        if !output.is_empty() {
-                            output.push_str("\n");
-                        }
-                        output.push_str(data_trimmed);
+        // 3. Strict Data Check: Only proceed if data is explicitly present and non-empty
+        if let Some(bytes) = response.data {
+            if !bytes.is_empty() {
+                // format_arrow_data returns Ok(Some(Table)) ONLY if row_count > 0
+                match self.format_arrow_data(&bytes) {
+                    Ok(Some(table)) => println!("{}", table),
+                    Ok(None) => {
+                        // Data was present but contained 0 rows (e.g., empty result set)
+                        // We print nothing here to keep output clean as requested
                     }
-                } else {
-                    if !output.is_empty() {
-                        output.push_str("\n");
-                    }
-                    output.push_str(data_trimmed);
+                    Err(e) => eprintln!("Failed to parse result data: {}", e),
                 }
             }
-        }
-
-        output
-    }
-
-    fn format_json_array(&self, json_str: &str) -> Result<String, ()> {
-        if json_str == "[]" {
-            return Ok(String::new());
-        }
-
-        let trimmed = json_str.trim_start_matches('[').trim_end_matches(']');
-        if trimmed.is_empty() {
-            return Ok(String::new());
-        }
-
-        let items: Vec<&str> = trimmed.split("},{").collect();
-        let mut rows = Vec::new();
-
-        for item in items.iter() {
-            let trimmed_item = item.trim();
-            let mut clean_item = String::new();
-
-            if !trimmed_item.starts_with('{') {
-                clean_item.push('{');
-            }
-            clean_item.push_str(trimmed_item);
-            if !trimmed_item.ends_with('}') {
-                clean_item.push('}');
-            }
-
-            if let Ok((name, wasm_path, state, created_at, started_at)) =
-                self.parse_task_json(&clean_item)
-            {
-                rows.push((name, wasm_path, state, created_at, started_at));
-            }
-        }
-
-        if rows.is_empty() {
-            return Ok(String::new());
-        }
-
-        let name_width = rows.iter().map(|r| r.0.len()).max().unwrap_or(10).max(4);
-        let path_width = rows.iter().map(|r| r.1.len()).max().unwrap_or(20).max(9);
-        let state_width = rows.iter().map(|r| r.2.len()).max().unwrap_or(7).max(5);
-        let created_width = rows.iter().map(|r| r.3.len()).max().unwrap_or(19).max(10);
-        let started_width = rows.iter().map(|r| r.4.len()).max().unwrap_or(19).max(10);
-
-        let mut table = String::new();
-
-        table.push_str(&format!(
-            "+{}+{}+{}+{}+{}+\n",
-            "-".repeat(name_width + 2),
-            "-".repeat(path_width + 2),
-            "-".repeat(state_width + 2),
-            "-".repeat(created_width + 2),
-            "-".repeat(started_width + 2)
-        ));
-        table.push_str(&format!(
-            "| {:<width$} | {:<path$} | {:<state$} | {:<created$} | {:<started$} |\n",
-            "Name",
-            "WasmPath",
-            "State",
-            "CreatedAt",
-            "StartedAt",
-            width = name_width,
-            path = path_width,
-            state = state_width,
-            created = created_width,
-            started = started_width
-        ));
-        table.push_str(&format!(
-            "+{}+{}+{}+{}+{}+\n",
-            "-".repeat(name_width + 2),
-            "-".repeat(path_width + 2),
-            "-".repeat(state_width + 2),
-            "-".repeat(created_width + 2),
-            "-".repeat(started_width + 2)
-        ));
-
-        for (name, wasm_path, state, created_at, started_at) in rows {
-            table.push_str(&format!(
-                "| {:<width$} | {:<path$} | {:<state$} | {:<created$} | {:<started$} |\n",
-                name,
-                wasm_path,
-                state,
-                created_at,
-                started_at,
-                width = name_width,
-                path = path_width,
-                state = state_width,
-                created = created_width,
-                started = started_width
-            ));
-        }
-
-        table.push_str(&format!(
-            "+{}+{}+{}+{}+{}+\n",
-            "-".repeat(name_width + 2),
-            "-".repeat(path_width + 2),
-            "-".repeat(state_width + 2),
-            "-".repeat(created_width + 2),
-            "-".repeat(started_width + 2)
-        ));
-
-        Ok(table)
-    }
-
-    fn parse_task_json(&self, json: &str) -> Result<(String, String, String, String, String), ()> {
-        let name = self
-            .extract_json_field(json, "name")
-            .unwrap_or_else(|| "N/A".to_string());
-        let wasm_path = self
-            .extract_json_field(json, "wasm_path")
-            .unwrap_or_else(|| "N/A".to_string());
-        let state = self
-            .extract_json_field(json, "state")
-            .unwrap_or_else(|| "N/A".to_string());
-        let created_at = self
-            .extract_json_field(json, "created_at")
-            .unwrap_or_else(|| "N/A".to_string());
-        let started_at = self
-            .extract_json_field(json, "started_at")
-            .unwrap_or_else(|| "null".to_string());
-
-        let created_at_formatted = if created_at != "N/A" {
-            created_at
-                .replace("SystemTime { tv_sec: ", "")
-                .replace(", tv_nsec: ", ".")
-                .replace(" }", "")
-                .split('.')
-                .next()
-                .unwrap_or(&created_at)
-                .to_string()
-        } else {
-            created_at
-        };
-
-        let started_at_formatted = if started_at == "null" || started_at.is_empty() {
-            "-".to_string()
-        } else {
-            started_at
-                .replace("SystemTime { tv_sec: ", "")
-                .replace(", tv_nsec: ", ".")
-                .replace(" }", "")
-                .split('.')
-                .next()
-                .unwrap_or(&started_at)
-                .to_string()
-        };
-
-        Ok((
-            name,
-            wasm_path,
-            state,
-            created_at_formatted,
-            started_at_formatted,
-        ))
-    }
-
-    fn extract_json_field(&self, json: &str, field: &str) -> Option<String> {
-        let field_pattern = format!("\"{}\":", field);
-        if let Some(start) = json.find(&field_pattern) {
-            let value_start = start + field_pattern.len();
-            let value_str = &json[value_start..];
-            let value_str = value_str.trim_start();
-
-            if value_str.starts_with('"') {
-                let start = 1;
-                if let Some(end) = value_str[start..].find('"') {
-                    return Some(value_str[start..start + end].to_string());
-                }
-            } else if value_str.starts_with("null") {
-                return Some("null".to_string());
-            } else {
-                let end = value_str
-                    .find(',')
-                    .or_else(|| value_str.find('}'))
-                    .unwrap_or(value_str.len());
-                return Some(value_str[..end].trim().to_string());
-            }
-        }
-        None
-    }
-
-    fn is_sql_complete(&self, sql: &str) -> bool {
-        let trimmed = sql.trim();
-
-        if trimmed.is_empty() {
-            return true;
-        }
-
-        let mut paren_count = 0;
-        let mut in_string = false;
-        let mut escape_next = false;
-
-        for ch in trimmed.chars() {
-            if escape_next {
-                escape_next = false;
-                continue;
-            }
-
-            if ch == '\\' {
-                escape_next = true;
-                continue;
-            }
-
-            if ch == '\'' || ch == '"' {
-                in_string = !in_string;
-                continue;
-            }
-
-            if !in_string {
-                match ch {
-                    '(' => paren_count += 1,
-                    ')' => {
-                        if paren_count > 0 {
-                            paren_count -= 1;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        paren_count == 0 && !trimmed.ends_with('\\')
-    }
-
-    fn read_multiline_sql(&mut self) -> io::Result<String> {
-        let mut lines = Vec::new();
-        let mut is_first_line = true;
-
-        loop {
-            let prompt = if is_first_line {
-                "FunctionStream> "
-            } else {
-                "         > "
-            };
-
-            let line = if let Some(ref mut editor) = self.editor {
-                match editor.readline(prompt) {
-                    Ok(line) => {
-                        if !line.trim().is_empty() {
-                            let _ = editor.add_history_entry(line.as_str());
-                        }
-                        line
-                    }
-                    Err(ReadlineError::Interrupted) => {
-                        return Err(io::Error::new(io::ErrorKind::Interrupted, "Interrupted"));
-                    }
-                    Err(ReadlineError::Eof) => {
-                        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
-                    }
-                    Err(e) => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            format!("Readline error: {}", e),
-                        ));
-                    }
-                }
-            } else {
-                print!("{}", prompt);
-                io::stdout().flush()?;
-                let mut line = String::new();
-                io::stdin().read_line(&mut line)?;
-                line
-            };
-
-            let trimmed_line = line.trim_start();
-            let trimmed = trimmed_line.trim();
-
-            if is_first_line && trimmed.is_empty() {
-                continue;
-            }
-
-            lines.push(trimmed_line.to_string());
-            let combined = lines.join(" ");
-
-            if self.is_sql_complete(&combined) {
-                return Ok(combined.trim().to_string());
-            }
-
-            is_first_line = false;
-        }
-    }
-
-    pub async fn run_async(&mut self) -> io::Result<()> {
-        println!("========================================");
-        println!("  Function Stream SQL CLI");
-        println!("========================================");
-        println!("Server: {}", self.server_address());
-        println!();
-
-        if self.client.is_none() {
-            if let Err(e) = self.connect().await {
-                eprintln!("Failed to connect to server: {}", e);
-                return Err(io::Error::new(io::ErrorKind::ConnectionRefused, e));
-            }
-        }
-
-        println!("Connected to server.");
-        println!("Type SQL statements or 'exit'/'quit' to exit.");
-        println!("Type 'help' for help.");
-        println!();
-
-        loop {
-            let input = match self.read_multiline_sql() {
-                Ok(input) => input,
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {
-                    println!("\n(Use 'exit' or 'quit' to exit)");
-                    continue;
-                }
-                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                    println!("\nGoodbye!");
-                    break;
-                }
-                Err(e) => {
-                    eprintln!("Error reading input: {}", e);
-                    break;
-                }
-            };
-
-            if input.is_empty() {
-                continue;
-            }
-
-            match input.trim().to_lowercase().as_str() {
-                "exit" | "quit" | "q" => {
-                    println!("Goodbye!");
-                    break;
-                }
-                "help" | "h" => {
-                    self.show_help();
-                    continue;
-                }
-                _ => match self.execute_sql(&input).await {
-                    Ok(result) => {
-                        println!("{}", result);
-                    }
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                    }
-                },
-            }
-            println!();
-        }
-
-        if let Some(ref mut editor) = self.editor {
-            let _ = editor.save_history(".function-stream-cli-history");
         }
 
         Ok(())
     }
 
-    fn show_help(&self) {
-        println!();
-        println!("Available commands:");
-        println!("  help, h          - Show this help message");
-        println!("  exit, quit, q     - Exit the CLI");
-        println!();
-        println!("SQL Statements:");
-        println!("  CREATE FUNCTION WITH (wasm-path='<path>', ...)");
-        println!("  DROP FUNCTION <name>");
-        println!("  START FUNCTION <name>");
-        println!("  STOP FUNCTION <name>");
-        println!("  SHOW FUNCTIONS");
-        println!();
-        println!("Multi-line Input:");
-        println!("  - Press Enter to continue on next line");
-        println!("  - Press Enter on empty line to execute");
-        println!("  - Parentheses are automatically matched");
-        println!();
-        println!("Command History:");
-        println!("  - Use ↑/↓ arrow keys to browse previous commands");
-        println!("  - History is saved to .function-stream-cli-history");
-        println!();
-        println!("Examples:");
-        println!("  CREATE FUNCTION WITH (wasm-path='./test.wasm')");
-        println!("  CREATE FUNCTION WITH (");
-        println!("    wasm-path='./test.wasm',");
-        println!("    config-path='./config.json'");
-        println!("  )");
-        println!("  START FUNCTION my_task");
-        println!("  SHOW FUNCTIONS");
-        println!("  STOP FUNCTION my_task");
-        println!("  DROP FUNCTION my_task");
-        println!();
+    fn format_arrow_data(&self, bytes: &[u8]) -> Result<Option<Table>, ReplError> {
+        let cursor = Cursor::new(bytes);
+        let reader = match StreamReader::try_new(cursor, None) {
+            Ok(r) => r,
+            Err(_) => return Ok(None),
+        };
+
+        let mut table = Table::new();
+        table.load_preset(UTF8_FULL);
+
+        let mut has_rows = false;
+        let mut header_initialized = false;
+
+        for batch_result in reader {
+            let batch = batch_result.map_err(|e| ReplError::Internal(e.to_string()))?;
+            if batch.num_rows() == 0 {
+                continue;
+            }
+            has_rows = true;
+
+            if !header_initialized {
+                let headers: Vec<Cell> = batch
+                    .schema()
+                    .fields()
+                    .iter()
+                    .map(|f| Cell::new(f.name()).fg(Color::Cyan))
+                    .collect();
+                table.set_header(headers);
+                header_initialized = true;
+            }
+
+            for row_idx in 0..batch.num_rows() {
+                let mut row_cells = Vec::new();
+                for col_idx in 0..batch.num_columns() {
+                    let cell_val = self.extract_value(batch.column(col_idx), row_idx);
+                    row_cells.push(cell_val);
+                }
+                table.add_row(row_cells);
+            }
+        }
+
+        if has_rows {
+            Ok(Some(table))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn extract_value(&self, column: &dyn Array, row: usize) -> String {
+        if column.is_null(row) {
+            return "NULL".to_string();
+        }
+
+        match column.data_type() {
+            DataType::Utf8 | DataType::LargeUtf8 => column
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .unwrap()
+                .value(row)
+                .to_string(),
+            DataType::Int32 => column
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .unwrap()
+                .value(row)
+                .to_string(),
+            DataType::Int64 => column
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .value(row)
+                .to_string(),
+            DataType::Float32 => {
+                format!(
+                    "{:.4}",
+                    column
+                        .as_any()
+                        .downcast_ref::<Float32Array>()
+                        .unwrap()
+                        .value(row)
+                )
+            }
+            DataType::Float64 => {
+                format!(
+                    "{:.4}",
+                    column
+                        .as_any()
+                        .downcast_ref::<Float64Array>()
+                        .unwrap()
+                        .value(row)
+                )
+            }
+            DataType::Boolean => column
+                .as_any()
+                .downcast_ref::<BooleanArray>()
+                .unwrap()
+                .value(row)
+                .to_string(),
+            _ => "[unsupported]".to_string(),
+        }
+    }
+
+    pub async fn run_async(&mut self) -> io::Result<()> {
+        println!("Function Stream SQL Interface");
+        println!("Server: {}\n", self.server_address());
+
+        if let Err(e) = self.connect().await {
+            eprintln!("Error: {}", e);
+            return Ok(());
+        }
+
+        loop {
+            let input = match self.read_sql_input() {
+                Ok(sql) => sql,
+                Err(ReadlineError::Interrupted) => continue,
+                Err(ReadlineError::Eof) => break,
+                Err(e) => {
+                    eprintln!("Read Error: {}", e);
+                    break;
+                }
+            };
+
+            if input.trim().is_empty() {
+                continue;
+            }
+
+            match input.trim().to_lowercase().as_str() {
+                "exit" | "quit" | "q" => break,
+                "help" | "h" => self.print_help(),
+                _ => {
+                    if let Err(e) = self.execute_sql(&input).await {
+                        eprintln!("SQL Execution Error: {}", e);
+                    }
+                }
+            }
+            println!();
+        }
+
+        if let Some(ref mut ed) = self.editor {
+            let _ = ed.save_history(".function-stream-cli-history");
+        }
+        Ok(())
+    }
+
+    fn read_sql_input(&mut self) -> Result<String, ReadlineError> {
+        let mut lines = Vec::new();
+        loop {
+            let prompt = if lines.is_empty() { "sql> " } else { "  -> " };
+
+            let line = match self.editor.as_mut() {
+                Some(ed) => {
+                    let l = ed.readline(prompt)?;
+                    if !l.trim().is_empty() {
+                        ed.add_history_entry(l.as_str()).ok();
+                    }
+                    l
+                }
+                None => {
+                    print!("{}", prompt);
+                    io::stdout().flush().unwrap();
+                    let mut l = String::new();
+                    io::stdin().read_line(&mut l).unwrap();
+                    l
+                }
+            };
+
+            lines.push(line);
+            let trimmed = lines.last().map(|s| s.trim()).unwrap_or("");
+
+            if trimmed.ends_with(';') || self.is_balanced(&lines.join(" ")) {
+                return Ok(lines.join(" ").trim().to_string());
+            }
+        }
+    }
+
+    fn is_balanced(&self, sql: &str) -> bool {
+        let open = sql.chars().filter(|&c| c == '(').count();
+        let close = sql.chars().filter(|&c| c == ')').count();
+        open == close && !sql.trim().is_empty()
+    }
+
+    fn print_help(&self) {
+        let mut table = Table::new();
+        table
+            .set_header(vec!["Command", "Usage"])
+            .add_row(vec!["HELP", "Show this message"])
+            .add_row(vec!["EXIT", "Close connection"]);
+        println!("{}", table);
     }
 }

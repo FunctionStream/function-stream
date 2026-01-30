@@ -10,13 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Library crate for function-stream
+//! DataSet trait and SQL result types: RecordBatch, StatementResult (for RPC).
 
-pub mod codec;
-pub mod config;
-pub mod coordinator;
-pub mod logging;
-pub mod runtime;
-pub mod server;
-pub mod sql;
-pub mod storage;
+mod data_set;
+mod statement_result;
+
+pub use data_set::{empty_record_batch, DataSet};
+pub use arrow_array::RecordBatch;
+pub use statement_result::StatementResult;

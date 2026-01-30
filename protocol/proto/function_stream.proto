@@ -50,7 +50,7 @@ enum StatusCode {
 message Response {
   StatusCode status_code = 1;
   string message = 2;
-  optional string data = 3;
+  optional bytes data = 3;
 }
 
 // SQL execution request

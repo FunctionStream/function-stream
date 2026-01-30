@@ -27,12 +27,25 @@ pub use stop_function::StopFunction;
 pub use visitor::{StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
 use std::fmt;
+use std::sync::Arc;
 
-#[derive(Debug, Clone)]
+use super::dataset::DataSet;
+
+#[derive(Clone)]
 pub struct ExecuteResult {
     pub success: bool,
     pub message: String,
-    pub data: Option<String>,
+    pub data: Option<Arc<dyn DataSet>>,
+}
+
+impl fmt::Debug for ExecuteResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExecuteResult")
+            .field("success", &self.success)
+            .field("message", &self.message)
+            .field("data", &self.data.as_ref().map(|_| "..."))
+            .finish()
+    }
 }
 
 impl ExecuteResult {
@@ -44,11 +57,11 @@ impl ExecuteResult {
         }
     }
 
-    pub fn ok_with_data(message: impl Into<String>, data: impl Into<String>) -> Self {
+    pub fn ok_with_data(message: impl Into<String>, data: impl DataSet + 'static) -> Self {
         Self {
             success: true,
             message: message.into(),
-            data: Some(data.into()),
+            data: Some(Arc::new(data)),
         }
     }
 
