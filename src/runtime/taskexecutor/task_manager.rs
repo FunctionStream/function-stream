@@ -223,7 +223,7 @@ impl TaskManager {
             module_bytes.len()
         );
 
-        let task = crate::runtime::task::TaskBuilder::from_yaml_config(config_bytes, module_bytes)
+        let task = TaskBuilder::from_yaml_config(config_bytes, module_bytes)
             .map_err(|e| {
                 let preview: String = String::from_utf8_lossy(config_bytes).chars().take(500).collect();
                 log::error!("Failed to create task. Config preview: {}", preview);
@@ -234,7 +234,7 @@ impl TaskManager {
     }
 
     /// Internal method to register and start a task
-    fn register_task_internal(&self, task: Box<dyn crate::runtime::task::TaskLifecycle>) -> Result<()> {
+    fn register_task_internal(&self, task: Box<dyn TaskLifecycle>) -> Result<()> {
         let task_name = task.get_name().to_string();
 
         // Check for duplicate
@@ -433,7 +433,7 @@ impl TaskManager {
                 modules.len()
             );
 
-            let task = crate::runtime::task::TaskBuilder::from_python_config(config_bytes, modules)
+            let task = TaskBuilder::from_python_config(config_bytes, modules)
                 .map_err(|e| {
                     let preview: String = String::from_utf8_lossy(config_bytes).chars().take(500).collect();
                     log::error!("Failed to create Python task. Config preview: {}", preview);

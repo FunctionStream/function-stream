@@ -16,7 +16,7 @@ use arrow_array::{
 use arrow_ipc::reader::StreamReader;
 use arrow_schema::DataType;
 use comfy_table::presets::UTF8_FULL;
-use comfy_table::{Cell, Color, Table};
+use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, TableComponent};
 use protocol::cli::{function_stream_service_client::FunctionStreamServiceClient, SqlRequest};
 use rustyline::error::ReadlineError;
 use rustyline::{Config, DefaultEditor, EditMode};
@@ -97,7 +97,11 @@ impl Repl {
         // 2. Print the operational message (e.g., "CREATE FUNCTION successful")
         let clean_msg = response.message.trim();
         if !clean_msg.is_empty() {
-            println!("{}", clean_msg);
+            if clean_msg.ends_with("found") {
+                println!("  ✓ {}", clean_msg);
+            } else {
+                println!("{}", clean_msg);
+            }
         }
 
         // 3. Strict Data Check: Only proceed if data is explicitly present and non-empty
@@ -126,7 +130,14 @@ impl Repl {
         };
 
         let mut table = Table::new();
-        table.load_preset(UTF8_FULL);
+        table
+            .load_preset(UTF8_FULL)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            // 表头下方用单线，不用双线
+            .set_style(TableComponent::LeftHeaderIntersection, '├')
+            .set_style(TableComponent::HeaderLines, '─')
+            .set_style(TableComponent::MiddleHeaderIntersections, '┼')
+            .set_style(TableComponent::RightHeaderIntersection, '┤');
 
         let mut has_rows = false;
         let mut header_initialized = false;
@@ -143,17 +154,38 @@ impl Repl {
                     .schema()
                     .fields()
                     .iter()
-                    .map(|f| Cell::new(f.name()).fg(Color::Cyan))
+                    .map(|f| {
+                        Cell::new(f.name())
+                            .fg(Color::Cyan)
+                            .add_attribute(Attribute::Bold)
+                    })
                     .collect();
                 table.set_header(headers);
                 header_initialized = true;
             }
 
+            let field_names: Vec<String> = batch
+                .schema()
+                .fields()
+                .iter()
+                .map(|f| f.name().clone())
+                .collect();
+
             for row_idx in 0..batch.num_rows() {
-                let mut row_cells = Vec::new();
+                let mut row_cells: Vec<Cell> = Vec::new();
                 for col_idx in 0..batch.num_columns() {
                     let cell_val = self.extract_value(batch.column(col_idx), row_idx);
-                    row_cells.push(cell_val);
+                    let cell = if field_names.get(col_idx).map(|s| s.as_str()) == Some("status") {
+                        let c = Cell::new(cell_val.as_str());
+                        match cell_val.as_str() {
+                            "Running" => c.fg(Color::Green),
+                            "Stopped" | "Failed" => c.fg(Color::Red),
+                            _ => c,
+                        }
+                    } else {
+                        Cell::new(cell_val)
+                    };
+                    row_cells.push(cell);
                 }
                 table.add_row(row_cells);
             }
@@ -302,7 +334,22 @@ impl Repl {
     fn print_help(&self) {
         let mut table = Table::new();
         table
-            .set_header(vec!["Command", "Usage"])
+            .load_preset(UTF8_FULL)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_style(TableComponent::LeftHeaderIntersection, '├')
+            .set_style(TableComponent::HeaderLines, '─')
+            .set_style(TableComponent::MiddleHeaderIntersections, '┼')
+            .set_style(TableComponent::RightHeaderIntersection, '┤')
+            .set_header(
+                vec!["Command", "Usage"]
+                    .into_iter()
+                    .map(|s| {
+                        Cell::new(s)
+                            .fg(Color::Cyan)
+                            .add_attribute(Attribute::Bold)
+                    })
+                    .collect::<Vec<_>>(),
+            )
             .add_row(vec!["HELP", "Show this message"])
             .add_row(vec!["EXIT", "Close connection"]);
         println!("{}", table);
