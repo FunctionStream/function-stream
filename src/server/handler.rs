@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use arrow_ipc::writer::StreamWriter;
-use log::{error, info, warn};
+use log::{error, info};
 use tonic::{Request, Response as TonicResponse, Status};
 
 use protocol::service::{
@@ -80,7 +80,6 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
                 stmt
             }
             Err(e) => {
-                warn!("SQL parse failed: {}, cost: {}ms", e, parse_start.elapsed().as_millis());
                 return Ok(TonicResponse::new(Self::build_response(
                     StatusCode::BadRequest,
                     format!("Parse error: {}", e),

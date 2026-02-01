@@ -68,13 +68,13 @@ impl ComponentRegistry {
 
         for (idx, component) in self.components.iter().enumerate() {
             let start = std::time::Instant::now();
-            log::info!("[{}/{}] Initializing component: {}", idx + 1, self.components.len(), component.name);
+            log::debug!("[{}/{}] Initializing component: {}", idx + 1, self.components.len(), component.name);
             
             (component.initializer)(config)
                 .with_context(|| format!("Component '{}' initialization failed", component.name))?;
             
             let elapsed = start.elapsed();
-            log::info!(
+            log::debug!(
                 "[{}/{}] Component '{}' initialized successfully in {:?}",
                 idx + 1,
                 self.components.len(),

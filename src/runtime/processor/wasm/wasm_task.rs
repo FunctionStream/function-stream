@@ -259,7 +259,7 @@ impl WasmTask {
         let mut current_input_index: usize = 0;
         let mut is_running = false;
         let init_elapsed = init_start.elapsed().as_secs_f64();
-        log::info!(
+        log::debug!(
             "[Timing] task_thread_loop - Initialize local state: {:.3}s",
             init_elapsed
         );
@@ -267,13 +267,13 @@ impl WasmTask {
         let lock_start = std::time::Instant::now();
         *shared_state.lock().unwrap() = ComponentState::Initialized;
         let lock_elapsed = lock_start.elapsed().as_secs_f64();
-        log::info!(
+        log::debug!(
             "[Timing] task_thread_loop - Update shared state: {:.3}s",
             lock_elapsed
         );
 
         let thread_init_elapsed = thread_start_time.elapsed().as_secs_f64();
-        log::info!(
+        log::debug!(
             "Task thread started (paused): {} (thread init: {:.3}s)",
             task_name,
             thread_init_elapsed
@@ -357,7 +357,7 @@ impl WasmTask {
                     return ControlAction::Pause;
                 }
 
-                log::info!("Starting task: {}", task_name);
+                log::debug!("Starting task: {}", task_name);
 
                 for (idx, input) in inputs.iter_mut().enumerate() {
                     if let Err(e) = input.start() {

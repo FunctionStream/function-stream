@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    name: Linux build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            libssl-dev \
+            pkg-config \
+            libsasl2-dev
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@2
+        with:
+          shared-key: "linux-build"
+
+      - name: Check format
+        run: cargo fmt --all -- --check
+
+      - name: Build
+        run: cargo build --all-targets --workspace
+
+      - name: Test
+        run: cargo test --workspace

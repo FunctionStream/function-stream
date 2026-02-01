@@ -66,7 +66,7 @@ impl TaskBuilder {
         let yaml_value = Self::parse_yaml(config_bytes)?;
         let task_name = Self::extract_task_name(&yaml_value)?;
 
-        log::info!("Creating Python task '{}' via fs-exec", task_name);
+        log::debug!("Creating Python task '{}' via fs-exec", task_name);
         PythonBuilder::build(task_name, &yaml_value, modules)
     }
 

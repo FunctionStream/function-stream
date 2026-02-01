@@ -237,7 +237,7 @@ impl KafkaOutputSink {
 
         // Initial state is paused, waiting for Start signal
         let mut is_running = false;
-        log::info!(
+        log::debug!(
             "Send thread started (paused), waiting for start signal for topic: {}",
             config.topic
         );
@@ -344,7 +344,7 @@ impl KafkaOutputSink {
                     completion_flag.mark_error(error);
                     return ControlAction::Continue;
                 }
-                log::info!("Sink start signal received for topic: {}", config.topic);
+                log::debug!("Sink start signal received for topic: {}", config.topic);
                 *state.lock().unwrap() = ComponentState::Running;
                 completion_flag.mark_completed();
                 ControlAction::Continue
@@ -593,7 +593,7 @@ impl OutputSink for KafkaOutputSink {
         // Wait with timeout retry for runloop thread to complete
         self.wait_with_retry(&completion_flag, "Start")?;
 
-        log::info!(
+        log::debug!(
             "KafkaOutputSink started: sink_id={}, topic={}",
             self.sink_id,
             self.config.topic

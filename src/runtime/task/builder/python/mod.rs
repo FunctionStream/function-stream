@@ -62,7 +62,7 @@ impl PythonBuilder {
             .map(|group| group.inputs.len())
             .sum();
 
-        log::info!(
+        log::debug!(
             "Parsed python config: {} input groups ({} total inputs), {} outputs, processor: {}",
             task_config.input_groups.len(),
             total_inputs,
@@ -83,25 +83,25 @@ impl PythonBuilder {
                         ),
                     ))
                 })?;
-            log::info!(
+            log::debug!(
                 "Created {} input source(s) for input group #{}",
                 group_inputs.len(),
                 group_idx + 1
             );
             all_inputs.extend(group_inputs);
         }
-        log::info!(
+        log::debug!(
             "Created {} total input source(s) from {} input group(s)",
             all_inputs.len(),
             task_config.input_groups.len()
         );
 
         let outputs = Self::create_outputs_from_config(&task_config.outputs)?;
-        log::info!("Created {} output(s)", outputs.len());
+        log::debug!("Created {} output(s)", outputs.len());
 
         let processor =
             Self::create_processor_from_config(&task_config.processor, modules)?;
-        log::info!("Created python processor: {}", task_config.processor.name);
+        log::debug!("Created python processor: {}", task_config.processor.name);
 
         let task = WasmTask::new(
             task_config.task_name.clone(),
@@ -112,7 +112,7 @@ impl PythonBuilder {
         );
         let task = Arc::new(task);
 
-        log::info!(
+        log::debug!(
             "WasmTask created successfully for python task: {}",
             task_config.task_name
         );

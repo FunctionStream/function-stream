@@ -197,7 +197,7 @@ impl KafkaInputSource {
 
         // Initial state is paused, waiting for Start signal
         let mut is_running = false;
-        log::info!(
+        log::debug!(
             "Consumer thread started (paused), waiting for start signal for topic: {} partition: {}",
             config.topic,
             config.partition_str()
@@ -287,7 +287,7 @@ impl KafkaInputSource {
                     completion_flag.mark_error(error);
                     return ControlAction::Continue;
                 }
-                log::info!(
+                log::debug!(
                     "Source start signal received for topic: {} partition: {}",
                     config.topic,
                     config.partition_str()
@@ -644,7 +644,7 @@ impl InputSource for KafkaInputSource {
 
         self.wait_with_retry(&completion_flag, "Start")?;
 
-        log::info!(
+        log::debug!(
             "KafkaInputSource started: group_id={}, input_id={}, topic={}, partition={}",
             self.group_id,
             self.input_id,
