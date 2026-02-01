@@ -29,6 +29,7 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct TaskManager {
     /// In-memory task registry
@@ -97,24 +98,20 @@ impl TaskManager {
 
 // --- 2. Public API: Task Lifecycle Control ---
 impl TaskManager {
-    pub fn register_wasm_task(
-        &self,
-        name: &str,
-        config_bytes: &[u8],
-        module_bytes: &[u8],
-    ) -> Result<()> {
-        let task = TaskBuilder::from_yaml_config(config_bytes, module_bytes)
-            .map_err(|e| anyhow!("Failed to build Wasm task '{}': {}", name, e))?;
-
-        self.register_task_internal(task)
-    }
-
-    /// Register task from YAML config and module bytes (name from config)
     pub fn register_task(&self, config_bytes: &[u8], module_bytes: &[u8]) -> Result<()> {
         let task = TaskBuilder::from_yaml_config(config_bytes, module_bytes)
             .map_err(|e| anyhow!("Failed to build task: {}", e))?;
-
-        self.register_task_internal(task)
+        let info = task.get_function_info();
+        let task_info = StoredTaskInfo {
+            name: info.name,
+            task_type: info.task_type,
+            module_bytes: Some(TaskModuleBytes::Wasm(module_bytes.to_vec())),
+            config_bytes: config_bytes.to_vec(),
+            state: ComponentState::Initialized,
+            created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            checkpoint_id: None,
+        };
+        self.register_task_internal(task, Some(task_info))
     }
 
     pub fn register_python_task(
@@ -126,7 +123,25 @@ impl TaskManager {
         {
             let task = TaskBuilder::from_python_config(config_bytes, modules)
                 .map_err(|e| anyhow!("Failed to build Python task: {}", e))?;
-            self.register_task_internal(task)
+            let (class_name, module_name, module_bytes) = match modules.first() {
+                Some((name, bytes)) => (name.clone(), name.clone(), Some(bytes.clone())),
+                None => (String::new(), String::new(), None),
+            };
+            let info = task.get_function_info();
+            let task_info = StoredTaskInfo {
+                name: info.name,
+                task_type: info.task_type,
+                module_bytes: Some(TaskModuleBytes::Python {
+                    class_name,
+                    module: module_name,
+                    bytes: module_bytes,
+                }),
+                config_bytes: config_bytes.to_vec(),
+                state: ComponentState::Initialized,
+                created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                checkpoint_id: None,
+            };
+            self.register_task_internal(task, Some(task_info))
         }
         #[cfg(not(feature = "python"))]
         {
@@ -216,7 +231,11 @@ impl TaskManager {
 
 // --- 4. Internal Helpers & Recovery ---
 impl TaskManager {
-    fn register_task_internal(&self, task: Box<dyn TaskLifecycle>) -> Result<()> {
+    fn register_task_internal(
+        &self,
+        task: Box<dyn TaskLifecycle>,
+        task_info_to_store: Option<StoredTaskInfo>,
+    ) -> Result<()> {
         let task_name = task.get_name().to_string();
 
         if self.tasks.read().contains_key(&task_name) {
@@ -225,7 +244,6 @@ impl TaskManager {
 
         let task_arc = Arc::new(RwLock::new(task));
 
-        // Atomic-like registration and initialization
         {
             let mut registry = self.tasks.write();
             registry.insert(task_name.clone(), Arc::clone(&task_arc));
@@ -244,6 +262,12 @@ impl TaskManager {
         handle
             .start()
             .map_err(|e| anyhow!("Failed to start task '{}': {}", task_name, e))?;
+
+        if let Some(ref info) = task_info_to_store {
+            self.task_storage
+                .create_task(info)
+                .context("Failed to persist task to storage")?;
+        }
 
         log::info!(
             target: "task_manager",
@@ -298,7 +322,7 @@ impl TaskManager {
         }
         .map_err(|e| anyhow!("Failed to rebuild task from storage: {}", e))?;
 
-        self.register_task_internal(task)
+        self.register_task_internal(task, None)
     }
 
     fn get_task_handle(&self, name: &str) -> Result<Arc<RwLock<Box<dyn TaskLifecycle>>>> {
