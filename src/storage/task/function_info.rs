@@ -10,12 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod data_set;
-mod execute_result;
-mod show_functions_result;
-
-pub use arrow_array::RecordBatch;
-pub use crate::storage::task::FunctionInfo;
-pub use data_set::{empty_record_batch, DataSet};
-pub use execute_result::ExecuteResult;
-pub use show_functions_result::ShowFunctionsResult;
+#[derive(Clone, Debug)]
+pub struct FunctionInfo {
+    pub name: String,
+    pub task_type: String,
+    pub status: String,
+}

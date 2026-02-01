@@ -18,7 +18,8 @@ use crate::runtime::taskexecutor::TaskManager;
 use crate::coordinator::analyze::{Analysis, Analyzer};
 use crate::coordinator::execution::Executor;
 use crate::coordinator::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
-use crate::coordinator::statement::{ExecuteResult, Statement};
+use crate::coordinator::dataset::ExecuteResult;
+use crate::coordinator::statement::Statement;
 
 use super::execution_context::ExecutionContext;
 

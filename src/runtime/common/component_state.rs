@@ -40,7 +40,9 @@ pub const CONTROL_TASK_CHANNEL_CAPACITY: usize = 10;
 ///                                             
 ///                                          Error (any state can transition to error)
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[derive(Default)]
 pub enum ComponentState {
     /// Uninitialized

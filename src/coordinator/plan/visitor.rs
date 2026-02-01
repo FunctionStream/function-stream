@@ -32,8 +32,8 @@ impl PlanVisitorContext {
     }
 }
 
+use crate::coordinator::dataset::ExecuteResult;
 use crate::coordinator::execution::ExecuteError;
-use crate::coordinator::statement::ExecuteResult;
 
 /// Result returned by PlanVisitor methods
 ///

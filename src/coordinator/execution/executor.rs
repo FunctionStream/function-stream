@@ -10,41 +10,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::runtime::taskexecutor::TaskManager;
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, PlanNode, PlanVisitor,
     PlanVisitorContext, PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan,
     StopFunctionPlan,
 };
-use crate::coordinator::statement::ExecuteResult;
-use arrow_array::StringArray;
-use arrow_schema::{DataType, Field, Schema};
-
-use crate::coordinator::RecordBatch;
-use std::fmt;
-use std::fs;
+use crate::coordinator::dataset::{
+    empty_record_batch, ExecuteResult, ShowFunctionsResult,
+};
+use crate::coordinator::statement::{ConfigSource, FunctionSource};
+use crate::runtime::taskexecutor::TaskManager;
 use std::sync::Arc;
+use thiserror::Error;
+use tracing::{debug, info, instrument};
 
-#[derive(Debug, Clone)]
-pub struct ExecuteError {
-    pub message: String,
+#[derive(Error, Debug)]
+pub enum ExecuteError {
+    #[error("Execution failed: {0}")]
+    Internal(String),
+    #[error("IO error during execution: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Task manager error: {0}")]
+    Task(String),
+    #[error("Validation error: {0}")]
+    Validation(String),
 }
-
-impl ExecuteError {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
-
-impl fmt::Display for ExecuteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Execute error: {}", self.message)
-    }
-}
-
-impl std::error::Error for ExecuteError {}
 
 pub struct Executor {
     task_manager: Arc<TaskManager>,
@@ -55,263 +45,179 @@ impl Executor {
         Self { task_manager }
     }
 
+    #[instrument(skip_all, fields(plan_type = std::any::type_name_of_val(plan)))]
     pub fn execute(&self, plan: &dyn PlanNode) -> Result<ExecuteResult, ExecuteError> {
-        let exec_start = std::time::Instant::now();
+        let timer = std::time::Instant::now();
         let context = PlanVisitorContext::new();
 
         let visitor_result = plan.accept(self, &context);
 
-        let exec_elapsed = exec_start.elapsed().as_secs_f64();
-        log::info!(
-            "[Timing] Executor.execute (plan routing + execution): {:.3}s",
-            exec_elapsed
-        );
-
         match visitor_result {
-            PlanVisitorResult::Execute(result) => result,
+            PlanVisitorResult::Execute(result) => {
+                let elapsed = timer.elapsed();
+                debug!(target: "executor", elapsed_ms = elapsed.as_millis(), "Execution completed");
+                result
+            }
         }
     }
 }
 
 impl PlanVisitor for Executor {
+    #[instrument(skip_all, target = "executor")]
     fn visit_create_function(
         &self,
         plan: &CreateFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let start_time = std::time::Instant::now();
-        log::info!("Executing CREATE FUNCTION (name will be read from config file)");
+        let result = (|| -> Result<ExecuteResult, ExecuteError> {
+            let function_bytes = match &plan.function_source {
+                FunctionSource::Path(path) => std::fs::read(path)
+                    .map_err(|e| ExecuteError::Validation(format!("Failed to read function at {}: {}", path, e)))?,
+                FunctionSource::Bytes(bytes) => bytes.clone(),
+            };
 
-        let function_bytes = match &plan.function_source {
-            crate::coordinator::statement::FunctionSource::Path(path) => {
-                match fs::read(path) {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                            "Failed to read function file: {}: {}",
-                            path, e
-                        ))));
-                    }
+            let config_bytes = match &plan.config_source {
+                Some(ConfigSource::Path(path)) => std::fs::read(path)
+                    .map_err(|e| ExecuteError::Validation(format!("Failed to read config at {}: {}", path, e)))?,
+                Some(ConfigSource::Bytes(bytes)) => bytes.clone(),
+                None => {
+                    return Err(ExecuteError::Validation(
+                        "Configuration bytes required for function creation".into(),
+                    ))
                 }
-            }
-            crate::coordinator::statement::FunctionSource::Bytes(bytes) => bytes.clone(),
-        };
+            };
 
-        let config_bytes = match &plan.config_source {
-            Some(crate::coordinator::statement::ConfigSource::Path(path)) => {
-                match fs::read(path) {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                            "Failed to read config file: {}: {}",
-                            path, e
-                        ))));
-                    }
-                }
-            }
-            Some(crate::coordinator::statement::ConfigSource::Bytes(bytes)) => bytes.clone(),
-            None => {
-                return PlanVisitorResult::Execute(Err(ExecuteError::new(
-                    "Config is required but not provided".to_string(),
-                )));
-            }
-        };
+            info!(config_size = config_bytes.len(), "Registering Wasm task");
+            self.task_manager
+                .register_task(&config_bytes, &function_bytes)
+                .map_err(|e| ExecuteError::Task(format!("Registration failed: {:?}", e)))?;
 
-        log::debug!(
-            "Registering task with config size={} bytes, function size={} bytes",
-            config_bytes.len(),
-            function_bytes.len()
-        );
-        let register_start = std::time::Instant::now();
+            Ok(ExecuteResult::ok_with_data(
+                "Function registered successfully",
+                empty_record_batch(),
+            ))
+        })();
 
-        if let Err(e) = self.task_manager.register_task(&config_bytes, &function_bytes) {
-            let error_msg = "Failed to register task (name read from config file)".to_string();
-            log::error!("{}: {}", error_msg, e);
-            log::error!("Error chain: {:?}", e);
-            let mut full_error = format!("{}: {}", error_msg, e);
-            let mut source = e.source();
-            let mut depth = 0;
-            while let Some(err) = source {
-                depth += 1;
-                full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
-                source = err.source();
-                if depth > 10 {
-                    full_error.push_str("\n  ... (error chain too long, truncated)");
-                    break;
-                }
-            }
-            log::error!("Full error details:\n{}", full_error);
-            return PlanVisitorResult::Execute(Err(ExecuteError::new(&full_error)));
-        }
-
-        let register_elapsed = register_start.elapsed().as_secs_f64();
-        log::info!("[Timing] Task registration: {:.3}s", register_elapsed);
-
-        let total_elapsed = start_time.elapsed().as_secs_f64();
-        log::info!("[Timing] CREATE FUNCTION total: {:.3}s", total_elapsed);
-
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(
-            "FUNCTION created successfully (name from config file)",
-        )))
+        PlanVisitorResult::Execute(result)
     }
 
+    #[instrument(skip_all, target = "executor", fields(name = %plan.name))]
     fn visit_drop_function(
         &self,
         plan: &DropFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        log::info!("Executing DROP FUNCTION: {}", plan.name);
+        let result = (|| -> Result<ExecuteResult, ExecuteError> {
+            if !plan.force {
+                let status = self
+                    .task_manager
+                    .get_task_status(&plan.name)
+                    .map_err(|e| ExecuteError::Task(format!("Task discovery failed: {}", e)))?;
 
-        if plan.force {
-            let _ = self.task_manager.stop_task(&plan.name);
-            let _ = self.task_manager.close_task(&plan.name);
-        } else {
-            let status = match self.task_manager.get_task_status(&plan.name) {
-                Ok(s) => s,
-                Err(e) => {
-                    return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                        "Task '{}' not found: {}",
-                        plan.name, e
-                    ))));
+                if status.is_running() {
+                    return Err(ExecuteError::Validation(format!(
+                        "Task '{}' is currently running. Use FORCE to drop.",
+                        plan.name
+                    )));
                 }
-            };
-            if status.is_running() {
-                return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                    "Task '{}' is running. Use FORCE to drop running task.",
-                    plan.name
-                ))));
+            } else {
+                let _ = self.task_manager.stop_task(&plan.name);
             }
-        }
 
-        if let Err(e) = self.task_manager.remove_task(&plan.name) {
-            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                "Failed to remove task: {}: {}",
-                plan.name, e
-            ))));
-        }
+            self.task_manager
+                .remove_task(&plan.name)
+                .map_err(|e| ExecuteError::Task(format!("Removal failed: {}", e)))?;
 
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
-            "FUNCTION '{}' dropped successfully",
-            plan.name
-        ))))
+            Ok(ExecuteResult::ok_with_data(
+                format!("Function '{}' dropped", plan.name),
+                empty_record_batch(),
+            ))
+        })();
+
+        PlanVisitorResult::Execute(result)
     }
 
+    #[instrument(skip_all, target = "executor", fields(name = %plan.name))]
     fn visit_start_function(
         &self,
         plan: &StartFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        log::info!("Executing START FUNCTION: {}", plan.name);
+        let result = self
+            .task_manager
+            .start_task(&plan.name)
+            .map(|_| {
+                ExecuteResult::ok_with_data(
+                    format!("Function '{}' started", plan.name),
+                    empty_record_batch(),
+                )
+            })
+            .map_err(|e| ExecuteError::Task(e.to_string()));
 
-        if let Err(e) = self.task_manager.start_task(&plan.name) {
-            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                "Failed to start task: {}: {}",
-                plan.name, e
-            ))));
-        }
-
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
-            "FUNCTION '{}' started successfully",
-            plan.name
-        ))))
+        PlanVisitorResult::Execute(result)
     }
 
-    fn visit_stop_function(
-        &self,
-        plan: &StopFunctionPlan,
-        _context: &PlanVisitorContext,
-    ) -> PlanVisitorResult {
-        log::info!(
-            "Executing STOP FUNCTION: {} (graceful: {})",
-            plan.name,
-            plan.graceful
-        );
-
-        if let Err(e) = self.task_manager.stop_task(&plan.name) {
-            return PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                "Failed to stop task: {}: {}",
-                plan.name, e
-            ))));
-        }
-
-        PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
-            "FUNCTION '{}' stopped successfully",
-            plan.name
-        ))))
-    }
-
+    #[instrument(skip_all, target = "executor")]
     fn visit_show_functions(
         &self,
         _plan: &ShowFunctionsPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        log::info!("Executing SHOW FUNCTIONS");
+        let result = (|| -> Result<ExecuteResult, ExecuteError> {
+            let functions = self.task_manager.list_all_functions();
 
-        let task_names = self.task_manager.list_tasks();
-        let names: Vec<&str> = task_names.iter().map(|s| s.as_str()).collect();
-        let statuses: Vec<String> = task_names
-            .iter()
-            .map(|name| {
-                self.task_manager
-                    .get_task_status(name)
-                    .map(|s| format!("{:?}", s))
-                    .unwrap_or_else(|_| "UNKNOWN".to_string())
-            })
-            .collect();
-        let status_refs: Vec<&str> = statuses.iter().map(|s| s.as_str()).collect();
+            Ok(ExecuteResult::ok_with_data(
+                format!("Found {} task(s)", functions.len()),
+                ShowFunctionsResult::new(functions),
+            ))
+        })();
 
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("name", DataType::Utf8, false),
-            Field::new("status", DataType::Utf8, false),
-        ]));
-        let name_array = Arc::new(StringArray::from(names));
-        let status_array = Arc::new(StringArray::from(status_refs));
-
-        match RecordBatch::try_new(schema, vec![name_array, status_array]) {
-            Ok(batch) => PlanVisitorResult::Execute(Ok(ExecuteResult::ok_with_data(
-                format!("{} task(s) found", task_names.len()),
-                batch,
-            ))),
-            Err(e) => PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                "SHOW FUNCTIONS failed: {}",
-                e
-            )))),
-        }
+        PlanVisitorResult::Execute(result)
     }
 
+    #[instrument(skip_all, target = "executor", fields(class = %plan.class_name))]
     fn visit_create_python_function(
         &self,
         plan: &CreatePythonFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        log::info!(
-            "Executing CREATE PYTHON FUNCTION: class_name='{}', modules={}, config_content length={}",
-            plan.class_name,
-            plan.modules.len(),
-            plan.config_content.len()
-        );
+        let result = (|| -> Result<ExecuteResult, ExecuteError> {
+            let modules: Vec<(String, Vec<u8>)> = plan
+                .modules
+                .iter()
+                .map(|m| (m.name.clone(), m.bytes.clone()))
+                .collect();
 
-        // Convert modules to the format expected by register_python_task
-        let modules: Vec<(String, Vec<u8>)> = plan
-            .modules
-            .iter()
-            .map(|m| (m.name.clone(), m.bytes.clone()))
-            .collect();
+            self.task_manager
+                .register_python_task(plan.config_content.as_bytes(), &modules)
+                .map_err(|e| ExecuteError::Task(format!("Python registration failed: {}", e)))?;
 
-        // Register Python task (similar to register_task)
-        match self.task_manager.register_python_task(plan.config_content.as_bytes(), &modules) {
-            Ok(()) => {
-                PlanVisitorResult::Execute(Ok(ExecuteResult::ok(format!(
-                    "Python function '{}' registered successfully",
-                    plan.class_name
-                ))))
-            }
-            Err(e) => {
-                PlanVisitorResult::Execute(Err(ExecuteError::new(format!(
-                    "Failed to register Python function '{}': {}",
-                    plan.class_name, e
-                ))))
-            }
-        }
+            Ok(ExecuteResult::ok_with_data(
+                format!("Python function '{}' deployed", plan.class_name),
+                empty_record_batch(),
+            ))
+        })();
+
+        PlanVisitorResult::Execute(result)
+    }
+
+    #[instrument(skip_all, target = "executor", fields(name = %plan.name))]
+    fn visit_stop_function(
+        &self,
+        plan: &StopFunctionPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let result = self
+            .task_manager
+            .stop_task(&plan.name)
+            .map(|_| {
+                ExecuteResult::ok_with_data(
+                    format!("Function '{}' stopped", plan.name),
+                    empty_record_batch(),
+                )
+            })
+            .map_err(|e| ExecuteError::Task(e.to_string()));
+
+        PlanVisitorResult::Execute(result)
     }
 }

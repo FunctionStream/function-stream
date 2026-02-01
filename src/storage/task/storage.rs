@@ -12,12 +12,26 @@
 
 use crate::runtime::common::ComponentState;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TaskModuleBytes {
+    Wasm(Vec<u8>),
+    Python {
+        class_name: String,
+        module: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        bytes: Option<Vec<u8>>,
+    },
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct StoredTaskInfo {
     pub name: String,
-    pub wasm_bytes: Option<Vec<u8>>,
+    pub task_type: String,
+    pub module_bytes: Option<TaskModuleBytes>,
     pub config_bytes: Vec<u8>,
     pub state: ComponentState,
     pub created_at: u64,
@@ -38,6 +52,5 @@ pub trait TaskStorage: Send + Sync {
 
     fn task_exists(&self, task_name: &str) -> Result<bool>;
 
-    /// List all persisted task names (for recovery).
-    fn list_tasks(&self) -> Result<Vec<String>>;
+    fn list_all_tasks(&self) -> Result<Vec<StoredTaskInfo>>;
 }

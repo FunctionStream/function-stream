@@ -23,8 +23,8 @@ pub use coordinator::Coordinator;
 pub use execution::Executor;
 pub use execution_context::ExecutionContext;
 pub use plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
-pub use dataset::{empty_record_batch, DataSet, RecordBatch, StatementResult};
+pub use dataset::{empty_record_batch, DataSet, ExecuteResult, RecordBatch};
 pub use statement::{
-    CreateFunction, CreatePythonFunction, DropFunction, ExecuteResult, ShowFunctions,
+    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions,
     StartFunction, Statement, StopFunction, ConfigSource, FunctionSource, PythonModule,
 };

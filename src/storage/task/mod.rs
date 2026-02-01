@@ -15,8 +15,10 @@
 //! Provides storage interface and implementation for task information.
 
 pub mod factory;
+mod function_info;
 mod rocksdb_storage;
 pub mod storage;
 
 pub use factory::TaskStorageFactory;
-pub use storage::TaskStorage;
+pub use function_info::FunctionInfo;
+pub use storage::{StoredTaskInfo, TaskModuleBytes, TaskStorage};

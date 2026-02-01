@@ -17,436 +17,302 @@
 use crate::config::GlobalConfig;
 use crate::runtime::common::ComponentState;
 use crate::runtime::processor::wasm::thread_pool::{GlobalTaskThreadPool, TaskThreadPool};
-use crate::runtime::task::TaskLifecycle;
+use crate::runtime::task::{TaskBuilder, TaskLifecycle};
 use crate::runtime::taskexecutor::init_context::InitContext;
-use crate::runtime::task::TaskBuilder;
 use crate::storage::state_backend::StateStorageServer;
-use crate::storage::task::storage::StoredTaskInfo;
-use crate::storage::task::{TaskStorage, TaskStorageFactory};
-use anyhow::{Context, Result, anyhow};
+use crate::storage::task::{
+    FunctionInfo, StoredTaskInfo, TaskModuleBytes, TaskStorage, TaskStorageFactory,
+};
+
+use anyhow::{anyhow, Context, Result};
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock};
 
 pub struct TaskManager {
+    /// In-memory task registry
     tasks: Arc<RwLock<HashMap<String, Arc<RwLock<Box<dyn TaskLifecycle>>>>>>,
-    /// State storage server
+    /// Shared runtime components
     state_storage_server: Arc<StateStorageServer>,
-    /// Task storage instance (used to manage information for all tasks)
     task_storage: Arc<dyn TaskStorage>,
-    /// Task thread pool
     thread_pool: Arc<TaskThreadPool>,
 }
 
-/// Global TaskManager instance
-static GLOBAL_TASK_MANAGER: OnceLock<Arc<TaskManager>> = OnceLock::new();
+static GLOBAL_INSTANCE: OnceLock<Arc<TaskManager>> = OnceLock::new();
 
+// --- 1. Initialization & Singleton Management ---
 impl TaskManager {
-    /// Initialize global task manager instance
-    ///
-    /// Must be called in the main thread, before server startup.
-    /// Can only be called once, repeated calls will return an error.
-    ///
-    /// # Arguments
-    /// - `config`: Global configuration
-    ///
-    /// # Returns
-    /// - `Ok(())`: Initialization successful
-    /// - `Err(...)`: Initialization failed or already initialized
     pub fn init(config: &GlobalConfig) -> Result<()> {
-        // Check if already initialized
-        if GLOBAL_TASK_MANAGER.get().is_some() {
-            return Err(anyhow!("TaskManager has already been initialized"));
+        if GLOBAL_INSTANCE.get().is_some() {
+            return Err(anyhow!("TaskManager singleton already initialized"));
         }
 
-        // Initialize global thread pool
+        // Initialize global resources
         let _ = GlobalTaskThreadPool::get_or_create();
 
-        // Initialize
         let manager =
-            Arc::new(Self::init_task_manager(config).context("Failed to initialize TaskManager")?);
+            Arc::new(Self::init_internal(config).context("Failed to construct TaskManager")?);
+        manager
+            .recover_tasks_from_storage()
+            .context("Failed to recover persisted tasks")?;
 
-        // Recover persisted tasks from task storage
-        manager.recover_tasks().context("Failed to recover tasks")?;
-
-        // Set global instance
-        GLOBAL_TASK_MANAGER
+        GLOBAL_INSTANCE
             .set(manager)
-            .map_err(|_| anyhow!("Failed to set global TaskManager instance"))?;
+            .map_err(|_| anyhow!("Concurrency error during TaskManager singleton assignment"))?;
 
         Ok(())
     }
 
-    /// Recover persisted tasks from task storage
-    ///
-    /// Called during init after task manager is created. Lists all task names from storage,
-    /// loads each task info, rebuilds the task from config and module bytes, then registers
-    /// and starts it. Tasks that fail to recover are logged and skipped.
-    ///
-    /// # Returns
-    /// - `Ok(())`: Recovery completed (individual task failures are logged only)
-    /// - `Err(...)`: Fatal error (e.g. failed to list tasks)
-    fn recover_tasks(&self) -> Result<()> {
-        let names = self
-            .task_storage
-            .list_tasks()
-            .context("Failed to list persisted tasks")?;
-
-        for name in names {
-            if let Err(e) = self.recover_one_task(&name) {
-                log::error!("Failed to recover task '{}': {}", name, e);
-                // Continue with other tasks
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Recover a single task by name from task storage
-    fn recover_one_task(&self, task_name: &str) -> Result<()> {
-        // Skip if already in memory (e.g. duplicate in storage)
-        {
-            let map = self.tasks.read().map_err(|_| anyhow!("Lock poisoned"))?;
-            if map.contains_key(task_name) {
-                log::debug!("Task '{}' already loaded, skip recovery", task_name);
-                return Ok(());
-            }
-        }
-
-        let stored = self
-            .task_storage
-            .load_task(task_name)
-            .context("Failed to load task info")?;
-
-        let task = Self::build_task_from_stored(&stored)?;
-        self.register_task_internal(task)?;
-        log::info!("Recovered task '{}'", task_name);
-        Ok(())
-    }
-
-    /// Build TaskLifecycle from stored task info (config + wasm bytes)
-    fn build_task_from_stored(stored: &StoredTaskInfo) -> Result<Box<dyn TaskLifecycle>> {
-        let module_bytes = stored
-            .wasm_bytes
-            .as_deref()
-            .unwrap_or_default();
-        TaskBuilder::from_yaml_config(&stored.config_bytes, module_bytes).map_err(|e| {
-            anyhow!("Failed to build task from stored info: {}", e)
-        })
-    }
-
-    /// Get global task manager instance
-    ///
-    /// Must call `init` first before using.
-    ///
-    /// # Returns
-    /// - `Ok(Arc<TaskManager>)`: Successfully obtained
-    /// - `Err(...)`: Not yet initialized
     pub fn get() -> Result<Arc<Self>> {
-        GLOBAL_TASK_MANAGER.get().map(Arc::clone).ok_or_else(|| {
-            anyhow!("TaskManager has not been initialized. Call TaskManager::init() first.")
-        })
+        GLOBAL_INSTANCE
+            .get()
+            .cloned()
+            .ok_or_else(|| anyhow!("TaskManager not initialized. Call init() first."))
     }
 
-    /// Initialize task manager
-    ///
-    /// Create a new task manager using global thread pool.
-    ///
-    /// # Arguments
-    /// - `config`: Global configuration
-    ///
-    /// # Returns
-    /// - `Ok(TaskManager)`: Successfully created
-    /// - `Err(...)`: Creation failed
-    fn init_task_manager(config: &GlobalConfig) -> Result<Self> {
-        // Get global thread pool (already initialized in init)
+    fn init_internal(config: &GlobalConfig) -> Result<Self> {
         let thread_pool = GlobalTaskThreadPool::get_or_create();
 
-        // Get state storage configuration from global configuration
-        let state_storage_config = config.state_storage.clone();
-
-        // If state storage configuration has base_dir, ensure directory exists
-        if let Some(ref base_dir) = state_storage_config.base_dir {
-            let base_path = std::path::Path::new(base_dir);
-            if !base_path.exists() {
-                fs::create_dir_all(base_path).context("Failed to create base dir")?;
-            }
+        // Ensure state storage directory exists
+        if let Some(ref base_dir) = config.state_storage.base_dir {
+            fs::create_dir_all(base_dir).context("Failed to create state storage directory")?;
         }
 
-        // Create state storage server
-        let state_storage_server = StateStorageServer::new(state_storage_config)
-            .map_err(|e| anyhow!("Failed to create state storage server: {}", e))?;
+        let state_storage_server = Arc::new(
+            StateStorageServer::new(config.state_storage.clone())
+                .map_err(|e| anyhow!("Failed to create state storage server: {}", e))?,
+        );
 
-        // Create task storage instance
-        // TaskStorage uses task name as key, so one instance can manage all tasks
-        // If db_path is specified in config, use that path; otherwise use default path "data/task"
-        // TaskStorage uses task name as key, not database path
-        let task_storage = TaskStorageFactory::create_storage(&config.task_storage)?;
+        let task_storage = Arc::from(TaskStorageFactory::create_storage(&config.task_storage)?);
 
         Ok(Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
-            state_storage_server: Arc::new(state_storage_server),
-            task_storage: Arc::from(task_storage),
+            state_storage_server,
+            task_storage,
             thread_pool,
         })
     }
+}
 
-    /// Get state storage server
-    ///
-    /// # Returns
-    /// - `Arc<StateStorageServer>`: State storage server
-    pub fn state_storage_server(&self) -> Arc<StateStorageServer> {
-        self.state_storage_server.clone()
-    }
-
-    /// Get task storage instance
-    ///
-    /// # Returns
-    /// - `Arc<dyn TaskStorage>`: Task storage instance
-    pub fn task_storage(&self) -> Arc<dyn TaskStorage> {
-        self.task_storage.clone()
-    }
-
-    /// Get task thread pool
-    ///
-    /// # Returns
-    /// - `Arc<TaskThreadPool>`: Task thread pool
-    pub fn thread_pool(&self) -> Arc<TaskThreadPool> {
-        self.thread_pool.clone()
-    }
-
-    /// Register task from YAML config and module bytes
-    pub fn register_task(&self, config_bytes: &[u8], module_bytes: &[u8]) -> Result<()> {
-        log::debug!(
-            "Registering task: config={} bytes, module={} bytes",
-            config_bytes.len(),
-            module_bytes.len()
-        );
-
+// --- 2. Public API: Task Lifecycle Control ---
+impl TaskManager {
+    pub fn register_wasm_task(
+        &self,
+        name: &str,
+        config_bytes: &[u8],
+        module_bytes: &[u8],
+    ) -> Result<()> {
         let task = TaskBuilder::from_yaml_config(config_bytes, module_bytes)
-            .map_err(|e| {
-                let preview: String = String::from_utf8_lossy(config_bytes).chars().take(500).collect();
-                log::error!("Failed to create task. Config preview: {}", preview);
-                anyhow!("Failed to create task: {}", e)
-            })?;
+            .map_err(|e| anyhow!("Failed to build Wasm task '{}': {}", name, e))?;
 
         self.register_task_internal(task)
     }
 
-    /// Internal method to register and start a task
-    fn register_task_internal(&self, task: Box<dyn TaskLifecycle>) -> Result<()> {
-        let task_name = task.get_name().to_string();
+    /// Register task from YAML config and module bytes (name from config)
+    pub fn register_task(&self, config_bytes: &[u8], module_bytes: &[u8]) -> Result<()> {
+        let task = TaskBuilder::from_yaml_config(config_bytes, module_bytes)
+            .map_err(|e| anyhow!("Failed to build task: {}", e))?;
 
-        // Check for duplicate
+        self.register_task_internal(task)
+    }
+
+    pub fn register_python_task(
+        &self,
+        config_bytes: &[u8],
+        modules: &[(String, Vec<u8>)],
+    ) -> Result<()> {
+        #[cfg(feature = "python")]
         {
-            let map = self.tasks.read().map_err(|_| anyhow!("Lock poisoned"))?;
-            if map.contains_key(&task_name) {
-                return Err(anyhow!("Task '{}' already exists", task_name));
+            let task = TaskBuilder::from_python_config(config_bytes, modules)
+                .map_err(|e| anyhow!("Failed to build Python task: {}", e))?;
+            self.register_task_internal(task)
+        }
+        #[cfg(not(feature = "python"))]
+        {
+            let _ = (config_bytes, modules);
+            Err(anyhow!("Python feature disabled in this build"))
+        }
+    }
+
+    pub fn start_task(&self, name: &str) -> Result<()> {
+        let task = self.get_task_handle(name)?;
+        task.write()
+            .start()
+            .map_err(|e| anyhow!("Failed to start task: {}", e))
+    }
+
+    pub fn stop_task(&self, name: &str) -> Result<()> {
+        let task = self.get_task_handle(name)?;
+        task.write()
+            .stop()
+            .map_err(|e| anyhow!("Failed to stop task: {}", e))
+    }
+
+    pub fn close_task(&self, name: &str) -> Result<()> {
+        let task = self.get_task_handle(name)?;
+        task.write()
+            .close()
+            .map_err(|e| anyhow!("Failed to close task: {}", e))
+    }
+
+    pub fn remove_task(&self, name: &str) -> Result<()> {
+        let task_handle = self.get_task_handle(name)?;
+
+        // Ensure task is closed before removal
+        {
+            let mut handle = task_handle.write();
+            if !handle.get_state().is_closed() {
+                handle
+                    .close()
+                    .map_err(|e| anyhow!("Failed to close task before removal: {}", e))?;
             }
         }
 
-        // Add to map
-        let task_arc = {
-            let mut map = self.tasks.write().map_err(|_| anyhow!("Lock poisoned"))?;
-            let arc = Arc::new(RwLock::new(task));
-            map.insert(task_name.clone(), arc.clone());
-            arc
-        };
+        // Cleanup from memory and storage
+        self.tasks.write().remove(name);
+        self.task_storage
+            .delete_task(name)
+            .context("Failed to remove task from persistent storage")?;
 
-        // Initialize and start
+        log::info!(target: "task_manager", "Task '{}' successfully purged", name);
+        Ok(())
+    }
+
+    pub fn take_checkpoint(&self, name: &str, checkpoint_id: u64) -> Result<()> {
+        let task = self.get_task_handle(name)?;
+        task.write()
+            .take_checkpoint(checkpoint_id)
+            .map_err(|e| anyhow!("Checkpoint failed: {}", e))
+    }
+}
+
+// --- 3. Public API: Observation & Discovery ---
+impl TaskManager {
+    pub fn list_all_functions(&self) -> Vec<FunctionInfo> {
+        let tasks = self.tasks.read();
+        tasks
+            .iter()
+            .map(|(name, task_arc)| {
+                let status = task_arc.read().get_state();
+                FunctionInfo {
+                    name: name.clone(),
+                    task_type: "UNKNOWN".to_string(),
+                    status: format!("{:?}", status),
+                }
+            })
+            .collect()
+    }
+
+    pub fn get_task_status(&self, name: &str) -> Result<ComponentState> {
+        Ok(self.get_task_handle(name)?.read().get_state())
+    }
+
+    pub fn state_storage_server(&self) -> Arc<StateStorageServer> {
+        Arc::clone(&self.state_storage_server)
+    }
+
+    pub fn task_storage(&self) -> Arc<dyn TaskStorage> {
+        Arc::clone(&self.task_storage)
+    }
+
+    pub fn thread_pool(&self) -> Arc<TaskThreadPool> {
+        Arc::clone(&self.thread_pool)
+    }
+}
+
+// --- 4. Internal Helpers & Recovery ---
+impl TaskManager {
+    fn register_task_internal(&self, task: Box<dyn TaskLifecycle>) -> Result<()> {
+        let task_name = task.get_name().to_string();
+
+        if self.tasks.read().contains_key(&task_name) {
+            return Err(anyhow!("Task uniqueness violation: '{}'", task_name));
+        }
+
+        let task_arc = Arc::new(RwLock::new(task));
+
+        // Atomic-like registration and initialization
+        {
+            let mut registry = self.tasks.write();
+            registry.insert(task_name.clone(), Arc::clone(&task_arc));
+        }
+
         let init_context = InitContext::new(
             self.state_storage_server.clone(),
             self.task_storage.clone(),
             self.thread_pool.clone(),
         );
 
-        {
-            let mut guard = task_arc.write().map_err(|_| anyhow!("Lock poisoned"))?;
-            guard.init_with_context(&init_context).map_err(|e| {
-                log::error!("Failed to initialize task '{}': {}", task_name, e);
-                anyhow!("Failed to initialize task '{}': {}", task_name, e)
-            })?;
-            guard.start().map_err(|e| {
-                log::error!("Failed to start task '{}': {}", task_name, e);
-                anyhow!("Failed to start task '{}': {}", task_name, e)
-            })?;
-        }
-
-        log::info!("Task '{}' registered and started successfully", task_name);
-        Ok(())
-    }
-
-    /// Start task
-    ///
-    /// # Arguments
-    /// - `name`: Task name
-    ///
-    /// # Returns
-    /// - `Ok(())`: Start successful
-    /// - `Err(...)`: Start failed
-    pub fn start_task(&self, name: &str) -> Result<()> {
-        let task = self.get_task(name)?;
-        let mut task_guard = task.write().map_err(|_| anyhow!("Lock poisoned"))?;
-        task_guard
+        let mut handle = task_arc.write();
+        handle
+            .init_with_context(&init_context)
+            .map_err(|e| anyhow!("Failed to init task '{}': {}", task_name, e))?;
+        handle
             .start()
-            .map_err(|e| anyhow!("Failed to start task: {}", e))?;
+            .map_err(|e| anyhow!("Failed to start task '{}': {}", task_name, e))?;
+
+        log::info!(
+            target: "task_manager",
+            "Task '{}' initialized and started",
+            task_name
+        );
         Ok(())
     }
 
-    /// Stop task
-    ///
-    /// # Arguments
-    /// - `name`: Task name
-    ///
-    /// # Returns
-    /// - `Ok(())`: Stop successful
-    /// - `Err(...)`: Stop failed
-    pub fn stop_task(&self, name: &str) -> Result<()> {
-        let task = self.get_task(name)?;
-        let mut task_guard = task.write().map_err(|_| anyhow!("Lock poisoned"))?;
-        task_guard
-            .stop()
-            .map_err(|e| anyhow!("Failed to stop task: {}", e))?;
-        Ok(())
-    }
+    fn recover_tasks_from_storage(&self) -> Result<()> {
+        let stored_tasks = self.task_storage.list_all_tasks()?;
 
-    /// Close task
-    ///
-    /// # Arguments
-    /// - `name`: Task name
-    ///
-    /// # Returns
-    /// - `Ok(())`: Close successful
-    /// - `Err(...)`: Close failed
-    pub fn close_task(&self, name: &str) -> Result<()> {
-        let task = self.get_task(name)?;
-        let mut task_guard = task.write().map_err(|_| anyhow!("Lock poisoned"))?;
-        task_guard
-            .close()
-            .map_err(|e| anyhow!("Failed to close task: {}", e))?;
-        Ok(())
-    }
-
-    /// Execute checkpoint
-    ///
-    /// # Arguments
-    /// - `name`: Task name
-    /// - `checkpoint_id`: Checkpoint ID
-    ///
-    /// # Returns
-    /// - `Ok(())`: Checkpoint successful
-    /// - `Err(...)`: Checkpoint failed
-    pub fn take_checkpoint(&self, name: &str, checkpoint_id: u64) -> Result<()> {
-        let task = self.get_task(name)?;
-        let mut task_guard = task.write().map_err(|_| anyhow!("Lock poisoned"))?;
-        task_guard
-            .take_checkpoint(checkpoint_id)
-            .map_err(|e| anyhow!("Failed to take checkpoint: {}", e))?;
-        Ok(())
-    }
-
-    /// Get task
-    ///
-    /// # Arguments
-    /// - `name`: Task name
-    ///
-    /// # Returns
-    /// - `Ok(Arc<RwLock<Box<dyn TaskLifecycle>>>)`: Task found
-    /// - `Err(...)`: Task does not exist
-    fn get_task(&self, name: &str) -> Result<Arc<RwLock<Box<dyn TaskLifecycle>>>> {
-        let map = self.tasks.read().map_err(|_| anyhow!("Lock poisoned"))?;
-        map.get(name)
-            .cloned()
-            .ok_or_else(|| anyhow!("Task '{}' not found", name))
-    }
-
-    /// Get task status
-    ///
-    /// # Arguments
-    /// - `name`: Task name
-    ///
-    /// # Returns
-    /// - `Ok(ComponentState)`: Task state
-    /// - `Err(...)`: Task does not exist or failed to get state
-    pub fn get_task_status(&self, name: &str) -> Result<ComponentState> {
-        let task = self.get_task(name)?;
-        let task_guard = task.read().map_err(|_| anyhow!("Lock poisoned"))?;
-        Ok(task_guard.get_state())
-    }
-
-    /// List all task names
-    ///
-    /// # Returns
-    /// - `Vec<String>`: Task name list
-    pub fn list_tasks(&self) -> Vec<String> {
-        let map = self.tasks.read().unwrap();
-        map.keys().cloned().collect()
-    }
-
-    /// Remove task (will close first if not already closed)
-    ///
-    /// # Arguments
-    /// - `name`: Task name
-    ///
-    /// # Returns
-    /// - `Ok(())`: Removal successful
-    /// - `Err(...)`: Removal failed
-    pub fn remove_task(&self, name: &str) -> Result<()> {
-        // Get task
-        let task = self.get_task(name)?;
-        
-        // Close task if not already closed
-        {
-            let task_guard = task.read().map_err(|_| anyhow!("Lock poisoned"))?;
-            let status = task_guard.get_state();
-            drop(task_guard);
-            
-            if !status.is_closed() {
-                let mut task_guard = task.write().map_err(|_| anyhow!("Lock poisoned"))?;
-                task_guard.close().map_err(|e| {
-                    log::error!("Failed to close task '{}' before removal. Error: {}", name, e);
-                    anyhow!("Failed to close task '{}': {}", name, e)
-                })?;
+        for stored in stored_tasks {
+            if let Err(e) = self.recover_one_task(&stored) {
+                log::error!(
+                    target: "task_manager",
+                    "Recovery failed for {}: {:?}",
+                    stored.name,
+                    e
+                );
             }
         }
-
-        // Remove from memory
-        {
-            let mut map = self.tasks.write().map_err(|_| anyhow!("Lock poisoned"))?;
-            map.remove(name);
-        }
-
-        // TODO: Remove task information from task storage
-        // Can use task_storage to remove task information
-
-        log::info!("Manager: Task '{}' removed.", name);
         Ok(())
     }
 
-    /// Register Python function as a task (for fs-exec)
-    pub fn register_python_task(&self, config_bytes: &[u8], modules: &[(String, Vec<u8>)]) -> Result<()> {
-        #[cfg(feature = "python")]
-        {
-            log::debug!(
-                "Registering Python task: config={} bytes, modules={}",
-                config_bytes.len(),
-                modules.len()
-            );
-
-            let task = TaskBuilder::from_python_config(config_bytes, modules)
-                .map_err(|e| {
-                    let preview: String = String::from_utf8_lossy(config_bytes).chars().take(500).collect();
-                    log::error!("Failed to create Python task. Config preview: {}", preview);
-                    anyhow!("Failed to create Python task: {}", e)
-                })?;
-
-            self.register_task_internal(task)
+    fn recover_one_task(&self, stored: &StoredTaskInfo) -> Result<()> {
+        if self.tasks.read().contains_key(&stored.name) {
+            return Ok(());
         }
 
-        #[cfg(not(feature = "python"))]
-        {
-            let _ = (config_bytes, modules);
-            Err(anyhow!("Python feature is not enabled"))
+        let task = match &stored.module_bytes {
+            None => TaskBuilder::from_yaml_config(&stored.config_bytes, &[]),
+            Some(TaskModuleBytes::Wasm(bytes)) => {
+                TaskBuilder::from_yaml_config(&stored.config_bytes, bytes)
+            }
+            Some(TaskModuleBytes::Python {
+                class_name: _,
+                module,
+                bytes: py_bytes,
+            }) => {
+                #[cfg(feature = "python")]
+                {
+                    let modules = [(module.clone(), py_bytes.clone().unwrap_or_default())];
+                    TaskBuilder::from_python_config(&stored.config_bytes, &modules)
+                }
+                #[cfg(not(feature = "python"))]
+                {
+                    let _ = (module, py_bytes);
+                    return Err(anyhow!("Python task recovery skipped: feature disabled"));
+                }
+            }
         }
+        .map_err(|e| anyhow!("Failed to rebuild task from storage: {}", e))?;
+
+        self.register_task_internal(task)
+    }
+
+    fn get_task_handle(&self, name: &str) -> Result<Arc<RwLock<Box<dyn TaskLifecycle>>>> {
+        self.tasks
+            .read()
+            .get(name)
+            .cloned()
+            .ok_or_else(|| anyhow!("Task '{}' not found in registry", name))
     }
 }
