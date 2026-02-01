@@ -569,11 +569,6 @@ impl OutputSink for KafkaOutputSink {
         self.send_thread = None;
         // init_with_context is the only place that sets state in caller thread
         *self.state.lock().unwrap() = ComponentState::Initialized;
-        log::info!(
-            "KafkaOutputSink initialized: sink_id={}, topic={}",
-            self.sink_id,
-            self.config.topic
-        );
         Ok(())
     }
 

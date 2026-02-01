@@ -22,7 +22,7 @@ use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::taskexecutor::TaskManager;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info};
 
 #[derive(Error, Debug)]
 pub enum ExecuteError {
@@ -45,7 +45,6 @@ impl Executor {
         Self { task_manager }
     }
 
-    #[instrument(skip_all, fields(plan_type = std::any::type_name_of_val(plan)))]
     pub fn execute(&self, plan: &dyn PlanNode) -> Result<ExecuteResult, ExecuteError> {
         let timer = std::time::Instant::now();
         let context = PlanVisitorContext::new();
@@ -63,7 +62,6 @@ impl Executor {
 }
 
 impl PlanVisitor for Executor {
-    #[instrument(skip_all, target = "executor")]
     fn visit_create_function(
         &self,
         plan: &CreateFunctionPlan,
@@ -101,7 +99,6 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
-    #[instrument(skip_all, target = "executor", fields(name = %plan.name))]
     fn visit_drop_function(
         &self,
         plan: &DropFunctionPlan,
@@ -137,7 +134,6 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
-    #[instrument(skip_all, target = "executor", fields(name = %plan.name))]
     fn visit_start_function(
         &self,
         plan: &StartFunctionPlan,
@@ -157,7 +153,6 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
-    #[instrument(skip_all, target = "executor")]
     fn visit_show_functions(
         &self,
         _plan: &ShowFunctionsPlan,
@@ -175,7 +170,6 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
-    #[instrument(skip_all, target = "executor", fields(class = %plan.class_name))]
     fn visit_create_python_function(
         &self,
         plan: &CreatePythonFunctionPlan,
@@ -201,7 +195,6 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
-    #[instrument(skip_all, target = "executor", fields(name = %plan.name))]
     fn visit_stop_function(
         &self,
         plan: &StopFunctionPlan,

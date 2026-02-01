@@ -197,14 +197,6 @@ impl WasmProcessor for WasmProcessorImpl {
             return Ok(());
         }
 
-        let total_bytes: usize = self.modules.iter().map(|(_, b)| b.len()).sum();
-        log::info!(
-            "Initializing WasmProcessor '{}' with {} bytes of module data ({} modules)",
-            self.name,
-            total_bytes,
-            self.modules.len()
-        );
-
         // Note: WasmHost initialization requires output_sinks
         // But sinks are not ready yet, so WasmHost will be initialized later via init_wasm_host
         // Here we only do basic initialization checks
@@ -212,10 +204,6 @@ impl WasmProcessor for WasmProcessorImpl {
         self.initialized = true;
         self.is_healthy = true;
         self.error_count = 0;
-        log::info!(
-            "WasmProcessor '{}' initialized successfully (WasmHost will be initialized when sinks are set)",
-            self.name
-        );
         Ok(())
     }
 
@@ -526,12 +514,6 @@ impl WasmProcessor for WasmProcessorImpl {
             return Ok(());
         }
 
-        log::info!(
-            "Initializing WasmHost for processor '{}' with {} output sinks",
-            self.name,
-            output_sinks.len()
-        );
-
         let (processor, store) = if self.use_custom_engine_and_component {
             let engine = self.custom_engine.as_ref().ok_or_else(|| {
                 Box::new(WasmProcessorError::InitError(
@@ -633,10 +615,6 @@ impl WasmProcessor for WasmProcessorImpl {
                 })?;
         }
 
-        log::info!(
-            "WasmHost initialized successfully for processor '{}'",
-            self.name
-        );
         Ok(())
     }
 

@@ -533,11 +533,6 @@ impl KafkaInputSource {
                     format!("Failed to assign partition {}: {}", partition, e),
                 )) as Box<dyn std::error::Error + Send>
             })?;
-            log::info!(
-                "Kafka consumer assigned to topic '{}' partition {}",
-                self.config.topic,
-                partition
-            );
         } else {
             // Partition not specified, use subscribe auto-assignment
             consumer.subscribe(&[&self.config.topic]).map_err(|e| {
@@ -548,7 +543,6 @@ impl KafkaInputSource {
                     ),
                 )) as Box<dyn std::error::Error + Send>
             })?;
-            log::info!("Kafka consumer subscribed to topic '{}'", self.config.topic);
         }
 
         Ok(consumer)
@@ -630,13 +624,6 @@ impl InputSource for KafkaInputSource {
         // When closing, need to manage thread through TaskHandle
         self.consumer_thread = None;
         *self.state.lock().unwrap() = InputSourceState::Initialized;
-        log::info!(
-            "KafkaInputSource initialized: group_id={}, input_id={}, topic={}, partition={}",
-            self.group_id,
-            self.input_id,
-            self.config.topic,
-            self.config.partition_str()
-        );
         Ok(())
     }
 

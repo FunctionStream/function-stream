@@ -235,19 +235,12 @@ impl WasmTask {
         init_context.register_thread_group(main_runloop_group);
 
         let thread_groups = init_context.take_thread_groups();
-        log::info!(
-            "WasmTask '{}' registered {} thread groups",
-            self.task_name,
-            thread_groups.len()
-        );
-
         self.thread_groups = Some(thread_groups);
 
         self.task_thread = None;
         self.execution_state
             .store(ExecutionState::Running as u8, Ordering::Relaxed);
 
-        log::info!("WasmTask '{}' initialized", self.task_name);
         Ok(())
     }
 
