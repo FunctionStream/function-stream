@@ -193,14 +193,7 @@ impl TaskManager {
         let tasks = self.tasks.read();
         tasks
             .iter()
-            .map(|(name, task_arc)| {
-                let status = task_arc.read().get_state();
-                FunctionInfo {
-                    name: name.clone(),
-                    task_type: "UNKNOWN".to_string(),
-                    status: format!("{:?}", status),
-                }
-            })
+            .map(|(_, task_arc)| task_arc.read().get_function_info())
             .collect()
     }
 

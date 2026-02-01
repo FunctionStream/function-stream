@@ -16,6 +16,7 @@
 
 use crate::runtime::common::ComponentState;
 use crate::runtime::taskexecutor::InitContext;
+use crate::storage::task::FunctionInfo;
 
 /// Task lifecycle management interface
 ///
@@ -124,6 +125,8 @@ pub trait TaskLifecycle: Send + Sync {
     /// # Returns
     /// Name of the task
     fn get_name(&self) -> &str;
+
+    fn get_function_info(&self) -> FunctionInfo;
 
     /// Check if task is running
     ///

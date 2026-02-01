@@ -18,7 +18,7 @@ use crate::runtime::input::{InputSource, InputSourceProvider};
 use crate::runtime::output::{OutputSink, OutputSinkProvider};
 use crate::runtime::processor::wasm::wasm_processor::WasmProcessorImpl;
 use crate::runtime::processor::wasm::wasm_processor_trait::WasmProcessor;
-use crate::runtime::processor::wasm::wasm_task::{TaskEnvironment, WasmTask};
+use crate::runtime::processor::wasm::wasm_task::WasmTask;
 use crate::runtime::processor::python::get_python_engine_and_component;
 use crate::runtime::task::yaml_keys::{TYPE, type_values};
 use crate::runtime::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
@@ -70,10 +70,6 @@ impl PythonBuilder {
             task_config.processor.name
         );
 
-        let environment = TaskEnvironment {
-            task_name: task_config.task_name.clone(),
-        };
-
         let mut all_inputs = Vec::new();
         for (group_idx, input_group) in task_config.input_groups.iter().enumerate() {
             let group_inputs = Self::create_inputs_from_config(&input_group.inputs, group_idx)
@@ -107,7 +103,13 @@ impl PythonBuilder {
             Self::create_processor_from_config(&task_config.processor, modules)?;
         log::info!("Created python processor: {}", task_config.processor.name);
 
-        let task = WasmTask::new(environment, all_inputs, processor, outputs);
+        let task = WasmTask::new(
+            task_config.task_name.clone(),
+            type_values::PYTHON.to_string(),
+            all_inputs,
+            processor,
+            outputs,
+        );
         let task = Arc::new(task);
 
         log::info!(

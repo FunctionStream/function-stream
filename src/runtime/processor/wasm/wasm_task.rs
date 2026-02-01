@@ -17,6 +17,7 @@ use crate::runtime::common::{ComponentState, TaskCompletionFlag};
 use crate::runtime::input::InputSource;
 use crate::runtime::output::OutputSink;
 use crate::runtime::task::TaskLifecycle;
+use crate::storage::task::FunctionInfo;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc;
@@ -27,11 +28,6 @@ use std::time::Duration;
 const CONTROL_OPERATION_TIMEOUT_MS: u64 = 5000;
 const CONTROL_OPERATION_MAX_RETRIES: u32 = 3;
 const MAX_BATCH_SIZE: usize = 100;
-
-#[derive(Clone, Debug)]
-pub struct TaskEnvironment {
-    pub task_name: String,
-}
 
 enum TaskControlSignal {
     Start { completion_flag: TaskCompletionFlag },
@@ -101,7 +97,7 @@ impl ExecutionState {
 
 pub struct WasmTask {
     task_name: String,
-    environment: TaskEnvironment,
+    task_type: String,
     inputs: Option<Vec<Box<dyn InputSource>>>,
     processor: Option<Box<dyn WasmProcessor>>,
     sinks: Option<Vec<Box<dyn OutputSink>>>,
@@ -118,15 +114,16 @@ pub struct WasmTask {
 
 impl WasmTask {
     pub fn new(
-        environment: TaskEnvironment,
+        task_name: String,
+        task_type: String,
         inputs: Vec<Box<dyn InputSource>>,
         processor: Box<dyn WasmProcessor>,
         sinks: Vec<Box<dyn OutputSink>>,
     ) -> Self {
         let (_tx, rx) = mpsc::channel();
         Self {
-            task_name: environment.task_name.clone(),
-            environment,
+            task_name,
+            task_type,
             inputs: Some(inputs),
             processor: Some(processor),
             sinks: Some(sinks),
@@ -886,6 +883,14 @@ impl TaskLifecycle for WasmTask {
 
     fn get_name(&self) -> &str {
         &self.task_name
+    }
+
+    fn get_function_info(&self) -> FunctionInfo {
+        FunctionInfo {
+            name: self.task_name.clone(),
+            task_type: self.task_type.clone(),
+            status: format!("{:?}", self.get_state()),
+        }
     }
 
     fn exec_python_function(
