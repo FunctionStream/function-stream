@@ -23,10 +23,13 @@ from .exceptions import (
     ClientError,
     ServerError,
 )
+from .models import FunctionInfo, ShowFunctionsResult
 
 __all__ = [
     "FsClient",
     "ClientError",
     "ServerError",
+    "FunctionInfo",
+    "ShowFunctionsResult",
 ]
 

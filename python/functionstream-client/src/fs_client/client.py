@@ -28,6 +28,7 @@ from .exceptions import (
     BadRequestError, AuthenticationError, PermissionDeniedError,
     NotFoundError, ConflictError, ResourceExhaustedError, InternalServerError
 )
+from .models import FunctionInfo, ShowFunctionsResult
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,105 @@ class FsClient:
         )
 
         self._invoke(self._stub.CreatePythonFunction, request, None)
+        return True
+
+    def drop_function(
+            self,
+            function_name: str,
+            timeout: Optional[float] = None,
+    ) -> bool:
+        """
+        Drop a function by name.
+
+        Args:
+            function_name: Name of the function to drop.
+            timeout: Optional timeout in seconds.
+
+        Returns:
+            True if successful.
+        """
+        request = function_stream_pb2.DropFunctionRequest(function_name=function_name)
+        self._invoke(self._stub.DropFunction, request, timeout)
+        return True
+
+    def show_functions(
+            self,
+            filter: Optional[str] = None,
+            timeout: Optional[float] = None,
+    ) -> ShowFunctionsResult:
+        """
+        List functions, optionally filtered.
+
+        Args:
+            filter: Optional filter string; None to list all.
+            timeout: Optional timeout in seconds.
+
+        Returns:
+            ShowFunctionsResult with status_code, message, and list of FunctionInfo.
+        """
+        req = function_stream_pb2.ShowFunctionsRequest()
+        if filter is not None:
+            req.filter = filter
+        actual_timeout = timeout if timeout is not None else self.default_timeout
+        try:
+            response = self._stub.ShowFunctions(req, timeout=actual_timeout)
+        except grpc.RpcError as e:
+            logger.error(f"gRPC call failed: {e.code()} - {e.details()}")
+            raise _convert_grpc_error(e) from e
+
+        code = response.status_code
+        if code >= 400:
+            error_msg = response.message or "Unknown server error"
+            logger.error(f"Server returned error: code={code}, msg={error_msg}")
+            exception_cls = self._STATUS_CODE_MAP.get(code, ServerError)
+            raise exception_cls(message=error_msg, status_code=code)
+
+        functions = [
+            FunctionInfo(name=f.name, task_type=f.task_type, status=f.status)
+            for f in response.functions
+        ]
+        return ShowFunctionsResult(
+            status_code=code,
+            message=response.message or "",
+            functions=functions,
+        )
+
+    def start_function(
+            self,
+            function_name: str,
+            timeout: Optional[float] = None,
+    ) -> bool:
+        """
+        Start a function by name.
+
+        Args:
+            function_name: Name of the function to start.
+            timeout: Optional timeout in seconds.
+
+        Returns:
+            True if successful.
+        """
+        request = function_stream_pb2.StartFunctionRequest(function_name=function_name)
+        self._invoke(self._stub.StartFunction, request, timeout)
+        return True
+
+    def stop_function(
+            self,
+            function_name: str,
+            timeout: Optional[float] = None,
+    ) -> bool:
+        """
+        Stop a function by name.
+
+        Args:
+            function_name: Name of the function to stop.
+            timeout: Optional timeout in seconds.
+
+        Returns:
+            True if successful.
+        """
+        request = function_stream_pb2.StopFunctionRequest(function_name=function_name)
+        self._invoke(self._stub.StopFunction, request, timeout)
         return True
 
     def _invoke(self, rpc_method, request, timeout: Optional[float]):

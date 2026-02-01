@@ -77,6 +77,40 @@ message CreatePythonFunctionRequest {
   string config_content = 3;
 }
 
+// Function information (for ShowFunctions response)
+message FunctionInfo {
+  string name = 1;
+  string task_type = 2;
+  string status = 3;
+}
+
+// Drop function request
+message DropFunctionRequest {
+  string function_name = 1;
+}
+
+// Show functions request (optional filter, empty for list all)
+message ShowFunctionsRequest {
+  optional string filter = 1;
+}
+
+// Show functions response (status_code, message, and list of FunctionInfo)
+message ShowFunctionsResponse {
+  StatusCode status_code = 1;
+  string message = 2;
+  repeated FunctionInfo functions = 3;
+}
+
+// Start function request
+message StartFunctionRequest {
+  string function_name = 1;
+}
+
+// Stop function request
+message StopFunctionRequest {
+  string function_name = 1;
+}
+
 // Function Stream service
 service FunctionStreamService {
   // SQL execution
@@ -87,4 +121,16 @@ service FunctionStreamService {
   
   // Create Python function dynamically
   rpc CreatePythonFunction(CreatePythonFunctionRequest) returns (Response);
+  
+  // Drop function
+  rpc DropFunction(DropFunctionRequest) returns (Response);
+  
+  // Show functions (returns list of FunctionInfo)
+  rpc ShowFunctions(ShowFunctionsRequest) returns (ShowFunctionsResponse);
+  
+  // Start function
+  rpc StartFunction(StartFunctionRequest) returns (Response);
+  
+  // Stop function
+  rpc StopFunction(StopFunctionRequest) returns (Response);
 }

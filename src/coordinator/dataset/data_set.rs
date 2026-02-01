@@ -21,7 +21,8 @@ pub fn empty_record_batch() -> RecordBatch {
 }
 
 /// DataSet interface: conversion to Arrow RecordBatch.
-pub trait DataSet: Send + Sync {
+/// Supertrait `Any` allows downcasting `Arc<dyn DataSet>` to concrete types (e.g. `ShowFunctionsResult`).
+pub trait DataSet: Send + Sync + std::any::Any {
     /// Convert to RecordBatch.
     fn to_record_batch(&self) -> RecordBatch;
 }
