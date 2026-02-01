@@ -19,7 +19,7 @@ A high-level gRPC client library for interacting with the Function Stream servic
 __version__ = "0.0.1"
 
 from .client import FsClient
-from .config import Config, ConfigBuilder
+from .config import WasmTaskBuilder as ConfigBuilder, WasmTaskConfig as Config
 from .exceptions import (
     ClientError,
     ServerError,

@@ -36,12 +36,3 @@ class ShowFunctionsResult:
     status_code: int
     message: str
     functions: List[FunctionInfo]
-
-
-@dataclass
-class SqlResult:
-    """Result of ExecuteSql RPC: status, message, and optional raw data."""
-
-    status_code: int
-    message: str
-    data: Optional[bytes] = None

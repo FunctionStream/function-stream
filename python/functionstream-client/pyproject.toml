@@ -22,8 +22,10 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
+    "functionstream-api>=0.0.1",
     "grpcio>=1.50.0",
     "protobuf>=4.21.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

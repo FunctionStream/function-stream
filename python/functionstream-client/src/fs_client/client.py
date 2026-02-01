@@ -17,11 +17,18 @@ This module provides a production-ready client for the Function Stream service.
 It handles connection management, error translation, logging, and type safety.
 """
 
+import ast
+import importlib.util
+import inspect
 import logging
+import sys
 import grpc
 from pathlib import Path
-from typing import Optional, Union, List, Dict, Type
+from typing import Optional, Union, List, Dict, Type, Set, Tuple
 
+from fs_api import FSProcessorDriver
+
+from .config import WasmTaskConfig
 from ._proto import function_stream_pb2, function_stream_pb2_grpc
 from .exceptions import (
     ServerError, ClientError, _convert_grpc_error,
@@ -31,6 +38,121 @@ from .exceptions import (
 from .models import FunctionInfo, ShowFunctionsResult
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_relative(module_part: Optional[str], level: int, current_package: str) -> str:
+    if level == 0:
+        return module_part or ""
+    parts = (current_package or "").split(".")
+    for _ in range(level - 1):
+        if parts:
+            parts.pop()
+    prefix = ".".join(parts)
+    if module_part:
+        return f"{prefix}.{module_part}" if prefix else module_part
+    return prefix
+
+
+def _get_imported_names(tree: ast.AST) -> List[Tuple[Optional[str], int]]:
+    out: List[Tuple[Optional[str], int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                out.append((alias.name, 0))
+        elif isinstance(node, ast.ImportFrom):
+            out.append((node.module, node.level or 0))
+    return out
+
+
+def _is_under_site_or_stdlib(origin: Path) -> bool:
+    try:
+        resolved = origin.resolve()
+        parts = resolved.parts
+        if "site-packages" in parts or "dist-packages" in parts:
+            return True
+        base = Path(sys.base_prefix)
+        try:
+            resolved.relative_to(base / "lib")
+            return True
+        except ValueError:
+            return False
+    except (OSError, RuntimeError):
+        return True
+
+
+def _collect_local_deps(
+    driver_class: Type,
+    driver_file: Path,
+) -> Tuple[Dict[str, Path], Dict[str, Set[str]]]:
+    driver_root = driver_file.resolve().parent
+    driver_module_name = driver_class.__module__
+    result: Dict[str, Path] = {}
+    dep_graph: Dict[str, Set[str]] = {}
+    queue: List[str] = [driver_module_name]
+    seen: Set[str] = set()
+    if driver_module_name == "__main__":
+        result[driver_module_name] = driver_file.resolve()
+        dep_graph[driver_module_name] = set()
+
+    while queue:
+        module_name = queue.pop(0)
+        if module_name in seen:
+            continue
+        seen.add(module_name)
+        package = module_name.rpartition(".")[0]
+        if module_name == "__main__" and module_name in result:
+            origin = result[module_name]
+        else:
+            try:
+                spec = importlib.util.find_spec(module_name)
+            except (ImportError, ValueError, ModuleNotFoundError):
+                continue
+            if spec is None or spec.origin is None or spec.origin == "built-in":
+                continue
+            origin = Path(spec.origin)
+        if _is_under_site_or_stdlib(origin):
+            continue
+        try:
+            origin.resolve().relative_to(driver_root)
+        except ValueError:
+            continue
+        result[module_name] = origin
+        dep_graph[module_name] = set()
+        try:
+            tree = ast.parse(origin.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            pass
+        else:
+            for module_part, level in _get_imported_names(tree):
+                if level == 0:
+                    abs_name = module_part
+                else:
+                    abs_name = _resolve_relative(module_part, level, package)
+                if abs_name:
+                    dep_graph[module_name].add(abs_name)
+                    if abs_name not in seen:
+                        queue.append(abs_name)
+
+    return result, dep_graph
+
+
+def _topo_order(nodes: List[str], graph: Dict[str, Set[str]]) -> List[str]:
+    node_set = set(nodes)
+    order: List[str] = []
+    g = {n: graph.get(n, set()) & node_set for n in nodes}
+    while g:
+        for n in list(g):
+            if all(d in order for d in g[n]):
+                order.append(n)
+                del g[n]
+                break
+        else:
+            break
+    for n in nodes:
+        if n not in order:
+            order.append(n)
+    return order
+
 
 class FsClient:
     """
@@ -190,6 +312,64 @@ class FsClient:
 
         self._invoke(self._stub.CreatePythonFunction, request, None)
         return True
+
+    def create_python_function_from_config(
+            self,
+            config: WasmTaskConfig,
+            driver_class: Type,
+    ) -> bool:
+        """
+        Create Python function from Config and Driver implementation.
+
+        Extracts class_name and module bytes from the Driver class automatically,
+        and uses the Config's to_yaml() for config_content.
+
+        Args:
+            config: WasmTaskConfig
+            driver_class: The FSProcessorDriver subclass implementing the processor
+
+        Returns:
+            True if successful
+
+        Raises:
+            ValueError: If driver_class is not a class
+            TypeError: If driver_class does not implement FSProcessorDriver
+            ClientError: If the request fails
+        """
+        if not inspect.isclass(driver_class):
+            raise ValueError("driver_class must be a class, not an instance")
+
+        if not issubclass(driver_class, FSProcessorDriver):
+            raise TypeError(
+                f"driver_class must implement FSProcessorDriver, got {driver_class.__name__}"
+            )
+
+        class_name = driver_class.__name__
+        driver_file = Path(inspect.getfile(driver_class))
+        paths, dep_graph = _collect_local_deps(driver_class, driver_file)
+        driver_module_name = driver_class.__module__
+        order = _topo_order(list(paths.keys()), dep_graph)
+        modules: List[Tuple[str, bytes]] = []
+        for name in order:
+            display_name = driver_file.stem if name == "__main__" else name
+            try:
+                modules.append((display_name, paths[name].read_bytes()))
+            except OSError as e:
+                raise ClientError(f"Failed to read module: {paths[name]}") from e
+
+        config_content = config.to_yaml()
+
+        logger.info(
+            f"Creating Python function from config: class_name='{class_name}', "
+            f"config_name='{getattr(config, 'task_name', 'unknown')}', "
+            f"modules={len(modules)}"
+        )
+
+        return self.create_python_function(
+            class_name=class_name,
+            modules=modules,
+            config_content=config_content,
+        )
 
     def drop_function(
             self,
