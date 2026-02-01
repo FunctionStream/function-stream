@@ -72,13 +72,11 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
     ) -> Result<TonicResponse<Response>, Status> {
         let start_time = Instant::now();
         let req = request.into_inner();
-        
-        info!("Received SQL request, length: {}", req.sql.len());
 
         let parse_start = Instant::now();
         let stmt = match SqlParser::parse(&req.sql) {
             Ok(stmt) => {
-                info!("SQL parsed in {}ms", parse_start.elapsed().as_millis());
+                log::debug!("SQL parsed in {}ms", parse_start.elapsed().as_millis());
                 stmt
             }
             Err(e) => {
@@ -93,7 +91,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
 
         let exec_start = Instant::now();
         let result = self.coordinator.execute(stmt.as_ref());
-        info!(
+        log::debug!(
             "Coordinator execution finished in {}ms",
             exec_start.elapsed().as_millis()
         );
@@ -105,7 +103,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
             StatusCode::InternalServerError
         };
 
-        info!("Total SQL request cost: {}ms", start_time.elapsed().as_millis());
+        log::debug!("Total SQL request cost: {}ms", start_time.elapsed().as_millis());
 
         Ok(TonicResponse::new(Self::build_response(
             status_code,

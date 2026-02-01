@@ -36,16 +36,10 @@ impl Coordinator {
         let context = ExecutionContext::new();
         let execution_id = context.execution_id;
 
-        log::info!(
-            "[{}] Starting SQL execution: {:?}",
-            execution_id,
-            std::any::type_name_of_val(&stmt)
-        );
-
         match self.execute_pipeline(&context, stmt) {
             Ok(result) => {
-                log::info!(
-                    "[{}] Execution completed successfully in {}ms",
+                log::debug!(
+                    "[{}] Execution completed in {}ms",
                     execution_id,
                     start_time.elapsed().as_millis()
                 );
