@@ -19,6 +19,7 @@ A high-level gRPC client library for interacting with the Function Stream servic
 __version__ = "0.0.1"
 
 from .client import FsClient
+from .config import Config, ConfigBuilder
 from .exceptions import (
     ClientError,
     ServerError,
@@ -27,6 +28,8 @@ from .models import FunctionInfo, ShowFunctionsResult
 
 __all__ = [
     "FsClient",
+    "Config",
+    "ConfigBuilder",
     "ClientError",
     "ServerError",
     "FunctionInfo",

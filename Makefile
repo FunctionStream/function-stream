@@ -21,7 +21,7 @@ PACKAGE_DIR := packages
 PYTHON_WASM_PATH := python/functionstream-runtime/target/functionstream-python-runtime.wasm
 PYTHON_WASM_NAME := functionstream-python-runtime.wasm
 
-.PHONY: help clean clean-dist build build-full build-lite package package-full package-lite package-all test install
+.PHONY: help clean clean-dist build build-full build-lite package package-full package-lite package-all test install docker-build docker-up
 
 help:
 	@echo "Function Stream Build System"
@@ -33,7 +33,9 @@ help:
 	@echo "  package-full   - Build and package full version (.zip and .tar.gz)"
 	@echo "  package-lite   - Build and package lite version (.zip and .tar.gz)"
 	@echo "  package-all    - Build and package both versions"
-	@echo "  test           - Run tests"
+	@echo "  docker-build   - Run package-full then docker-compose build"
+	@echo "  docker-up     - Run package-full then docker-compose up -d"
+	@echo "  test          - Run tests"
 	@echo "  clean          - Clean all build artifacts (cargo + dist)"
 	@echo "  clean-dist     - Clean distribution directory only"
 	@echo ""
@@ -219,6 +221,14 @@ package-all: clean-dist package-full package-lite
 	@echo ""
 	@echo "All packages created:"
 	@ls -lh $(DIST_BASE)/$(PACKAGE_DIR)/
+
+docker-build: package-full
+	@echo "Building Docker image (using dist/packages/function-stream-$(VERSION).zip)..."
+	docker-compose build
+
+docker-up: package-full
+	@echo "Building and starting containers..."
+	docker-compose up -d --build
 
 test:
 	cargo test

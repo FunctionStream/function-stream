@@ -11,7 +11,10 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
     libsasl2-dev \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
+
+ENV PROTOC=/usr/bin/protoc
 
 WORKDIR /build
 
@@ -21,6 +24,7 @@ COPY cli ./cli
 COPY src ./src
 COPY python ./python
 COPY wit ./wit
+COPY config.yaml ./
 
 RUN python3 -m venv .venv \
     && .venv/bin/pip install --upgrade pip \
