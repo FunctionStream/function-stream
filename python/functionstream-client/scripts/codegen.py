@@ -20,7 +20,6 @@ import re
 import shutil
 import logging
 import argparse
-import subprocess
 from pathlib import Path
 from typing import List, Optional
 
@@ -113,10 +112,8 @@ class CodeGenerator:
         not be on PATH. Prefer the executable next to sys.executable,
         then PATH.
         """
-        import sys as _sys
-
         # 1. Same dir as current Python (venv bin when run via make)
-        bin_dir = Path(_sys.executable).resolve().parent
+        bin_dir = Path(sys.executable).resolve().parent
         for name in ("protoc-gen-mypy", "protoc-gen-mypy.exe"):
             candidate = bin_dir / name
             if candidate.exists() and (

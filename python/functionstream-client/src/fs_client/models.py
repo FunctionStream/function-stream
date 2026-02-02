@@ -17,7 +17,7 @@ Provides Python-friendly dataclasses for API results, independent of protobuf.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 
 @dataclass(frozen=True)

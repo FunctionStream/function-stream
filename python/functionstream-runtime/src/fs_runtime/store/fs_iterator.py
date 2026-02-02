@@ -12,7 +12,6 @@
 
 from typing import TYPE_CHECKING, Optional, Tuple
 
-from fs_api.store.error import KvError
 from fs_api.store.iterator import KvIterator
 
 from .fs_error import wit_to_api_error

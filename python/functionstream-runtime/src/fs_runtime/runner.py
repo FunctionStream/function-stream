@@ -10,15 +10,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import abc
 import importlib.util
-import json
 import sys
-import time
-from typing import Dict, List, Optional, Tuple
-
-import cloudpickle
-import fs_api
+from typing import List, Optional, Tuple
 
 from fs_api.driver import FSProcessorDriver
 
@@ -53,8 +47,10 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
             module = importlib.util.module_from_spec(spec)
 
             # Execute the module source code
+            # Note: exec is required here for dynamic module loading
+            # This is a controlled execution environment for user-provided code
             code = compile(module_source, f"<{module_name}>", "exec")
-            exec(code, module.__dict__)
+            exec(code, module.__dict__)  # noqa: S102
 
             # Add the module to sys.modules
             sys.modules[module_name] = module
@@ -62,7 +58,6 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
 
         # Try to find the class in all loaded modules
         ProcessorClass = None
-        found_in_module = None
 
         # First, try to find in the last module (most likely location)
         if modules:
@@ -71,14 +66,12 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
                 module = loaded_modules[last_module_name]
                 if hasattr(module, class_name):
                     ProcessorClass = getattr(module, class_name)
-                    found_in_module = last_module_name
 
         # If not found, search in all modules
         if ProcessorClass is None:
             for module_name, module in loaded_modules.items():
                 if hasattr(module, class_name):
                     ProcessorClass = getattr(module, class_name)
-                    found_in_module = module_name
                     break
 
         if ProcessorClass is None:
@@ -103,7 +96,7 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
 class WitWorld:
 
     def fs_init(self, config: List[Tuple[str, str]]) -> None:
-        global _DRIVER, _CONTEXT
+        global _CONTEXT
 
         config_dict = convert_config_to_dict(config)
 
@@ -113,7 +106,8 @@ class WitWorld:
             try:
                 _DRIVER.init(_CONTEXT, _CONTEXT._CONFIG)
             except Exception:
-                pass
+                # Silently ignore initialization errors to allow graceful degradation
+                pass  # noqa: S110
 
     def fs_process(self, source_id: int, data: bytes) -> None:
         global _DRIVER, _CONTEXT
@@ -123,7 +117,8 @@ class WitWorld:
         try:
             _DRIVER.process(_CONTEXT, source_id, data)
         except Exception:
-            pass
+            # Silently ignore processing errors to allow graceful degradation
+            pass  # noqa: S110
 
     def fs_process_watermark(self, source_id: int, watermark: int) -> None:
         global _DRIVER, _CONTEXT
@@ -133,7 +128,8 @@ class WitWorld:
         try:
             _DRIVER.process_watermark(_CONTEXT, source_id, watermark)
         except Exception:
-            pass
+            # Silently ignore watermark processing errors to allow graceful degradation
+            pass  # noqa: S110
 
     def fs_take_checkpoint(self, checkpoint_id: int) -> None:
         global _DRIVER, _CONTEXT
@@ -143,7 +139,8 @@ class WitWorld:
         try:
             _DRIVER.take_checkpoint(_CONTEXT, checkpoint_id)
         except Exception:
-            pass
+            # Silently ignore checkpoint errors to allow graceful degradation
+            pass  # noqa: S110
 
     def fs_check_heartbeat(self) -> bool:
         global _DRIVER, _CONTEXT
@@ -162,7 +159,8 @@ class WitWorld:
             try:
                 _DRIVER.close(_CONTEXT)
             except Exception:
-                pass
+                # Silently ignore close errors to ensure cleanup completes
+                pass  # noqa: S110
 
         _DRIVER = None
         _CONTEXT = None

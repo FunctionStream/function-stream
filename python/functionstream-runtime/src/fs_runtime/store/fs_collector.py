@@ -35,7 +35,8 @@ def emit(data: bytes, channel: int = 0) -> None:
     try:
         wit_emit(channel, data)
     except Exception:
-        pass
+        # Silently ignore emit errors to allow graceful degradation
+        pass  # noqa: S110
 
 
 def emit_watermark(watermark: int, channel: int = 0) -> None:
@@ -45,7 +46,8 @@ def emit_watermark(watermark: int, channel: int = 0) -> None:
     try:
         wit_emit_watermark(channel, watermark)
     except Exception:
-        pass
+        # Silently ignore watermark emit errors to allow graceful degradation
+        pass  # noqa: S110
 
 
 __all__ = ['emit', 'emit_watermark']

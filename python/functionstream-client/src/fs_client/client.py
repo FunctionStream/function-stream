@@ -383,7 +383,6 @@ class FsClient:
         class_name = driver_class.__name__
         driver_file = Path(inspect.getfile(driver_class))
         paths, dep_graph = _collect_local_deps(driver_class, driver_file)
-        driver_module_name = driver_class.__module__
         order = _topo_order(list(paths.keys()), dep_graph)
         modules: List[Tuple[str, bytes]] = []
         for name in order:
@@ -430,22 +429,22 @@ class FsClient:
 
     def show_functions(
             self,
-            filter: Optional[str] = None,
+            filter_pattern: Optional[str] = None,
             timeout: Optional[float] = None,
     ) -> ShowFunctionsResult:
         """
         List functions, optionally filtered.
 
         Args:
-            filter: Optional filter string; None to list all.
+            filter_pattern: Optional filter string; None to list all.
             timeout: Optional timeout in seconds.
 
         Returns:
             ShowFunctionsResult with status_code, message, and list of FunctionInfo.
         """
         req = function_stream_pb2.ShowFunctionsRequest()
-        if filter is not None:
-            req.filter = filter
+        if filter_pattern is not None:
+            req.filter = filter_pattern
         actual_timeout = timeout if timeout is not None else self.default_timeout
         try:
             response = self._stub.ShowFunctions(req, timeout=actual_timeout)

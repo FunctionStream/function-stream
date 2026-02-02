@@ -1,6 +1,6 @@
 FROM rust:1-bookworm AS builder
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     make \
     clang \
@@ -31,7 +31,9 @@ RUN python3 -m venv .venv \
     && .venv/bin/pip install componentize-py \
     && .venv/bin/pip install -e python/functionstream-api
 
-RUN cd python/functionstream-runtime && make build
+WORKDIR /build/python/functionstream-runtime
+RUN make build
+WORKDIR /build
 
 RUN make build-full
 

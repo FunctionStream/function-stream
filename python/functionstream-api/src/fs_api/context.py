@@ -43,6 +43,5 @@ class Context(abc.ABC):
         Returns:
             Dict[str, str]: Configuration dictionary
         """
-        pass
 
 __all__ = ['Context']

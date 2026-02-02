@@ -25,7 +25,7 @@ import shutil
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 # --- Configuration ---
 
@@ -60,7 +60,6 @@ logger = logging.getLogger("fs_wasm_builder")
 
 class BuildError(Exception):
     """Custom exception for build failures."""
-    pass
 
 
 class WasmBuilder:
@@ -228,7 +227,7 @@ class WasmBuilder:
 
             if WASM_OUTPUT.exists():
                 size_kb = WASM_OUTPUT.stat().st_size / 1024
-                logger.info(f"✓ wasm Build Successful!")
+                logger.info("✓ wasm Build Successful!")
                 logger.info(f"  Output: {WASM_OUTPUT}")
                 logger.info(f"  Size:   {size_kb:.2f} KB")
             else:
@@ -271,7 +270,7 @@ class WasmBuilder:
         except KeyboardInterrupt:
             logger.error("Build interrupted.")
             sys.exit(130)
-        except Exception as e:
+        except Exception:
             logger.exception("Unexpected error occurred:")
             sys.exit(1)
 

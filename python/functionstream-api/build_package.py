@@ -29,7 +29,7 @@ import logging
 import subprocess
 import importlib.util
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 # --- Configuration ---
 SCRIPT_DIR = Path(__file__).parent.absolute()
@@ -48,7 +48,6 @@ logger = logging.getLogger("fs_builder")
 
 class BuildError(Exception):
     """Custom exception for build failures."""
-    pass
 
 
 class Builder:
@@ -214,7 +213,7 @@ class Builder:
         except KeyboardInterrupt:
             logger.error("Build interrupted by user.")
             sys.exit(130)
-        except Exception as e:
+        except Exception:
             logger.exception("An unexpected error occurred:")
             sys.exit(1)
 

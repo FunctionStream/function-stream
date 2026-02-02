@@ -37,7 +37,6 @@ class ClientError(FsError):
     Raised when the error originates from the client side.
     Examples: File not found, invalid configuration, local validation failure.
     """
-    pass
 
 
 class ServerError(FsError):
@@ -65,7 +64,7 @@ class NetworkError(ServerError):
     pass
 
 
-class TimeoutError(ServerError):
+class FunctionStreamTimeoutError(ServerError):
     """Raised when the operation timed out."""
     pass
 
@@ -123,7 +122,7 @@ _GRPC_CODE_TO_EXCEPTION = {
 
     grpc.StatusCode.RESOURCE_EXHAUSTED: ResourceExhaustedError,
 
-    grpc.StatusCode.DEADLINE_EXCEEDED: TimeoutError,
+    grpc.StatusCode.DEADLINE_EXCEEDED: FunctionStreamTimeoutError,
     grpc.StatusCode.UNAVAILABLE: NetworkError,
 
     grpc.StatusCode.INTERNAL: InternalServerError,

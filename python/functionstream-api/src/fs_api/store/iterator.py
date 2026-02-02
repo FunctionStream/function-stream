@@ -12,7 +12,6 @@
 
 import abc
 from typing import Optional, Tuple
-from .error import KvError
 
 
 class KvIterator(abc.ABC):
