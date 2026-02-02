@@ -18,5 +18,5 @@
 pub mod python_host;
 pub mod python_service;
 
-pub use python_host::{get_python_engine_and_component, initialize_config};
+pub use python_host::get_python_engine_and_component;
 pub use python_service::PythonService;

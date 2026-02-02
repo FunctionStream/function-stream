@@ -21,7 +21,7 @@ use crate::storage::task::FunctionInfo;
 /// Task lifecycle management interface
 ///
 /// Defines complete lifecycle management methods for Task, following standard state transition flow:
-/// ```
+/// ```ignore
 /// Uninitialized -> Initialized -> Starting -> Running
 ///                                             |
 ///                                             v

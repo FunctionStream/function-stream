@@ -214,12 +214,7 @@ impl InputGroup {
 pub struct ProcessorConfig {
     /// Processor name
     pub name: String,
-    /// WASM module bytes (not in config file, set at runtime)
-    ///
-    /// Note: This field is not serialized/deserialized from config file,
-    /// ensuring config file and wasm module bytes are decoupled.
-    #[serde(skip)]
-    pub wasm_bytes: Option<Vec<u8>>,
+
     /// Whether to use built-in Event serialization
     ///
     /// If true, uses the system's built-in Event serialization method.
@@ -334,14 +329,6 @@ impl ProcessorConfig {
         }
 
         Ok(config)
-    }
-
-    /// Set WASM module bytes
-    ///
-    /// # Arguments
-    /// - `bytes`: WASM module bytes
-    pub fn set_wasm_bytes(&mut self, bytes: Vec<u8>) {
-        self.wasm_bytes = Some(bytes);
     }
 }
 

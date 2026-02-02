@@ -15,16 +15,11 @@ use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 #[derive(Debug, Clone)]
 pub struct DropFunctionPlan {
     pub name: String,
-    pub force: bool,
 }
 
 impl DropFunctionPlan {
     pub fn new(name: String) -> Self {
-        Self { name, force: false }
-    }
-
-    pub fn with_force(name: String, force: bool) -> Self {
-        Self { name, force }
+        Self { name }
     }
 }
 

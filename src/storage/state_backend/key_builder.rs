@@ -39,7 +39,6 @@ pub fn increment_key(key: &[u8]) -> Vec<u8> {
     for i in (0..result.len()).rev() {
         if result[i] < 0xFF {
             result[i] += 1;
-            // Don't truncate - keep all bytes including trailing zeros
             return result;
         } else {
             result[i] = 0;

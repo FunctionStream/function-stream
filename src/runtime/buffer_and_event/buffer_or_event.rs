@@ -10,24 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// BufferOrEvent - Buffer or event
-//
-// Unified representation of data received from network or message queue, can be a buffer containing data records, or an event
-
-use crate::runtime::buffer_and_event::event::Event;
-
-/// BufferOrEvent - Buffer or event
-///
-/// Unified representation of data received from network or message queue
-/// Can be a buffer containing data records (byte array), or an event (Event)
-///
-/// Reference Flink's BufferOrEvent class
 #[derive(Debug)]
 pub struct BufferOrEvent {
     /// Buffer data (byte array, if is_buffer() returns true)
     buffer: Option<Vec<u8>>,
-    /// Event (if is_event() returns true)
-    event: Option<Box<dyn Event>>,
     /// Whether event has priority (can skip buffer)
     has_priority: bool,
     /// Channel/partition information (optional)
@@ -51,28 +37,7 @@ impl BufferOrEvent {
         let size = buffer.len();
         Self {
             buffer: Some(buffer),
-            event: None,
             has_priority: false,
-            channel_info,
-            size,
-            more_available,
-            more_priority_events,
-        }
-    }
-
-    /// Create BufferOrEvent of event type
-    pub fn new_event(
-        event: Box<dyn Event>,
-        has_priority: bool,
-        channel_info: Option<String>,
-        more_available: bool,
-        size: usize,
-        more_priority_events: bool,
-    ) -> Self {
-        Self {
-            buffer: None,
-            event: Some(event),
-            has_priority,
             channel_info,
             size,
             more_available,
@@ -83,11 +48,6 @@ impl BufferOrEvent {
     /// Check if it's a buffer
     pub fn is_buffer(&self) -> bool {
         self.buffer.is_some()
-    }
-
-    /// Check if it's an event
-    pub fn is_event(&self) -> bool {
-        self.event.is_some()
     }
 
     /// Check if event has priority
@@ -103,11 +63,6 @@ impl BufferOrEvent {
     /// Get buffer data ownership (if it's a buffer)
     pub fn into_buffer(self) -> Option<Vec<u8>> {
         self.buffer
-    }
-
-    /// Get event (if it's an event)
-    pub fn get_event(&self) -> Option<&dyn Event> {
-        self.event.as_deref()
     }
 
     /// Get channel/partition information

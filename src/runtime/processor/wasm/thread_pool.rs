@@ -20,7 +20,6 @@ use std::time::Duration;
 
 pub struct TaskThreadPool {
     tasks: Arc<Mutex<HashMap<String, TaskHandle>>>,
-    thread_group_name: String,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -34,15 +33,13 @@ pub enum ThreadGroupType {
 
 pub struct ThreadInfo {
     handle: thread::JoinHandle<()>,
-    name: String,
     is_running: Arc<AtomicBool>,
 }
 
 impl ThreadInfo {
-    fn new(handle: thread::JoinHandle<()>, name: String) -> Self {
+    fn new(handle: thread::JoinHandle<()>) -> Self {
         Self {
             handle,
-            name,
             is_running: Arc::new(AtomicBool::new(true)),
         }
     }
@@ -77,8 +74,8 @@ impl ThreadGroup {
         }
     }
 
-    pub fn add_thread(&mut self, handle: thread::JoinHandle<()>, thread_name: String) {
-        self.threads.push(ThreadInfo::new(handle, thread_name));
+    pub fn add_thread(&mut self, handle: thread::JoinHandle<()>) {
+        self.threads.push(ThreadInfo::new(handle));
     }
 
     pub fn is_finished(&self) -> bool {
@@ -147,26 +144,6 @@ impl TaskHandle {
         self.thread_groups.push(thread_group);
     }
 
-    fn get_main_runloop_thread(&self) -> Option<&ThreadGroup> {
-        self.thread_groups
-            .iter()
-            .find(|g| matches!(g.group_type, ThreadGroupType::MainRunloop))
-    }
-
-    fn get_input_threads(&self) -> Vec<&ThreadGroup> {
-        self.thread_groups
-            .iter()
-            .filter(|g| matches!(g.group_type, ThreadGroupType::InputSource(_)))
-            .collect()
-    }
-
-    fn get_output_threads(&self) -> Vec<&ThreadGroup> {
-        self.thread_groups
-            .iter()
-            .filter(|g| matches!(g.group_type, ThreadGroupType::OutputSink(_)))
-            .collect()
-    }
-
     fn get_all_thread_groups(&self) -> &[ThreadGroup] {
         &self.thread_groups
     }
@@ -200,10 +177,9 @@ impl TaskHandle {
 }
 
 impl TaskThreadPool {
-    pub fn new(thread_group_name: String) -> Self {
+    pub fn new() -> Self {
         Self {
             tasks: Arc::new(Mutex::new(HashMap::new())),
-            thread_group_name,
             shutdown: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -237,7 +213,7 @@ impl TaskThreadPool {
 
         let mut cleanup_thread_group =
             ThreadGroup::new(ThreadGroupType::Cleanup, format!("TaskCleanup-{}", task_id));
-        cleanup_thread_group.add_thread(cleanup_thread, format!("TaskCleanup-{}", task_id));
+        cleanup_thread_group.add_thread(cleanup_thread);
 
         let thread_groups = {
             let mut task_guard = task.lock().unwrap();
@@ -552,7 +528,7 @@ impl ThreadHealthStatus {
 
 impl Default for TaskThreadPool {
     fn default() -> Self {
-        Self::new("Flink Task Threads".to_string())
+        Self::new()
     }
 }
 

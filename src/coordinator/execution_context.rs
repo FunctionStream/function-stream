@@ -18,7 +18,6 @@ static EXECUTION_ID_GENERATOR: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug)]
 pub struct ExecutionContext {
     pub execution_id: u64,
-    pub sql: Option<String>,
     pub start_time: Instant,
     pub timeout: Duration,
 }
@@ -27,16 +26,9 @@ impl ExecutionContext {
     pub fn new() -> Self {
         Self {
             execution_id: EXECUTION_ID_GENERATOR.fetch_add(1, Ordering::SeqCst),
-            sql: None,
             start_time: Instant::now(),
             timeout: Duration::from_secs(30),
         }
-    }
-
-    pub fn with_sql(sql: impl Into<String>) -> Self {
-        let mut ctx = Self::new();
-        ctx.sql = Some(sql.into());
-        ctx
     }
 
     pub fn set_timeout(&mut self, timeout: Duration) {

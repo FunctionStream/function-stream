@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::thread_pool::{TaskThreadPool, ThreadGroup};
+use super::thread_pool::ThreadGroup;
 use super::wasm_processor_trait::WasmProcessor;
 use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::common::{ComponentState, TaskCompletionFlag};
@@ -112,7 +112,6 @@ pub struct WasmTask {
     state: Arc<Mutex<ComponentState>>,
     control_sender: Option<Sender<TaskControlSignal>>,
     task_thread: Option<JoinHandle<()>>,
-    thread_pool: Option<Arc<TaskThreadPool>>,
     thread_groups: Option<Vec<ThreadGroup>>,
     execution_state: Arc<AtomicU8>,
     failure_cause: Arc<Mutex<Option<String>>>,
@@ -138,7 +137,6 @@ impl WasmTask {
             state: Arc::new(Mutex::new(ComponentState::Uninitialized)),
             control_sender: None,
             task_thread: None,
-            thread_pool: None,
             thread_groups: None,
             execution_state: Arc::new(AtomicU8::new(ExecutionState::Created as u8)),
             failure_cause: Arc::new(Mutex::new(None)),
@@ -240,7 +238,7 @@ impl WasmTask {
             ThreadGroupType::MainRunloop,
             format!("MainRunloop-{}", self.task_name),
         );
-        main_runloop_group.add_thread(thread_handle, format!("stream-task-{}", self.task_name));
+        main_runloop_group.add_thread(thread_handle);
         init_context.register_thread_group(main_runloop_group);
 
         let thread_groups = init_context.take_thread_groups();

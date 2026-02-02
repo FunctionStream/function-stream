@@ -16,7 +16,6 @@
 // Can be a buffer containing data records, or an event
 
 mod buffer_or_event;
-pub mod event;
 pub mod stream_element;
 
 pub use buffer_or_event::BufferOrEvent;

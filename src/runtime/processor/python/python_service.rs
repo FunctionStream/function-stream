@@ -60,18 +60,4 @@ impl PythonService {
 
         Ok(())
     }
-
-    /// Initialize Python WASM runtime with default configuration
-    ///
-    /// This is a convenience method that uses default configuration values.
-    /// Default WASM path: data/cache/python-runner/functionstream-python-runtime.wasm
-    /// Default cache directory: data/cache/python-runner
-    ///
-    /// # Returns
-    /// - `Ok(())`: Initialization successful
-    /// - `Err(...)`: Initialization failed (e.g., WASM file not found at default path)
-    pub fn initialize_with_defaults() -> Result<()> {
-        let config = GlobalConfig::default();
-        Self::initialize(&config)
-    }
 }

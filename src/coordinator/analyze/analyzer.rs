@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use super::Analysis;
-use crate::coordinator::ExecutionContext;
+use crate::coordinator::execution_context::ExecutionContext;
 use crate::coordinator::statement::{
     CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, Statement,
     StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
@@ -58,14 +58,6 @@ impl<'a> Analyzer<'a> {
             _ => return Err(AnalyzeError::new("Analyzer should return Analyze result")),
         };
         Ok(Analysis::new(analyzed_stmt))
-    }
-
-    /// Static method: analyze Statement
-    pub fn analyze_statement(
-        stmt: &dyn Statement,
-        context: &ExecutionContext,
-    ) -> Result<Analysis, AnalyzeError> {
-        Analyzer::new(context).analyze(stmt)
     }
 }
 

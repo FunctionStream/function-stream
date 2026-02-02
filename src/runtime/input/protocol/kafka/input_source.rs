@@ -620,7 +620,7 @@ impl InputSource for KafkaInputSource {
             ThreadGroupType::InputSource(self.group_id),
             format!("InputSource-g{}-i{}", self.group_id, self.input_id),
         );
-        input_thread_group.add_thread(thread_handle, thread_name);
+        input_thread_group.add_thread(thread_handle);
         init_context.register_thread_group(input_thread_group);
 
         // Note: Thread handle has been moved to thread group, no longer stored in consumer_thread

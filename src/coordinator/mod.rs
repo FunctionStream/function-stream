@@ -18,13 +18,9 @@ mod execution_context;
 mod plan;
 mod statement;
 
-pub use analyze::{Analysis, Analyzer};
 pub use coordinator::Coordinator;
-pub use dataset::{DataSet, ExecuteResult, RecordBatch, ShowFunctionsResult, empty_record_batch};
-pub use execution::Executor;
-pub use execution_context::ExecutionContext;
-pub use plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
+pub use dataset::{DataSet, ShowFunctionsResult};
 pub use statement::{
-    ConfigSource, CreateFunction, CreatePythonFunction, DropFunction, FunctionSource, PythonModule,
-    ShowFunctions, StartFunction, Statement, StopFunction,
+    CreateFunction, CreatePythonFunction, DropFunction, PythonModule, ShowFunctions, StartFunction,
+    Statement, StopFunction,
 };

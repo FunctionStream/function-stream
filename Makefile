@@ -21,12 +21,14 @@ PACKAGE_DIR := packages
 PYTHON_WASM_PATH := python/functionstream-runtime/target/functionstream-python-runtime.wasm
 PYTHON_WASM_NAME := functionstream-python-runtime.wasm
 
-.PHONY: help clean clean-dist build build-full build-lite package package-full package-lite package-all test install docker-build docker-up
+.PHONY: help clean clean-dist build build-full build-lite package package-full package-lite package-all test install docker-build docker-up fmt fmt-check
 
 help:
 	@echo "Function Stream Build System"
 	@echo ""
 	@echo "Available targets:"
+	@echo "  fmt            - Format code with cargo fmt"
+	@echo "  fmt-check      - Check code format without modifying"
 	@echo "  build          - Build full version (debug)"
 	@echo "  build-full     - Build full release version"
 	@echo "  build-lite     - Build lite release version (no Python)"
@@ -42,6 +44,14 @@ help:
 	@echo "Version: $(VERSION)"
 	@echo "Architecture: $(ARCH)"
 	@echo "OS: $(OS)"
+
+fmt:
+	@echo "Formatting code..."
+	cargo fmt --all
+
+fmt-check:
+	@echo "Checking code format..."
+	cargo fmt --all -- --check
 
 clean:
 	@echo "Cleaning build artifacts..."

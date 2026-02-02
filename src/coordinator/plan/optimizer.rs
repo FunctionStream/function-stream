@@ -20,19 +20,6 @@ pub trait PlanOptimizer: fmt::Debug + Send + Sync {
     fn name(&self) -> &str;
 }
 
-#[derive(Debug, Default)]
-pub struct NoOpOptimizer;
-
-impl PlanOptimizer for NoOpOptimizer {
-    fn optimize(&self, plan: Box<dyn PlanNode>, _analysis: &Analysis) -> Box<dyn PlanNode> {
-        plan
-    }
-
-    fn name(&self) -> &str {
-        "NoOpOptimizer"
-    }
-}
-
 #[derive(Debug)]
 pub struct LogicalPlanner {
     optimizers: Vec<Box<dyn PlanOptimizer>>,

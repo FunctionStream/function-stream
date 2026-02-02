@@ -12,7 +12,6 @@
 
 // Library crate for function-stream
 
-pub mod codec;
 pub mod config;
 pub mod coordinator;
 pub mod logging;

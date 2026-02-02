@@ -27,10 +27,6 @@ struct Grammar;
 pub struct SqlParser;
 
 impl SqlParser {
-    pub fn new() -> Self {
-        Self
-    }
-
     pub fn parse(sql: &str) -> Result<Box<dyn Statement>, ParseError> {
         let pairs = Grammar::parse(Rule::statement, sql)
             .map_err(|e| ParseError::new(format!("Parse error: {}", e)))?;

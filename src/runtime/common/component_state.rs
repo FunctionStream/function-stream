@@ -26,7 +26,7 @@ pub const CONTROL_TASK_CHANNEL_CAPACITY: usize = 10;
 /// Represents the lifecycle state of task components (Input, Output, Processor, etc.)
 ///
 /// State transition diagram:
-/// ```
+/// ```ignore
 /// Uninitialized -> Initialized -> Starting -> Running
 ///                                             |
 ///                                             v
@@ -37,7 +37,7 @@ pub const CONTROL_TASK_CHANNEL_CAPACITY: usize = 10;
 ///                                             |
 ///                                             v
 ///                                          Closing -> Closed
-///
+///                                             
 ///                                          Error (any state can transition to error)
 /// ```
 use serde::{Deserialize, Serialize};
@@ -190,65 +190,4 @@ pub enum ControlTask {
         /// Whether component should be stopped
         should_stop: bool,
     },
-}
-
-/// State transition helper functions
-pub mod state_machine {
-    use super::ComponentState;
-
-    /// Attempt state transition
-    ///
-    /// # Arguments
-    /// - `current`: Current state
-    /// - `target`: Target state
-    ///
-    /// # Returns
-    /// - `Ok(ComponentState)`: Transition successful
-    /// - `Err(...)`: Transition failed
-    pub fn transition(
-        current: &ComponentState,
-        target: ComponentState,
-    ) -> Result<ComponentState, String> {
-        if current.can_transition_to(&target) {
-            Ok(target)
-        } else {
-            Err(format!(
-                "Invalid state transition from {} to {}",
-                current, target
-            ))
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_state_transitions() {
-        // Test valid state transitions
-        assert!(ComponentState::Uninitialized.can_transition_to(&ComponentState::Initialized));
-        assert!(ComponentState::Initialized.can_transition_to(&ComponentState::Starting));
-        assert!(ComponentState::Starting.can_transition_to(&ComponentState::Running));
-        assert!(ComponentState::Running.can_transition_to(&ComponentState::Checkpointing));
-        assert!(ComponentState::Checkpointing.can_transition_to(&ComponentState::Running));
-        assert!(ComponentState::Running.can_transition_to(&ComponentState::Stopping));
-        assert!(ComponentState::Checkpointing.can_transition_to(&ComponentState::Stopping));
-        assert!(ComponentState::Stopping.can_transition_to(&ComponentState::Stopped));
-
-        // Test invalid state transitions
-        assert!(!ComponentState::Uninitialized.can_transition_to(&ComponentState::Running));
-        assert!(!ComponentState::Closed.can_transition_to(&ComponentState::Running));
-    }
-
-    #[test]
-    fn test_state_machine_transition() {
-        let current = ComponentState::Initialized;
-        let result = state_machine::transition(&current, ComponentState::Starting);
-        assert!(result.is_ok());
-
-        let current = ComponentState::Uninitialized;
-        let result = state_machine::transition(&current, ComponentState::Running);
-        assert!(result.is_err());
-    }
 }

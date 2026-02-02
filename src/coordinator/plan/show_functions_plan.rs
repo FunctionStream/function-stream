@@ -13,13 +13,11 @@
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
 #[derive(Debug, Clone, Default)]
-pub struct ShowFunctionsPlan {
-    pub filter: Option<String>,
-}
+pub struct ShowFunctionsPlan {}
 
 impl ShowFunctionsPlan {
     pub fn new() -> Self {
-        Self { filter: None }
+        Self {}
     }
 }
 

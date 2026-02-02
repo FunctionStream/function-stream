@@ -564,7 +564,7 @@ impl OutputSink for KafkaOutputSink {
             ThreadGroupType::OutputSink(self.sink_id),
             format!("OutputSink-{}", self.sink_id),
         );
-        output_thread_group.add_thread(thread_handle, thread_name);
+        output_thread_group.add_thread(thread_handle);
         init_context.register_thread_group(output_thread_group);
 
         // Note: thread handle has been moved to thread group, no longer stored in send_thread
