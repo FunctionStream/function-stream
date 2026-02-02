@@ -25,7 +25,6 @@ import shutil
 import logging
 import subprocess
 from pathlib import Path
-from typing import List
 
 # --- Configuration ---
 
@@ -165,7 +164,9 @@ class WasmBuilder:
 
         logger.debug(f"Exec: {' '.join(cmd)}")
         try:
-            subprocess.run(
+            # Note: subprocess.run is safe here as cmd is constructed from
+            # controlled build-time inputs, not user-provided data
+            subprocess.run(  # noqa: S603
                 cmd,
                 cwd=SCRIPT_DIR,
                 check=True,

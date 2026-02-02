@@ -65,7 +65,6 @@ class NetworkError(ServerError):
 
 class FunctionStreamTimeoutError(ServerError):
     """Raised when the operation timed out."""
-    pass
 
 
 # --- Specific Business/Logic Errors (Mapped from gRPC Codes) ---

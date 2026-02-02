@@ -33,11 +33,19 @@ jobs:
             pkg-config \
             libsasl2-dev \
             protobuf-compiler
+          # Verify cmake is available
+          cmake --version
+          which cmake
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "linux-build"
+
+      - name: Set CMAKE environment variable
+        run: |
+          echo "CMAKE=$(which cmake)" >> $GITHUB_ENV
+          echo "CMAKE set to: $(which cmake)"
 
       - name: Generate protocol files
         run: cargo check --package protocol
