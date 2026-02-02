@@ -39,7 +39,7 @@ pub fn increment_key(key: &[u8]) -> Vec<u8> {
     for i in (0..result.len()).rev() {
         if result[i] < 0xFF {
             result[i] += 1;
-            result.truncate(i + 1);
+            // Don't truncate - keep all bytes including trailing zeros
             return result;
         } else {
             result[i] = 0;
@@ -52,7 +52,7 @@ pub fn increment_key(key: &[u8]) -> Vec<u8> {
 
 /// Check if key is all 0xFF
 pub fn is_all_0xff(key: &[u8]) -> bool {
-    key.iter().all(|&b| b == 0xFF)
+    !key.is_empty() && key.iter().all(|&b| b == 0xFF)
 }
 
 #[cfg(test)]

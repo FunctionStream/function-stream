@@ -34,64 +34,24 @@ pub fn encode_var_int32(
 /// Decode VarInt32 (signed 32-bit variable-length integer)
 ///
 /// Decodes from the specified position in the byte array, returns (decoded value, bytes consumed)
+/// Note: Negative numbers are encoded using VarInt64 format (10 bytes), so we use decode_var_int64
+/// and then check the range
 pub fn decode_var_int32(
     bytes: &[u8],
     offset: usize,
 ) -> Result<(i32, usize), Box<dyn std::error::Error + Send>> {
-    let mut value: i32 = 0;
-    let mut shift = 0;
-    let mut pos = offset;
-
-    loop {
-        if pos >= bytes.len() {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "Incomplete VarInt32",
-            )));
-        }
-
-        let b = bytes[pos] as i8;
-        pos += 1;
-
-        if b >= 0 {
-            value |= (b as i32) << shift;
-            return Ok((value, pos - offset));
-        }
-
-        value |= ((b as i32) ^ (0xffffff80u32 as i32)) << shift;
-        shift += 7;
-
-        if shift >= 35 {
-            // Handle negative numbers, need to read additional bytes
-            if pos >= bytes.len() || bytes[pos] != 0xff {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid VarInt32 encoding",
-                )));
-            }
-            pos += 1;
-
-            for _ in 0..4 {
-                if pos >= bytes.len() || bytes[pos] != 0xff {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "Invalid VarInt32 encoding",
-                    )));
-                }
-                pos += 1;
-            }
-
-            if pos >= bytes.len() || bytes[pos] != 0x01 {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid VarInt32 encoding",
-                )));
-            }
-            pos += 1;
-
-            return Ok((value, pos - offset));
-        }
+    // Since encode_var_int32 uses encode_var_int64 for negative numbers,
+    // we need to use decode_var_int64 and then check the range
+    let (decoded, consumed) = decode_var_int64(bytes, offset)?;
+    
+    if decoded < i32::MIN as i64 || decoded > i32::MAX as i64 {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "VarInt32 value out of range",
+        )));
     }
+    
+    Ok((decoded as i32, consumed))
 }
 
 /// Encode VarUInt32 (unsigned 32-bit variable-length integer)
