@@ -19,6 +19,7 @@ use super::StreamElement;
 /// Watermark - Event time watermark
 ///
 /// Represents the progress of event time, telling operators that they should no longer receive elements with timestamps less than or equal to the watermark timestamp
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Watermark {
     /// Watermark timestamp (milliseconds)
@@ -27,16 +28,19 @@ pub struct Watermark {
 
 impl Watermark {
     /// Create watermark
+    #[allow(dead_code)]
     pub fn new(timestamp: u64) -> Self {
         Self { timestamp }
     }
 
     /// Get timestamp
+    #[allow(dead_code)]
     pub fn timestamp(&self) -> u64 {
         self.timestamp
     }
 
     /// Watermark representing end of event time
+    #[allow(dead_code)]
     pub fn max() -> Self {
         Self {
             timestamp: u64::MAX,
@@ -44,6 +48,7 @@ impl Watermark {
     }
 
     /// Uninitialized watermark
+    #[allow(dead_code)]
     pub fn uninitialized() -> Self {
         Self {
             timestamp: u64::MIN,

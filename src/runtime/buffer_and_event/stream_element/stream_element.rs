@@ -19,6 +19,7 @@ use std::fmt::Debug;
 /// StreamElementType - Stream element type enumeration
 ///
 /// Used to identify different types of stream elements
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StreamElementType {
     /// Data record
@@ -36,6 +37,7 @@ pub enum StreamElementType {
 /// StreamElement - Base class for all stream elements
 ///
 /// Defines type checking and conversion methods for stream elements
+#[allow(dead_code)]
 pub trait StreamElement: Send + Sync + Debug {
     /// Get stream element type
     fn get_type(&self) -> StreamElementType;

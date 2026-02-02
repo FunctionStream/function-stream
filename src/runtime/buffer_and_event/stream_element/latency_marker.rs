@@ -31,6 +31,7 @@ pub struct LatencyMarker {
 
 impl LatencyMarker {
     /// Create latency marker
+    #[allow(dead_code)]
     pub fn new(marked_time: u64, operator_id: u32, subtask_index: i32) -> Self {
         Self {
             marked_time,
@@ -40,16 +41,19 @@ impl LatencyMarker {
     }
 
     /// Get marked time
+    #[allow(dead_code)]
     pub fn marked_time(&self) -> u64 {
         self.marked_time
     }
 
     /// Get operator ID
+    #[allow(dead_code)]
     pub fn operator_id(&self) -> u32 {
         self.operator_id
     }
 
     /// Get subtask index
+    #[allow(dead_code)]
     pub fn subtask_index(&self) -> i32 {
         self.subtask_index
     }
@@ -76,6 +80,7 @@ impl LatencyMarker {
     ///     sint32 subtask_index = 3;   // Subtask index
     /// }
     /// ```
+    #[allow(dead_code)]
     pub fn serialize_protobuf(
         &self,
         buffer: &mut [u8],
@@ -96,6 +101,7 @@ impl LatencyMarker {
     }
 
     /// Size after Protocol Buffers serialization
+    #[allow(dead_code)]
     pub fn protobuf_size(&self) -> usize {
         let mut size = 0;
         size += crate::codec::compute_uint64_field_size(1, self.marked_time);
@@ -107,6 +113,7 @@ impl LatencyMarker {
     /// Protocol Buffers deserialization
     ///
     /// Decode from the specified position in the byte array, returns (LatencyMarker, bytes consumed)
+    #[allow(dead_code)]
     pub fn deserialize_protobuf(
         bytes: &[u8],
         offset: usize,

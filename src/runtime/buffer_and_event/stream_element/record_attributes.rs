@@ -19,6 +19,7 @@ use super::StreamElement;
 /// RecordAttributes - Record attributes
 ///
 /// Contains metadata attributes of records, such as whether it's backlog, etc.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RecordAttributes {
     /// Whether processing backlog data
@@ -27,16 +28,19 @@ pub struct RecordAttributes {
 
 impl RecordAttributes {
     /// Create record attributes
+    #[allow(dead_code)]
     pub fn new(is_backlog: bool) -> Self {
         Self { is_backlog }
     }
 
     /// Check if backlog
+    #[allow(dead_code)]
     pub fn is_backlog(&self) -> bool {
         self.is_backlog
     }
 
     /// Create default record attributes (non-backlog)
+    #[allow(dead_code)]
     pub fn default() -> Self {
         Self { is_backlog: false }
     }
@@ -61,6 +65,7 @@ impl RecordAttributes {
     ///     bool is_backlog = 1;  // Whether processing backlog data
     /// }
     /// ```
+    #[allow(dead_code)]
     pub fn serialize_protobuf(
         &self,
         buffer: &mut [u8],
@@ -70,6 +75,7 @@ impl RecordAttributes {
     }
 
     /// Size after Protocol Buffers serialization
+    #[allow(dead_code)]
     pub fn protobuf_size(&self) -> usize {
         crate::codec::compute_bool_field_size(1)
     }
@@ -77,6 +83,7 @@ impl RecordAttributes {
     /// Protocol Buffers deserialization
     ///
     /// Decode from the specified position in the byte array, returns (RecordAttributes, bytes consumed)
+    #[allow(dead_code)]
     pub fn deserialize_protobuf(
         bytes: &[u8],
         offset: usize,

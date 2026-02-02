@@ -21,6 +21,7 @@ use std::fmt::Debug;
 ///
 /// Represents a data record in the data stream, containing the actual data value (byte array) and optional timestamp
 /// Note: StreamRecord is not an Event, but serialization support is required
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct StreamRecord {
     /// Actual data value (byte array)
@@ -31,6 +32,7 @@ pub struct StreamRecord {
 
 impl StreamRecord {
     /// Create record without timestamp
+    #[allow(dead_code)]
     pub fn new(value: Vec<u8>) -> Self {
         Self {
             value,
@@ -39,6 +41,7 @@ impl StreamRecord {
     }
 
     /// Create record with timestamp
+    #[allow(dead_code)]
     pub fn with_timestamp(value: Vec<u8>, timestamp: u64) -> Self {
         Self {
             value,
@@ -47,11 +50,13 @@ impl StreamRecord {
     }
 
     /// Get data value (reference to byte array)
+    #[allow(dead_code)]
     pub fn value(&self) -> &[u8] {
         &self.value
     }
 
     /// Get data value (ownership of byte array)
+    #[allow(dead_code)]
     pub fn into_value(self) -> Vec<u8> {
         self.value
     }
@@ -59,27 +64,32 @@ impl StreamRecord {
     /// Get timestamp
     ///
     /// Returns None if there is no timestamp
+    #[allow(dead_code)]
     pub fn timestamp(&self) -> Option<u64> {
         self.timestamp
     }
 
     /// Get timestamp, returns u64::MIN if not present
+    #[allow(dead_code)]
     pub fn get_timestamp(&self) -> u64 {
         self.timestamp.unwrap_or(u64::MIN)
     }
 
     /// Check if has timestamp
+    #[allow(dead_code)]
     pub fn has_timestamp(&self) -> bool {
         self.timestamp.is_some()
     }
 
     /// Replace value (preserve timestamp)
+    #[allow(dead_code)]
     pub fn replace(mut self, value: Vec<u8>) -> Self {
         self.value = value;
         self
     }
 
     /// Replace value and timestamp
+    #[allow(dead_code)]
     pub fn replace_with_timestamp(mut self, value: Vec<u8>, timestamp: u64) -> Self {
         self.value = value;
         self.timestamp = Some(timestamp);
@@ -101,6 +111,7 @@ impl StreamElement for StreamRecord {
 /// StreamRecordSerializable - StreamRecord serialization interface
 ///
 /// Serialization interface implemented by StreamRecord itself, used for getting type and serialization
+#[allow(dead_code)]
 pub trait StreamRecordSerializable: Send + Sync + Debug {
     /// Get StreamRecord type
     fn record_type(&self) -> StreamRecordType;
@@ -177,6 +188,7 @@ impl StreamRecord {
     ///     uint64 timestamp = 2;  // Timestamp (optional, written if present)
     /// }
     /// ```
+    #[allow(dead_code)]
     pub fn deserialize_protobuf(
         bytes: &[u8],
         offset: usize,
@@ -250,6 +262,7 @@ impl StreamRecord {
 /// Deserialize StreamRecord (backward compatibility helper function)
 ///
 /// Decode from the specified position in the byte array, returns (StreamRecord, bytes consumed)
+#[allow(dead_code)]
 #[deprecated(note = "Use StreamRecord::deserialize_protobuf instead")]
 pub fn deserialize_stream_record(
     bytes: &[u8],
@@ -261,6 +274,7 @@ pub fn deserialize_stream_record(
 /// StreamRecordType - StreamRecord type marker
 ///
 /// Used to identify the type of StreamRecord during serialization
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum StreamRecordType {
@@ -272,6 +286,7 @@ pub enum StreamRecordType {
 
 impl StreamRecordType {
     /// Create type from u8
+    #[allow(dead_code)]
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
             1 => Some(StreamRecordType::RecordWithTimestamp),
@@ -281,6 +296,7 @@ impl StreamRecordType {
     }
 
     /// Convert to u8
+    #[allow(dead_code)]
     pub fn to_u8(self) -> u8 {
         self as u8
     }
