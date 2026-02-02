@@ -153,9 +153,10 @@ impl KafkaOutputSink {
                 Ok(_) => {
                     // Check operation result
                     if let Some(error) = completion_flag.get_error() {
-                        return Err(Box::new(std::io::Error::other(
-                            format!("{} failed: {}", operation_name, error),
-                        )));
+                        return Err(Box::new(std::io::Error::other(format!(
+                            "{} failed: {}",
+                            operation_name, error
+                        ))));
                     }
                     return Ok(());
                 }
@@ -192,9 +193,10 @@ impl KafkaOutputSink {
                 Ok(_) => {
                     // Check operation result
                     if let Some(error) = completion_flag.get_error() {
-                        return Err(Box::new(std::io::Error::other(
-                            format!("Flush failed: {}", error),
-                        )));
+                        return Err(Box::new(std::io::Error::other(format!(
+                            "Flush failed: {}",
+                            error
+                        ))));
                     }
                     return Ok(());
                 }
@@ -550,9 +552,10 @@ impl OutputSink for KafkaOutputSink {
                 );
             })
             .map_err(|e| -> Box<dyn std::error::Error + Send> {
-                Box::new(std::io::Error::other(
-                    format!("Failed to start thread: {}", e),
-                ))
+                Box::new(std::io::Error::other(format!(
+                    "Failed to start thread: {}",
+                    e
+                )))
             })?;
 
         // Register thread group to InitContext
@@ -584,9 +587,10 @@ impl OutputSink for KafkaOutputSink {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| -> Box<dyn std::error::Error + Send> {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send start signal: {}", e),
-                    ))
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send start signal: {}",
+                        e
+                    )))
                 })?;
         }
 
@@ -612,9 +616,10 @@ impl OutputSink for KafkaOutputSink {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| -> Box<dyn std::error::Error + Send> {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send stop signal: {}", e),
-                    ))
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send stop signal: {}",
+                        e
+                    )))
                 })?;
         }
 
@@ -645,9 +650,10 @@ impl OutputSink for KafkaOutputSink {
             control_sender
                 .send(signal)
                 .map_err(|e| -> Box<dyn std::error::Error + Send> {
-                    Box::new(std::io::Error::other(
-                        format!("Checkpoint signal failed: {}", e),
-                    ))
+                    Box::new(std::io::Error::other(format!(
+                        "Checkpoint signal failed: {}",
+                        e
+                    )))
                 })?;
         }
 
@@ -676,9 +682,10 @@ impl OutputSink for KafkaOutputSink {
             control_sender
                 .send(signal)
                 .map_err(|e| -> Box<dyn std::error::Error + Send> {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send checkpoint finish signal: {}", e),
-                    ))
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send checkpoint finish signal: {}",
+                        e
+                    )))
                 })?;
         }
 
@@ -795,9 +802,10 @@ impl OutputSink for KafkaOutputSink {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| -> Box<dyn std::error::Error + Send> {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send flush signal: {}", e),
-                    ))
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send flush signal: {}",
+                        e
+                    )))
                 })?;
         }
 

@@ -14,21 +14,20 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 
-use crate::runtime::taskexecutor::TaskManager;
 use crate::coordinator::analyze::{Analysis, Analyzer};
+use crate::coordinator::dataset::ExecuteResult;
 use crate::coordinator::execution::Executor;
 use crate::coordinator::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
-use crate::coordinator::dataset::ExecuteResult;
 use crate::coordinator::statement::Statement;
+use crate::runtime::taskexecutor::TaskManager;
 
 use super::execution_context::ExecutionContext;
 
-pub struct Coordinator{
-}
+pub struct Coordinator {}
 
 impl Coordinator {
     pub fn new() -> Self {
-        Self{}
+        Self {}
     }
 
     pub fn execute(&self, stmt: &dyn Statement) -> ExecuteResult {
@@ -90,7 +89,11 @@ impl Coordinator {
         Ok(plan)
     }
 
-    fn step_optimize(&self, analysis: &Analysis, plan: Box<dyn PlanNode>) -> Result<Box<dyn PlanNode>> {
+    fn step_optimize(
+        &self,
+        analysis: &Analysis,
+        plan: Box<dyn PlanNode>,
+    ) -> Result<Box<dyn PlanNode>> {
         let start = Instant::now();
         let planner = LogicalPlanner::new();
         let optimized = planner.optimize(plan, analysis);
@@ -107,7 +110,10 @@ impl Coordinator {
         let task_manager = match TaskManager::get() {
             Ok(tm) => tm,
             Err(e) => {
-                return Ok(ExecuteResult::err(format!("Failed to get TaskManager: {}", e)));
+                return Ok(ExecuteResult::err(format!(
+                    "Failed to get TaskManager: {}",
+                    e
+                )));
             }
         };
         let executor = Executor::new(task_manager.clone());
@@ -122,5 +128,4 @@ impl Coordinator {
         );
         result
     }
-
 }

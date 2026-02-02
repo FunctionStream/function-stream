@@ -63,7 +63,9 @@ fn handle_create_stmt(
         .map(parse_properties)
         .ok_or_else(|| ParseError::new("Missing WITH clause"))?;
 
-    Ok(Box::new(CreateFunction::from_properties(properties).map_err(|e| ParseError::from(e))?))
+    Ok(Box::new(
+        CreateFunction::from_properties(properties).map_err(|e| ParseError::from(e))?,
+    ))
 }
 
 fn handle_drop_stmt(pair: pest::iterators::Pair<Rule>) -> Result<Box<DropFunction>, ParseError> {
@@ -167,7 +169,8 @@ mod tests {
 
     #[test]
     fn test_create_function() {
-        let sql = "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
+        let sql =
+            "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
         let stmt = SqlParser::parse(sql).unwrap();
     }
 
@@ -221,13 +224,16 @@ mod tests {
 
     #[test]
     fn test_case_insensitive_property_keys() {
-        let sql1 = "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
+        let sql1 =
+            "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
         let stmt1 = SqlParser::parse(sql1).unwrap();
 
-        let sql2 = "CREATE FUNCTION WITH ('Function_Path'='./test.wasm', 'Config_Path'='./config.yml')";
+        let sql2 =
+            "CREATE FUNCTION WITH ('Function_Path'='./test.wasm', 'Config_Path'='./config.yml')";
         let stmt2 = SqlParser::parse(sql2).unwrap();
 
-        let sql3 = "CREATE FUNCTION WITH ('FUNCTION_PATH'='./test.wasm', 'CONFIG_PATH'='./config.yml')";
+        let sql3 =
+            "CREATE FUNCTION WITH ('FUNCTION_PATH'='./test.wasm', 'CONFIG_PATH'='./config.yml')";
         let stmt3 = SqlParser::parse(sql3).unwrap();
 
         // Note: SQL only supports Path mode (function_path, config_path)

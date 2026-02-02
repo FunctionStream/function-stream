@@ -22,7 +22,7 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
-use wasmtime::{Store, Engine, component::Component};
+use wasmtime::{Engine, Store, component::Component};
 
 /// Error types for WasmProcessor
 #[derive(Debug)]
@@ -173,14 +173,14 @@ impl WasmProcessorImpl {
             modules.len()
         );
 
-        processor
-            .call_fs_exec(store, class_name, modules)
-            .map_err(|e| -> Box<dyn Error + Send> {
+        processor.call_fs_exec(store, class_name, modules).map_err(
+            |e| -> Box<dyn Error + Send> {
                 Box::new(WasmProcessorError::ExecutionError(format!(
                     "Failed to call fs_exec with class_name '{}': {}",
                     class_name, e
                 )))
-            })?;
+            },
+        )?;
 
         log::info!("fs_exec completed successfully for class '{}'", class_name);
         Ok(())
@@ -374,7 +374,7 @@ impl WasmProcessor for WasmProcessorImpl {
 
         // Call wasm take_checkpoint function
         // WIT: export fs-take-checkpoint: func(checkpoint-id: u64) -> list<u8>;
-         processor
+        processor
             .call_fs_take_checkpoint(store, checkpoint_id)
             .map_err(|e| -> Box<dyn Error + Send> {
                 Box::new(WasmProcessorError::ExecutionError(format!(
@@ -522,32 +522,45 @@ impl WasmProcessor for WasmProcessorImpl {
             })?;
             let component = self.custom_component.as_ref().ok_or_else(|| {
                 Box::new(WasmProcessorError::InitError(
-                    "use_custom_engine_and_component is true but custom_component is None".to_string(),
+                    "use_custom_engine_and_component is true but custom_component is None"
+                        .to_string(),
                 )) as Box<dyn Error + Send>
             })?;
             use super::wasm_host::create_wasm_host_with_component;
-            create_wasm_host_with_component(engine, component, output_sinks, init_context, task_name).map_err(
-                |e| -> Box<dyn Error + Send> {
-                    let error_msg = format!("Failed to create WasmHost with custom engine/component: {}", e);
-                    log::error!("{}", error_msg);
-                    let mut full_error = error_msg.clone();
-                    let mut source = e.source();
-                    let mut depth = 0;
-                    while let Some(err) = source {
-                        depth += 1;
-                        full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
-                        source = err.source();
-                        if depth > 10 {
-                            full_error.push_str("\n  ... (error chain too long, truncated)");
-                            break;
-                        }
+            create_wasm_host_with_component(
+                engine,
+                component,
+                output_sinks,
+                init_context,
+                task_name,
+            )
+            .map_err(|e| -> Box<dyn Error + Send> {
+                let error_msg = format!(
+                    "Failed to create WasmHost with custom engine/component: {}",
+                    e
+                );
+                log::error!("{}", error_msg);
+                let mut full_error = error_msg.clone();
+                let mut source = e.source();
+                let mut depth = 0;
+                while let Some(err) = source {
+                    depth += 1;
+                    full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
+                    source = err.source();
+                    if depth > 10 {
+                        full_error.push_str("\n  ... (error chain too long, truncated)");
+                        break;
                     }
-                    log::error!("Full error chain:\n{}", full_error);
-                    Box::new(WasmProcessorError::InitError(full_error))
-                },
-            )?
+                }
+                log::error!("Full error chain:\n{}", full_error);
+                Box::new(WasmProcessorError::InitError(full_error))
+            })?
         } else {
-            let first_bytes = self.modules.first().map(|(_, b)| b.as_slice()).unwrap_or(&[]);
+            let first_bytes = self
+                .modules
+                .first()
+                .map(|(_, b)| b.as_slice())
+                .unwrap_or(&[]);
             create_wasm_host(first_bytes, output_sinks, init_context, task_name).map_err(
                 |e| -> Box<dyn Error + Send> {
                     let error_msg = format!("Failed to create WasmHost: {}", e);
@@ -587,7 +600,8 @@ impl WasmProcessor for WasmProcessorImpl {
                 let mut store_ref = self.store.borrow_mut();
                 let store = store_ref.as_mut().unwrap();
 
-                let class_name = self.init_config
+                let class_name = self
+                    .init_config
                     .get("class_name")
                     .or_else(|| self.init_config.get("processor_class"))
                     .map(|s| s.clone())

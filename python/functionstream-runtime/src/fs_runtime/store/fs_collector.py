@@ -25,7 +25,7 @@ else:
 def emit(data: bytes, channel: int = 0) -> None:
     if wit_emit is None:
         raise RuntimeError("WIT Collector binding is not available")
-    
+
     try:
         wit_emit(channel, data)
     except Exception:
@@ -35,7 +35,7 @@ def emit(data: bytes, channel: int = 0) -> None:
 def emit_watermark(watermark: int, channel: int = 0) -> None:
     if wit_emit_watermark is None:
         raise RuntimeError("WIT Collector binding is not available")
-    
+
     try:
         wit_emit_watermark(channel, watermark)
     except Exception:

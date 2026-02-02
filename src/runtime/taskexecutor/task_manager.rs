@@ -24,7 +24,7 @@ use crate::storage::task::{
     FunctionInfo, StoredTaskInfo, TaskModuleBytes, TaskStorage, TaskStorageFactory,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fs;
@@ -108,7 +108,10 @@ impl TaskManager {
             module_bytes: Some(TaskModuleBytes::Wasm(module_bytes.to_vec())),
             config_bytes: config_bytes.to_vec(),
             state: ComponentState::Initialized,
-            created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            created_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
             checkpoint_id: None,
         };
         self.register_task_internal(task, Some(task_info))
@@ -138,7 +141,10 @@ impl TaskManager {
                 }),
                 config_bytes: config_bytes.to_vec(),
                 state: ComponentState::Initialized,
-                created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                created_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
                 checkpoint_id: None,
             };
             self.register_task_internal(task, Some(task_info))

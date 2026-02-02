@@ -16,11 +16,11 @@ from .error import KvError
 
 
 class KvIterator(abc.ABC):
-    
+
     @abc.abstractmethod
     def has_next(self) -> bool:
         pass
-    
+
     @abc.abstractmethod
     def next(self) -> Optional[Tuple[bytes, bytes]]:
         pass

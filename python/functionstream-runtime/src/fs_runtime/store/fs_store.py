@@ -28,21 +28,21 @@ else:
 
 
 class FSStore(KvStore):
-    
+
     def __init__(self, name: str):
         if WitStore is None:
             raise RuntimeError("WIT Store binding is not available")
-        
+
         self._store: WitStore = WitStore(name)
         self._name = name
-    
+
     def put_state(self, key: bytes, value: bytes) -> None:
         try:
             self._store.put_state(key, value)
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
+
     def get_state(self, key: bytes) -> Optional[bytes]:
         try:
             return self._store.get_state(key)
@@ -52,21 +52,21 @@ class FSStore(KvStore):
             if isinstance(api_error, KvNotFoundError):
                 return None
             raise api_error
-    
+
     def delete_state(self, key: bytes) -> None:
         try:
             self._store.delete_state(key)
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
+
     def list_states(self, start_inclusive: bytes, end_exclusive: bytes) -> List[bytes]:
         try:
             return self._store.list_states(start_inclusive, end_exclusive)
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
+
     def put(self, key: ComplexKey, value: bytes) -> None:
         try:
             wit_key = api_to_wit(key)
@@ -74,7 +74,7 @@ class FSStore(KvStore):
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
+
     def get(self, key: ComplexKey) -> Optional[bytes]:
         try:
             wit_key = api_to_wit(key)
@@ -85,7 +85,7 @@ class FSStore(KvStore):
             if isinstance(api_error, KvNotFoundError):
                 return None
             raise api_error
-    
+
     def delete(self, key: ComplexKey) -> None:
         try:
             wit_key = api_to_wit(key)
@@ -93,7 +93,7 @@ class FSStore(KvStore):
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
+
     def merge(self, key: ComplexKey, value: bytes) -> None:
         try:
             wit_key = api_to_wit(key)
@@ -101,7 +101,7 @@ class FSStore(KvStore):
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
+
     def delete_prefix(self, key: ComplexKey) -> None:
         try:
             wit_key = api_to_wit(key)
@@ -109,15 +109,15 @@ class FSStore(KvStore):
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
-    def list_complex(self, key_group: bytes, key: bytes, namespace: bytes, 
+
+    def list_complex(self, key_group: bytes, key: bytes, namespace: bytes,
                      start_inclusive: bytes, end_exclusive: bytes) -> List[bytes]:
         try:
             return self._store.list_complex(key_group, key, namespace, start_inclusive, end_exclusive)
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
+
     def scan_complex(self, key_group: bytes, key: bytes, namespace: bytes) -> KvIterator:
         try:
             wit_iterator = self._store.scan_complex(key_group, key, namespace)

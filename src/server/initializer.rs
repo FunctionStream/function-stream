@@ -10,8 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{Context, Result};
 use crate::config::GlobalConfig;
+use anyhow::{Context, Result};
 
 type InitializerFn = fn(&GlobalConfig) -> Result<()>;
 
@@ -68,11 +68,16 @@ impl ComponentRegistry {
 
         for (idx, component) in self.components.iter().enumerate() {
             let start = std::time::Instant::now();
-            log::debug!("[{}/{}] Initializing component: {}", idx + 1, self.components.len(), component.name);
-            
+            log::debug!(
+                "[{}/{}] Initializing component: {}",
+                idx + 1,
+                self.components.len(),
+                component.name
+            );
+
             (component.initializer)(config)
                 .with_context(|| format!("Component '{}' initialization failed", component.name))?;
-            
+
             let elapsed = start.elapsed();
             log::debug!(
                 "[{}/{}] Component '{}' initialized successfully in {:?}",
@@ -83,7 +88,10 @@ impl ComponentRegistry {
             );
         }
 
-        log::info!("All {} components initialized successfully", self.components.len());
+        log::info!(
+            "All {} components initialized successfully",
+            self.components.len()
+        );
         Ok(())
     }
 
@@ -139,15 +147,13 @@ pub fn register_components() -> ComponentRegistry {
     let mut builder = ComponentRegistryBuilder::new()
         .register("WasmCache", initialize_wasm_cache)
         .register("TaskManager", initialize_task_manager);
-    
+
     #[cfg(feature = "python")]
     {
         builder = builder.register("PythonService", initialize_python_service);
     }
-    
+
     builder
         .register("Coordinator", initialize_coordinator)
         .build()
 }
-
-

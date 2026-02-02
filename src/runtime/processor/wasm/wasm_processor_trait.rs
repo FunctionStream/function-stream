@@ -15,8 +15,8 @@
 // This module defines the WasmProcessor trait, which is the interface
 // for WebAssembly-based data processors in the stream processing system.
 
-use crate::runtime::taskexecutor::InitContext;
 use crate::runtime::output::OutputSink;
+use crate::runtime::taskexecutor::InitContext;
 
 /// wasm Processor trait
 ///

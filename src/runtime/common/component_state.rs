@@ -37,13 +37,12 @@ pub const CONTROL_TASK_CHANNEL_CAPACITY: usize = 10;
 ///                                             |
 ///                                             v
 ///                                          Closing -> Closed
-///                                             
+///
 ///                                          Error (any state can transition to error)
 /// ```
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ComponentState {
     /// Uninitialized
     #[default]
@@ -141,7 +140,6 @@ impl ComponentState {
         }
     }
 }
-
 
 impl std::fmt::Display for ComponentState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

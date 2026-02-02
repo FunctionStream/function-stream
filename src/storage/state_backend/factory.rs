@@ -63,10 +63,9 @@ pub fn get_factory_for_task<P: AsRef<Path>>(
                 .join(format!("{}-{}", task_name, created_at));
 
             let config = rocksdb_config.unwrap_or_default();
-            let factory =
-                crate::storage::state_backend::rocksdb::RocksDBStateStoreFactory::new(
-                    db_path, config,
-                )?;
+            let factory = crate::storage::state_backend::rocksdb::RocksDBStateStoreFactory::new(
+                db_path, config,
+            )?;
 
             Ok(Arc::new(factory))
         }

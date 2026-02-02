@@ -45,7 +45,7 @@ def wit_to_api_error(wit_error) -> KvError:
         return KvIOError(wit_error.value)
     elif Error_Other is not None and isinstance(wit_error, Error_Other):
         return KvOtherError(wit_error.value)
-    
+
     if wit_error == "not-found" or (isinstance(wit_error, str) and wit_error == "not-found"):
         return KvNotFoundError()
     elif isinstance(wit_error, tuple) and len(wit_error) > 0:
@@ -55,7 +55,7 @@ def wit_to_api_error(wit_error) -> KvError:
         elif wit_error[0] == "other":
             message = wit_error[1] if len(wit_error) > 1 else "Other error"
             return KvOtherError(message)
-    
+
     return KvOtherError("Unknown error")
 
 

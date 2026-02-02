@@ -15,8 +15,8 @@ use crate::runtime::output::OutputSink;
 use crate::runtime::processor::wasm::wasm_cache;
 use crate::storage::state_backend::{StateStore, StateStoreFactory};
 use std::sync::{Arc, OnceLock};
+use wasmtime::component::{Component, Linker, Resource, bindgen};
 use wasmtime::{Config, Engine, OptLevel, Store, WasmBacktraceDetails};
-use wasmtime::component::{bindgen, Component, Linker, Resource};
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiView};
 
 static GLOBAL_ENGINE: OnceLock<Arc<Engine>> = OnceLock::new();
@@ -411,12 +411,8 @@ impl functionstream::core::collector::Host for HostState {
                 panic!("Invalid target_id: {target_id}, available sinks: {sink_count}");
             });
 
-        let buffer_or_event = BufferOrEvent::new_buffer(
-            data,
-            Some(format!("target_{}", target_id)),
-            false,
-            false,
-        );
+        let buffer_or_event =
+            BufferOrEvent::new_buffer(data, Some(format!("target_{}", target_id)), false, false);
 
         sink.collect(buffer_or_event).unwrap_or_else(|e| {
             panic!("failed to collect output: {e}");
@@ -518,9 +514,8 @@ pub fn create_wasm_host(
 ) -> anyhow::Result<(Processor, Store<HostState>)> {
     let engine = get_global_engine(wasm_bytes.len())?;
 
-    let component = Component::from_binary(&engine, wasm_bytes).map_err(|e| {
-        anyhow::anyhow!("Failed to parse WebAssembly component: {}", e)
-    })?;
+    let component = Component::from_binary(&engine, wasm_bytes)
+        .map_err(|e| anyhow::anyhow!("Failed to parse WebAssembly component: {}", e))?;
 
     create_wasm_host_with_component(&engine, &component, output_sinks, init_context, task_name)
 }

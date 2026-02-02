@@ -60,7 +60,7 @@ impl ServerHandle {
 async fn wait_for_signal() -> Result<String> {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
         let mut sigterm = signal(SignalKind::terminate()).context("Failed to register SIGTERM")?;
         let mut sigint = signal(SignalKind::interrupt()).context("Failed to register SIGINT")?;
         let mut sighup = signal(SignalKind::hangup()).context("Failed to register SIGHUP")?;
@@ -113,7 +113,8 @@ fn spawn_server_thread(config: config::GlobalConfig) -> Result<ServerHandle> {
             };
 
             rt.block_on(async {
-                if let Err(e) = server::start_server_with_shutdown(&config, shutdown_rx, None).await {
+                if let Err(e) = server::start_server_with_shutdown(&config, shutdown_rx, None).await
+                {
                     log::error!("Server runtime loop crashed: {}", e);
                     let _ = error_tx.send(e);
                 }
@@ -144,7 +145,11 @@ fn setup_environment() -> Result<config::GlobalConfig> {
 
     logging::init_logging(&config.logging).context("Logging initialization failed")?;
 
-    log::debug!("Environment initialized. Data: {}, Conf: {}", data_dir.display(), conf_dir.display());
+    log::debug!(
+        "Environment initialized. Data: {}, Conf: {}",
+        data_dir.display(),
+        conf_dir.display()
+    );
     Ok(config)
 }
 
@@ -173,7 +178,8 @@ fn main() -> Result<()> {
 
     // 2. Component Initialization
     let registry = server::register_components();
-    registry.initialize_all(&config)
+    registry
+        .initialize_all(&config)
         .context("Component initialization failed")?;
 
     // 3. Server Startup

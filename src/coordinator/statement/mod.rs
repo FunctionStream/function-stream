@@ -18,7 +18,7 @@ mod start_function;
 mod stop_function;
 mod visitor;
 
-pub use create_function::{CreateFunction, FunctionSource, ConfigSource};
+pub use create_function::{ConfigSource, CreateFunction, FunctionSource};
 pub use create_python_function::{CreatePythonFunction, PythonModule};
 pub use drop_function::DropFunction;
 pub use show_functions::ShowFunctions;

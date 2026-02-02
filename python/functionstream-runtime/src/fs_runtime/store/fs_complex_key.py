@@ -42,7 +42,7 @@ def api_to_wit(api_key: 'ApiComplexKey') -> 'WitComplexKey':
 
 def wit_to_api(wit_key: 'WitComplexKey') -> 'ApiComplexKey':
     from fs_api.store.complexkey import ComplexKey
-    
+
     if isinstance(wit_key, dict):
         return ComplexKey(
             key_group=wit_key.get('key_group', b''),

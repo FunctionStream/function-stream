@@ -356,9 +356,10 @@ impl RocksDBStateIterator {
             let key_slice = key.as_ref();
 
             if let Some(ref last) = *last_key
-                && key_slice <= last.as_slice() {
-                    continue;
-                }
+                && key_slice <= last.as_slice()
+            {
+                continue;
+            }
 
             if key_slice.starts_with(&self.prefix) {
                 drop(last_key);

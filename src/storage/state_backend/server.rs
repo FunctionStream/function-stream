@@ -48,12 +48,13 @@ impl StateStorageServer {
         }
 
         if factory_type == FactoryType::RocksDB
-            && let Some(ref base_dir) = config.base_dir {
-                let state_dir = std::path::Path::new(base_dir).join(STATE_DIR_NAME);
-                std::fs::create_dir_all(&state_dir).map_err(|e| {
-                    BackendError::IoError(format!("Failed to create state directory: {}", e))
-                })?;
-            }
+            && let Some(ref base_dir) = config.base_dir
+        {
+            let state_dir = std::path::Path::new(base_dir).join(STATE_DIR_NAME);
+            std::fs::create_dir_all(&state_dir).map_err(|e| {
+                BackendError::IoError(format!("Failed to create state directory: {}", e))
+            })?;
+        }
 
         Ok(Self { config })
     }
@@ -78,11 +79,9 @@ impl StateStorageServer {
         };
 
         let rocksdb_config = if factory_type == FactoryType::RocksDB {
-            Some(
-                crate::storage::state_backend::rocksdb::RocksDBConfig::from(
-                    &self.config.rocksdb,
-                ),
-            )
+            Some(crate::storage::state_backend::rocksdb::RocksDBConfig::from(
+                &self.config.rocksdb,
+            ))
         } else {
             None
         };

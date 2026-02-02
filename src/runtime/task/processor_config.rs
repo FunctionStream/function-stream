@@ -18,7 +18,6 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashMap;
 
-
 // ============================================================================
 // Input Configuration
 // ============================================================================
@@ -156,46 +155,46 @@ impl InputGroup {
 
         // If value is an object, try to get the inputs field
         if let Some(inputs_value) = value.get("inputs")
-            && let Some(inputs_seq) = inputs_value.as_sequence() {
-                let mut inputs = Vec::new();
-                for (idx, input_value) in inputs_seq.iter().enumerate() {
-                    let input_type = input_value
-                        .get("input-type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
+            && let Some(inputs_seq) = inputs_value.as_sequence()
+        {
+            let mut inputs = Vec::new();
+            for (idx, input_value) in inputs_seq.iter().enumerate() {
+                let input_type = input_value
+                    .get("input-type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
 
-                    let input = InputConfig::from_yaml_value(input_value).map_err(
-                        |e| -> Box<dyn std::error::Error + Send> {
-                            Box::new(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                format!(
-                                    "Failed to parse input #{} (type: {}) in input group: {}",
-                                    idx + 1,
-                                    input_type,
-                                    e
-                                ),
-                            ))
-                        },
-                    )?;
-
-                    let parsed_type = input.input_type();
-                    if parsed_type != input_type && input_type != "unknown" {
-                        return Err(Box::new(std::io::Error::new(
+                let input = InputConfig::from_yaml_value(input_value).map_err(
+                    |e| -> Box<dyn std::error::Error + Send> {
+                        Box::new(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             format!(
-                                "Input #{} type mismatch in input group: expected '{}', but got '{}'",
+                                "Failed to parse input #{} (type: {}) in input group: {}",
                                 idx + 1,
                                 input_type,
-                                parsed_type
+                                e
                             ),
                         ))
-                            as Box<dyn std::error::Error + Send>);
-                    }
+                    },
+                )?;
 
-                    inputs.push(input);
+                let parsed_type = input.input_type();
+                if parsed_type != input_type && input_type != "unknown" {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Input #{} type mismatch in input group: expected '{}', but got '{}'",
+                            idx + 1,
+                            input_type,
+                            parsed_type
+                        ),
+                    )) as Box<dyn std::error::Error + Send>);
                 }
-                return Ok(InputGroup::new(inputs));
+
+                inputs.push(input);
             }
+            return Ok(InputGroup::new(inputs));
+        }
 
         Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,

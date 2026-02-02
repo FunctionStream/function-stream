@@ -151,9 +151,10 @@ impl KafkaInputSource {
                 Ok(_) => {
                     // Check operation result
                     if let Some(error) = completion_flag.get_error() {
-                        return Err(Box::new(std::io::Error::other(
-                            format!("{} failed: {}", operation_name, error),
-                        )));
+                        return Err(Box::new(std::io::Error::other(format!(
+                            "{} failed: {}",
+                            operation_name, error
+                        ))));
                     }
                     return Ok(());
                 }
@@ -482,21 +483,23 @@ impl KafkaInputSource {
         }
 
         if let Some(partition) = self.config.partition
-            && partition < 0 {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("Kafka partition must be >= 0, got: {}", partition),
-                )));
-            }
+            && partition < 0
+        {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Kafka partition must be >= 0, got: {}", partition),
+            )));
+        }
 
         // Validate enable.auto.commit must be false
         if let Some(auto_commit) = self.config.properties.get("enable.auto.commit")
-            && auto_commit.to_lowercase().trim() == "true" {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "enable.auto.commit must be false for manual offset commit",
-                )));
-            }
+            && auto_commit.to_lowercase().trim() == "true"
+        {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "enable.auto.commit must be false for manual offset commit",
+            )));
+        }
 
         Ok(())
     }
@@ -518,9 +521,10 @@ impl KafkaInputSource {
         }
 
         let consumer: BaseConsumer = client_config.create().map_err(|e| {
-            Box::new(std::io::Error::other(
-                format!("Failed to create Kafka consumer: {}", e),
-            )) as Box<dyn std::error::Error + Send>
+            Box::new(std::io::Error::other(format!(
+                "Failed to create Kafka consumer: {}",
+                e
+            ))) as Box<dyn std::error::Error + Send>
         })?;
 
         // Subscribe to topic or assign specific partition
@@ -529,19 +533,18 @@ impl KafkaInputSource {
             let mut tpl = TopicPartitionList::new();
             tpl.add_partition(&self.config.topic, partition);
             consumer.assign(&tpl).map_err(|e| {
-                Box::new(std::io::Error::other(
-                    format!("Failed to assign partition {}: {}", partition, e),
-                )) as Box<dyn std::error::Error + Send>
+                Box::new(std::io::Error::other(format!(
+                    "Failed to assign partition {}: {}",
+                    partition, e
+                ))) as Box<dyn std::error::Error + Send>
             })?;
         } else {
             // Partition not specified, use subscribe auto-assignment
             consumer.subscribe(&[&self.config.topic]).map_err(|e| {
-                Box::new(std::io::Error::other(
-                    format!(
-                        "Failed to subscribe to topic '{}': {}",
-                        self.config.topic, e
-                    ),
-                )) as Box<dyn std::error::Error + Send>
+                Box::new(std::io::Error::other(format!(
+                    "Failed to subscribe to topic '{}': {}",
+                    self.config.topic, e
+                ))) as Box<dyn std::error::Error + Send>
             })?;
         }
 
@@ -582,9 +585,8 @@ impl InputSource for KafkaInputSource {
 
         // Take control_receiver from struct for thread use
         let control_receiver_for_thread = self.control_receiver.take().ok_or_else(|| {
-            Box::new(std::io::Error::other(
-                "control_receiver is None",
-            )) as Box<dyn std::error::Error + Send>
+            Box::new(std::io::Error::other("control_receiver is None"))
+                as Box<dyn std::error::Error + Send>
         })?;
 
         let thread_name = format!(
@@ -606,9 +608,10 @@ impl InputSource for KafkaInputSource {
                 );
             })
             .map_err(|e| {
-                Box::new(std::io::Error::other(
-                    format!("Failed to start thread: {}", e),
-                )) as Box<dyn std::error::Error + Send>
+                Box::new(std::io::Error::other(format!(
+                    "Failed to start thread: {}",
+                    e
+                ))) as Box<dyn std::error::Error + Send>
             })?;
 
         // Register thread group to InitContext
@@ -636,9 +639,10 @@ impl InputSource for KafkaInputSource {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send start signal: {}", e),
-                    )) as Box<dyn std::error::Error + Send>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send start signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
                 })?;
         }
 
@@ -663,9 +667,10 @@ impl InputSource for KafkaInputSource {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send stop signal: {}", e),
-                    )) as Box<dyn std::error::Error + Send>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send stop signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
                 })?;
         }
 
@@ -740,9 +745,10 @@ impl InputSource for KafkaInputSource {
                 completion_flag: completion_flag.clone(),
             };
             control_sender.send(signal).map_err(|e| {
-                Box::new(std::io::Error::other(
-                    format!("Checkpoint signal failed: {}", e),
-                )) as Box<dyn std::error::Error + Send>
+                Box::new(std::io::Error::other(format!(
+                    "Checkpoint signal failed: {}",
+                    e
+                ))) as Box<dyn std::error::Error + Send>
             })?;
         }
 
@@ -771,9 +777,10 @@ impl InputSource for KafkaInputSource {
                 completion_flag: completion_flag.clone(),
             };
             control_sender.send(signal).map_err(|e| {
-                Box::new(std::io::Error::other(
-                    format!("Failed to send checkpoint finish signal: {}", e),
-                )) as Box<dyn std::error::Error + Send>
+                Box::new(std::io::Error::other(format!(
+                    "Failed to send checkpoint finish signal: {}",
+                    e
+                ))) as Box<dyn std::error::Error + Send>
             })?;
         }
 

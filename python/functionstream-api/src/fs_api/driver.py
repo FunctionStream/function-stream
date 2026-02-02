@@ -22,7 +22,7 @@ class FSProcessorDriver(abc.ABC):
     @abc.abstractmethod
     def process(self, ctx: Context, source_id: int, data: bytes):
         pass
-    
+
     @abc.abstractmethod
     def process_watermark(self, ctx: Context, source_id: int, watermark: int):
         pass
@@ -34,7 +34,7 @@ class FSProcessorDriver(abc.ABC):
     @abc.abstractmethod
     def check_heartbeat(self, ctx: Context) -> bool:
         pass
-    
+
     @abc.abstractmethod
     def close(self, ctx: Context):
         pass

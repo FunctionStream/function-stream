@@ -10,13 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::coordinator::dataset::{ExecuteResult, ShowFunctionsResult, empty_record_batch};
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, PlanNode, PlanVisitor,
-    PlanVisitorContext, PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan,
-    StopFunctionPlan,
-};
-use crate::coordinator::dataset::{
-    empty_record_batch, ExecuteResult, ShowFunctionsResult,
+    PlanVisitorContext, PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::taskexecutor::TaskManager;
@@ -69,19 +66,21 @@ impl PlanVisitor for Executor {
     ) -> PlanVisitorResult {
         let result = (|| -> Result<ExecuteResult, ExecuteError> {
             let function_bytes = match &plan.function_source {
-                FunctionSource::Path(path) => std::fs::read(path)
-                    .map_err(|e| ExecuteError::Validation(format!("Failed to read function at {}: {}", path, e)))?,
+                FunctionSource::Path(path) => std::fs::read(path).map_err(|e| {
+                    ExecuteError::Validation(format!("Failed to read function at {}: {}", path, e))
+                })?,
                 FunctionSource::Bytes(bytes) => bytes.clone(),
             };
 
             let config_bytes = match &plan.config_source {
-                Some(ConfigSource::Path(path)) => std::fs::read(path)
-                    .map_err(|e| ExecuteError::Validation(format!("Failed to read config at {}: {}", path, e)))?,
+                Some(ConfigSource::Path(path)) => std::fs::read(path).map_err(|e| {
+                    ExecuteError::Validation(format!("Failed to read config at {}: {}", path, e))
+                })?,
                 Some(ConfigSource::Bytes(bytes)) => bytes.clone(),
                 None => {
                     return Err(ExecuteError::Validation(
                         "Configuration bytes required for function creation".into(),
-                    ))
+                    ));
                 }
             };
 

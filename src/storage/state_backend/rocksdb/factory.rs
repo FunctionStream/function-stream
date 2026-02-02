@@ -17,8 +17,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 /// RocksDB configuration options
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RocksDBConfig {
     /// Maximum number of open files
     pub max_open_files: Option<i32>,
@@ -31,7 +30,6 @@ pub struct RocksDBConfig {
     /// Maximum bytes for level base (bytes)
     pub max_bytes_for_level_base: Option<u64>,
 }
-
 
 /// Convert from configuration struct to RocksDBConfig
 impl From<&crate::config::storage::RocksDBStorageConfig> for RocksDBConfig {
@@ -126,24 +124,29 @@ impl RocksDBStateStoreFactory {
         column_family: Option<String>,
     ) -> Result<Box<dyn crate::storage::state_backend::store::StateStore>, BackendError> {
         if let Some(ref cf_name) = column_family
-            && cf_name != "default" && self.db.cf_handle(cf_name).is_none() {
-                let _guard = self.cf_creation_lock.lock().map_err(|e| {
-                    BackendError::Other(format!("Failed to acquire cf creation lock: {}", e))
+            && cf_name != "default"
+            && self.db.cf_handle(cf_name).is_none()
+        {
+            let _guard = self.cf_creation_lock.lock().map_err(|e| {
+                BackendError::Other(format!("Failed to acquire cf creation lock: {}", e))
+            })?;
+
+            if self.db.cf_handle(cf_name).is_none() {
+                log::info!("Creating column family '{}' as it does not exist", cf_name);
+                let opts = Options::default();
+                self.db.create_cf(cf_name, &opts).map_err(|e| {
+                    BackendError::Other(format!(
+                        "Failed to create column family '{}': {}",
+                        cf_name, e
+                    ))
                 })?;
-
-                if self.db.cf_handle(cf_name).is_none() {
-                    log::info!("Creating column family '{}' as it does not exist", cf_name);
-                    let opts = Options::default();
-                    self.db.create_cf(cf_name, &opts).map_err(|e| {
-                        BackendError::Other(format!(
-                            "Failed to create column family '{}': {}",
-                            cf_name, e
-                        ))
-                    })?;
-                }
             }
+        }
 
-        crate::storage::state_backend::rocksdb::store::RocksDBStateStore::new_with_factory(self.db.clone(), column_family)
+        crate::storage::state_backend::rocksdb::store::RocksDBStateStore::new_with_factory(
+            self.db.clone(),
+            column_family,
+        )
     }
 }
 

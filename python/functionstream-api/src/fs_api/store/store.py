@@ -23,49 +23,49 @@ from .iterator import KvIterator
 
 
 class KvStore(abc.ABC):
-    
+
     @abc.abstractmethod
     def put_state(self, key: bytes, value: bytes):
         pass
-    
+
     @abc.abstractmethod
     def get_state(self, key: bytes) -> Optional[bytes]:
         pass
-    
+
     @abc.abstractmethod
     def delete_state(self, key: bytes):
         pass
-    
+
     @abc.abstractmethod
     def list_states(self, start_inclusive: bytes, end_exclusive: bytes) -> List[bytes]:
         pass
-    
+
     @abc.abstractmethod
     def put(self, key: ComplexKey, value: bytes):
         pass
-    
+
     @abc.abstractmethod
     def get(self, key: ComplexKey) -> Optional[bytes]:
         pass
-    
+
     @abc.abstractmethod
     def delete(self, key: ComplexKey):
         pass
-    
+
     @abc.abstractmethod
     def merge(self, key: ComplexKey, value: bytes):
         pass
-    
+
     @abc.abstractmethod
     def delete_prefix(self, key: ComplexKey):
         pass
-    
+
     @abc.abstractmethod
-    def list_complex(self, key_group: bytes, key: bytes, namespace: bytes, 
+    def list_complex(self, key_group: bytes, key: bytes, namespace: bytes,
                      start_inclusive: bytes, end_exclusive: bytes) -> List[bytes]:
         pass
 
-    
+
     @abc.abstractmethod
     def scan_complex(self, key_group: bytes, key: bytes, namespace: bytes) -> KvIterator:
         pass

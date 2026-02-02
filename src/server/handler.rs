@@ -17,17 +17,17 @@ use arrow_ipc::writer::StreamWriter;
 use log::{error, info};
 use tonic::{Request, Response as TonicResponse, Status};
 
-use protocol::service::{
-    function_stream_service_server::FunctionStreamService, CreateFunctionRequest,
-    CreatePythonFunctionRequest, DropFunctionRequest, Response, ShowFunctionsRequest,
-    ShowFunctionsResponse, SqlRequest, StartFunctionRequest, StopFunctionRequest, StatusCode,
-};
 use protocol::service::FunctionInfo as ProtoFunctionInfo;
+use protocol::service::{
+    CreateFunctionRequest, CreatePythonFunctionRequest, DropFunctionRequest, Response,
+    ShowFunctionsRequest, ShowFunctionsResponse, SqlRequest, StartFunctionRequest, StatusCode,
+    StopFunctionRequest, function_stream_service_server::FunctionStreamService,
+};
 
 use crate::coordinator::Coordinator;
 use crate::coordinator::{
-    CreateFunction, CreatePythonFunction, DataSet, DropFunction, ShowFunctions, ShowFunctionsResult,
-    Statement, StartFunction, StopFunction,
+    CreateFunction, CreatePythonFunction, DataSet, DropFunction, ShowFunctions,
+    ShowFunctionsResult, StartFunction, Statement, StopFunction,
 };
 use crate::sql::SqlParser;
 
@@ -40,11 +40,7 @@ impl FunctionStreamServiceImpl {
         Self { coordinator }
     }
 
-    fn build_response(
-        status_code: StatusCode,
-        message: String,
-        data: Option<Vec<u8>>,
-    ) -> Response {
+    fn build_response(status_code: StatusCode, message: String, data: Option<Vec<u8>>) -> Response {
         Response {
             status_code: status_code as i32,
             message,
@@ -102,7 +98,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
             StatusCode::InternalServerError
         };
 
-        log::debug!("Total SQL request cost: {}ms", start_time.elapsed().as_millis());
+        log::debug!(
+            "Total SQL request cost: {}ms",
+            start_time.elapsed().as_millis()
+        );
 
         Ok(TonicResponse::new(Self::build_response(
             status_code,
@@ -193,11 +192,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
             )));
         }
 
-        let stmt = CreatePythonFunction::new(
-            req.class_name,
-            modules,
-            req.config_content,
-        );
+        let stmt = CreatePythonFunction::new(req.class_name, modules, req.config_content);
 
         let exec_start = Instant::now();
         let result = self.coordinator.execute(&stmt as &dyn Statement);
@@ -234,7 +229,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
     ) -> Result<TonicResponse<Response>, Status> {
         let start_time = Instant::now();
         let req = request.into_inner();
-        info!("Received DropFunction request: function_name={}", req.function_name);
+        info!(
+            "Received DropFunction request: function_name={}",
+            req.function_name
+        );
 
         let stmt = DropFunction::new(req.function_name);
         let exec_start = Instant::now();
@@ -290,8 +288,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
             .data
             .as_ref()
             .and_then(|arc_ds| {
-                (arc_ds.as_ref() as &dyn std::any::Any)
-                    .downcast_ref::<ShowFunctionsResult>()
+                (arc_ds.as_ref() as &dyn std::any::Any).downcast_ref::<ShowFunctionsResult>()
             })
             .map(|sfr| {
                 sfr.functions()
@@ -324,7 +321,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
     ) -> Result<TonicResponse<Response>, Status> {
         let start_time = Instant::now();
         let req = request.into_inner();
-        info!("Received StartFunction request: function_name={}", req.function_name);
+        info!(
+            "Received StartFunction request: function_name={}",
+            req.function_name
+        );
 
         let stmt = StartFunction::new(req.function_name);
         let exec_start = Instant::now();
@@ -359,7 +359,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
     ) -> Result<TonicResponse<Response>, Status> {
         let start_time = Instant::now();
         let req = request.into_inner();
-        info!("Received StopFunction request: function_name={}", req.function_name);
+        info!(
+            "Received StopFunction request: function_name={}",
+            req.function_name
+        );
 
         let stmt = StopFunction::new(req.function_name);
         let exec_start = Instant::now();

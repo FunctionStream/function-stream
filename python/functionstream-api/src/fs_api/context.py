@@ -22,24 +22,24 @@ from .store import KvStore
 
 class Context(abc.ABC):
     """Context object"""
-    
+
     @abc.abstractmethod
     def emit(self, data: bytes, channel: int = 0):
         pass
-    
+
     @abc.abstractmethod
     def emit_watermark(self, watermark: int, channel: int = 0):
         pass
-    
+
     @abc.abstractmethod
     def getOrCreateKVStore(self, name: str) -> KvStore:
         pass
-    
+
     @abc.abstractmethod
     def getConfig(self) -> Dict[str, str]:
         """
         Get global configuration Map
-        
+
         Returns:
             Dict[str, str]: Configuration dictionary
         """

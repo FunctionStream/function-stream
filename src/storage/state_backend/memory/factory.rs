@@ -10,15 +10,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
+use super::store::MemoryStateStore;
 use crate::storage::state_backend::error::BackendError;
 use crate::storage::state_backend::factory::StateStoreFactory;
-use super::store::MemoryStateStore;
 use std::sync::{Arc, Mutex};
 
-pub struct MemoryStateStoreFactory {
-
-}
+pub struct MemoryStateStoreFactory {}
 
 impl MemoryStateStoreFactory {
     pub fn new() -> Self {

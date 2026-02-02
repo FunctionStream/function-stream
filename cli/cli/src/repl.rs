@@ -343,11 +343,7 @@ impl Repl {
             .set_header(
                 vec!["Command", "Usage"]
                     .into_iter()
-                    .map(|s| {
-                        Cell::new(s)
-                            .fg(Color::Cyan)
-                            .add_attribute(Attribute::Bold)
-                    })
+                    .map(|s| Cell::new(s).fg(Color::Cyan).add_attribute(Attribute::Bold))
                     .collect::<Vec<_>>(),
             )
             .add_row(vec!["HELP", "Show this message"])

@@ -33,9 +33,7 @@ impl TaskStorageFactory {
     /// # Returns
     /// - `Ok(Box<dyn TaskStorage>)`: Successfully created storage instance
     /// - `Err(...)`: Creation failed
-    pub fn create_storage(
-        config: &TaskStorageConfig,
-    ) -> Result<Box<dyn TaskStorage>> {
+    pub fn create_storage(config: &TaskStorageConfig) -> Result<Box<dyn TaskStorage>> {
         match config.storage_type {
             TaskStorageType::RocksDB => {
                 // Determine database path

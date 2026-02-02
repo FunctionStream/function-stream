@@ -27,22 +27,22 @@ else:
 
 
 class FSIterator(KvIterator):
-    
+
     def __init__(self, wit_iterator: 'WitIterator'):
         if WitIterator is None:
             raise RuntimeError("WIT Iterator binding is not available")
         if not isinstance(wit_iterator, WitIterator):
             raise TypeError(f"Expected WitIterator, got {type(wit_iterator)}")
-        
+
         self._iterator: WitIterator = wit_iterator
-    
+
     def has_next(self) -> bool:
         try:
             return self._iterator.has_next()
         except Exception as e:
             api_error = wit_to_api_error(e)
             raise api_error
-    
+
     def next(self) -> Optional[Tuple[bytes, bytes]]:
         try:
             return self._iterator.next()

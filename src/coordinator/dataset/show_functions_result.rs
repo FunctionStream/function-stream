@@ -36,7 +36,11 @@ impl ShowFunctionsResult {
 impl DataSet for ShowFunctionsResult {
     fn to_record_batch(&self) -> RecordBatch {
         let names: Vec<&str> = self.functions.iter().map(|f| f.name.as_str()).collect();
-        let types: Vec<&str> = self.functions.iter().map(|f| f.task_type.as_str()).collect();
+        let types: Vec<&str> = self
+            .functions
+            .iter()
+            .map(|f| f.task_type.as_str())
+            .collect();
         let statuses: Vec<&str> = self.functions.iter().map(|f| f.status.as_str()).collect();
 
         let schema = Arc::new(Schema::new(vec![

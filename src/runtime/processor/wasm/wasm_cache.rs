@@ -14,7 +14,7 @@ use std::borrow::Cow;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(feature = "incremental-cache")]
@@ -170,7 +170,7 @@ impl FileCacheStore {
 
     fn evict_until_under_limit(&self, required_space: u64) {
         let mut files_to_delete = Vec::new();
-        
+
         {
             let mut state = self.state.write().unwrap();
             let target_size = state.max_size.saturating_sub(required_space);
@@ -251,11 +251,7 @@ impl CacheStore for FileCacheStore {
                 return false;
             }
 
-            let existing_size = state
-                .entries
-                .get(key)
-                .map(|e| e.size)
-                .unwrap_or(0);
+            let existing_size = state.entries.get(key).map(|e| e.size).unwrap_or(0);
 
             let additional_size = value_size.saturating_sub(existing_size);
 
@@ -291,13 +287,10 @@ impl CacheStore for FileCacheStore {
                     .unwrap_or_default()
                     .as_secs();
 
-                let existing_size_final = state
-                    .entries
-                    .get(key)
-                    .map(|e| e.size)
-                    .unwrap_or(0);
+                let existing_size_final = state.entries.get(key).map(|e| e.size).unwrap_or(0);
 
-                state.total_size = state.total_size.saturating_sub(existing_size_final) + value_size;
+                state.total_size =
+                    state.total_size.saturating_sub(existing_size_final) + value_size;
                 state.entries.put(
                     key.to_vec(),
                     CacheEntry {

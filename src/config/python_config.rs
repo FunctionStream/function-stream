@@ -23,7 +23,10 @@ pub const DEFAULT_PYTHON_WASM_FILENAME: &str = "functionstream-python-runtime.wa
 pub const DEFAULT_PYTHON_CWASM_FILENAME: &str = "functionstream-python-runtime.cwasm";
 
 fn default_python_wasm_path() -> String {
-    format!("{}/{}", DEFAULT_PYTHON_CACHE_DIR, DEFAULT_PYTHON_WASM_FILENAME)
+    format!(
+        "{}/{}",
+        DEFAULT_PYTHON_CACHE_DIR, DEFAULT_PYTHON_WASM_FILENAME
+    )
 }
 
 fn default_python_cache_dir() -> String {
@@ -40,12 +43,12 @@ pub struct PythonConfig {
     /// Default: data/cache/python-runner/functionstream-python-runtime.wasm
     #[serde(default = "default_python_wasm_path")]
     pub wasm_path: String,
-    
+
     /// Cache directory for precompiled components
     /// Default: data/cache/python-runner
     #[serde(default = "default_python_cache_dir")]
     pub cache_dir: String,
-    
+
     /// Enable component caching
     /// If true, precompiled components will be cached to speed up subsequent loads
     /// Default: true
@@ -68,12 +71,12 @@ impl PythonConfig {
     pub fn wasm_path_buf(&self) -> PathBuf {
         PathBuf::from(&self.wasm_path)
     }
-    
+
     /// Get the cache directory as PathBuf
     pub fn cache_dir_buf(&self) -> PathBuf {
         PathBuf::from(&self.cache_dir)
     }
-    
+
     /// Get the precompiled component cache file path (cwasm)
     pub fn cwasm_cache_path(&self) -> PathBuf {
         self.cache_dir_buf().join(DEFAULT_PYTHON_CWASM_FILENAME)

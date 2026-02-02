@@ -109,8 +109,7 @@ impl ProcessorBuilder {
         let outputs = Self::create_outputs_from_config(&task_config.outputs)?;
         log::debug!("Created {} output(s)", outputs.len());
 
-        let processor =
-            Self::create_processor_from_config(&task_config.processor, module_bytes)?;
+        let processor = Self::create_processor_from_config(&task_config.processor, module_bytes)?;
         log::debug!("Created wasm processor: {}", task_config.processor.name);
 
         let task = WasmTask::new(

@@ -43,9 +43,7 @@ impl PythonService {
 
         info!(
             "Python WASM configuration: wasm_path={}, cache_dir={}, enable_cache={}",
-            python_config.wasm_path,
-            python_config.cache_dir,
-            python_config.enable_cache
+            python_config.wasm_path, python_config.cache_dir, python_config.enable_cache
         );
 
         // Initialize configuration for Python host

@@ -15,13 +15,13 @@
 //! Provides unified factory methods to create TaskLifecycle instances from YAML config.
 //! Dispatches to specific builders (Processor, Source, Sink, Python) based on task type.
 
+use crate::runtime::task::TaskLifecycle;
 use crate::runtime::task::builder::processor::ProcessorBuilder;
 #[cfg(feature = "python")]
 use crate::runtime::task::builder::python::PythonBuilder;
 use crate::runtime::task::builder::sink::SinkBuilder;
 use crate::runtime::task::builder::source::SourceBuilder;
 use crate::runtime::task::yaml_keys::{NAME, TYPE, type_values};
-use crate::runtime::task::TaskLifecycle;
 use serde_yaml::Value;
 use std::sync::Arc;
 
@@ -30,7 +30,10 @@ pub type BuildResult = Result<Box<dyn TaskLifecycle>, Box<dyn std::error::Error 
 
 /// Task builder error
 fn build_error(msg: impl Into<String>) -> Box<dyn std::error::Error + Send> {
-    Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, msg.into()))
+    Box::new(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        msg.into(),
+    ))
 }
 
 /// Factory for creating tasks from configuration
@@ -73,7 +76,10 @@ impl TaskBuilder {
     /// Parse YAML configuration
     fn parse_yaml(config_bytes: &[u8]) -> Result<Value, Box<dyn std::error::Error + Send>> {
         serde_yaml::from_slice(config_bytes).map_err(|e| {
-            let preview: String = String::from_utf8_lossy(config_bytes).chars().take(500).collect();
+            let preview: String = String::from_utf8_lossy(config_bytes)
+                .chars()
+                .take(500)
+                .collect();
             log::error!("Failed to parse YAML config: {}. Preview:\n{}", e, preview);
             build_error(format!("Failed to parse YAML: {}", e))
         })
@@ -92,7 +98,10 @@ impl TaskBuilder {
     }
 
     /// Extract task type from YAML
-    fn extract_task_type(yaml: &Value, task_name: &str) -> Result<String, Box<dyn std::error::Error + Send>> {
+    fn extract_task_type(
+        yaml: &Value,
+        task_name: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send>> {
         yaml.get(TYPE)
             .and_then(|v| v.as_str())
             .map(String::from)
@@ -105,7 +114,11 @@ impl TaskBuilder {
     /// Get available keys from YAML for error messages
     fn get_yaml_keys(yaml: &Value) -> Vec<String> {
         yaml.as_mapping()
-            .map(|m| m.keys().filter_map(|k| k.as_str().map(String::from)).collect())
+            .map(|m| {
+                m.keys()
+                    .filter_map(|k| k.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -138,7 +151,10 @@ impl TaskBuilder {
 
     /// Build and unwrap WASM task from Arc
     fn build_wasm_task(
-        result: Result<Arc<crate::runtime::processor::wasm::wasm_task::WasmTask>, Box<dyn std::error::Error + Send>>,
+        result: Result<
+            Arc<crate::runtime::processor::wasm::wasm_task::WasmTask>,
+            Box<dyn std::error::Error + Send>,
+        >,
         task_name: &str,
     ) -> BuildResult {
         let arc = result.map_err(|e| {
@@ -150,8 +166,15 @@ impl TaskBuilder {
             .map(|task| Box::new(task) as Box<dyn TaskLifecycle>)
             .map_err(|arc| {
                 let refs = Arc::strong_count(&arc);
-                log::error!("Failed to unwrap Arc for '{}': {} references", task_name, refs);
-                build_error(format!("Task '{}' has {} active references", task_name, refs))
+                log::error!(
+                    "Failed to unwrap Arc for '{}': {} references",
+                    task_name,
+                    refs
+                );
+                build_error(format!(
+                    "Task '{}' has {} active references",
+                    task_name, refs
+                ))
             })
     }
 }

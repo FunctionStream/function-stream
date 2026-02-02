@@ -20,11 +20,11 @@ mod statement;
 
 pub use analyze::{Analysis, Analyzer};
 pub use coordinator::Coordinator;
+pub use dataset::{DataSet, ExecuteResult, RecordBatch, ShowFunctionsResult, empty_record_batch};
 pub use execution::Executor;
 pub use execution_context::ExecutionContext;
 pub use plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
-pub use dataset::{empty_record_batch, DataSet, ExecuteResult, RecordBatch, ShowFunctionsResult};
 pub use statement::{
-    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions,
-    StartFunction, Statement, StopFunction, ConfigSource, FunctionSource, PythonModule,
+    ConfigSource, CreateFunction, CreatePythonFunction, DropFunction, FunctionSource, PythonModule,
+    ShowFunctions, StartFunction, Statement, StopFunction,
 };

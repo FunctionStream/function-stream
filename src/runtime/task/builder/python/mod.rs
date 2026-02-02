@@ -16,10 +16,10 @@
 
 use crate::runtime::input::{InputSource, InputSourceProvider};
 use crate::runtime::output::{OutputSink, OutputSinkProvider};
+use crate::runtime::processor::python::get_python_engine_and_component;
 use crate::runtime::processor::wasm::wasm_processor::WasmProcessorImpl;
 use crate::runtime::processor::wasm::wasm_processor_trait::WasmProcessor;
 use crate::runtime::processor::wasm::wasm_task::WasmTask;
-use crate::runtime::processor::python::get_python_engine_and_component;
 use crate::runtime::task::yaml_keys::{TYPE, type_values};
 use crate::runtime::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
 use serde_yaml::Value;
@@ -32,7 +32,8 @@ impl PythonBuilder {
         task_name: String,
         yaml_value: &Value,
         modules: &[(String, Vec<u8>)],
-    ) -> Result<Box<dyn crate::runtime::task::TaskLifecycle>, Box<dyn std::error::Error + Send>> {
+    ) -> Result<Box<dyn crate::runtime::task::TaskLifecycle>, Box<dyn std::error::Error + Send>>
+    {
         let config_type = yaml_value
             .get(TYPE)
             .and_then(|v| v.as_str())
@@ -99,8 +100,7 @@ impl PythonBuilder {
         let outputs = Self::create_outputs_from_config(&task_config.outputs)?;
         log::debug!("Created {} output(s)", outputs.len());
 
-        let processor =
-            Self::create_processor_from_config(&task_config.processor, modules)?;
+        let processor = Self::create_processor_from_config(&task_config.processor, modules)?;
         log::debug!("Created python processor: {}", task_config.processor.name);
 
         let task = WasmTask::new(
@@ -117,9 +117,11 @@ impl PythonBuilder {
             task_config.task_name
         );
 
-        Ok(Box::new(Arc::try_unwrap(task).map_err(|_| -> Box<dyn std::error::Error + Send> {
-            Box::new(std::io::Error::other("Failed to unwrap Arc<WasmTask>"))
-        })?))
+        Ok(Box::new(Arc::try_unwrap(task).map_err(
+            |_| -> Box<dyn std::error::Error + Send> {
+                Box::new(std::io::Error::other("Failed to unwrap Arc<WasmTask>"))
+            },
+        )?))
     }
 
     fn create_inputs_from_config(
@@ -134,13 +136,14 @@ impl PythonBuilder {
         modules: &[(String, Vec<u8>)],
     ) -> Result<Box<dyn WasmProcessor>, Box<dyn std::error::Error + Send>> {
         // Get python wasm engine and component for reuse
-        let (custom_engine, custom_component) = get_python_engine_and_component()
-            .map_err(|e| -> Box<dyn std::error::Error + Send> {
+        let (custom_engine, custom_component) = get_python_engine_and_component().map_err(
+            |e| -> Box<dyn std::error::Error + Send> {
                 Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("Failed to get python wasm engine and component: {}", e),
                 ))
-            })?;
+            },
+        )?;
 
         // Clone the Component (Component implements Clone via Arc<ComponentInner>)
         let processor_impl = WasmProcessorImpl::new_with_custom_engine_and_component(
@@ -160,4 +163,3 @@ impl PythonBuilder {
         OutputSinkProvider::from_output_configs(outputs)
     }
 }
-

@@ -119,13 +119,7 @@ impl ThreadGroup {
                 .into());
             }
 
-            remaining_threads.retain(|t| {
-                if t.is_finished() {
-                    false
-                } else {
-                    true
-                }
-            });
+            remaining_threads.retain(|t| if t.is_finished() { false } else { true });
 
             if !remaining_threads.is_empty() {
                 thread::sleep(Duration::from_millis(10));
@@ -321,9 +315,10 @@ impl TaskThreadPool {
         if let Some(task) = self.get_task(task_id) {
             let task_guard = task.lock().unwrap();
             task_guard.cancel().map_err(|e| {
-                Box::new(std::io::Error::other(
-                    format!("Failed to cancel task: {}", e),
-                )) as Box<dyn std::error::Error>
+                Box::new(std::io::Error::other(format!(
+                    "Failed to cancel task: {}",
+                    e
+                ))) as Box<dyn std::error::Error>
             })?;
             Ok(())
         } else {
@@ -353,9 +348,10 @@ impl TaskThreadPool {
             }
 
             if let Some(timeout) = timeout
-                && start.elapsed() > timeout {
-                    return Err(format!("Timeout waiting for {} tasks to complete", count).into());
-                }
+                && start.elapsed() > timeout
+            {
+                return Err(format!("Timeout waiting for {} tasks to complete", count).into());
+            }
 
             thread::sleep(Duration::from_millis(100));
         }

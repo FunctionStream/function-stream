@@ -65,12 +65,13 @@ pub fn initialize_config(config: &PythonConfig) -> anyhow::Result<()> {
         Err(_) => {
             // Configuration already set, check if it matches
             if let Some(existing) = GLOBAL_PYTHON_CONFIG.get() {
-                let existing_config = existing.read().map_err(|e| {
-                    anyhow::anyhow!("Failed to read existing configuration: {}", e)
-                })?;
-                if existing_config.wasm_path == config.wasm_path 
-                    && existing_config.cache_dir == config.cache_dir 
-                    && existing_config.enable_cache == config.enable_cache {
+                let existing_config = existing
+                    .read()
+                    .map_err(|e| anyhow::anyhow!("Failed to read existing configuration: {}", e))?;
+                if existing_config.wasm_path == config.wasm_path
+                    && existing_config.cache_dir == config.cache_dir
+                    && existing_config.enable_cache == config.enable_cache
+                {
                     log::debug!("[Python Host] Configuration already set with same values");
                     return Ok(());
                 }
@@ -96,7 +97,7 @@ fn get_config() -> PythonConfig {
 /// Load Python WASM bytes from the configured path
 fn load_python_wasm_bytes(config: &PythonConfig) -> anyhow::Result<Vec<u8>> {
     let wasm_path = config.wasm_path_buf();
-    
+
     if !wasm_path.exists() {
         return Err(anyhow::anyhow!(
             "Python WASM file not found at: {}. Please ensure the file exists or build it first with: cd python/functionstream-runtime && make build",
@@ -136,7 +137,10 @@ fn get_global_python_engine() -> anyhow::Result<Arc<Engine>> {
         });
 
         let engine_elapsed = engine_start.elapsed().as_secs_f64();
-        log::debug!("[Python Host] Global Engine created: {:.3}s", engine_elapsed);
+        log::debug!(
+            "[Python Host] Global Engine created: {:.3}s",
+            engine_elapsed
+        );
 
         Arc::new(engine)
     });
@@ -152,30 +156,44 @@ fn load_precompiled_component(engine: &Engine, config: &PythonConfig) -> Option<
     }
 
     let cache_path = config.cwasm_cache_path();
-    
+
     if !cache_path.exists() {
-        log::debug!("[Python Host] No cached component found at: {}", cache_path.display());
+        log::debug!(
+            "[Python Host] No cached component found at: {}",
+            cache_path.display()
+        );
         return None;
     }
 
     match std::fs::read(&cache_path) {
         Ok(precompiled_bytes) => {
-            log::debug!("[Python Host] Loading precompiled component from cache: {}", cache_path.display());
+            log::debug!(
+                "[Python Host] Loading precompiled component from cache: {}",
+                cache_path.display()
+            );
             match unsafe { Component::deserialize(engine, &precompiled_bytes) } {
                 Ok(component) => {
-                    log::debug!("[Python Host] Precompiled component loaded successfully from cache (size: {} KB)", 
-                               precompiled_bytes.len() / 1024);
+                    log::debug!(
+                        "[Python Host] Precompiled component loaded successfully from cache (size: {} KB)",
+                        precompiled_bytes.len() / 1024
+                    );
                     return Some(component);
                 }
                 Err(e) => {
-                    log::warn!("[Python Host] Failed to deserialize cached component: {}. Removing invalid cache and falling back to compilation.", e);
+                    log::warn!(
+                        "[Python Host] Failed to deserialize cached component: {}. Removing invalid cache and falling back to compilation.",
+                        e
+                    );
                     // Remove invalid cache file
                     let _ = std::fs::remove_file(&cache_path);
                 }
             }
         }
         Err(e) => {
-            log::warn!("[Python Host] Failed to read cached component: {}. Falling back to compilation.", e);
+            log::warn!(
+                "[Python Host] Failed to read cached component: {}. Falling back to compilation.",
+                e
+            );
         }
     }
 
@@ -183,7 +201,11 @@ fn load_precompiled_component(engine: &Engine, config: &PythonConfig) -> Option<
 }
 
 /// Save precompiled component to cache
-fn save_precompiled_component(engine: &Engine, wasm_bytes: &[u8], config: &PythonConfig) -> anyhow::Result<PathBuf> {
+fn save_precompiled_component(
+    engine: &Engine,
+    wasm_bytes: &[u8],
+    config: &PythonConfig,
+) -> anyhow::Result<PathBuf> {
     if !config.enable_cache {
         return Err(anyhow::anyhow!("Component caching is disabled"));
     }
@@ -193,24 +215,34 @@ fn save_precompiled_component(engine: &Engine, wasm_bytes: &[u8], config: &Pytho
 
     // Create cache directory if it doesn't exist
     std::fs::create_dir_all(&cache_dir).map_err(|e| {
-        anyhow::anyhow!("Failed to create cache directory {}: {}", cache_dir.display(), e)
+        anyhow::anyhow!(
+            "Failed to create cache directory {}: {}",
+            cache_dir.display(),
+            e
+        )
     })?;
 
-        log::debug!("[Python Host] Precompiling component for cache...");
-    
+    log::debug!("[Python Host] Precompiling component for cache...");
+
     // Precompile component
-    let precompiled_bytes = engine.precompile_component(wasm_bytes).map_err(|e| {
-        anyhow::anyhow!("Failed to precompile component: {}", e)
-    })?;
+    let precompiled_bytes = engine
+        .precompile_component(wasm_bytes)
+        .map_err(|e| anyhow::anyhow!("Failed to precompile component: {}", e))?;
 
     // Write to cache file
     std::fs::write(&cache_path, &precompiled_bytes).map_err(|e| {
-        anyhow::anyhow!("Failed to write cached component to {}: {}", cache_path.display(), e)
+        anyhow::anyhow!(
+            "Failed to write cached component to {}: {}",
+            cache_path.display(),
+            e
+        )
     })?;
 
-    log::debug!("[Python Host] Cached precompiled component to {} (size: {} KB)", 
-               cache_path.display(),
-               precompiled_bytes.len() / 1024);
+    log::debug!(
+        "[Python Host] Cached precompiled component to {} (size: {} KB)",
+        cache_path.display(),
+        precompiled_bytes.len() / 1024
+    );
 
     Ok(cache_path)
 }
@@ -236,12 +268,18 @@ fn get_global_python_component() -> anyhow::Result<Arc<Component>> {
         // Try to load precompiled component from cache first
         if let Some(precompiled) = load_precompiled_component(&engine, &config) {
             let component_elapsed = component_start.elapsed().as_secs_f64();
-            log::debug!("[Python Host] Precompiled component loaded from cache: {:.3}s", component_elapsed);
+            log::debug!(
+                "[Python Host] Precompiled component loaded from cache: {:.3}s",
+                component_elapsed
+            );
             return Arc::new(precompiled);
         }
 
         // Cache doesn't exist or is invalid, compile from WASM file
-        log::debug!("[Python Host] Loading Python WASM component from: {}", config.wasm_path);
+        log::debug!(
+            "[Python Host] Loading Python WASM component from: {}",
+            config.wasm_path
+        );
         let wasm_bytes = load_python_wasm_bytes(&config).unwrap_or_else(|e| {
             panic!("Failed to load Python WASM bytes: {}", e);
         });
@@ -258,14 +296,19 @@ fn get_global_python_component() -> anyhow::Result<Arc<Component>> {
         });
 
         let compile_elapsed = compile_start.elapsed().as_secs_f64();
-        log::debug!("[Python Host] Component compiled: {:.3}s (size: {} KB)", 
-                   compile_elapsed,
-                   wasm_bytes.len() / 1024);
+        log::debug!(
+            "[Python Host] Component compiled: {:.3}s (size: {} KB)",
+            compile_elapsed,
+            wasm_bytes.len() / 1024
+        );
 
         // Save precompiled component to cache for future use
         if config.enable_cache {
             if let Err(e) = save_precompiled_component(&engine, &wasm_bytes, &config) {
-                log::warn!("[Python Host] Failed to save precompiled component to cache: {}", e);
+                log::warn!(
+                    "[Python Host] Failed to save precompiled component to cache: {}",
+                    e
+                );
                 log::warn!("[Python Host] Component will be recompiled on next run");
             }
         }

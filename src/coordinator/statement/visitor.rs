@@ -10,7 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, StopFunction};
+use super::{
+    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, StopFunction,
+};
 use crate::coordinator::plan::PlanNode;
 use crate::coordinator::statement::Statement;
 

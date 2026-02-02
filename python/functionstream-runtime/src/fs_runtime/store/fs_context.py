@@ -21,10 +21,10 @@ from .fs_store import FSStore
 
 def convert_config_to_dict(config: List[Tuple[str, str]]) -> Dict[str, str]:
     result: Dict[str, str] = {}
-    
+
     if not config:
         return result
-    
+
     for item in config:
         if isinstance(item, (list, tuple)):
             if len(item) >= 2:
@@ -36,27 +36,27 @@ def convert_config_to_dict(config: List[Tuple[str, str]]) -> Dict[str, str]:
                 result[str(k)] = str(v)
         else:
             continue
-    
+
     return result
 
 
 class WitContext(Context):
-    
+
     def __init__(self, config: Dict[str, str] = None):
         self._store_cache: dict[str, KvStore] = {}
         self._CONFIG: Dict[str, str] = config.copy() if config is not None else {}
-    
+
     def emit(self, data: bytes, channel: int = 0) -> None:
         emit(data, channel)
-    
+
     def emit_watermark(self, watermark: int, channel: int = 0) -> None:
         emit_watermark(watermark, channel)
-    
+
     def getOrCreateKVStore(self, name: str) -> KvStore:
         if name not in self._store_cache:
             self._store_cache[name] = FSStore(name)
         return self._store_cache[name]
-    
+
     def getConfig(self) -> Dict[str, str]:
         return self._CONFIG.copy()
 

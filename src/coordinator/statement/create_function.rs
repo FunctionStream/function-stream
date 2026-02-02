@@ -27,7 +27,6 @@ pub enum ConfigSource {
     Bytes(Vec<u8>),
 }
 
-
 #[derive(Debug, Clone)]
 pub struct CreateFunction {
     pub function_source: FunctionSource,
@@ -36,15 +35,11 @@ pub struct CreateFunction {
 }
 
 impl CreateFunction {
-    
     pub const PROP_FUNCTION_PATH: &'static str = "function_path";
 
     pub const PROP_CONFIG_PATH: &'static str = "config_path";
 
-    pub fn from_bytes(
-        function_bytes: Vec<u8>,
-        config_bytes: Option<Vec<u8>>,
-    ) -> Self {
+    pub fn from_bytes(function_bytes: Vec<u8>, config_bytes: Option<Vec<u8>>) -> Self {
         Self {
             function_source: FunctionSource::Bytes(function_bytes),
             config_source: config_bytes.map(ConfigSource::Bytes),
@@ -56,7 +51,7 @@ impl CreateFunction {
         let function_source = Self::parse_function_path(&properties)?;
         let config_source = Self::parse_config_path(&properties);
         let extra_props = Self::extract_extra_properties(&properties);
-        
+
         Ok(Self {
             function_source,
             config_source,
@@ -95,8 +90,7 @@ impl CreateFunction {
             .keys()
             .filter(|k| {
                 let k_lower = k.to_lowercase();
-                k_lower == Self::PROP_FUNCTION_PATH
-                    || k_lower == Self::PROP_CONFIG_PATH
+                k_lower == Self::PROP_FUNCTION_PATH || k_lower == Self::PROP_CONFIG_PATH
             })
             .cloned()
             .collect();

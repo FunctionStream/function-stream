@@ -30,9 +30,15 @@ const CONTROL_OPERATION_MAX_RETRIES: u32 = 3;
 const MAX_BATCH_SIZE: usize = 100;
 
 enum TaskControlSignal {
-    Start { completion_flag: TaskCompletionFlag },
-    Stop { completion_flag: TaskCompletionFlag },
-    Cancel { completion_flag: TaskCompletionFlag },
+    Start {
+        completion_flag: TaskCompletionFlag,
+    },
+    Stop {
+        completion_flag: TaskCompletionFlag,
+    },
+    Cancel {
+        completion_flag: TaskCompletionFlag,
+    },
     Checkpoint {
         checkpoint_id: u64,
         completion_flag: TaskCompletionFlag,
@@ -46,7 +52,9 @@ enum TaskControlSignal {
         modules: Vec<(String, Vec<u8>)>,
         completion_flag: TaskCompletionFlag,
     },
-    Close { completion_flag: TaskCompletionFlag },
+    Close {
+        completion_flag: TaskCompletionFlag,
+    },
 }
 
 enum ControlAction {
@@ -144,19 +152,16 @@ impl WasmTask {
         init_context: &crate::runtime::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
         let mut inputs = self.inputs.take().ok_or_else(|| {
-            Box::new(std::io::Error::other(
-                "inputs already moved to thread",
-            )) as Box<dyn std::error::Error + Send>
+            Box::new(std::io::Error::other("inputs already moved to thread"))
+                as Box<dyn std::error::Error + Send>
         })?;
         let mut processor = self.processor.take().ok_or_else(|| {
-            Box::new(std::io::Error::other(
-                "processor already moved to thread",
-            )) as Box<dyn std::error::Error + Send>
+            Box::new(std::io::Error::other("processor already moved to thread"))
+                as Box<dyn std::error::Error + Send>
         })?;
         let mut sinks = self.sinks.take().ok_or_else(|| {
-            Box::new(std::io::Error::other(
-                "sinks already moved to thread",
-            )) as Box<dyn std::error::Error + Send>
+            Box::new(std::io::Error::other("sinks already moved to thread"))
+                as Box<dyn std::error::Error + Send>
         })?;
 
         let init_context = init_context.clone();
@@ -164,32 +169,36 @@ impl WasmTask {
         for (idx, sink) in sinks.iter_mut().enumerate() {
             if let Err(e) = sink.init_with_context(&init_context) {
                 log::error!("Failed to init sink {}: {}", idx, e);
-                return Err(Box::new(std::io::Error::other(
-                    format!("Failed to init sink {}: {}", idx, e),
-                )));
+                return Err(Box::new(std::io::Error::other(format!(
+                    "Failed to init sink {}: {}",
+                    idx, e
+                ))));
             }
         }
 
         if let Err(e) = processor.init_with_context(&init_context) {
             log::error!("Failed to init processor: {}", e);
-            return Err(Box::new(std::io::Error::other(
-                format!("Failed to init processor: {}", e),
-            )));
+            return Err(Box::new(std::io::Error::other(format!(
+                "Failed to init processor: {}",
+                e
+            ))));
         }
 
         if let Err(e) = processor.init_wasm_host(sinks, &init_context, self.task_name.clone()) {
             log::error!("Failed to init WasmHost: {}", e);
-            return Err(Box::new(std::io::Error::other(
-                format!("Failed to init WasmHost: {}", e),
-            )));
+            return Err(Box::new(std::io::Error::other(format!(
+                "Failed to init WasmHost: {}",
+                e
+            ))));
         }
 
         for (idx, input) in inputs.iter_mut().enumerate() {
             if let Err(e) = input.init_with_context(&init_context) {
                 log::error!("Failed to init input {}: {}", idx, e);
-                return Err(Box::new(std::io::Error::other(
-                    format!("Failed to init input {}: {}", idx, e),
-                )));
+                return Err(Box::new(std::io::Error::other(format!(
+                    "Failed to init input {}: {}",
+                    idx, e
+                ))));
             }
         }
 
@@ -220,11 +229,11 @@ impl WasmTask {
                 let _ = termination_tx.send(ExecutionState::Finished);
             })
             .map_err(|e| {
-                Box::new(std::io::Error::other(
-                    format!("Failed to start task thread: {}", e),
-                )) as Box<dyn std::error::Error + Send>
+                Box::new(std::io::Error::other(format!(
+                    "Failed to start task thread: {}",
+                    e
+                ))) as Box<dyn std::error::Error + Send>
             })?;
-
 
         use crate::runtime::processor::wasm::thread_pool::{ThreadGroup, ThreadGroupType};
         let mut main_runloop_group = ThreadGroup::new(
@@ -601,9 +610,10 @@ impl WasmTask {
             match completion_flag.wait_timeout(timeout) {
                 Ok(_) => {
                     if let Some(error) = completion_flag.get_error() {
-                        return Err(Box::new(std::io::Error::other(
-                            format!("{} failed: {}", operation_name, error),
-                        )));
+                        return Err(Box::new(std::io::Error::other(format!(
+                            "{} failed: {}",
+                            operation_name, error
+                        ))));
                     }
                     return Ok(());
                 }
@@ -636,9 +646,10 @@ impl WasmTask {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send start signal: {}", e),
-                    )) as Box<dyn std::error::Error + Send>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send start signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
                 })?;
         }
         self.wait_with_retry(&completion_flag, "Start")
@@ -652,9 +663,10 @@ impl WasmTask {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send stop signal: {}", e),
-                    )) as Box<dyn std::error::Error + Send>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send stop signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
                 })?;
         }
         self.wait_with_retry(&completion_flag, "Stop")
@@ -668,9 +680,10 @@ impl WasmTask {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send cancel signal: {}", e),
-                    )) as Box<dyn std::error::Error + Send>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send cancel signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
                 })?;
         }
         self.wait_with_retry(&completion_flag, "Cancel")
@@ -688,9 +701,10 @@ impl WasmTask {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send checkpoint signal: {}", e),
-                    )) as Box<dyn std::error::Error + Send>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send checkpoint signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
                 })?;
         }
         self.wait_with_retry(&completion_flag, "Checkpoint")
@@ -708,9 +722,10 @@ impl WasmTask {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send checkpoint finish signal: {}", e),
-                    )) as Box<dyn std::error::Error + Send>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send checkpoint finish signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
                 })?;
         }
         self.wait_with_retry(&completion_flag, "CheckpointFinish")
@@ -730,9 +745,10 @@ impl WasmTask {
                     completion_flag: completion_flag.clone(),
                 })
                 .map_err(|e| {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to send exec_python_function signal: {}", e),
-                    )) as Box<dyn std::error::Error + Send>
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send exec_python_function signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
                 })?;
         } else {
             return Err(Box::new(std::io::Error::other(
@@ -752,9 +768,10 @@ impl WasmTask {
         }
 
         if let Some(handle) = self.task_thread.take()
-            && let Err(e) = handle.join() {
-                log::warn!("Task thread join error: {:?}", e);
-            }
+            && let Err(e) = handle.join()
+        {
+            log::warn!("Task thread join error: {:?}", e);
+        }
 
         self.control_sender.take();
         log::info!("WasmTask closed: {}", self.task_name);

@@ -93,9 +93,10 @@ impl KafkaProducerConfig {
             client_config
                 .create()
                 .map_err(|e| -> Box<dyn std::error::Error + Send> {
-                    Box::new(std::io::Error::other(
-                        format!("Failed to create Kafka producer: {}", e),
-                    ))
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to create Kafka producer: {}",
+                        e
+                    )))
                 })?;
 
         Ok(producer)

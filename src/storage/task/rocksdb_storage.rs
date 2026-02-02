@@ -17,8 +17,8 @@
 use super::storage::{StoredTaskInfo, TaskModuleBytes, TaskStorage};
 use crate::config::storage::RocksDBStorageConfig;
 use crate::runtime::common::ComponentState;
-use anyhow::{anyhow, Context, Result};
-use rocksdb::{ColumnFamilyDescriptor, IteratorMode, WriteBatch, DB, Options};
+use anyhow::{Context, Result, anyhow};
+use rocksdb::{ColumnFamilyDescriptor, DB, IteratorMode, Options, WriteBatch};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
