@@ -1,37 +1,37 @@
 #!/bin/bash
 
-# Go wasm Processor 构建脚本
-# 将 Go 代码编译为 wasm Component，并生成 YAML 配置文件
+# Go wasm Processor build script
+# Compiles Go code to wasm Component and generates YAML configuration file
 
 set -e
 
-# 颜色输出
+# Color output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# 脚本目录
+# Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# 任务名称（从环境变量或使用默认值）
+# Task name (from environment variable or use default value)
 TASK_NAME="${TASK_NAME:-go-processor-example}"
 
 echo -e "${GREEN}Building Go WASM Processor Component...${NC}"
 
-# 检查 TinyGo 是否安装
+# Check if TinyGo is installed
 if ! command -v tinygo &> /dev/null; then
     echo -e "${RED}Error: tinygo is not installed${NC}"
     echo "Please install TinyGo: https://tinygo.org/getting-started/install/"
     exit 1
 fi
 
-# 检查 TinyGo 版本
+# Check TinyGo version
 TINYGO_VERSION=$(tinygo version | awk '{print $2}' | sed 's/tinygo version //')
 echo -e "${GREEN}Using TinyGo $TINYGO_VERSION${NC}"
 
-# 步骤 1: 生成 WIT 绑定代码
+# Step 1: Generate WIT bindings
 echo -e "${GREEN}Step 1: Generating WIT bindings...${NC}"
 chmod +x generate-bindings.sh
 ./generate-bindings.sh
@@ -41,15 +41,15 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 检查绑定代码是否生成
+# Check if bindings were generated
 if [ ! -d "bindings" ] || [ -z "$(ls -A bindings 2>/dev/null)" ]; then
     echo -e "${YELLOW}Warning: No bindings generated, continuing with placeholder implementation${NC}"
 fi
 
-       # 输出目录结构：
-       # build/ - 最终输出文件
-       # build/tmp/ - 临时中间文件（构建后删除）
-       # build/deps/ - 依赖文件（保留，每次检查）
+       # Output directory structure:
+       # build/ - Final output files
+       # build/tmp/ - Temporary intermediate files (deleted after build)
+       # build/deps/ - Dependency files (kept, checked each time)
        OUTPUT_DIR="build"
        TMP_DIR="$OUTPUT_DIR/tmp"
        DEPS_DIR="$OUTPUT_DIR/deps"
@@ -57,14 +57,14 @@ fi
        mkdir -p "$TMP_DIR"
        mkdir -p "$DEPS_DIR"
 
-# 步骤 2: 使用 TinyGo 编译为 wasm
+# Step 2: Compile Go to wasm using TinyGo
 echo -e "${GREEN}Step 2: Compiling Go to WASM (using TinyGo)...${NC}"
 
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WIT_FILE="$PROJECT_ROOT/wit/processor.wit"
 COMPONENT_FILE="$OUTPUT_DIR/processor.wasm"
 
-# 使用 TinyGo 编译为 wasm（core 模块）
+# Compile Go to wasm using TinyGo (core module)
 echo "  Compiling with TinyGo (target: wasi)..."
 CORE_WASM="$TMP_DIR/processor-core.wasm"
 tinygo build -target wasi -o "$CORE_WASM" main.go
@@ -74,7 +74,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 验证生成的文件
+# Verify generated file
 if [ ! -f "$CORE_WASM" ]; then
     echo -e "${RED}Error: Core WASM file was not created${NC}"
     exit 1
@@ -82,10 +82,10 @@ fi
 
 echo -e "${GREEN}✓ Go compiled to WASM (core module)${NC}"
 
-# 步骤 3: 转换为 Component Model 格式
+# Step 3: Convert to Component Model format
 echo -e "${GREEN}Step 3: Converting to Component Model format...${NC}"
 
-# 检查 wasm-tools 是否可用（必需）
+# Check if wasm-tools is available (required)
 if ! command -v wasm-tools &> /dev/null; then
     echo -e "${RED}Error: wasm-tools is REQUIRED for Component Model conversion${NC}"
     echo "Please install wasm-tools:"
@@ -93,7 +93,7 @@ if ! command -v wasm-tools &> /dev/null; then
     exit 1
 fi
 
-# 3.1: 嵌入 WIT 元数据
+# 3.1: Embed WIT metadata
 EMBEDDED_WASM="$TMP_DIR/processor-embedded.wasm"
 echo "  Embedding WIT metadata..."
 wasm-tools component embed --world processor "$WIT_FILE" "$CORE_WASM" -o "$EMBEDDED_WASM" || {
@@ -101,7 +101,7 @@ wasm-tools component embed --world processor "$WIT_FILE" "$CORE_WASM" -o "$EMBED
     exit 1
 }
 
-# 3.2: 准备 WASI 适配器（如果需要）
+# 3.2: Prepare WASI adapter (if needed)
 WASI_ADAPTER_FILE="$DEPS_DIR/wasi_snapshot_preview1.reactor.wasm"
 if [ ! -f "$WASI_ADAPTER_FILE" ]; then
     echo "  Downloading WASI adapter..."
@@ -144,9 +144,9 @@ if [ ! -f "$WASI_ADAPTER_FILE" ]; then
     echo "  ✓ WASI adapter downloaded and verified"
 fi
 
-# 3.3: 转换为 Component Model（最终输出）
+# 3.3: Convert to Component Model (final output)
 echo "  Converting to Component Model..."
-# 使用 --realloc-via-memory-grow 选项，因为 TinyGo 生成的 wasm 缺少 cabi_realloc 导出
+# Use --realloc-via-memory-grow option because TinyGo-generated wasm lacks cabi_realloc export
 wasm-tools component new "$EMBEDDED_WASM" \
     --adapt wasi_snapshot_preview1="$WASI_ADAPTER_FILE" \
     --realloc-via-memory-grow \
@@ -155,14 +155,14 @@ wasm-tools component new "$EMBEDDED_WASM" \
     exit 1
 }
 
-# 验证 Component Model 格式
+# Validate Component Model format
 if wasm-tools validate "$COMPONENT_FILE" 2>&1 > /dev/null; then
     echo -e "${GREEN}✓ Component Model format validated${NC}"
 else
     echo -e "${YELLOW}Warning: Component validation failed${NC}"
 fi
 
-# 验证输出文件存在
+# Verify output file exists
 if [ ! -f "$COMPONENT_FILE" ]; then
     echo -e "${RED}Error: Output file was not created: $COMPONENT_FILE${NC}"
     exit 1
@@ -170,7 +170,7 @@ fi
 
 echo -e "${GREEN}✓ WASM Component built: $COMPONENT_FILE${NC}"
 
-# 显示文件信息
+# Display file information
 if [ -f "$COMPONENT_FILE" ]; then
     WASM_SIZE=$(du -h "$COMPONENT_FILE" | cut -f1)
     echo -e "${GREEN}WASM module size: $WASM_SIZE${NC}"
@@ -179,21 +179,21 @@ else
     exit 1
 fi
 
-# 清理说明
+# Cleanup notes
 echo ""
 echo -e "${GREEN}Build completed!${NC}"
 echo ""
-echo -e "${GREEN}目录结构:${NC}"
+echo -e "${GREEN}Directory structure:${NC}"
 echo "  $OUTPUT_DIR/"
-echo "    ├── processor.wasm          # 最终输出文件（Component Model 格式）"
+echo "    ├── processor.wasm          # Final output file (Component Model format)"
 echo "    └── deps/"
-echo "        └── wasi_snapshot_preview1.reactor.wasm  # WASI 适配器（依赖文件，保留）"
+echo "        └── wasi_snapshot_preview1.reactor.wasm  # WASI adapter (dependency file, kept)"
 echo ""
-echo -e "${YELLOW}说明:${NC}"
-echo "  - bindings/ 目录中的文件是中间产物（Go 绑定代码），用于编译"
-echo "  - build/tmp/ 目录中的临时文件已自动清理"
-echo "  - build/deps/ 目录中的依赖文件会保留，下次构建时检查是否存在"
-echo "  - 最终输出: $OUTPUT_DIR/processor.wasm (Component Model 格式)"
+echo -e "${YELLOW}Notes:${NC}"
+echo "  - Files in bindings/ directory are intermediate artifacts (Go binding code) used for compilation"
+echo "  - Temporary files in build/tmp/ directory have been automatically cleaned up"
+echo "  - Dependency files in build/deps/ directory are kept and checked for existence on next build"
+echo "  - Final output: $OUTPUT_DIR/processor.wasm (Component Model format)"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo "1. Use the generated config.yaml to register the task"

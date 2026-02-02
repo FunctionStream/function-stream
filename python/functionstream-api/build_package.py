@@ -120,18 +120,18 @@ class Builder:
 
         self.dist_dir.mkdir(parents=True, exist_ok=True)
 
-        # 从上级目录运行，并显式传入项目路径，避免本目录内的 build.py 遮住 PyPA 的 build
+        # Run from parent directory and explicitly pass project path to avoid local build.py shadowing PyPA's build
         cmd = [
             self.python_exec, "-m", "build",
             "--outdir", str(self.dist_dir),
             str(self.work_dir),
         ]
-        run_cwd = self.work_dir.parent  # 不能是 work_dir，否则 "python -m build" 会加载本地 build.py 导致死循环
+        run_cwd = self.work_dir.parent  # Cannot be work_dir, otherwise "python -m build" will load local build.py causing infinite recursion
 
         logger.info(f"Executing: {' '.join(cmd)}")
 
         try:
-            # 使用 inherit（stdout/stderr=None）避免 PIPE 缓冲满导致子进程阻塞或超时
+            # Use inherit (stdout/stderr=None) to avoid PIPE buffer full causing subprocess blocking or timeout
             subprocess.run(
                 cmd,
                 cwd=run_cwd,
@@ -141,7 +141,7 @@ class Builder:
             )
         except subprocess.CalledProcessError as e:
             logger.error("Build process failed.")
-            # 使用 inherit 时无捕获内容，提示用户查看上方终端输出
+            # When using inherit, no captured content, prompt user to check terminal output above
             if e.stdout or e.stderr:
                 logger.error(f"STDOUT:\n{e.stdout}")
                 logger.error(f"STDERR:\n{e.stderr}")

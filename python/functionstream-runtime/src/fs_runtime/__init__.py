@@ -11,9 +11,9 @@
 # limitations under the License.
 
 """
-functionstream-runtime (wasm 内核 & WIT 实现)
+functionstream-runtime (wasm kernel & WIT implementation)
 
-包含真实 WIT 绑定，只存在于服务端
+Contains real WIT bindings, only exists on the server side
 """
 
 __version__ = "1.0.0"

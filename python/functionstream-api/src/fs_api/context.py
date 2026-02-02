@@ -13,7 +13,7 @@
 """
 fs_api.context
 
-Context：上下文对象
+Context: Context object
 """
 import abc
 from typing import Dict
@@ -21,7 +21,7 @@ from .store import KvStore
 
 
 class Context(abc.ABC):
-    """上下文对象"""
+    """Context object"""
     
     @abc.abstractmethod
     def emit(self, data: bytes, channel: int = 0):
@@ -38,10 +38,10 @@ class Context(abc.ABC):
     @abc.abstractmethod
     def getConfig(self) -> Dict[str, str]:
         """
-        获取全局配置 Map
+        Get global configuration Map
         
         Returns:
-            Dict[str, str]: 配置字典
+            Dict[str, str]: Configuration dictionary
         """
         pass
 
