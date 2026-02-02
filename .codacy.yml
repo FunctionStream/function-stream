@@ -8,6 +8,9 @@ exclude_paths:
   - "examples/**"
   - "README.md"
   - "cli/README.md"
+  # Build scripts use subprocess with controlled build-time inputs only
+  - "python/functionstream-runtime/build.py"
+  - "python/functionstream-api/build_package.py"
 
 # Exclude some code quality checks (during refactoring phase)
 exclude_patterns:

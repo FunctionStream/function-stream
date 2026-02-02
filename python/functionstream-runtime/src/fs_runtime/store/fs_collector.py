@@ -10,7 +10,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from wit_world.imports.collector import (
@@ -34,9 +37,8 @@ def emit(data: bytes, channel: int = 0) -> None:
 
     try:
         wit_emit(channel, data)
-    except Exception:
-        # Silently ignore emit errors to allow graceful degradation
-        pass  # noqa: S110
+    except Exception as e:
+        logger.debug("Emit error (graceful degradation): %s", e)
 
 
 def emit_watermark(watermark: int, channel: int = 0) -> None:
@@ -45,9 +47,10 @@ def emit_watermark(watermark: int, channel: int = 0) -> None:
 
     try:
         wit_emit_watermark(channel, watermark)
-    except Exception:
-        # Silently ignore watermark emit errors to allow graceful degradation
-        pass  # noqa: S110
+    except Exception as e:
+        logger.debug(
+            "Watermark emit error (graceful degradation): %s", e
+        )
 
 
 __all__ = ['emit', 'emit_watermark']

@@ -90,6 +90,47 @@ def _is_under_site_or_stdlib(origin: Path) -> bool:
         return True
 
 
+def _get_module_origin(
+    module_name: str,
+    result: Dict[str, Path],
+) -> Optional[Path]:
+    """Resolve module origin path from spec or existing result."""
+    if module_name == "__main__" and module_name in result:
+        return result[module_name]
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except (ImportError, ValueError, ModuleNotFoundError):
+        return None
+    if spec is None or spec.origin is None or spec.origin == "built-in":
+        return None
+    return Path(spec.origin)
+
+
+def _process_module_deps(
+    module_name: str,
+    origin: Path,
+    package: str,
+    dep_graph: Dict[str, Set[str]],
+    seen: Set[str],
+    queue: List[str],
+) -> None:
+    """Parse module and add its imports to dep_graph and queue."""
+    try:
+        tree = ast.parse(origin.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return
+    for module_part, level in _get_imported_names(tree):
+        abs_name = (
+            module_part
+            if level == 0
+            else _resolve_relative(module_part, level, package)
+        )
+        if abs_name:
+            dep_graph[module_name].add(abs_name)
+            if abs_name not in seen:
+                queue.append(abs_name)
+
+
 def _collect_local_deps(
     driver_class: Type,
     driver_file: Path,
@@ -100,6 +141,7 @@ def _collect_local_deps(
     dep_graph: Dict[str, Set[str]] = {}
     queue: List[str] = [driver_module_name]
     seen: Set[str] = set()
+
     if driver_module_name == "__main__":
         result[driver_module_name] = driver_file.resolve()
         dep_graph[driver_module_name] = set()
@@ -110,42 +152,22 @@ def _collect_local_deps(
             continue
         seen.add(module_name)
         package = module_name.rpartition(".")[0]
-        if module_name == "__main__" and module_name in result:
-            origin = result[module_name]
-        else:
-            try:
-                spec = importlib.util.find_spec(module_name)
-            except (ImportError, ValueError, ModuleNotFoundError):
-                continue
-            if (
-                spec is None
-                or spec.origin is None
-                or spec.origin == "built-in"
-            ):
-                continue
-            origin = Path(spec.origin)
+
+        origin = _get_module_origin(module_name, result)
+        if origin is None:
+            continue
         if _is_under_site_or_stdlib(origin):
             continue
         try:
             origin.resolve().relative_to(driver_root)
         except ValueError:
             continue
+
         result[module_name] = origin
         dep_graph[module_name] = set()
-        try:
-            tree = ast.parse(origin.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError):
-            pass
-        else:
-            for module_part, level in _get_imported_names(tree):
-                if level == 0:
-                    abs_name = module_part
-                else:
-                    abs_name = _resolve_relative(module_part, level, package)
-                if abs_name:
-                    dep_graph[module_name].add(abs_name)
-                    if abs_name not in seen:
-                        queue.append(abs_name)
+        _process_module_deps(
+            module_name, origin, package, dep_graph, seen, queue
+        )
 
     return result, dep_graph
 

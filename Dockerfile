@@ -1,10 +1,10 @@
 FROM rust:1-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    cmake \
+    cmake=3.25.1-1 \
     make \
-    clang \
-    libclang-dev \
+    clang=1:14.0-55.7~deb12u1 \
+    libclang-dev=1:14.0-55.7~deb12u1 \
     python3 \
     python3-venv \
     python3-pip \
@@ -40,8 +40,8 @@ RUN make build-full
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl3 \
+    ca-certificates=20230311+deb12u1 \
+    libssl3=3.0.18-1~deb12u2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

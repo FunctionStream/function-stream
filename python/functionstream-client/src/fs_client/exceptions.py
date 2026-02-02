@@ -71,17 +71,14 @@ class FunctionStreamTimeoutError(ServerError):
 
 class BadRequestError(ServerError):
     """Raised when the arguments are invalid (INVALID_ARGUMENT)."""
-    pass
 
 
 class AuthenticationError(ServerError):
     """Raised when the client is not authenticated (UNAUTHENTICATED)."""
-    pass
 
 
 class PermissionDeniedError(ServerError):
     """Raised when the client does not have permission (PERMISSION_DENIED)."""
-    pass
 
 
 class NotFoundError(ServerError):

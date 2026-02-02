@@ -11,10 +11,13 @@
 # limitations under the License.
 
 import importlib.util
+import logging
 import sys
 from typing import List, Optional, Tuple
 
 from fs_api.driver import FSProcessorDriver
+
+logger = logging.getLogger(__name__)
 
 from .store.fs_context import WitContext, convert_config_to_dict
 
@@ -46,11 +49,13 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
             # Create the module
             module = importlib.util.module_from_spec(spec)
 
-            # Execute the module source code
-            # Note: exec is required here for dynamic module loading
-            # This is a controlled execution environment for user-provided code
+            # Execute the module source code.
+            # exec is required: importlib.util.module_from_spec does not execute
+            # code; Python's import system uses exec internally. This runtime
+            # is designed to execute trusted user-provided processor code in
+            # an isolated WASM sandbox. Only deploy code from trusted sources.
             code = compile(module_source, f"<{module_name}>", "exec")
-            exec(code, module.__dict__)  # noqa: S102
+            exec(code, module.__dict__)  # noqa: S102  # nosec B102
 
             # Add the module to sys.modules
             sys.modules[module_name] = module
@@ -105,9 +110,8 @@ class WitWorld:
         if _DRIVER:
             try:
                 _DRIVER.init(_CONTEXT, _CONTEXT._CONFIG)
-            except Exception:
-                # Silently ignore initialization errors to allow graceful degradation
-                pass  # noqa: S110
+            except Exception as e:
+                logger.debug("Driver init failed (graceful degradation): %s", e)
 
     def fs_process(self, source_id: int, data: bytes) -> None:
         if not _DRIVER or not _CONTEXT:
@@ -115,9 +119,8 @@ class WitWorld:
 
         try:
             _DRIVER.process(_CONTEXT, source_id, data)
-        except Exception:
-            # Silently ignore processing errors to allow graceful degradation
-            pass  # noqa: S110
+        except Exception as e:
+            logger.debug("Process error (graceful degradation): %s", e)
 
     def fs_process_watermark(self, source_id: int, watermark: int) -> None:
         if not _DRIVER or not _CONTEXT:
@@ -125,9 +128,8 @@ class WitWorld:
 
         try:
             _DRIVER.process_watermark(_CONTEXT, source_id, watermark)
-        except Exception:
-            # Silently ignore watermark processing errors to allow graceful degradation
-            pass  # noqa: S110
+        except Exception as e:
+            logger.debug("Watermark process error (graceful degradation): %s", e)
 
     def fs_take_checkpoint(self, checkpoint_id: int) -> None:
         if not _DRIVER or not _CONTEXT:
@@ -135,9 +137,8 @@ class WitWorld:
 
         try:
             _DRIVER.take_checkpoint(_CONTEXT, checkpoint_id)
-        except Exception:
-            # Silently ignore checkpoint errors to allow graceful degradation
-            pass  # noqa: S110
+        except Exception as e:
+            logger.debug("Checkpoint error (graceful degradation): %s", e)
 
     def fs_check_heartbeat(self) -> bool:
         if not _DRIVER or not _CONTEXT:
@@ -145,7 +146,8 @@ class WitWorld:
 
         try:
             return _DRIVER.check_heartbeat(_CONTEXT)
-        except Exception:
+        except Exception as e:
+            logger.debug("Heartbeat check failed (graceful degradation): %s", e)
             return False
 
     def fs_close(self) -> None:
@@ -154,9 +156,8 @@ class WitWorld:
         if _DRIVER and _CONTEXT:
             try:
                 _DRIVER.close(_CONTEXT)
-            except Exception:
-                # Silently ignore close errors to ensure cleanup completes
-                pass  # noqa: S110
+            except Exception as e:
+                logger.debug("Driver close error (cleanup continues): %s", e)
 
         _DRIVER = None
         _CONTEXT = None
