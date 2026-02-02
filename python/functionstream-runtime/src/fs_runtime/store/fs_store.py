@@ -10,12 +10,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from fs_api.store import KvStore, ComplexKey, KvIterator
+from fs_api.store import ComplexKey, KvIterator, KvStore
 
-from .fs_error import wit_to_api_error
 from .fs_complex_key import api_to_wit
+from .fs_error import wit_to_api_error
 from .fs_iterator import FSIterator
 
 if TYPE_CHECKING:

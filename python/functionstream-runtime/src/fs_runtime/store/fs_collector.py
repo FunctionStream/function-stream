@@ -13,10 +13,16 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from wit_world.imports.collector import emit as wit_emit, emit_watermark as wit_emit_watermark
+    from wit_world.imports.collector import (
+        emit as wit_emit,
+        emit_watermark as wit_emit_watermark,
+    )
 else:
     try:
-        from wit_world.imports.collector import emit as wit_emit, emit_watermark as wit_emit_watermark
+        from wit_world.imports.collector import (
+            emit as wit_emit,
+            emit_watermark as wit_emit_watermark,
+        )
     except (ImportError, AttributeError):
         wit_emit = None
         wit_emit_watermark = None

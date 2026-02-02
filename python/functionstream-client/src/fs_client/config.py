@@ -10,8 +10,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any, Dict, List, Optional
+
 import yaml
-from typing import List, Dict, Optional, Any
 
 # ==========================================
 # 1. Models mapping to Rust Input/Output

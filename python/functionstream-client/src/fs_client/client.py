@@ -22,25 +22,35 @@ import importlib.util
 import inspect
 import logging
 import sys
-import grpc
 from pathlib import Path
-from typing import Optional, Union, List, Dict, Type, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Type, Union
+
+import grpc
 
 from fs_api import FSProcessorDriver
 
-from .config import WasmTaskConfig
 from ._proto import function_stream_pb2, function_stream_pb2_grpc
+from .config import WasmTaskConfig
 from .exceptions import (
-    ServerError, ClientError, _convert_grpc_error,
-    BadRequestError, AuthenticationError, PermissionDeniedError,
-    NotFoundError, ConflictError, ResourceExhaustedError, InternalServerError
+    AuthenticationError,
+    BadRequestError,
+    ClientError,
+    ConflictError,
+    InternalServerError,
+    NotFoundError,
+    PermissionDeniedError,
+    ResourceExhaustedError,
+    ServerError,
+    _convert_grpc_error,
 )
 from .models import FunctionInfo, ShowFunctionsResult
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_relative(module_part: Optional[str], level: int, current_package: str) -> str:
+def _resolve_relative(
+    module_part: Optional[str], level: int, current_package: str
+) -> str:
     if level == 0:
         return module_part or ""
     parts = (current_package or "").split(".")
@@ -107,7 +117,11 @@ def _collect_local_deps(
                 spec = importlib.util.find_spec(module_name)
             except (ImportError, ValueError, ModuleNotFoundError):
                 continue
-            if spec is None or spec.origin is None or spec.origin == "built-in":
+            if (
+                spec is None
+                or spec.origin is None
+                or spec.origin == "built-in"
+            ):
                 continue
             origin = Path(spec.origin)
         if _is_under_site_or_stdlib(origin):
@@ -194,23 +208,33 @@ class FsClient:
 
         if channel:
             self._channel = channel
-            logger.debug(f"Initialized FsClient with existing channel to {self.target}")
+            logger.debug(
+                f"Initialized FsClient with existing channel to {self.target}"
+            )
         else:
             base_options = list(self.DEFAULT_OPTIONS)
             if options:
                 base_options.extend(options)
 
-            logger.info(f"Connecting to FunctionStream at {self.target} (secure={secure})...")
+            logger.info(
+                f"Connecting to FunctionStream at {self.target} (secure={secure})..."
+            )
 
             if secure:
                 creds = grpc.ssl_channel_credentials()
-                self._channel = grpc.secure_channel(self.target, creds, options=base_options)
+                self._channel = grpc.secure_channel(
+                    self.target, creds, options=base_options
+                )
             else:
-                self._channel = grpc.insecure_channel(self.target, options=base_options)
+                self._channel = grpc.insecure_channel(
+                    self.target, options=base_options
+                )
 
             self._own_channel = True
 
-        self._stub = function_stream_pb2_grpc.FunctionStreamServiceStub(self._channel)
+        self._stub = function_stream_pb2_grpc.FunctionStreamServiceStub(
+            self._channel
+        )
 
     def create_function_from_files(
             self,
@@ -229,7 +253,9 @@ class FsClient:
         if not c_path.exists():
             raise FileNotFoundError(f"Config file not found: {c_path}")
 
-        logger.info(f"Creating function from files: wasm={f_path.name}, config={c_path.name}")
+        logger.info(
+            f"Creating function from files: wasm={f_path.name}, config={c_path.name}"
+        )
 
         try:
             func_bytes = f_path.read_bytes()
@@ -254,12 +280,18 @@ class FsClient:
         elif isinstance(config_content, bytes):
             real_conf_bytes = config_content
         else:
-            raise TypeError(f"config_content must be str or bytes, got {type(config_content)}")
+            raise TypeError(
+                f"config_content must be str or bytes, got {type(config_content)}"
+            )
 
         logger.info("Creating function from in-memory bytes")
-        return self._create_function_internal(function_bytes, real_conf_bytes, timeout)
+        return self._create_function_internal(
+            function_bytes, real_conf_bytes, timeout
+        )
 
-    def _create_function_internal(self, func_bytes: bytes, conf_bytes: bytes, timeout: float) -> bool:
+    def _create_function_internal(
+        self, func_bytes: bytes, conf_bytes: bytes, timeout: float
+    ) -> bool:
         request = function_stream_pb2.CreateFunctionRequest(
             function_bytes=func_bytes,
             config_bytes=conf_bytes,
@@ -278,7 +310,8 @@ class FsClient:
 
         Args:
             class_name: Name of the Python class to load and instantiate
-            modules: List of tuples (module_name, module_bytes) containing Python module code
+            modules: List of tuples (module_name, module_bytes) containing
+                Python module code
             config_content: Configuration content as string
 
         Returns:
@@ -321,12 +354,14 @@ class FsClient:
         """
         Create Python function from Config and Driver implementation.
 
-        Extracts class_name and module bytes from the Driver class automatically,
+        Extracts class_name and module bytes from the Driver class
+        automatically,
         and uses the Config's to_yaml() for config_content.
 
         Args:
             config: WasmTaskConfig
-            driver_class: The FSProcessorDriver subclass implementing the processor
+            driver_class: The FSProcessorDriver subclass implementing the
+                processor
 
         Returns:
             True if successful
@@ -341,7 +376,8 @@ class FsClient:
 
         if not issubclass(driver_class, FSProcessorDriver):
             raise TypeError(
-                f"driver_class must implement FSProcessorDriver, got {driver_class.__name__}"
+                f"driver_class must implement FSProcessorDriver, "
+                f"got {driver_class.__name__}"
             )
 
         class_name = driver_class.__name__
@@ -355,7 +391,9 @@ class FsClient:
             try:
                 modules.append((display_name, paths[name].read_bytes()))
             except OSError as e:
-                raise ClientError(f"Failed to read module: {paths[name]}") from e
+                raise ClientError(
+                    f"Failed to read module: {paths[name]}"
+                ) from e
 
         config_content = config.to_yaml()
 
@@ -481,11 +519,18 @@ class FsClient:
 
             if response.status_code >= 400:
                 error_msg = response.message or "Unknown server error"
-                logger.error(f"Server returned error: code={response.status_code}, msg={error_msg}")
+                logger.error(
+                    f"Server returned error: code={response.status_code}, "
+                    f"msg={error_msg}"
+                )
 
                 # Automatically map status code to specific exception
-                exception_cls = self._STATUS_CODE_MAP.get(response.status_code, ServerError)
-                raise exception_cls(message=error_msg, status_code=response.status_code)
+                exception_cls = self._STATUS_CODE_MAP.get(
+                    response.status_code, ServerError
+                )
+                raise exception_cls(
+                    message=error_msg, status_code=response.status_code
+                )
 
             return response
 

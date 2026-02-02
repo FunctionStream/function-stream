@@ -65,7 +65,6 @@ class KvStore(abc.ABC):
                      start_inclusive: bytes, end_exclusive: bytes) -> List[bytes]:
         pass
 
-
     @abc.abstractmethod
     def scan_complex(self, key_group: bytes, key: bytes, namespace: bytes) -> KvIterator:
         pass

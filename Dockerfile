@@ -45,7 +45,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY --from=builder /build/target/release/function-stream bin/
-COPY --from=builder /build/python/functionstream-runtime/target/functionstream-python-runtime.wasm data/cache/python-runner/
+COPY --from=builder \
+    /build/python/functionstream-runtime/target/functionstream-python-runtime.wasm \
+    data/cache/python-runner/
 COPY config.yaml conf/
 RUN sed -i 's/127.0.0.1/0.0.0.0/' conf/config.yaml
 

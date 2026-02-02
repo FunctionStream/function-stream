@@ -10,7 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 class KvError(Exception):
     pass
 
@@ -29,6 +28,7 @@ class KvOtherError(KvError):
     def __init__(self, message: str):
         self.message = message
         super().__init__(message)
+
 
 __all__ = ['KvError', 'KvNotFoundError', 'KvIOError', 'KvOtherError']
 

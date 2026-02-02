@@ -38,6 +38,9 @@ jobs:
         with:
           shared-key: "linux-build"
 
+      - name: Generate protocol files
+        run: cargo check --package protocol
+
       - name: Check format
         run: cargo fmt --all -- --check
 

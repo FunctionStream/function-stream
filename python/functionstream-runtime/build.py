@@ -14,8 +14,9 @@
 """
 wasm Build Script for Function Stream Runtime.
 
-This script compiles the python runtime into a WebAssembly component using componentize-py.
-It handles dependency installation, WIT binding generation, and the final wasm compilation.
+This script compiles the python runtime into a WebAssembly component
+using componentize-py. It handles dependency installation, WIT binding
+generation, and the final wasm compilation.
 """
 
 import os
@@ -86,7 +87,9 @@ class WasmBuilder:
             return path_cmd
 
         logger.error("❌ 'componentize-py' not found.")
-        logger.info("Please install it in your environment: pip install componentize-py")
+        logger.info(
+            "Please install it in your environment: pip install componentize-py"
+        )
         raise BuildError("Dependency missing: componentize-py")
 
     def clean(self) -> None:
@@ -113,7 +116,9 @@ class WasmBuilder:
         logger.info("Preparing dependencies...")
 
         if not FS_API_DIR.exists():
-            raise BuildError(f"functionstream-api source not found at: {FS_API_DIR}")
+            raise BuildError(
+                f"functionstream-api source not found at: {FS_API_DIR}"
+            )
 
         DEPENDENCIES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -170,7 +175,9 @@ class WasmBuilder:
             logger.info(f"✓ Bindings generated at: {BINDINGS_DIR}")
         except subprocess.CalledProcessError as e:
             logger.warning(f"Failed to generate bindings: {e.stderr}")
-            logger.warning("Continuing build process (bindings are optional for the artifact)...")
+            logger.warning(
+                "Continuing build process (bindings are optional for the artifact)..."
+            )
 
     def build_wasm(self) -> None:
         """Compiles the python code into a wasm component."""
@@ -225,7 +232,9 @@ class WasmBuilder:
                 logger.info(f"  Output: {WASM_OUTPUT}")
                 logger.info(f"  Size:   {size_kb:.2f} KB")
             else:
-                raise BuildError("Build command succeeded but output file is missing.")
+                raise BuildError(
+                    "Build command succeeded but output file is missing."
+                )
 
         except subprocess.CalledProcessError as e:
             logger.error("wasm compilation failed.")

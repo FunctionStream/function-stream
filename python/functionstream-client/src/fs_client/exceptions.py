@@ -18,13 +18,16 @@ allowing users to handle specific error cases (e.g., timeouts, auth failures)
 granularly.
 """
 
-import grpc
 from typing import Optional
+
+import grpc
 
 
 class FsError(Exception):
     """Base exception for all Function Stream errors."""
-    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+    def __init__(
+        self, message: str, original_exception: Optional[Exception] = None
+    ):
         super().__init__(message)
         self.original_exception = original_exception
 
@@ -42,10 +45,17 @@ class ServerError(FsError):
     Base class for errors returned by the server.
     This includes both business logic errors and gRPC protocol errors.
     """
-    def __init__(self, message: str, status_code: Optional[int] = None, grpc_code: Optional[grpc.StatusCode] = None):
+    def __init__(
+        self,
+        message: str,
+        status_code: Optional[int] = None,
+        grpc_code: Optional[grpc.StatusCode] = None,
+    ):
         super().__init__(message)
-        self.status_code = status_code  # Business logic code (e.g., HTTP-like 400/500)
-        self.grpc_code = grpc_code      # gRPC protocol code (e.g., UNAVAILABLE)
+        # Business logic code (e.g., HTTP-like 400/500)
+        self.status_code = status_code
+        # gRPC protocol code (e.g., UNAVAILABLE)
+        self.grpc_code = grpc_code
 
 
 # --- Specific Network/Protocol Errors ---

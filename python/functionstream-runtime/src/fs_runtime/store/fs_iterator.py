@@ -10,10 +10,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Tuple
 
-from fs_api.store.iterator import KvIterator
 from fs_api.store.error import KvError
+from fs_api.store.iterator import KvIterator
 
 from .fs_error import wit_to_api_error
 

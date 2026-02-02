@@ -26,4 +26,3 @@ class KvIterator(abc.ABC):
         pass
 
 __all__ = ['KvIterator']
-

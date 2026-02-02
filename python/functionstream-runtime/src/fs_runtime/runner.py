@@ -10,14 +10,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import cloudpickle
-import time
-import importlib.util
-import sys
 import abc
+import importlib.util
+import json
+import sys
+import time
+from typing import Dict, List, Optional, Tuple
+
+import cloudpickle
 import fs_api
-from typing import Optional, List, Tuple, Dict
 
 from fs_api.driver import FSProcessorDriver
 
@@ -27,12 +28,11 @@ from .store.fs_context import WitContext, convert_config_to_dict
 _DRIVER: Optional[FSProcessorDriver] = None
 _CONTEXT: Optional[WitContext] = None
 
-def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
 
+def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
     global _DRIVER
 
     try:
-
         # Load all modules in order
         loaded_modules = {}
         for module_name, module_bytes in modules:
@@ -40,7 +40,9 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
             try:
                 module_source = module_bytes.decode("utf-8")
             except UnicodeDecodeError:
-                raise ValueError(f"Failed to decode module_bytes as UTF-8 for module '{module_name}'")
+                raise ValueError(
+                    f"Failed to decode module_bytes as UTF-8 for module '{module_name}'"
+                )
 
             # Create a module spec from the module name
             spec = importlib.util.spec_from_loader(module_name, loader=None)
@@ -81,15 +83,22 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
 
         if ProcessorClass is None:
             module_names = [name for name, _ in modules]
-            raise RuntimeError(f"Class '{class_name}' not found in any of the loaded modules: {module_names}")
+            raise RuntimeError(
+                f"Class '{class_name}' not found in any of the loaded modules: {module_names}"
+            )
 
         if not issubclass(ProcessorClass, FSProcessorDriver):
-            raise TypeError(f"Class '{class_name}' must be a subclass of FSProcessorDriver")
+            raise TypeError(
+                f"Class '{class_name}' must be a subclass of FSProcessorDriver"
+            )
 
         _DRIVER = ProcessorClass()
 
     except Exception as e:
-        raise RuntimeError(f"Failed to load class '{class_name}' from modules: {e}") from e
+        raise RuntimeError(
+            f"Failed to load class '{class_name}' from modules: {e}"
+        ) from e
+
 
 class WitWorld:
 

@@ -113,25 +113,30 @@ class Builder:
     def build(self) -> None:
         """
         Executes the build process using the PyPA `build` module.
-        Runs from work_dir.parent with work_dir as srcdir so that a local build.py
-        in work_dir cannot shadow "python -m build", avoiding infinite recursion.
+        Runs from work_dir.parent with work_dir as srcdir so that a local
+        build.py in work_dir cannot shadow "python -m build", avoiding
+        infinite recursion.
         """
         logger.info("Building python package...")
 
         self.dist_dir.mkdir(parents=True, exist_ok=True)
 
-        # Run from parent directory and explicitly pass project path to avoid local build.py shadowing PyPA's build
+        # Run from parent directory and explicitly pass project path to avoid
+        # local build.py shadowing PyPA's build
         cmd = [
             self.python_exec, "-m", "build",
             "--outdir", str(self.dist_dir),
             str(self.work_dir),
         ]
-        run_cwd = self.work_dir.parent  # Cannot be work_dir, otherwise "python -m build" will load local build.py causing infinite recursion
+        # Cannot be work_dir, otherwise "python -m build" will load local
+        # build.py causing infinite recursion
+        run_cwd = self.work_dir.parent
 
         logger.info(f"Executing: {' '.join(cmd)}")
 
         try:
-            # Use inherit (stdout/stderr=None) to avoid PIPE buffer full causing subprocess blocking or timeout
+            # Use inherit (stdout/stderr=None) to avoid PIPE buffer full
+            # causing subprocess blocking or timeout
             subprocess.run(
                 cmd,
                 cwd=run_cwd,
@@ -141,7 +146,8 @@ class Builder:
             )
         except subprocess.CalledProcessError as e:
             logger.error("Build process failed.")
-            # When using inherit, no captured content, prompt user to check terminal output above
+            # When using inherit, no captured content, prompt user to check
+            # terminal output above
             if e.stdout or e.stderr:
                 logger.error(f"STDOUT:\n{e.stdout}")
                 logger.error(f"STDERR:\n{e.stderr}")

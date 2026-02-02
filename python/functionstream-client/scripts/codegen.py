@@ -50,7 +50,9 @@ class CodeGenerator:
     def _check_paths(self):
         """Validates input paths."""
         if not self.proto_root.exists():
-            raise FileNotFoundError(f"Proto root directory not found: {self.proto_root}")
+            raise FileNotFoundError(
+                f"Proto root directory not found: {self.proto_root}"
+            )
 
         for p_file in self.proto_files:
             if not (self.proto_root / p_file).exists():
@@ -94,7 +96,9 @@ class CodeGenerator:
             )
             logger.info("Enabled mypy-protobuf type generation.")
         else:
-            logger.warning("mypy-protobuf not found. Skipping .pyi generation.")
+            logger.warning(
+                "mypy-protobuf not found. Skipping .pyi generation."
+            )
 
         for p_file in self.proto_files:
             args.append(str(self.proto_root / p_file))
@@ -106,7 +110,8 @@ class CodeGenerator:
         """
         Resolves the protoc-gen-mypy executable path.
         Protoc looks for plugins via PATH; when run from make/CI, venv bin may
-        not be on PATH. Prefer the executable next to sys.executable, then PATH.
+        not be on PATH. Prefer the executable next to sys.executable,
+        then PATH.
         """
         import sys as _sys
 
@@ -114,7 +119,9 @@ class CodeGenerator:
         bin_dir = Path(_sys.executable).resolve().parent
         for name in ("protoc-gen-mypy", "protoc-gen-mypy.exe"):
             candidate = bin_dir / name
-            if candidate.exists() and (candidate.is_file() or candidate.is_symlink()):
+            if candidate.exists() and (
+                candidate.is_file() or candidate.is_symlink()
+            ):
                 return str(candidate)
 
         # 2. On PATH
@@ -166,7 +173,9 @@ class CodeGenerator:
             logger.info(f"Code generation complete. Output: {self.output_dir}")
 
         except Exception:
-            logger.exception("An unexpected error occurred during code generation.")
+            logger.exception(
+                "An unexpected error occurred during code generation."
+            )
             sys.exit(1)
 
 
@@ -195,7 +204,10 @@ def main():
         "files",
         nargs="*",
         default=["function_stream.proto"],
-        help="Specific .proto files to compile (default: function_stream.proto)",
+        help=(
+            "Specific .proto files to compile "
+            "(default: function_stream.proto)"
+        ),
     )
 
     args = parser.parse_args()

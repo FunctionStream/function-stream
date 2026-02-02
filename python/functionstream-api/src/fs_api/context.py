@@ -46,4 +46,3 @@ class Context(abc.ABC):
         pass
 
 __all__ = ['Context']
-
