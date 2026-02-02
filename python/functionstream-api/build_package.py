@@ -136,7 +136,9 @@ class Builder:
         try:
             # Use inherit (stdout/stderr=None) to avoid PIPE buffer full
             # causing subprocess blocking or timeout
-            subprocess.run(
+            # Note: subprocess.run is safe here as cmd is constructed from
+            # controlled build-time inputs, not user-provided data
+            subprocess.run(  # noqa: S603
                 cmd,
                 cwd=run_cwd,
                 check=True,

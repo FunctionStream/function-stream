@@ -110,7 +110,6 @@ class WitWorld:
                 pass  # noqa: S110
 
     def fs_process(self, source_id: int, data: bytes) -> None:
-        global _DRIVER, _CONTEXT
         if not _DRIVER or not _CONTEXT:
             return
 
@@ -121,7 +120,6 @@ class WitWorld:
             pass  # noqa: S110
 
     def fs_process_watermark(self, source_id: int, watermark: int) -> None:
-        global _DRIVER, _CONTEXT
         if not _DRIVER or not _CONTEXT:
             return
 
@@ -132,7 +130,6 @@ class WitWorld:
             pass  # noqa: S110
 
     def fs_take_checkpoint(self, checkpoint_id: int) -> None:
-        global _DRIVER, _CONTEXT
         if not _DRIVER or not _CONTEXT:
             return
 
@@ -143,7 +140,6 @@ class WitWorld:
             pass  # noqa: S110
 
     def fs_check_heartbeat(self) -> bool:
-        global _DRIVER, _CONTEXT
         if not _DRIVER or not _CONTEXT:
             return False
 
@@ -169,8 +165,6 @@ class WitWorld:
         fs_exec(class_name, modules)
 
     def fs_custom(self, payload: bytes) -> bytes:
-        global _DRIVER, _CONTEXT
-
         if not _DRIVER or not _CONTEXT:
             raise RuntimeError("Driver or Context not initialized")
 

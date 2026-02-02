@@ -61,7 +61,6 @@ class ServerError(FsError):
 
 class NetworkError(ServerError):
     """Raised when communication with the server fails (e.g., connection refused)."""
-    pass
 
 
 class FunctionStreamTimeoutError(ServerError):
