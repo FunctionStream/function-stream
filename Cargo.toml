@@ -43,7 +43,7 @@ clap = { version = "4.5", features = ["derive"] }
 wasmtime = { version = "28.0", features = ["component-model", "async"] }
 base64 = "0.22"
 wasmtime-wasi = "28.0"
-rocksdb = { version = "0.21", features = ["multi-threaded-cf"] }
+rocksdb = { version = "0.21", features = ["multi-threaded-cf", "lz4"] }
 bincode = "1.3"
 tokio-stream = "0.1.18"
 lru = "0.12"
