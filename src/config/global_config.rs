@@ -74,7 +74,7 @@ impl GlobalConfig {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let config_path = path
             .map(|p| p.as_ref().to_path_buf())
-            .unwrap_or_else(|| std::path::PathBuf::from("config.yaml"));
+            .unwrap_or_else(|| std::path::PathBuf::from("../../conf/config.yaml"));
 
         if config_path.exists() {
             crate::config::load_global_config(&config_path)

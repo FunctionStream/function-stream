@@ -24,7 +24,7 @@ COPY cli ./cli
 COPY src ./src
 COPY python ./python
 COPY wit ./wit
-COPY config.yaml ./
+COPY conf/config.yaml ./
 
 RUN python3 -m venv .venv \
     && .venv/bin/pip install --upgrade pip \
@@ -50,7 +50,7 @@ COPY --from=builder /build/target/release/function-stream bin/
 COPY --from=builder \
     /build/python/functionstream-runtime/target/functionstream-python-runtime.wasm \
     data/cache/python-runner/
-COPY config.yaml conf/
+COPY conf/config.yaml conf/
 RUN sed -i 's/127.0.0.1/0.0.0.0/' conf/config.yaml
 
 EXPOSE 8080

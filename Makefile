@@ -34,17 +34,31 @@ help:
 	@echo "  package-lite   - Build and package lite version (.zip and .tar.gz)"
 	@echo "  package-all    - Build and package both versions"
 	@echo "  test           - Run tests"
-	@echo "  clean          - Clean all build artifacts (cargo + dist)"
+	@echo "  clean          - Clean all (cargo, dist, data, logs, sub-modules)"
 	@echo "  clean-dist     - Clean distribution directory only"
 	@echo ""
 	@echo "Version: $(VERSION)"
 	@echo "Architecture: $(ARCH)"
 	@echo "OS: $(OS)"
 
+# Sub-modules with their own Makefiles
+PYTHON_MODULES := python/functionstream-api python/functionstream-client python/functionstream-runtime
+
 clean:
 	@echo "Cleaning build artifacts..."
 	cargo clean
 	@rm -rf $(DIST_BASE)
+	@echo "Cleaning data directory..."
+	@rm -rf data
+	@echo "Cleaning logs directory..."
+	@rm -rf logs
+	@echo "Cleaning sub-modules..."
+	@for mod in $(PYTHON_MODULES); do \
+		if [ -f "$$mod/Makefile" ]; then \
+			echo "  Cleaning $$mod..."; \
+			$(MAKE) -C $$mod clean 2>/dev/null || true; \
+		fi; \
+	done
 	@echo "Clean complete"
 
 clean-dist:
