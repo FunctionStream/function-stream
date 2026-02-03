@@ -13,7 +13,9 @@
 use serde::{Deserialize, Serialize};
 
 fn default_wasm_cache_dir() -> String {
-    ".cache/wasm-incremental".to_string()
+    crate::config::paths::get_wasm_cache_dir()
+        .to_string_lossy()
+        .to_string()
 }
 
 fn default_true() -> bool {

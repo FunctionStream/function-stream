@@ -42,8 +42,7 @@ static GLOBAL_PYTHON_CONFIG: OnceLock<RwLock<PythonConfig>> = OnceLock::new();
 /// - `Ok(())`: Initialization successful
 /// - `Err(...)`: Configuration already set or validation failed
 pub fn initialize_config(config: &PythonConfig) -> anyhow::Result<()> {
-    // Validate wasm_path exists
-    let wasm_path = PathBuf::from(&config.wasm_path);
+    let wasm_path = config.wasm_path_buf();
     if !wasm_path.exists() {
         return Err(anyhow::anyhow!(
             "Python WASM file not found at: {}. Please ensure the file exists or build it first with: cd python/functionstream-runtime && make build",

@@ -1150,6 +1150,7 @@ dependencies = [
  "parking_lot",
  "pest",
  "pest_derive",
+ "proctitle",
  "protocol",
  "rdkafka",
  "rocksdb",
@@ -2459,6 +2460,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9695f8df41bb4f3d222c95a67532365f569318332d03d5f3f67f37b20e6ebdf0"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "proctitle"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "924cd8a0de90723d63fed19c5035ea129913a0bc998b37686a67f1eaf6a2aab5"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "winapi",
 ]
 
 [[package]]

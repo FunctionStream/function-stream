@@ -14,8 +14,6 @@ mod data_set;
 mod execute_result;
 mod show_functions_result;
 
-pub use crate::storage::task::FunctionInfo;
-pub use arrow_array::RecordBatch;
 pub use data_set::{DataSet, empty_record_batch};
 pub use execute_result::ExecuteResult;
 pub use show_functions_result::ShowFunctionsResult;

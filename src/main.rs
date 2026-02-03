@@ -129,8 +129,8 @@ fn spawn_server_thread(config: config::GlobalConfig) -> Result<ServerHandle> {
 }
 
 fn setup_environment() -> Result<config::GlobalConfig> {
-    let data_dir = config::find_or_create_data_dir().context("Data directory setup failed")?;
-    let conf_dir = config::find_or_create_conf_dir().context("Config directory setup failed")?;
+    let data_dir = config::get_data_dir();
+    let conf_dir = config::get_conf_dir();
 
     let config = if let Some(path) = config::find_config_file("config.yaml") {
         log::info!("Loading configuration from: {}", path.display());
@@ -167,6 +167,7 @@ fn main() -> Result<()> {
         .map_err(|e| anyhow::anyhow!(e))
         .context("Configuration validation failed")?;
 
+    proctitle::set_title(format!("function-stream-{}", config.service.service_id));
     log::info!(
         "Starting Service [Name: {}, ID: {}] on {}:{}",
         config.service.service_name,

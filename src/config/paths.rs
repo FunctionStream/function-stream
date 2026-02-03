@@ -10,94 +10,136 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::OnceLock;
 
-fn get_exe_dir() -> Option<PathBuf> {
-    std::env::current_exe().ok()?.parent().map(PathBuf::from)
+pub const ENV_HOME: &str = "FUNCTION_STREAM_HOME";
+pub const ENV_CONF: &str = "FUNCTION_STREAM_CONF";
+
+static PROJECT_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn get_project_root() -> &'static PathBuf {
+    PROJECT_ROOT
+        .get_or_init(|| resolve_project_root().expect("CRITICAL: Failed to resolve project root"))
 }
 
-fn search_paths<F>(mut check: F) -> Option<PathBuf>
-where
-    F: FnMut(&Path) -> bool,
-{
-    let cwd = PathBuf::from(".");
-    if check(cwd.as_path()) {
-        return Some(cwd);
+fn resolve_project_root() -> std::io::Result<PathBuf> {
+    if let Ok(home) = env::var(ENV_HOME) {
+        let path = PathBuf::from(&home);
+        return path.canonicalize().or(Ok(path));
     }
 
-    if let Some(exe_dir) = get_exe_dir() {
-        if check(exe_dir.as_path()) {
-            return Some(exe_dir);
-        }
+    if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        return Ok(PathBuf::from(manifest_dir));
+    }
 
-        if let Some(parent) = exe_dir.parent() {
-            if check(parent) {
-                return Some(parent.to_path_buf());
+    if let Ok(exe_path) = env::current_exe() {
+        let mut path = exe_path;
+        path.pop();
+        if path.file_name().map_or(false, |n| n == "bin") {
+            path.pop();
+        }
+        return Ok(path);
+    }
+
+    env::current_dir()
+}
+
+pub fn resolve_path(input_path: &str) -> PathBuf {
+    let path = PathBuf::from(input_path);
+    if path.is_absolute() {
+        path
+    } else {
+        get_project_root().join(path)
+    }
+}
+
+fn to_absolute_path(input_path: &str) -> PathBuf {
+    resolve_path(input_path)
+}
+
+pub fn find_config_file(config_name: &str) -> Option<PathBuf> {
+    if let Ok(conf_env) = env::var(ENV_CONF) {
+        let path = to_absolute_path(&conf_env);
+        if path.is_file() {
+            return Some(path);
+        }
+        if path.is_dir() {
+            let full = path.join(config_name);
+            if full.exists() {
+                return Some(full);
             }
+        }
+    }
+
+    let search_paths = vec![
+        get_conf_dir().join(config_name),
+        get_project_root().join(config_name),
+    ];
+
+    for path in search_paths {
+        if path.exists() {
+            return Some(path.canonicalize().unwrap_or(path));
         }
     }
 
     None
 }
 
-pub fn find_config_file(config_name: &str) -> Option<PathBuf> {
-    let config_path = PathBuf::from(config_name);
-    if config_path.exists() {
-        return Some(config_path);
+fn get_or_create_sub_dir(name: &str) -> PathBuf {
+    let dir = get_project_root().join(name);
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
     }
-
-    search_paths(|base| base.join(config_name).exists())
-        .or_else(|| {
-            get_exe_dir().and_then(|exe_dir| {
-                exe_dir.parent().and_then(|parent| {
-                    let path = parent.join("conf").join(config_name);
-                    path.exists().then_some(path)
-                })
-            })
-        })
-        .or_else(|| {
-            std::env::var("FUNCTION_STREAM_CONFIG")
-                .ok()
-                .map(PathBuf::from)
-                .filter(|p| p.exists())
-        })
+    dir
 }
 
-fn find_or_create_dir(dir_name: &str) -> std::io::Result<PathBuf> {
-    let cwd_dir = PathBuf::from(dir_name);
-    if cwd_dir.exists() {
-        return Ok(cwd_dir);
-    }
-
-    if let Some(exe_dir) = get_exe_dir() {
-        if let Some(parent) = exe_dir.parent() {
-            let dir = parent.join(dir_name);
-            if dir.exists() {
-                return Ok(dir);
-            }
-            fs::create_dir_all(&dir)?;
-            return Ok(dir);
-        }
-
-        let dir = exe_dir.join(dir_name);
-        if dir.exists() {
-            return Ok(dir);
-        }
-    }
-
-    fs::create_dir_all(&cwd_dir)?;
-    Ok(cwd_dir)
+pub fn get_data_dir() -> PathBuf {
+    get_or_create_sub_dir("data")
 }
 
-pub fn find_or_create_data_dir() -> std::io::Result<PathBuf> {
-    find_or_create_dir("data")
+pub fn get_logs_dir() -> PathBuf {
+    get_or_create_sub_dir("logs")
 }
 
-pub fn find_or_create_conf_dir() -> std::io::Result<PathBuf> {
-    find_or_create_dir("conf")
+pub fn get_conf_dir() -> PathBuf {
+    get_or_create_sub_dir("conf")
 }
 
-pub fn find_or_create_logs_dir() -> std::io::Result<PathBuf> {
-    find_or_create_dir("logs")
+pub fn get_task_dir() -> PathBuf {
+    get_or_create_sub_dir("data/task")
+}
+
+pub fn get_state_dir() -> PathBuf {
+    get_or_create_sub_dir("data/state")
+}
+
+pub fn get_state_dir_for_base(base: &str) -> PathBuf {
+    resolve_path(base).join("state")
+}
+
+pub fn get_app_log_path() -> PathBuf {
+    get_logs_dir().join("app.log")
+}
+
+pub fn get_log_path(relative: &str) -> PathBuf {
+    get_logs_dir().join(relative)
+}
+
+pub fn get_wasm_cache_dir() -> PathBuf {
+    get_or_create_sub_dir("data/cache/wasm-incremental")
+}
+
+pub fn get_python_cache_dir() -> PathBuf {
+    get_or_create_sub_dir("data/cache/python-runner")
+}
+
+pub fn get_python_wasm_path() -> PathBuf {
+    get_python_cache_dir().join("functionstream-python-runtime.wasm")
+}
+
+pub fn get_python_cwasm_path() -> PathBuf {
+    get_python_cache_dir().join("functionstream-python-runtime.cwasm")
 }

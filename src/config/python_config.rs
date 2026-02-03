@@ -13,24 +13,19 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Default directory for Python runtime cache (wasm and cwasm files)
-pub const DEFAULT_PYTHON_CACHE_DIR: &str = "data/cache/python-runner";
-
-/// Default Python WASM filename
 pub const DEFAULT_PYTHON_WASM_FILENAME: &str = "functionstream-python-runtime.wasm";
-
-/// Default Python compiled WASM cache filename
 pub const DEFAULT_PYTHON_CWASM_FILENAME: &str = "functionstream-python-runtime.cwasm";
 
 fn default_python_wasm_path() -> String {
-    format!(
-        "{}/{}",
-        DEFAULT_PYTHON_CACHE_DIR, DEFAULT_PYTHON_WASM_FILENAME
-    )
+    super::paths::get_python_wasm_path()
+        .to_string_lossy()
+        .to_string()
 }
 
 fn default_python_cache_dir() -> String {
-    DEFAULT_PYTHON_CACHE_DIR.to_string()
+    super::paths::get_python_cache_dir()
+        .to_string_lossy()
+        .to_string()
 }
 
 fn default_true() -> bool {
@@ -39,19 +34,12 @@ fn default_true() -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PythonConfig {
-    /// Path to the Python WASM file
-    /// Default: data/cache/python-runner/functionstream-python-runtime.wasm
     #[serde(default = "default_python_wasm_path")]
     pub wasm_path: String,
 
-    /// Cache directory for precompiled components
-    /// Default: data/cache/python-runner
     #[serde(default = "default_python_cache_dir")]
     pub cache_dir: String,
 
-    /// Enable component caching
-    /// If true, precompiled components will be cached to speed up subsequent loads
-    /// Default: true
     #[serde(default = "default_true")]
     pub enable_cache: bool,
 }
@@ -67,18 +55,15 @@ impl Default for PythonConfig {
 }
 
 impl PythonConfig {
-    /// Get the WASM file path as PathBuf
     pub fn wasm_path_buf(&self) -> PathBuf {
-        PathBuf::from(&self.wasm_path)
+        super::paths::resolve_path(&self.wasm_path)
     }
 
-    /// Get the cache directory as PathBuf
     pub fn cache_dir_buf(&self) -> PathBuf {
-        PathBuf::from(&self.cache_dir)
+        super::paths::resolve_path(&self.cache_dir)
     }
 
-    /// Get the precompiled component cache file path (cwasm)
     pub fn cwasm_cache_path(&self) -> PathBuf {
-        self.cache_dir_buf().join(DEFAULT_PYTHON_CWASM_FILENAME)
+        super::paths::resolve_path(&self.cache_dir).join(DEFAULT_PYTHON_CWASM_FILENAME)
     }
 }

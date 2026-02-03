@@ -10,10 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TaskManager - Task manager
-//
-// Manages wasm-based task lifecycle, including configuration parsing, file persistence, concurrency control and state transitions.
-
 use crate::config::GlobalConfig;
 use crate::runtime::common::ComponentState;
 use crate::runtime::processor::wasm::thread_pool::{GlobalTaskThreadPool, TaskThreadPool};
@@ -27,14 +23,11 @@ use crate::storage::task::{
 use anyhow::{Context, Result, anyhow};
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::fs;
 use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct TaskManager {
-    /// In-memory task registry
     tasks: Arc<RwLock<HashMap<String, Arc<RwLock<Box<dyn TaskLifecycle>>>>>>,
-    /// Shared runtime components
     state_storage_server: Arc<StateStorageServer>,
     task_storage: Arc<dyn TaskStorage>,
     thread_pool: Arc<TaskThreadPool>,
@@ -42,14 +35,12 @@ pub struct TaskManager {
 
 static GLOBAL_INSTANCE: OnceLock<Arc<TaskManager>> = OnceLock::new();
 
-// --- 1. Initialization & Singleton Management ---
 impl TaskManager {
     pub fn init(config: &GlobalConfig) -> Result<()> {
         if GLOBAL_INSTANCE.get().is_some() {
             return Err(anyhow!("TaskManager singleton already initialized"));
         }
 
-        // Initialize global resources
         let _ = GlobalTaskThreadPool::get_or_create();
 
         let manager =
@@ -75,11 +66,6 @@ impl TaskManager {
     fn init_internal(config: &GlobalConfig) -> Result<Self> {
         let thread_pool = GlobalTaskThreadPool::get_or_create();
 
-        // Ensure state storage directory exists
-        if let Some(ref base_dir) = config.state_storage.base_dir {
-            fs::create_dir_all(base_dir).context("Failed to create state storage directory")?;
-        }
-
         let state_storage_server = Arc::new(
             StateStorageServer::new(config.state_storage.clone())
                 .map_err(|e| anyhow!("Failed to create state storage server: {}", e))?,
@@ -96,7 +82,6 @@ impl TaskManager {
     }
 }
 
-// --- 2. Public API: Task Lifecycle Control ---
 impl TaskManager {
     pub fn register_task(&self, config_bytes: &[u8], module_bytes: &[u8]) -> Result<()> {
         let task = TaskBuilder::from_yaml_config(config_bytes, module_bytes)
@@ -180,7 +165,6 @@ impl TaskManager {
     pub fn remove_task(&self, name: &str) -> Result<()> {
         let task_handle = self.get_task_handle(name)?;
 
-        // Ensure task is closed before removal
         {
             let mut handle = task_handle.write();
             if !handle.get_state().is_closed() {
@@ -190,7 +174,6 @@ impl TaskManager {
             }
         }
 
-        // Cleanup from memory and storage
         self.tasks.write().remove(name);
         self.task_storage
             .delete_task(name)
@@ -208,7 +191,6 @@ impl TaskManager {
     }
 }
 
-// --- 3. Public API: Observation & Discovery ---
 impl TaskManager {
     pub fn list_all_functions(&self) -> Vec<FunctionInfo> {
         let tasks = self.tasks.read();
@@ -235,7 +217,6 @@ impl TaskManager {
     }
 }
 
-// --- 4. Internal Helpers & Recovery ---
 impl TaskManager {
     fn register_task_internal(
         &self,

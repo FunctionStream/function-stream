@@ -110,7 +110,7 @@ fn initialize_wasm_cache(config: &GlobalConfig) -> Result<()> {
     crate::runtime::processor::wasm::wasm_cache::set_cache_config(
         crate::runtime::processor::wasm::wasm_cache::WasmCacheConfig {
             enabled: config.wasm.enable_cache,
-            cache_dir: std::path::PathBuf::from(&config.wasm.cache_dir),
+            cache_dir: crate::config::paths::resolve_path(&config.wasm.cache_dir),
             max_size: config.wasm.max_cache_size,
         },
     );

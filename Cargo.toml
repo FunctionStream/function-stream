@@ -51,6 +51,7 @@ parking_lot = "0.12"
 arrow-array = "52"
 arrow-ipc = "52"
 arrow-schema = "52"
+proctitle = "0.1"
 
 [features]
 default = ["incremental-cache", "python"]

@@ -4,6 +4,7 @@
 **/.vscode/
 **/.venv/**
 **/dist/**
+logs/**
 
 **.wasm
 

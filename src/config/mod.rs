@@ -22,7 +22,11 @@ pub mod wasm_config;
 pub use global_config::GlobalConfig;
 pub use loader::load_global_config;
 pub use log_config::LogConfig;
+#[allow(unused_imports)]
 pub use paths::{
-    find_config_file, find_or_create_conf_dir, find_or_create_data_dir, find_or_create_logs_dir,
+    ENV_CONF, ENV_HOME, find_config_file, get_app_log_path, get_conf_dir, get_data_dir,
+    get_log_path, get_logs_dir, get_project_root, get_python_cache_dir, get_python_cwasm_path,
+    get_python_wasm_path, get_state_dir, get_state_dir_for_base, get_task_dir, get_wasm_cache_dir,
+    resolve_path,
 };
 pub use python_config::PythonConfig;

@@ -21,37 +21,25 @@ PACKAGE_DIR := packages
 PYTHON_WASM_PATH := python/functionstream-runtime/target/functionstream-python-runtime.wasm
 PYTHON_WASM_NAME := functionstream-python-runtime.wasm
 
-.PHONY: help clean clean-dist build build-full build-lite package package-full package-lite package-all test install docker-build docker-up fmt fmt-check
+.PHONY: help clean clean-dist build build-full build-lite package package-full package-lite package-all test install
 
 help:
 	@echo "Function Stream Build System"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  fmt            - Format code with cargo fmt"
-	@echo "  fmt-check      - Check code format without modifying"
 	@echo "  build          - Build full version (debug)"
 	@echo "  build-full     - Build full release version"
 	@echo "  build-lite     - Build lite release version (no Python)"
 	@echo "  package-full   - Build and package full version (.zip and .tar.gz)"
 	@echo "  package-lite   - Build and package lite version (.zip and .tar.gz)"
 	@echo "  package-all    - Build and package both versions"
-	@echo "  docker-build   - Run package-full then docker-compose build"
-	@echo "  docker-up     - Run package-full then docker-compose up -d"
-	@echo "  test          - Run tests"
+	@echo "  test           - Run tests"
 	@echo "  clean          - Clean all build artifacts (cargo + dist)"
 	@echo "  clean-dist     - Clean distribution directory only"
 	@echo ""
 	@echo "Version: $(VERSION)"
 	@echo "Architecture: $(ARCH)"
 	@echo "OS: $(OS)"
-
-fmt:
-	@echo "Formatting code..."
-	cargo fmt --all
-
-fmt-check:
-	@echo "Checking code format..."
-	cargo fmt --all -- --check
 
 clean:
 	@echo "Cleaning build artifacts..."
@@ -231,14 +219,6 @@ package-all: clean-dist package-full package-lite
 	@echo ""
 	@echo "All packages created:"
 	@ls -lh $(DIST_BASE)/$(PACKAGE_DIR)/
-
-docker-build: package-full
-	@echo "Building Docker image (using dist/packages/function-stream-$(VERSION).zip)..."
-	docker-compose build
-
-docker-up: package-full
-	@echo "Building and starting containers..."
-	docker-compose up -d --build
 
 test:
 	cargo test
