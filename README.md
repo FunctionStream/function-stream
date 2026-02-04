@@ -119,9 +119,8 @@ We provide a robust shell script to manage the server process, capable of handli
 
 | Option              | Description                                                                 |
 |---------------------|-----------------------------------------------------------------------------|
-| `-d`, `--daemon`    | Run the server in the background (Daemon mode). Writes PID to `function-stream.pid`. |
+| `-d`, `--daemon`    | Run the server in the background (Daemon mode).                             |
 | `-c`, `--config <path>` | Specify a custom configuration file path.                              |
-| `-p`, `--pidfile <path>` | Specify a custom location for the PID file.                           |
 | `-D <KEY>=<VALUE>`  | Inject environment variables (e.g., `-D RUST_LOG=debug`).                   |
 
 **Examples:**
@@ -132,16 +131,16 @@ We provide a robust shell script to manage the server process, capable of handli
    ./bin/start-server.sh
    ```
 
-2. **Daemon Mode (Production)** — Runs the server in the background, redirects stdout/stderr to `logs/`, and manages the PID file.
+2. **Daemon Mode (Production)** — Runs the server in the background, redirects stdout/stderr to `logs/`.
 
    ```bash
    ./bin/start-server.sh -d
    ```
 
-3. **Custom Configuration** — Start with a specific config file and write the PID to a specific location.
+3. **Custom Configuration** — Start with a specific config file.
 
    ```bash
-   ./bin/start-server.sh -d -c /etc/function-stream/prod.yaml -p /var/run/fs.pid
+   ./bin/start-server.sh -d -c /etc/function-stream/prod.yaml
    ```
 
 4. **Environment Variable Injection** — Inject environment variables without modifying the script or system env.

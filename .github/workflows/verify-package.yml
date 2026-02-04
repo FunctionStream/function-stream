@@ -79,11 +79,3 @@ jobs:
           ls -lh dist/*.tar.gz dist/*.zip
           test -f dist/function-stream-*.tar.gz
           test -f dist/function-stream-*-lite.tar.gz
-
-      - name: Upload Packages
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: dist-packages
-          path: dist/*.tar.gz
-          retention-days: 1

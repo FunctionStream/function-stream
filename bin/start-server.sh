@@ -72,7 +72,6 @@ export FUNCTION_STREAM_HOME="$APP_HOME"
 export FUNCTION_STREAM_CONF="${FUNCTION_STREAM_CONF:-$APP_HOME/conf/config.yaml}"
 export FUNCTION_STREAM_LOG_DIR="${FUNCTION_STREAM_LOG_DIR:-$APP_HOME/logs}"
 
-PID_FILE="$APP_HOME/function-stream.pid"
 BINARY="$BIN_DIR/function-stream"
 FOREGROUND="true"
 APP_ARGS=""
@@ -86,10 +85,6 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -c|--config)
       export FUNCTION_STREAM_CONF="$2"
-      shift 2
-      ;;
-    -p|--pidfile)
-      PID_FILE="$2"
       shift 2
       ;;
     -d|--daemon)
@@ -116,15 +111,6 @@ mkdir -p "$FUNCTION_STREAM_LOG_DIR"
 
 check_port_usage "$FUNCTION_STREAM_CONF" || exit 1
 
-if [ "$FOREGROUND" = "false" ] && [ -f "$PID_FILE" ]; then
-  if kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-    echo "[ERROR] Already running (PID: $(cat "$PID_FILE"))"
-    exit 1
-  else
-    rm -f "$PID_FILE"
-  fi
-fi
-
 echo "------------------------------------------------"
 echo "Starting Function Stream"
 echo "Home:   $FUNCTION_STREAM_HOME"
@@ -140,8 +126,6 @@ else
 
   nohup "$BINARY" --config "$FUNCTION_STREAM_CONF" $APP_ARGS > "$LOG_OUT" 2> "$LOG_ERR" &
   PID=$!
-
-  echo "$PID" > "$PID_FILE"
 
   sleep 1
   if kill -0 "$PID" >/dev/null 2>&1; then
