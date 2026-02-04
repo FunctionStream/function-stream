@@ -36,12 +36,13 @@ COPY scripts ./scripts
 COPY python ./python
 COPY wit ./wit
 
-RUN bash scripts/setup.sh
-
 COPY protocol ./protocol
 COPY cli ./cli
 COPY src ./src
 COPY conf ./conf
+
+RUN bash scripts/setup.sh
+
 
 RUN make build
 
