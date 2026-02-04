@@ -51,6 +51,13 @@ log_step "API_INSTALL"
 "$PIP" install -q -e "$PYTHON_ROOT/functionstream-api"
 log_ok
 
+log_step "CLIENT_CODEGEN"
+"$PIP" install -q grpcio-tools mypy-protobuf
+mkdir -p "$PYTHON_ROOT/functionstream-client/src/fs_client/_proto"
+touch "$PYTHON_ROOT/functionstream-client/src/fs_client/_proto/__init__.py"
+(cd "$PYTHON_ROOT/functionstream-client" && "$PYTHON_BIN" scripts/codegen.py)
+log_ok
+
 log_step "CLIENT_INSTALL"
 "$PIP" install -q -e "$PYTHON_ROOT/functionstream-client"
 log_ok
@@ -63,12 +70,6 @@ log_step "API_BUILD"
 (cd "$PYTHON_ROOT/functionstream-api" && "$PYTHON_BIN" -m build > /dev/null)
 "$VENV_BIN/twine" check "$PYTHON_ROOT/functionstream-api/dist"/* > /dev/null 2>&1 || true
 log_ok
-
-log_step "CLIENT_CODEGEN"
-"$PIP" install -q grpcio-tools mypy-protobuf
-mkdir -p "$PYTHON_ROOT/functionstream-client/src/fs_client/_proto"
-touch "$PYTHON_ROOT/functionstream-client/src/fs_client/_proto/__init__.py"
-(cd "$PYTHON_ROOT/functionstream-client" && "$PYTHON_BIN" scripts/codegen.py)
 
 log_step "CLIENT_BUILD"
 (cd "$PYTHON_ROOT/functionstream-client" && "$PYTHON_BIN" -m build > /dev/null)
