@@ -56,6 +56,9 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Generate Protocol
+        run: cargo build --package protocol
+
       - name: Check Formatting
         run: cargo fmt --all -- --check
 
