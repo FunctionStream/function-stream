@@ -83,6 +83,7 @@ dist: build
 	@rm -rf "$(FULL_PATH)"
 	@mkdir -p "$(FULL_PATH)/"{bin,conf,logs,data/cache/python-runner}
 	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(FULL_PATH)/bin/"
+	@cp bin/* "$(FULL_PATH)/bin/"
 	@cp "$(WASM_SOURCE)" "$(FULL_PATH)/data/cache/python-runner/"
 	@cp conf/config.yaml "$(FULL_PATH)/conf/config.yaml" 2>/dev/null || true
 	@cp LICENSE README.md "$(FULL_PATH)/" 2>/dev/null || true
@@ -97,6 +98,7 @@ dist-lite: build-lite
 	@rm -rf "$(LITE_PATH)"
 	@mkdir -p "$(LITE_PATH)/"{bin,conf,logs,data}
 	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(LITE_PATH)/bin/"
+	@cp bin/* "$(LITE_PATH)/bin/"
 	@cp conf/config.yaml "$(LITE_PATH)/conf/config.yaml" 2>/dev/null || true
 	@cp LICENSE README.md "$(LITE_PATH)/" 2>/dev/null || true
 	@printf "Version: $(VERSION) (Lite)\nBuild: $(ARCH)-$(OS)\nDate: $(DATE)\n" > "$(LITE_PATH)/manifest.txt"

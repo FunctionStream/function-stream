@@ -40,8 +40,6 @@ We provide an automated script to set up the Python virtual environment (`.venv`
 make env
 ```
 
-This runs `scripts/setup.sh`, creating a `.venv` and installing the API, Client, and Runtime builder tools.
-
 ### 2. Build & Run Server
 
 Start the control plane in release mode. The build system will automatically compile the Python WASM runtime if it's missing.
@@ -49,8 +47,6 @@ Start the control plane in release mode. The build system will automatically com
 ```bash
 cargo run --release --bin function-stream
 ```
-
-Logs are output to `logs/app.log` (JSON format) and stdout. Default configuration is loaded from `conf/config.yaml`.
 
 ### 3. Run CLI
 
@@ -66,19 +62,15 @@ The project uses a standard Makefile to handle compilation and distribution. Art
 
 ### Build Targets
 
-| Command        | Description                                      |
-|----------------|--------------------------------------------------|
-| `make`         | Alias for `make build`. Compiles Rust binaries and Python WASM runtime. |
-| `make build`   | Builds the Full version (Rust + Python Support). |
-| `make build-lite` | Builds the Lite version (Rust only, no Python dependencies). |
+| Command          | Description                                                       |
+|------------------|------------------------------------------------------------------|
+| `make`           | Alias for `make build`. Compiles Rust binaries and Python WASM runtime. |
+| `make build`     | Builds the Full version (Rust + Python Support).                   |
+| `make build-lite`| Builds the Lite version (Rust only, no Python dependencies).     |
 
 ### Distribution (Packaging)
 
 To create production-ready archives (`.tar.gz` and `.zip`), use the dist targets.
-
-#### 1. Function Stream (Full)
-
-Includes the Rust binary, Python WASM runtime, configuration, and default directory structure.
 
 ```bash
 make dist
@@ -88,9 +80,7 @@ make dist
 * `dist/function-stream-<version>.tar.gz`
 * `dist/function-stream-<version>.zip`
 
-#### 2. Function Stream Lite
-
-A lightweight distribution without the Python WASM runtime or dependencies.
+For a lightweight distribution without Python WASM runtime:
 
 ```bash
 make dist-lite
@@ -100,13 +90,73 @@ make dist-lite
 * `dist/function-stream-<version>-lite.tar.gz`
 * `dist/function-stream-<version>-lite.zip`
 
+### Running the Distribution
+
+After extracting the release package, you will see the following structure:
+
+```text
+function-stream-<version>/
+├── bin/
+│   ├── function-stream      # The compiled binary
+│   └── start-server.sh      # Production startup script
+├── conf/
+│   └── config.yaml          # Default configuration
+├── data/                    # Runtime data (e.g. WASM cache)
+└── logs/                    # Log directory (created on runtime)
+```
+
+### Using the Startup Script (bin/start-server.sh)
+
+We provide a robust shell script to manage the server process, capable of handling environment injection, daemonization, and configuration overrides.
+
+**Usage:**
+
+```bash
+./bin/start-server.sh [options]
+```
+
+**Options:**
+
+| Option              | Description                                                                 |
+|---------------------|-----------------------------------------------------------------------------|
+| `-d`, `--daemon`    | Run the server in the background (Daemon mode). Writes PID to `function-stream.pid`. |
+| `-c`, `--config <path>` | Specify a custom configuration file path.                              |
+| `-p`, `--pidfile <path>` | Specify a custom location for the PID file.                           |
+| `-D <KEY>=<VALUE>`  | Inject environment variables (e.g., `-D RUST_LOG=debug`).                   |
+
+**Examples:**
+
+1. **Foreground Mode (Docker / Debugging)** — Runs the server in the current shell. Useful for containerized environments (Kubernetes/Docker) or debugging.
+
+   ```bash
+   ./bin/start-server.sh
+   ```
+
+2. **Daemon Mode (Production)** — Runs the server in the background, redirects stdout/stderr to `logs/`, and manages the PID file.
+
+   ```bash
+   ./bin/start-server.sh -d
+   ```
+
+3. **Custom Configuration** — Start with a specific config file and write the PID to a specific location.
+
+   ```bash
+   ./bin/start-server.sh -d -c /etc/function-stream/prod.yaml -p /var/run/fs.pid
+   ```
+
+4. **Environment Variable Injection** — Inject environment variables without modifying the script or system env.
+
+   ```bash
+   ./bin/start-server.sh -d -D RUST_LOG=debug
+   ```
+
 ## Maintenance
 
-| Command        | Description                                                      |
-|----------------|------------------------------------------------------------------|
-| `make clean`   | Deep clean. Removes `target/`, `dist/`, `.venv/`, and all temporary artifacts. |
-| `make env-clean` | Removes only the Python virtual environment and Python artifacts. |
-| `make test`    | Runs the Rust test suite.                                        |
+| Command          | Description                                                                 |
+|------------------|-----------------------------------------------------------------------------|
+| `make clean`     | Deep clean. Removes `target/`, `dist/`, `.venv/`, and all temporary artifacts. |
+| `make env-clean` | Removes only the Python virtual environment and Python artifacts.           |
+| `make test`      | Runs the Rust test suite.                                                    |
 
 ## Configuration
 

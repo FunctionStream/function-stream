@@ -40,11 +40,12 @@ COPY protocol ./protocol
 COPY cli ./cli
 COPY src ./src
 COPY conf ./conf
+COPY bin ./bin
 
 RUN bash scripts/setup.sh
 
 
-RUN make build
+RUN make dist
 
 FROM debian:bookworm-slim AS runtime
 
@@ -62,6 +63,10 @@ RUN groupadd -g 1000 appgroup && \
 WORKDIR /app
 
 COPY --from=builder --chown=appuser:appgroup /workspace/target/release/function-stream bin/
+COPY --from=builder --chown=appuser:appgroup /workspace/bin/start-server.sh bin/
+
+RUN chmod +x bin/function-stream bin/start-server.sh
+
 COPY --from=builder --chown=appuser:appgroup \
     /workspace/python/functionstream-runtime/target/functionstream-python-runtime.wasm \
     data/cache/python-runner/
@@ -73,4 +78,5 @@ USER appuser
 EXPOSE 8080
 VOLUME ["/app/data", "/app/logs"]
 
-ENTRYPOINT ["./bin/function-stream"]
+ENTRYPOINT ["./bin/start-server.sh"]
+CMD ["--config", "conf/config.yaml"]
