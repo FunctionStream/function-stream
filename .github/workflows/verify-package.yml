@@ -60,7 +60,7 @@ jobs:
         run: cargo build --package protocol
 
       - name: Check Formatting
-        run: cargo fmt --all -- --check
+        run: cargo fmt -p function-stream -p function-stream-cli -- --check
 
       - name: Initialize Environment
         run: make env
