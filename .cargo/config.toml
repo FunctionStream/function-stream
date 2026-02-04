@@ -1,3 +1,0 @@
-[env]
-CMAKE = "/opt/homebrew/bin/cmake"
-PATH = { value = "/opt/homebrew/bin:${PATH}", force = false }
