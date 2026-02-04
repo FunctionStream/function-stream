@@ -1,58 +1,75 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# syntax=docker/dockerfile:1
+
 FROM rust:1-bookworm AS builder
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    cmake=3.25.1-1 \
-    make \
-    clang=1:14.0-55.7~deb12u1 \
-    libclang-dev=1:14.0-55.7~deb12u1 \
-    python3 \
-    python3-venv \
-    python3-pip \
+    cmake \
+    clang \
+    libclang-dev \
     libssl-dev \
     pkg-config \
     libsasl2-dev \
     protobuf-compiler \
+    python3-full \
+    python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PROTOC=/usr/bin/protoc
+WORKDIR /workspace
 
-WORKDIR /build
+COPY Cargo.toml Cargo.lock Makefile ./
+COPY scripts ./scripts
+COPY python ./python
+COPY wit ./wit
 
-COPY Makefile Cargo.toml Cargo.lock ./
+RUN bash scripts/setup.sh
+
 COPY protocol ./protocol
 COPY cli ./cli
 COPY src ./src
-COPY python ./python
-COPY wit ./wit
-COPY conf/config.yaml ./
+COPY conf ./conf
 
-RUN python3 -m venv .venv \
-    && .venv/bin/pip install --upgrade pip \
-    && .venv/bin/pip install componentize-py \
-    && .venv/bin/pip install -e python/functionstream-api
-
-WORKDIR /build/python/functionstream-runtime
 RUN make build
-WORKDIR /build
 
-RUN make build-full
+FROM debian:bookworm-slim AS runtime
 
-FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates=20230311+deb12u1 \
-    libssl3=3.0.18-1~deb12u2 \
+    ca-certificates \
+    libssl3 \
+    libsasl2-2 \
     && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 1000 appgroup && \
+    useradd -m -u 1000 -g appgroup -s /bin/bash appuser
 
 WORKDIR /app
 
-COPY --from=builder /build/target/release/function-stream bin/
-COPY --from=builder \
-    /build/python/functionstream-runtime/target/functionstream-python-runtime.wasm \
+COPY --from=builder --chown=appuser:appgroup /workspace/target/release/function-stream bin/
+COPY --from=builder --chown=appuser:appgroup \
+    /workspace/python/functionstream-runtime/target/functionstream-python-runtime.wasm \
     data/cache/python-runner/
-COPY conf/config.yaml conf/
+COPY --from=builder --chown=appuser:appgroup /workspace/conf/config.yaml conf/
+
 RUN sed -i 's/127.0.0.1/0.0.0.0/' conf/config.yaml
 
+USER appuser
 EXPOSE 8080
+VOLUME ["/app/data", "/app/logs"]
 
 ENTRYPOINT ["./bin/function-stream"]

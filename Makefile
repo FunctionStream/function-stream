@@ -29,6 +29,10 @@ LITE_NAME   := $(APP_NAME)-$(VERSION)-lite
 FULL_PATH   := $(DIST_ROOT)/$(FULL_NAME)
 LITE_PATH   := $(DIST_ROOT)/$(LITE_NAME)
 
+DOCKER_REPO := functionstream
+DOCKER_TAG  := $(VERSION)
+IMAGE_NAME  := $(DOCKER_REPO):$(DOCKER_TAG)
+
 C_R := \033[0;31m
 C_G := \033[0;32m
 C_B := \033[0;34m
@@ -38,7 +42,7 @@ C_0 := \033[0m
 log = @printf "$(C_B)[-]$(C_0) %-15s %s\n" "$(1)" "$(2)"
 success = @printf "$(C_G)[✔]$(C_0) %s\n" "$(1)"
 
-.PHONY: all help build build-lite dist dist-lite clean test env env-clean .check-env .build-wasm
+.PHONY: all help build build-lite dist dist-lite clean test env env-clean docker docker-run docker-push .check-env .build-wasm
 
 all: build
 
@@ -52,6 +56,9 @@ help:
 	@echo "  env         Setup Python dev environment (.venv)"
 	@echo "  test        Run unit tests"
 	@echo "  clean       Cleanup all artifacts"
+	@echo "  docker      Build Docker image"
+	@echo "  docker-run  Run container (port 8080, mount logs)"
+	@echo "  docker-push Push image to registry"
 	@echo ""
 	@echo "  Version: $(VERSION) | Arch: $(ARCH) | OS: $(OS)"
 
@@ -122,3 +129,20 @@ clean:
 .check-env:
 	@command -v cargo >/dev/null 2>&1 || { printf "$(C_R)[X] Cargo not found$(C_0)\n"; exit 1; }
 	@command -v python3 >/dev/null 2>&1 || { printf "$(C_R)[X] Python3 not found$(C_0)\n"; exit 1; }
+
+docker:
+	$(call log,DOCKER,Building Image: $(IMAGE_NAME))
+	@docker build -t $(IMAGE_NAME) .
+	$(call success,Image Ready: $(IMAGE_NAME))
+
+docker-run:
+	$(call log,DOCKER,Starting Container)
+	@docker run --rm -it \
+		-p 8080:8080 \
+		-v $(CURDIR)/logs:/app/logs \
+		$(IMAGE_NAME)
+
+docker-push:
+	$(call log,DOCKER,Pushing $(IMAGE_NAME))
+	@docker push $(IMAGE_NAME)
+	$(call success,Push Complete)
