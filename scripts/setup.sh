@@ -23,7 +23,6 @@ PIP="$VENV_BIN/pip"
 PYTHON_BIN="$VENV_BIN/python"
 PYTHON_ROOT="$ROOT_DIR/python"
 
-C_R="\033[0;31m"
 C_G="\033[0;32m"
 C_Y="\033[0;33m"
 C_B="\033[0;34m"

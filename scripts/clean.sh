@@ -20,10 +20,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$ROOT_DIR/.venv"
 PYTHON_ROOT="$ROOT_DIR/python"
 
-C_R="\033[0;31m"
 C_G="\033[0;32m"
 C_B="\033[0;34m"
-C_Y="\033[0;33m"
 C_0="\033[0m"
 
 log_act() { printf "${C_B} [-]${C_0} %s\n" "$1"; }

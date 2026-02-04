@@ -74,7 +74,7 @@ export FUNCTION_STREAM_LOG_DIR="${FUNCTION_STREAM_LOG_DIR:-$APP_HOME/logs}"
 
 BINARY="$BIN_DIR/function-stream"
 FOREGROUND="true"
-APP_ARGS=""
+APP_ARGS=()
 
 if [ ! -f "$BINARY" ]; then
   echo "[ERROR] Binary not found at $BINARY"
@@ -97,11 +97,11 @@ while [ $# -gt 0 ]; do
       ;;
     --)
       shift
-      APP_ARGS="$APP_ARGS $*"
+      APP_ARGS+=("$@")
       break
       ;;
     *)
-      APP_ARGS="$APP_ARGS $1"
+      APP_ARGS+=("$1")
       shift
       ;;
   esac
@@ -119,12 +119,12 @@ echo "Mode:   $( [ "$FOREGROUND" = "true" ] && echo "Foreground" || echo "Daemon
 echo "------------------------------------------------"
 
 if [ "$FOREGROUND" = "true" ]; then
-  exec "$BINARY" --config "$FUNCTION_STREAM_CONF" $APP_ARGS
+  exec "$BINARY" --config "$FUNCTION_STREAM_CONF" "${APP_ARGS[@]}"
 else
   LOG_OUT="$FUNCTION_STREAM_LOG_DIR/stdout.log"
   LOG_ERR="$FUNCTION_STREAM_LOG_DIR/stderr.log"
 
-  nohup "$BINARY" --config "$FUNCTION_STREAM_CONF" $APP_ARGS > "$LOG_OUT" 2> "$LOG_ERR" &
+  nohup "$BINARY" --config "$FUNCTION_STREAM_CONF" "${APP_ARGS[@]}" > "$LOG_OUT" 2> "$LOG_ERR" &
   PID=$!
 
   sleep 1
