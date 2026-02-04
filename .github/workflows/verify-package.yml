@@ -56,11 +56,11 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Initialize Environment
-        run: make env
-
       - name: Check Formatting
         run: cargo fmt --all -- --check
+
+      - name: Initialize Environment
+        run: make env
 
       - name: Run Clippy
         run: cargo clippy --all-targets --workspace -- -D warnings
