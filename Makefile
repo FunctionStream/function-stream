@@ -10,233 +10,115 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-VERSION := $(shell grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/' | tr -d ' ')
-ARCH := $(shell uname -m)
-OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
-BUILD_DIR := target/release
-DIST_BASE := dist
-FULL_DIR := $(DIST_BASE)/function-stream-$(VERSION)
-LITE_DIR := $(DIST_BASE)/function-stream-$(VERSION)-lite
-PACKAGE_DIR := packages
-PYTHON_WASM_PATH := python/functionstream-runtime/target/functionstream-python-runtime.wasm
-PYTHON_WASM_NAME := functionstream-python-runtime.wasm
 
-.PHONY: help clean clean-dist build build-full build-lite package package-full package-lite package-all test install
+APP_NAME    := function-stream
+VERSION     := $(shell grep '^version' Cargo.toml | head -1 | awk -F '"' '{print $$2}')
+ARCH        := $(shell uname -m)
+OS          := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+DATE        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+DIST_ROOT   := dist
+TARGET_DIR  := target/release
+PYTHON_ROOT := python
+WASM_SOURCE := $(PYTHON_ROOT)/functionstream-runtime/target/functionstream-python-runtime.wasm
+
+PYTHON_EXEC := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
+FULL_NAME   := $(APP_NAME)-$(VERSION)
+LITE_NAME   := $(APP_NAME)-$(VERSION)-lite
+FULL_PATH   := $(DIST_ROOT)/$(FULL_NAME)
+LITE_PATH   := $(DIST_ROOT)/$(LITE_NAME)
+
+C_R := \033[0;31m
+C_G := \033[0;32m
+C_B := \033[0;34m
+C_Y := \033[0;33m
+C_0 := \033[0m
+
+log = @printf "$(C_B)[-]$(C_0) %-15s %s\n" "$(1)" "$(2)"
+success = @printf "$(C_G)[✔]$(C_0) %s\n" "$(1)"
+
+.PHONY: all help build build-lite dist dist-lite clean test env env-clean .check-env .build-wasm
+
+all: build
 
 help:
-	@echo "Function Stream Build System"
+	@echo "Usage: make [TARGET]"
 	@echo ""
-	@echo "Available targets:"
-	@echo "  build          - Build full version (debug)"
-	@echo "  build-full     - Build full release version"
-	@echo "  build-lite     - Build lite release version (no Python)"
-	@echo "  package-full   - Build and package full version (.zip and .tar.gz)"
-	@echo "  package-lite   - Build and package lite version (.zip and .tar.gz)"
-	@echo "  package-all    - Build and package both versions"
-	@echo "  test           - Run tests"
-	@echo "  clean          - Clean all (cargo, dist, data, logs, sub-modules)"
-	@echo "  clean-dist     - Clean distribution directory only"
+	@echo "  build       Build full release (Rust + Python WASM)"
+	@echo "  build-lite  Build lightweight release (Rust only)"
+	@echo "  dist        Package full build (.tar.gz / .zip)"
+	@echo "  dist-lite   Package lite build (.tar.gz / .zip)"
+	@echo "  env         Setup Python dev environment (.venv)"
+	@echo "  test        Run unit tests"
+	@echo "  clean       Cleanup all artifacts"
 	@echo ""
-	@echo "Version: $(VERSION)"
-	@echo "Architecture: $(ARCH)"
-	@echo "OS: $(OS)"
+	@echo "  Version: $(VERSION) | Arch: $(ARCH) | OS: $(OS)"
 
-# Sub-modules with their own Makefiles
-PYTHON_MODULES := python/functionstream-api python/functionstream-client python/functionstream-runtime
+build: .check-env .build-wasm
+	$(call log,BUILD,Rust Full Features)
+	@cargo build --release --features python --quiet
+	$(call success,Target: $(TARGET_DIR)/$(APP_NAME))
 
-clean:
-	@echo "Cleaning build artifacts..."
-	cargo clean
-	@rm -rf $(DIST_BASE)
-	@echo "Cleaning data directory..."
-	@rm -rf data
-	@echo "Cleaning logs directory..."
-	@rm -rf logs
-	@echo "Cleaning sub-modules..."
-	@for mod in $(PYTHON_MODULES); do \
-		if [ -f "$$mod/Makefile" ]; then \
-			echo "  Cleaning $$mod..."; \
-			$(MAKE) -C $$mod clean 2>/dev/null || true; \
-		fi; \
-	done
-	@echo "Clean complete"
+build-lite: .check-env
+	$(call log,BUILD,Rust Lite No Python)
+	@cargo build --release --no-default-features --features incremental-cache --quiet
+	$(call success,Target: $(TARGET_DIR)/$(APP_NAME))
 
-clean-dist:
-	@echo "Cleaning distribution directory..."
-	@rm -rf $(DIST_BASE)
-	@echo "Distribution directory cleaned"
+.build-wasm:
+	$(call log,WASM,Building Python Runtime using $(PYTHON_EXEC))
+	@cd $(PYTHON_ROOT)/functionstream-runtime && \
+		PYTHONPATH=../functionstream-api ../../$(PYTHON_EXEC) build.py > /dev/null
+	@[ -f "$(WASM_SOURCE)" ] || (printf "$(C_R)[X] WASM Build Failed$(C_0)\n" && exit 1)
 
-build:
-	cargo build
+dist: build
+	$(call log,DIST,Layout: $(FULL_PATH))
+	@rm -rf "$(FULL_PATH)"
+	@mkdir -p "$(FULL_PATH)/"{bin,conf,logs,data/cache/python-runner}
+	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(FULL_PATH)/bin/"
+	@cp "$(WASM_SOURCE)" "$(FULL_PATH)/data/cache/python-runner/"
+	@cp conf/config.yaml "$(FULL_PATH)/conf/config.yaml" 2>/dev/null || true
+	@cp LICENSE README.md "$(FULL_PATH)/" 2>/dev/null || true
+	@printf "Version: $(VERSION)\nBuild: $(ARCH)-$(OS)\nDate: $(DATE)\n" > "$(FULL_PATH)/manifest.txt"
+	$(call log,ARCHIVE,Compressing to $(DIST_ROOT)/...)
+	@cd $(DIST_ROOT) && tar -czf "$(FULL_NAME).tar.gz" "$(FULL_NAME)"
+	@cd $(DIST_ROOT) && zip -rq "$(FULL_NAME).zip" "$(FULL_NAME)"
+	$(call success,Ready: $(DIST_ROOT)/$(FULL_NAME).tar.gz)
 
-build-full:
-	@echo "Building full release version..."
-	@if [ ! -f $(PYTHON_WASM_PATH) ]; then \
-		echo "Python WASM file not found. Building it first..."; \
-		cd python/functionstream-runtime && $(MAKE) build || { \
-			echo "Error: Failed to build Python WASM file"; \
-			exit 1; \
-		}; \
-	fi
-	cargo build --release --features python
-	@echo "Full version build complete"
-
-build-lite:
-	@echo "Building lite release version (no Python)..."
-	cargo build --release --no-default-features --features incremental-cache
-	@echo "Lite version build complete"
-
-prepare-dist-full:
-	@echo "Preparing full distribution..."
-	@if [ -d $(FULL_DIR) ]; then \
-		echo "Removing existing full distribution directory..."; \
-		rm -rf $(FULL_DIR); \
-	fi
-	@mkdir -p $(FULL_DIR)/bin
-	@mkdir -p $(FULL_DIR)/conf
-	@mkdir -p $(FULL_DIR)/data/cache/python-runner
-	@mkdir -p $(FULL_DIR)/logs
-	@if [ -f $(BUILD_DIR)/function-stream ]; then \
-		cp $(BUILD_DIR)/function-stream $(FULL_DIR)/bin/ && \
-		chmod +x $(FULL_DIR)/bin/function-stream && \
-		echo "Copied function-stream binary"; \
-	fi
-	@if [ -f LICENSE ]; then \
-		cp LICENSE $(FULL_DIR)/ && \
-		echo "Copied LICENSE file"; \
-	else \
-		echo "Warning: LICENSE file not found"; \
-	fi
-	@if [ -f README.md ]; then \
-		cp README.md $(FULL_DIR)/ && \
-		echo "Copied README.md"; \
-	fi
-	@if [ -f $(PYTHON_WASM_PATH) ]; then \
-		cp $(PYTHON_WASM_PATH) $(FULL_DIR)/data/cache/python-runner/$(PYTHON_WASM_NAME) && \
-		echo "Copied Python WASM file to data/cache/python-runner/"; \
-	else \
-		echo "Warning: Python WASM file not found at $(PYTHON_WASM_PATH)"; \
-		echo "Warning: Full version requires Python WASM file. Please build it first:"; \
-		echo "  cd python/functionstream-runtime && make build"; \
-	fi
-	@if [ -f config.yaml ]; then \
-		cp config.yaml $(FULL_DIR)/conf/config.yaml && \
-		cp config.yaml $(FULL_DIR)/conf/config.yaml.template && \
-		echo "Copied config.yaml and config.yaml.template"; \
-	else \
-		echo "Warning: config.yaml not found, creating default..."; \
-		echo "service:" > $(FULL_DIR)/conf/config.yaml; \
-		echo "  service_id: \"default-service\"" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "  service_name: \"function-stream\"" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "  version: \"$(VERSION)\"" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "  host: \"127.0.0.1\"" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "  port: 8080" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "  debug: false" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "logging:" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "  level: info" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "  format: json" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "python:" >> $(FULL_DIR)/conf/config.yaml; \
-		echo "  wasm_path: data/cache/python-runner/$(PYTHON_WASM_NAME)" >> $(FULL_DIR)/conf/config.yaml; \
-		cp $(FULL_DIR)/conf/config.yaml $(FULL_DIR)/conf/config.yaml.template; \
-	fi
-	@echo "FULL VERSION - $(VERSION)" > $(FULL_DIR)/VERSION.txt
-	@echo "Build date: $$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $(FULL_DIR)/VERSION.txt
-	@echo "Architecture: $(ARCH)" >> $(FULL_DIR)/VERSION.txt
-	@echo "OS: $(OS)" >> $(FULL_DIR)/VERSION.txt
-	@if [ -f $(PYTHON_WASM_PATH) ]; then \
-		echo "Python WASM: Included (data/cache/python-runner/$(PYTHON_WASM_NAME))" >> $(FULL_DIR)/VERSION.txt; \
-	fi
-
-prepare-dist-lite:
-	@echo "Preparing lite distribution..."
-	@if [ -d $(LITE_DIR) ]; then \
-		echo "Removing existing lite distribution directory..."; \
-		rm -rf $(LITE_DIR); \
-	fi
-	@mkdir -p $(LITE_DIR)/bin
-	@mkdir -p $(LITE_DIR)/conf
-	@mkdir -p $(LITE_DIR)/data
-	@mkdir -p $(LITE_DIR)/logs
-	@if [ -f $(BUILD_DIR)/function-stream ]; then \
-		cp $(BUILD_DIR)/function-stream $(LITE_DIR)/bin/ && \
-		chmod +x $(LITE_DIR)/bin/function-stream && \
-		echo "Copied function-stream binary"; \
-	fi
-	@if [ -f LICENSE ]; then \
-		cp LICENSE $(LITE_DIR)/ && \
-		echo "Copied LICENSE file"; \
-	else \
-		echo "Warning: LICENSE file not found"; \
-	fi
-	@if [ -f README.md ]; then \
-		cp README.md $(LITE_DIR)/ && \
-		echo "Copied README.md"; \
-	fi
-	@if [ -f config.yaml ]; then \
-		cp config.yaml $(LITE_DIR)/conf/config.yaml && \
-		cp config.yaml $(LITE_DIR)/conf/config.yaml.template && \
-		echo "Copied config.yaml and config.yaml.template"; \
-	else \
-		echo "Warning: config.yaml not found, creating default..."; \
-		echo "service:" > $(LITE_DIR)/conf/config.yaml; \
-		echo "  service_id: \"default-service\"" >> $(LITE_DIR)/conf/config.yaml; \
-		echo "  service_name: \"function-stream\"" >> $(LITE_DIR)/conf/config.yaml; \
-		echo "  version: \"$(VERSION)\"" >> $(LITE_DIR)/conf/config.yaml; \
-		echo "  host: \"127.0.0.1\"" >> $(LITE_DIR)/conf/config.yaml; \
-		echo "  port: 8080" >> $(LITE_DIR)/conf/config.yaml; \
-		echo "  debug: false" >> $(LITE_DIR)/conf/config.yaml; \
-		echo "logging:" >> $(LITE_DIR)/conf/config.yaml; \
-		echo "  level: info" >> $(LITE_DIR)/conf/config.yaml; \
-		echo "  format: json" >> $(LITE_DIR)/conf/config.yaml; \
-		cp $(LITE_DIR)/conf/config.yaml $(LITE_DIR)/conf/config.yaml.template; \
-	fi
-	@echo "LITE VERSION - $(VERSION)" > $(LITE_DIR)/VERSION.txt
-	@echo "Build date: $$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $(LITE_DIR)/VERSION.txt
-	@echo "Architecture: $(ARCH)" >> $(LITE_DIR)/VERSION.txt
-	@echo "OS: $(OS)" >> $(LITE_DIR)/VERSION.txt
-	@echo "Note: Python processor support is disabled" >> $(LITE_DIR)/VERSION.txt
-
-package-full: build-full prepare-dist-full
-	@if [ ! -f $(FULL_DIR)/LICENSE ]; then \
-		echo "Error: LICENSE file is required for distribution but not found"; \
-		echo "Apache License 2.0 requires LICENSE file to be included in distribution"; \
-		exit 1; \
-	fi
-	@if [ ! -f $(FULL_DIR)/data/cache/python-runner/$(PYTHON_WASM_NAME) ]; then \
-		echo "Error: Python WASM file is required for full version but not found in distribution"; \
-		echo "Please ensure Python WASM is built before packaging"; \
-		exit 1; \
-	fi
-	@echo "Packaging full version..."
-	@mkdir -p $(DIST_BASE)/$(PACKAGE_DIR)
-	@cd $(DIST_BASE) && \
-		zip -r $(PACKAGE_DIR)/function-stream-$(VERSION).zip function-stream-$(VERSION) && \
-		tar -czf $(PACKAGE_DIR)/function-stream-$(VERSION).tar.gz function-stream-$(VERSION)
-	@echo "Full version packages created:"
-	@ls -lh $(DIST_BASE)/$(PACKAGE_DIR)/function-stream-$(VERSION).*
-
-package-lite: build-lite prepare-dist-lite
-	@if [ ! -f $(LITE_DIR)/LICENSE ]; then \
-		echo "Error: LICENSE file is required for distribution but not found"; \
-		echo "Apache License 2.0 requires LICENSE file to be included in distribution"; \
-		exit 1; \
-	fi
-	@echo "Packaging lite version..."
-	@mkdir -p $(DIST_BASE)/$(PACKAGE_DIR)
-	@cd $(DIST_BASE) && \
-		zip -r $(PACKAGE_DIR)/function-stream-$(VERSION)-lite.zip function-stream-$(VERSION)-lite && \
-		tar -czf $(PACKAGE_DIR)/function-stream-$(VERSION)-lite.tar.gz function-stream-$(VERSION)-lite
-	@echo "Lite version packages created:"
-	@ls -lh $(DIST_BASE)/$(PACKAGE_DIR)/function-stream-$(VERSION)-lite.*
-
-package-all: clean-dist package-full package-lite
-	@echo ""
-	@echo "All packages created:"
-	@ls -lh $(DIST_BASE)/$(PACKAGE_DIR)/
+dist-lite: build-lite
+	$(call log,DIST,Layout: $(LITE_PATH))
+	@rm -rf "$(LITE_PATH)"
+	@mkdir -p "$(LITE_PATH)/"{bin,conf,logs,data}
+	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(LITE_PATH)/bin/"
+	@cp conf/config.yaml "$(LITE_PATH)/conf/config.yaml" 2>/dev/null || true
+	@cp LICENSE README.md "$(LITE_PATH)/" 2>/dev/null || true
+	@printf "Version: $(VERSION) (Lite)\nBuild: $(ARCH)-$(OS)\nDate: $(DATE)\n" > "$(LITE_PATH)/manifest.txt"
+	$(call log,ARCHIVE,Compressing to $(DIST_ROOT)/...)
+	@cd $(DIST_ROOT) && tar -czf "$(LITE_NAME).tar.gz" "$(LITE_NAME)"
+	@cd $(DIST_ROOT) && zip -rq "$(LITE_NAME).zip" "$(LITE_NAME)"
+	$(call success,Ready: $(DIST_ROOT)/$(LITE_NAME).tar.gz)
 
 test:
-	cargo test
+	$(call log,TEST,Running cargo tests)
+	@cargo test --quiet
 
-install: build-full prepare-dist-full
-	@echo "Installation complete"
-	@echo "Distribution directory: $(FULL_DIR)"
+env:
+	$(call log,ENV,Initializing Python environment)
+	@./scripts/setup.sh
+	$(call success,Environment Ready)
+
+env-clean:
+	$(call log,CLEAN,Python artifacts)
+	@./scripts/clean.sh
+	$(call success,Done)
+
+clean:
+	$(call log,CLEAN,Removing all artifacts)
+	@cargo clean
+	@rm -rf $(DIST_ROOT) data logs
+	@./scripts/clean.sh 2>/dev/null || true
+	$(call success,Done)
+
+.check-env:
+	@command -v cargo >/dev/null 2>&1 || { printf "$(C_R)[X] Cargo not found$(C_0)\n"; exit 1; }
+	@command -v python3 >/dev/null 2>&1 || { printf "$(C_R)[X] Python3 not found$(C_0)\n"; exit 1; }
