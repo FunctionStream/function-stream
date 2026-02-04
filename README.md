@@ -2,8 +2,6 @@
 
 **Function Stream** is a high-performance, event-driven stream processing framework built in Rust. It provides a modular runtime to orchestrate serverless-style processing functions compiled to **WebAssembly (WASM)**, supporting functions written in **Go, Python, and Rust**.
 
-
-
 ## Key Features
 
 * **Event-Driven WASM Runtime**: Executes polyglot functions (Go, Python, Rust) with near-native performance and sandboxed isolation.
@@ -12,147 +10,112 @@
 
 ## Repository Layout
 
-```
+```text
 function-stream/
-├── src/                     # Core runtime, coordinator, server, config, SQL parser
-├── protocol/                # Protocol Buffers definitions and generated gRPC code
-├── cli/cli/                 # SQL REPL client
+├── src/                     # Core runtime, coordinator, server, config
+├── protocol/                # Protocol Buffers definitions
+├── cli/                     # SQL REPL client
 ├── conf/                    # Default runtime configuration
-├── examples/                # Sample processors and integration examples
-├── python/                  # Python API, client, and runtime WASM generator
-├── Makefile                 # Build and packaging automation
+├── examples/                # Sample processors
+├── python/                  # Python API, Client, and Runtime (WASM)
+├── scripts/                 # Build and environment automation scripts
+├── Makefile                 # Unified build system
 └── Cargo.toml               # Workspace manifest
 ```
 
 ## Prerequisites
 
-- Rust toolchain (recommend `rustup` with stable >= 1.77)
-- `protoc` (Protocol Buffers compiler) for generating gRPC bindings
-- Build tooling for `rdkafka`: `cmake`, `pkg-config`, and OpenSSL headers
-- Optional (for Python processors and full package):
-  - Python 3.9+ with `venv`
-  - `componentize-py` (installed via `make install-deps` inside `python/functionstream-runtime`)
+* **Rust Toolchain**: Stable >= 1.77 (via rustup).
+* **Python 3.9+**: Required for building the Python WASM runtime.
+* **Protoc**: Protocol Buffers compiler (for generating gRPC bindings).
+* **Build Tools**: cmake, pkg-config, OpenSSL headers (for rdkafka).
 
-## Build From Source
+## Quick Start (Local Development)
 
-Clone the repository and install dependencies:
+### 1. Initialize Environment
 
-```
-git clone https://github.com/<your-org>/function-stream.git
-cd function-stream
-cargo fetch
+We provide an automated script to set up the Python virtual environment (`.venv`), install dependencies, and compile necessary sub-modules.
+
+```bash
+make env
 ```
 
-Build targets:
+This runs `scripts/setup.sh`, creating a `.venv` and installing the API, Client, and Runtime builder tools.
 
-- Debug build (fast iteration):
-  ```
-  cargo build
-  ```
-- Release build with Python support (default features):
-  ```
-  cargo build --release
-  ```
-- Release build without Python (lite):
-  ```
-  cargo build --release --no-default-features --features incremental-cache
-  ```
+### 2. Build & Run Server
 
-To regenerate Protocol Buffers, rerun the build; `tonic-build` automatically recompiles when `protocol/proto/function_stream.proto` changes.
+Start the control plane in release mode. The build system will automatically compile the Python WASM runtime if it's missing.
 
-## Run Locally
-
-### Prepare configuration
-
-1. Review `conf/config.yaml` and adjust service host/port, logging, state storage, and Python runtime settings as needed.
-2. Optionally point `FUNCTION_STREAM_CONF` to a custom configuration file or directory:
-   ```
-   export FUNCTION_STREAM_CONF=/path/to/config.yaml
-   ```
-3. Ensure `data/` and `logs/` directories are writable (they are created automatically on startup).
-
-### Start the control plane
-
-```
+```bash
 cargo run --release --bin function-stream
 ```
 
-The server logs appear under `logs/app.log` (default JSON format). Stop the service with `Ctrl+C`.
+Logs are output to `logs/app.log` (JSON format) and stdout. Default configuration is loaded from `conf/config.yaml`.
 
-### Use the SQL CLI
+### 3. Run CLI
 
-Run the interactive CLI from another terminal to issue SQL statements:
+In a separate terminal, launch the SQL REPL:
 
-```
-cargo run -p function-stream-cli -- --ip 127.0.0.1 --port 8080
-```
-
-The CLI connects to the gRPC endpoint exposed by the server.
-
-### Try sample processors
-
-- Python processor example:
-  ```
-  cd examples/python-processor
-  python main.py
-  ```
-- Kafka integration tests and Go processor examples are under `examples/`.
-
-## Packaging
-
-Packaging is orchestrated by the top-level `Makefile`. Outputs are placed in `dist/`.
-
-### Full distribution (includes Python runtime)
-
-1. Create the virtual environment once:
-   ```
-   python3 -m venv .venv
-   source .venv/bin/activate
-   make -C python/functionstream-runtime install-deps build
-   deactivate
-   ```
-2. Build and package:
-   ```
-   make package-full
-   ```
-
-Artifacts:
-- `dist/function-stream-<version>/` directory containing binaries, config, logs/data skeletons, README, and Python WASM runtime.
-- `dist/packages/function-stream-<version>.zip` and `.tar.gz`.
-
-### Lite distribution (Rust-only)
-
-```
-make package-lite
+```bash
+cargo run -p function-stream-cli -- --host 127.0.0.1 --port 8080
 ```
 
-Artifacts:
-- `dist/function-stream-<version>-lite/` directory with binaries and configs.
-- `dist/packages/function-stream-<version>-lite.zip` and `.tar.gz`.
+## Building & Packaging
 
-### Package all variants
+The project uses a standard Makefile to handle compilation and distribution. Artifacts are generated in the `dist/` directory.
 
+### Build Targets
+
+| Command        | Description                                      |
+|----------------|--------------------------------------------------|
+| `make`         | Alias for `make build`. Compiles Rust binaries and Python WASM runtime. |
+| `make build`   | Builds the Full version (Rust + Python Support). |
+| `make build-lite` | Builds the Lite version (Rust only, no Python dependencies). |
+
+### Distribution (Packaging)
+
+To create production-ready archives (`.tar.gz` and `.zip`), use the dist targets.
+
+#### 1. Function Stream (Full)
+
+Includes the Rust binary, Python WASM runtime, configuration, and default directory structure.
+
+```bash
+make dist
 ```
-make package-all
+
+**Output:**
+* `dist/function-stream-<version>.tar.gz`
+* `dist/function-stream-<version>.zip`
+
+#### 2. Function Stream Lite
+
+A lightweight distribution without the Python WASM runtime or dependencies.
+
+```bash
+make dist-lite
 ```
 
-The script cleans previous `dist/` contents, produces both full and lite packages, and lists generated archives.
+**Output:**
+* `dist/function-stream-<version>-lite.tar.gz`
+* `dist/function-stream-<version>-lite.zip`
 
-## Testing
+## Maintenance
 
-Run the Rust test suite:
+| Command        | Description                                                      |
+|----------------|------------------------------------------------------------------|
+| `make clean`   | Deep clean. Removes `target/`, `dist/`, `.venv/`, and all temporary artifacts. |
+| `make env-clean` | Removes only the Python virtual environment and Python artifacts. |
+| `make test`    | Runs the Rust test suite.                                        |
 
+## Configuration
+
+The runtime behavior is controlled by `conf/config.yaml`. You can override the configuration location using environment variables:
+
+```bash
+export FUNCTION_STREAM_CONF=/path/to/custom/config.yaml
 ```
-cargo test
-```
-
-Python components expose their own `Makefile` targets (for example, `make -C python/functionstream-runtime test` if defined).
-
-## Environment Variables
-
-- `FUNCTION_STREAM_HOME`: Overrides the project root for resolving data/log directories.
-- `FUNCTION_STREAM_CONF`: Points to a configuration file or directory containing `config.yaml`.
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See `LICENSE` for details.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
