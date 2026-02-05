@@ -81,7 +81,7 @@ build-lite: .check-env
 dist: build
 	$(call log,DIST,Layout: $(FULL_PATH))
 	@rm -rf "$(FULL_PATH)"
-	@mkdir -p "$(FULL_PATH)/"{bin,conf,logs,data/cache/python-runner}
+	@mkdir -p "$(FULL_PATH)/bin" "$(FULL_PATH)/conf" "$(FULL_PATH)/logs" "$(FULL_PATH)/data/cache/python-runner"
 	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(FULL_PATH)/bin/"
 	@cp bin/* "$(FULL_PATH)/bin/"
 	@cp "$(WASM_SOURCE)" "$(FULL_PATH)/data/cache/python-runner/"
@@ -96,7 +96,7 @@ dist: build
 dist-lite: build-lite
 	$(call log,DIST,Layout: $(LITE_PATH))
 	@rm -rf "$(LITE_PATH)"
-	@mkdir -p "$(LITE_PATH)/"{bin,conf,logs,data}
+	@mkdir -p "$(LITE_PATH)/bin" "$(LITE_PATH)/conf" "$(LITE_PATH)/logs" "$(LITE_PATH)/data"
 	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(LITE_PATH)/bin/"
 	@cp bin/* "$(LITE_PATH)/bin/"
 	@cp conf/config.yaml "$(LITE_PATH)/conf/config.yaml" 2>/dev/null || true
