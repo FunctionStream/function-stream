@@ -80,5 +80,6 @@ jobs:
       - name: Verify Artifacts
         run: |
           ls -lh dist/*.tar.gz dist/*.zip
-          test -f dist/function-stream-*.tar.gz
-          test -f dist/function-stream-*-lite.tar.gz
+          VERSION=$(grep '^version' Cargo.toml | head -1 | awk -F '"' '{print $2}')
+          test -f "dist/function-stream-${VERSION}.tar.gz"
+          test -f "dist/function-stream-${VERSION}-lite.tar.gz"
