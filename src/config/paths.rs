@@ -38,7 +38,7 @@ fn resolve_project_root() -> std::io::Result<PathBuf> {
     if let Ok(exe_path) = env::current_exe() {
         let mut path = exe_path;
         path.pop();
-        if path.file_name().map_or(false, |n| n == "bin") {
+        if path.file_name().is_some_and(|n| n == "bin") {
             path.pop();
         }
         return Ok(path);

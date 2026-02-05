@@ -12,6 +12,8 @@
 
 use crate::storage::state_backend::error::BackendError;
 
+pub type StateIteratorItem = Result<Option<(Vec<u8>, Vec<u8>)>, BackendError>;
+
 /// State store iterator
 pub trait StateIterator: Send + Sync {
     /// Check if there is a next element
@@ -28,7 +30,7 @@ pub trait StateIterator: Send + Sync {
     /// - `Ok(Some((key, value)))`: next key-value pair
     /// - `Ok(None)`: no more data
     /// - `Err(BackendError)`: iteration failed
-    fn next(&mut self) -> Result<Option<(Vec<u8>, Vec<u8>)>, BackendError>;
+    fn next(&mut self) -> StateIteratorItem;
 }
 
 /// State store interface

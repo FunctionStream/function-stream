@@ -13,6 +13,7 @@
 use std::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub enum StreamElementType {
     Record,
     Watermark,
@@ -21,6 +22,7 @@ pub enum StreamElementType {
     WatermarkStatus,
 }
 
+#[allow(dead_code)]
 pub trait StreamElement: Send + Sync + Debug {
     fn get_type(&self) -> StreamElementType;
 }

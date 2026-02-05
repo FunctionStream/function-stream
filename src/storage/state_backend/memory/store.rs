@@ -15,6 +15,9 @@ use crate::storage::state_backend::store::{StateIterator, StateStore};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+type KeyValuePair = (Vec<u8>, Vec<u8>);
+type KeyValuePairs = Arc<Mutex<Vec<KeyValuePair>>>;
+
 /// Memory state store
 pub struct MemoryStateStore {
     /// Internal storage
@@ -151,7 +154,7 @@ impl StateStore for MemoryStateStore {
 
 /// Memory state iterator
 struct MemoryStateIterator {
-    pairs: Arc<Mutex<Vec<(Vec<u8>, Vec<u8>)>>>,
+    pairs: KeyValuePairs,
     index: Arc<Mutex<usize>>,
 }
 

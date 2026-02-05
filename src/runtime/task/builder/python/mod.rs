@@ -138,10 +138,10 @@ impl PythonBuilder {
         // Get python wasm engine and component for reuse
         let (custom_engine, custom_component) = get_python_engine_and_component().map_err(
             |e| -> Box<dyn std::error::Error + Send> {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to get python wasm engine and component: {}", e),
-                ))
+                Box::new(std::io::Error::other(format!(
+                    "Failed to get python wasm engine and component: {}",
+                    e
+                )))
             },
         )?;
 

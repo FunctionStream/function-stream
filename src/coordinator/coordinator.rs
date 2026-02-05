@@ -25,6 +25,12 @@ use super::execution_context::ExecutionContext;
 
 pub struct Coordinator {}
 
+impl Default for Coordinator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Coordinator {
     pub fn new() -> Self {
         Self {}

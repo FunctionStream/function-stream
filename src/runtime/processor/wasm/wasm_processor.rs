@@ -320,7 +320,8 @@ impl WasmProcessor for WasmProcessorImpl {
             })?;
 
         // Update current watermark
-        if self.current_watermark.is_none() || timestamp > self.current_watermark.unwrap() {
+        #[allow(clippy::unnecessary_map_or)]
+        if self.current_watermark.map_or(true, |w| timestamp > w) {
             self.current_watermark = Some(timestamp);
             log::debug!(
                 "WasmProcessor '{}' processed watermark: {} from input {}",
@@ -334,7 +335,7 @@ impl WasmProcessor for WasmProcessorImpl {
                 self.name,
                 timestamp,
                 input_index,
-                self.current_watermark.unwrap()
+                self.current_watermark.unwrap_or(0)
             );
         }
 
@@ -604,7 +605,7 @@ impl WasmProcessor for WasmProcessorImpl {
                     .init_config
                     .get("class_name")
                     .or_else(|| self.init_config.get("processor_class"))
-                    .map(|s| s.clone())
+                    .cloned()
                     .unwrap_or_else(|| self.name.clone());
 
                 processor

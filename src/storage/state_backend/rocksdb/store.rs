@@ -226,7 +226,7 @@ impl RocksDBStateIterator {
 
 impl StateIterator for RocksDBStateIterator {
     fn has_next(&mut self) -> Result<bool, BackendError> {
-        Ok(self.buffer.as_slice().len() > 0)
+        Ok(!self.buffer.as_slice().is_empty())
     }
 
     fn next(&mut self) -> Result<Option<(Vec<u8>, Vec<u8>)>, BackendError> {

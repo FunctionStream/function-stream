@@ -59,6 +59,7 @@ impl Executor {
 }
 
 impl PlanVisitor for Executor {
+    #[allow(clippy::redundant_closure_call)]
     fn visit_create_function(
         &self,
         plan: &CreateFunctionPlan,
@@ -98,6 +99,7 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
+    #[allow(clippy::redundant_closure_call)]
     fn visit_drop_function(
         &self,
         plan: &DropFunctionPlan,
@@ -148,23 +150,25 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
+    #[allow(clippy::redundant_closure_call)]
     fn visit_show_functions(
         &self,
         _plan: &ShowFunctionsPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let result = (|| -> Result<ExecuteResult, ExecuteError> {
+        let result = {
             let functions = self.task_manager.list_all_functions();
 
             Ok(ExecuteResult::ok_with_data(
                 format!("Found {} task(s)", functions.len()),
                 ShowFunctionsResult::new(functions),
             ))
-        })();
+        };
 
         PlanVisitorResult::Execute(result)
     }
 
+    #[allow(clippy::redundant_closure_call)]
     fn visit_create_python_function(
         &self,
         plan: &CreatePythonFunctionPlan,

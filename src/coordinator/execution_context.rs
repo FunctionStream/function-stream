@@ -16,12 +16,14 @@ use std::time::{Duration, Instant};
 static EXECUTION_ID_GENERATOR: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ExecutionContext {
     pub execution_id: u64,
     pub start_time: Instant,
     pub timeout: Duration,
 }
 
+#[allow(dead_code)]
 impl ExecutionContext {
     pub fn new() -> Self {
         Self {

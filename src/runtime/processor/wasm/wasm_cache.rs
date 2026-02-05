@@ -116,28 +116,29 @@ impl FileCacheStore {
         if let Ok(entries) = fs::read_dir(&self.cache_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() && path.extension() != Some(std::ffi::OsStr::new("tmp")) {
-                    if let Ok(metadata) = fs::metadata(&path) {
-                        let size = metadata.len();
-                        let modified = metadata
-                            .modified()
-                            .unwrap_or_else(|_| SystemTime::now())
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
+                if path.is_file()
+                    && path.extension() != Some(std::ffi::OsStr::new("tmp"))
+                    && let Ok(metadata) = fs::metadata(&path)
+                {
+                    let size = metadata.len();
+                    let modified = metadata
+                        .modified()
+                        .unwrap_or_else(|_| SystemTime::now())
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
 
-                        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                            if let Some(key) = self.filename_to_key(file_name) {
-                                state.entries.put(
-                                    key,
-                                    CacheEntry {
-                                        size,
-                                        last_accessed: modified,
-                                    },
-                                );
-                                total_size += size;
-                            }
-                        }
+                    if let Some(file_name) = path.file_name().and_then(|n| n.to_str())
+                        && let Some(key) = self.filename_to_key(file_name)
+                    {
+                        state.entries.put(
+                            key,
+                            CacheEntry {
+                                size,
+                                last_accessed: modified,
+                            },
+                        );
+                        total_size += size;
                     }
                 }
             }
@@ -264,15 +265,15 @@ impl CacheStore for FileCacheStore {
             self.evict_until_under_limit(value_size);
         }
 
-        if let Some(parent) = file_path.parent() {
-            if let Err(e) = fs::create_dir_all(parent) {
-                log::warn!(
-                    "Failed to create cache directory {}: {}",
-                    parent.display(),
-                    e
-                );
-                return false;
-            }
+        if let Some(parent) = file_path.parent()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            log::warn!(
+                "Failed to create cache directory {}: {}",
+                parent.display(),
+                e
+            );
+            return false;
         }
 
         let write_result = fs::File::create(&temp_path)

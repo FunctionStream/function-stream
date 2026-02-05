@@ -11,6 +11,7 @@
 // limitations under the License.
 
 mod analyze;
+#[allow(clippy::module_inception)]
 mod coordinator;
 mod dataset;
 mod execution;

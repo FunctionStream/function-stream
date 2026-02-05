@@ -60,7 +60,7 @@ fn handle_create_stmt(
         .ok_or_else(|| ParseError::new("Missing WITH clause"))?;
 
     Ok(Box::new(
-        CreateFunction::from_properties(properties).map_err(|e| ParseError::from(e))?,
+        CreateFunction::from_properties(properties).map_err(ParseError::from)?,
     ))
 }
 
@@ -167,13 +167,13 @@ mod tests {
     fn test_create_function() {
         let sql =
             "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
-        let stmt = SqlParser::parse(sql).unwrap();
+        let _stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
     fn test_create_function_minimal() {
         let sql = "CREATE FUNCTION WITH ('function_path'='./processor.wasm')";
-        let stmt = SqlParser::parse(sql).unwrap();
+        let _stmt = SqlParser::parse(sql).unwrap();
     }
 
     // Note: SQL only supports Path mode, not Bytes mode
@@ -182,55 +182,55 @@ mod tests {
     #[test]
     fn test_drop_function() {
         let sql = "DROP FUNCTION my_task";
-        let stmt = SqlParser::parse(sql).unwrap();
+        let _stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
     fn test_start_function() {
         let sql = "START FUNCTION my_task";
-        let stmt = SqlParser::parse(sql).unwrap();
+        let _stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
     fn test_stop_function() {
         let sql = "STOP FUNCTION my_task";
-        let stmt = SqlParser::parse(sql).unwrap();
+        let _stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
     fn test_show_functions() {
         let sql = "SHOW FUNCTIONS";
-        let stmt = SqlParser::parse(sql).unwrap();
+        let _stmt = SqlParser::parse(sql).unwrap();
     }
 
     #[test]
     fn test_case_insensitive_keywords() {
         let sql1 = "create function with ('function_path'='./test.wasm')";
-        let stmt1 = SqlParser::parse(sql1).unwrap();
+        let _stmt1 = SqlParser::parse(sql1).unwrap();
 
         let sql2 = "Create Function With ('Function_Path'='./test.wasm')";
-        let stmt2 = SqlParser::parse(sql2).unwrap();
+        let _stmt2 = SqlParser::parse(sql2).unwrap();
 
         let sql3 = "show functions";
-        let stmt3 = SqlParser::parse(sql3).unwrap();
+        let _stmt3 = SqlParser::parse(sql3).unwrap();
 
         let sql4 = "start function my_task";
-        let stmt4 = SqlParser::parse(sql4).unwrap();
+        let _stmt4 = SqlParser::parse(sql4).unwrap();
     }
 
     #[test]
     fn test_case_insensitive_property_keys() {
         let sql1 =
             "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
-        let stmt1 = SqlParser::parse(sql1).unwrap();
+        let _stmt1 = SqlParser::parse(sql1).unwrap();
 
         let sql2 =
             "CREATE FUNCTION WITH ('Function_Path'='./test.wasm', 'Config_Path'='./config.yml')";
-        let stmt2 = SqlParser::parse(sql2).unwrap();
+        let _stmt2 = SqlParser::parse(sql2).unwrap();
 
         let sql3 =
             "CREATE FUNCTION WITH ('FUNCTION_PATH'='./test.wasm', 'CONFIG_PATH'='./config.yml')";
-        let stmt3 = SqlParser::parse(sql3).unwrap();
+        let _stmt3 = SqlParser::parse(sql3).unwrap();
 
         // Note: SQL only supports Path mode (function_path, config_path)
         // Bytes mode (function, config) is only for gRPC requests
@@ -244,6 +244,6 @@ mod tests {
             'parallelism'='4',
             'memory-limit'='256mb'
         )"#;
-        let stmt = SqlParser::parse(sql).unwrap();
+        let _stmt = SqlParser::parse(sql).unwrap();
     }
 }

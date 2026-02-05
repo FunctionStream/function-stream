@@ -32,10 +32,12 @@ impl LogicalPlanner {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_optimizers(optimizers: Vec<Box<dyn PlanOptimizer>>) -> Self {
         Self { optimizers }
     }
 
+    #[allow(dead_code)]
     pub fn add_optimizer(&mut self, optimizer: Box<dyn PlanOptimizer>) {
         self.optimizers.push(optimizer);
     }

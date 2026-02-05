@@ -26,8 +26,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+type SharedTask = Arc<RwLock<Box<dyn TaskLifecycle>>>;
+type TaskMap = Arc<RwLock<HashMap<String, SharedTask>>>;
+
 pub struct TaskManager {
-    tasks: Arc<RwLock<HashMap<String, Arc<RwLock<Box<dyn TaskLifecycle>>>>>>,
+    tasks: TaskMap,
     state_storage_server: Arc<StateStorageServer>,
     task_storage: Arc<dyn TaskStorage>,
     thread_pool: Arc<TaskThreadPool>,
@@ -195,8 +198,8 @@ impl TaskManager {
     pub fn list_all_functions(&self) -> Vec<FunctionInfo> {
         let tasks = self.tasks.read();
         tasks
-            .iter()
-            .map(|(_, task_arc)| task_arc.read().get_function_info())
+            .values()
+            .map(|task_arc| task_arc.read().get_function_info())
             .collect()
     }
 

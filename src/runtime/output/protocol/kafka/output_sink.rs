@@ -181,7 +181,7 @@ impl KafkaOutputSink {
         )))
     }
 
-    /// Flush-specific timeout retry wait, checks operation result
+    #[allow(dead_code)]
     fn wait_flush_with_retry(
         &self,
         completion_flag: &TaskCompletionFlag,

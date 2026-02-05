@@ -10,6 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(dead_code)]
+
 mod config;
 mod coordinator;
 mod logging;
@@ -32,10 +34,10 @@ impl ServerHandle {
     pub fn stop(mut self) {
         log::info!("Initiating server shutdown sequence...");
 
-        if let Some(tx) = self.shutdown_tx.take() {
-            if tx.send(()).is_err() {
-                log::warn!("Server shutdown signal failed to send (receiver dropped)");
-            }
+        if let Some(tx) = self.shutdown_tx.take()
+            && tx.send(()).is_err()
+        {
+            log::warn!("Server shutdown signal failed to send (receiver dropped)");
         }
 
         if let Some(handle) = self.join_handle.take() {

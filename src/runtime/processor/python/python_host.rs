@@ -90,7 +90,7 @@ fn get_config() -> PythonConfig {
         .get()
         .and_then(|lock| lock.read().ok())
         .map(|config| config.clone())
-        .unwrap_or_else(PythonConfig::default)
+        .unwrap_or_default()
 }
 
 /// Load Python WASM bytes from the configured path
@@ -302,14 +302,14 @@ fn get_global_python_component() -> anyhow::Result<Arc<Component>> {
         );
 
         // Save precompiled component to cache for future use
-        if config.enable_cache {
-            if let Err(e) = save_precompiled_component(&engine, &wasm_bytes, &config) {
-                log::warn!(
-                    "[Python Host] Failed to save precompiled component to cache: {}",
-                    e
-                );
-                log::warn!("[Python Host] Component will be recompiled on next run");
-            }
+        if config.enable_cache
+            && let Err(e) = save_precompiled_component(&engine, &wasm_bytes, &config)
+        {
+            log::warn!(
+                "[Python Host] Failed to save precompiled component to cache: {}",
+                e
+            );
+            log::warn!("[Python Host] Component will be recompiled on next run");
         }
 
         let component_elapsed = component_start.elapsed().as_secs_f64();

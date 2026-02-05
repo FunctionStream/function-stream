@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn test_build_key() {
         let key = build_key(b"group", b"key", b"namespace", b"user");
-        assert!(key.len() > 0);
+        assert!(!key.is_empty());
     }
 
     #[test]

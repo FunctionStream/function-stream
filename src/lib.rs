@@ -12,6 +12,8 @@
 
 // Library crate for function-stream
 
+#![allow(dead_code)]
+
 pub mod config;
 pub mod coordinator;
 pub mod logging;

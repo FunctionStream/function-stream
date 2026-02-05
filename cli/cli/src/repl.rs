@@ -26,13 +26,19 @@ use tonic::Request;
 #[derive(Debug, thiserror::Error)]
 pub enum ReplError {
     #[error("RPC error: {0}")]
-    Rpc(#[from] tonic::Status),
+    Rpc(Box<tonic::Status>),
     #[error("Connection failed: {0}")]
     Connection(String),
     #[error("Internal error: {0}")]
     Internal(String),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
+}
+
+impl From<tonic::Status> for ReplError {
+    fn from(s: tonic::Status) -> Self {
+        ReplError::Rpc(Box::new(s))
+    }
 }
 
 pub struct Repl {

@@ -116,7 +116,7 @@ impl ThreadGroup {
                 .into());
             }
 
-            remaining_threads.retain(|t| if t.is_finished() { false } else { true });
+            remaining_threads.retain(|t| !t.is_finished());
 
             if !remaining_threads.is_empty() {
                 thread::sleep(Duration::from_millis(10));
@@ -144,10 +144,12 @@ impl TaskHandle {
         self.thread_groups.push(thread_group);
     }
 
+    #[allow(dead_code)]
     fn get_all_thread_groups(&self) -> &[ThreadGroup] {
         &self.thread_groups
     }
 
+    #[allow(dead_code)]
     fn join_all_threads(
         &mut self,
         timeout: Option<Duration>,

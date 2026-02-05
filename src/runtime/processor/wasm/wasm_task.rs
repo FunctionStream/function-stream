@@ -64,6 +64,7 @@ enum ControlAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 enum TaskState {
     Uninitialized,
     Initialized,
@@ -350,7 +351,7 @@ impl WasmTask {
     fn handle_control_signal(
         signal: TaskControlSignal,
         state: &mut TaskState,
-        inputs: &mut Vec<Box<dyn InputSource>>,
+        inputs: &mut [Box<dyn InputSource>],
         processor: &mut Box<dyn WasmProcessor>,
         shared_state: &Arc<Mutex<ComponentState>>,
         task_name: &str,
@@ -517,7 +518,7 @@ impl WasmTask {
 
     #[inline]
     fn process_batch(
-        inputs: &mut Vec<Box<dyn InputSource>>,
+        inputs: &mut [Box<dyn InputSource>],
         processor: &mut Box<dyn WasmProcessor>,
         current_input_index: &mut usize,
     ) {
@@ -567,15 +568,15 @@ impl WasmTask {
             return;
         }
 
-        if let Some(buffer_bytes) = data.get_buffer() {
-            if let Err(e) = processor.process(buffer_bytes.to_vec(), input_index) {
-                log::error!("Processor error from input {}: {}", input_index, e);
-            }
+        if let Some(buffer_bytes) = data.get_buffer()
+            && let Err(e) = processor.process(buffer_bytes.to_vec(), input_index)
+        {
+            log::error!("Processor error from input {}: {}", input_index, e);
         }
     }
 
     fn cleanup_resources(
-        inputs: &mut Vec<Box<dyn InputSource>>,
+        inputs: &mut [Box<dyn InputSource>],
         processor: &mut Box<dyn WasmProcessor>,
         task_name: &str,
     ) {
