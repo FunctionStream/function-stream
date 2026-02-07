@@ -65,12 +65,16 @@ help:
 build: .check-env .build-wasm
 	$(call log,BUILD,Rust Full Features)
 	@cargo build --release --features python --quiet
-	$(call success,Target: $(TARGET_DIR)/$(APP_NAME))
+	$(call log,BUILD,CLI)
+	@cargo build --release -p function-stream-cli --quiet
+	$(call success,Target: $(TARGET_DIR)/$(APP_NAME) $(TARGET_DIR)/cli)
 
 build-lite: .check-env
 	$(call log,BUILD,Rust Lite No Python)
 	@cargo build --release --no-default-features --features incremental-cache --quiet
-	$(call success,Target: $(TARGET_DIR)/$(APP_NAME))
+	$(call log,BUILD,CLI for dist)
+	@cargo build --release -p function-stream-cli --quiet
+	$(call success,Target: $(TARGET_DIR)/$(APP_NAME) $(TARGET_DIR)/cli)
 
 .build-wasm:
 	$(call log,WASM,Building Python Runtime using $(PYTHON_EXEC))
@@ -83,6 +87,7 @@ dist: build
 	@rm -rf "$(FULL_PATH)"
 	@mkdir -p "$(FULL_PATH)/bin" "$(FULL_PATH)/conf" "$(FULL_PATH)/logs" "$(FULL_PATH)/data/cache/python-runner"
 	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(FULL_PATH)/bin/"
+	@cp "$(TARGET_DIR)/cli" "$(FULL_PATH)/bin/"
 	@cp bin/* "$(FULL_PATH)/bin/"
 	@cp "$(WASM_SOURCE)" "$(FULL_PATH)/data/cache/python-runner/"
 	@cp conf/config.yaml "$(FULL_PATH)/conf/config.yaml" 2>/dev/null || true
@@ -98,6 +103,7 @@ dist-lite: build-lite
 	@rm -rf "$(LITE_PATH)"
 	@mkdir -p "$(LITE_PATH)/bin" "$(LITE_PATH)/conf" "$(LITE_PATH)/logs" "$(LITE_PATH)/data"
 	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(LITE_PATH)/bin/"
+	@cp "$(TARGET_DIR)/cli" "$(LITE_PATH)/bin/"
 	@cp bin/* "$(LITE_PATH)/bin/"
 	@cp conf/config.yaml "$(LITE_PATH)/conf/config.yaml" 2>/dev/null || true
 	@cp LICENSE README.md "$(LITE_PATH)/" 2>/dev/null || true

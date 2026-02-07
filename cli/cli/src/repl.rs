@@ -55,10 +55,22 @@ impl Repl {
             .edit_mode(EditMode::Emacs)
             .build();
 
-        let editor = DefaultEditor::with_config(config).ok().map(|mut ed| {
-            let _ = ed.load_history(".function-stream-cli-history");
-            ed
-        });
+        let editor = match DefaultEditor::with_config(config) {
+            Ok(mut ed) => {
+                if let Err(e) = ed.load_history(".function-stream-cli-history") {
+                    eprintln!("Warning: Failed to load history: {}", e);
+                }
+                Some(ed)
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: rustyline failed to initialize ({}). \
+                     Falling back to basic stdin input. History and line editing disabled.",
+                    e
+                );
+                None
+            }
+        };
 
         Self {
             client: None,
@@ -139,7 +151,6 @@ impl Repl {
         table
             .load_preset(UTF8_FULL)
             .set_content_arrangement(ContentArrangement::Dynamic)
-            // 表头下方用单线，不用双线
             .set_style(TableComponent::LeftHeaderIntersection, '├')
             .set_style(TableComponent::HeaderLines, '─')
             .set_style(TableComponent::MiddleHeaderIntersections, '┼')
@@ -306,13 +317,7 @@ impl Repl {
             let prompt = if lines.is_empty() { "sql> " } else { "  -> " };
 
             let line = match self.editor.as_mut() {
-                Some(ed) => {
-                    let l = ed.readline(prompt)?;
-                    if !l.trim().is_empty() {
-                        ed.add_history_entry(l.as_str()).ok();
-                    }
-                    l
-                }
+                Some(ed) => ed.readline(prompt)?,
                 None => {
                     print!("{}", prompt);
                     io::stdout().flush().unwrap();
@@ -323,10 +328,16 @@ impl Repl {
             };
 
             lines.push(line);
+            let full_sql = lines.join(" ").trim().to_string();
             let trimmed = lines.last().map(|s| s.trim()).unwrap_or("");
 
-            if trimmed.ends_with(';') || self.is_balanced(&lines.join(" ")) {
-                return Ok(lines.join(" ").trim().to_string());
+            if trimmed.ends_with(';') || self.is_balanced(&full_sql) {
+                if let Some(ed) = self.editor.as_mut() {
+                    if !full_sql.is_empty() {
+                        let _ = ed.add_history_entry(full_sql.as_str());
+                    }
+                }
+                return Ok(full_sql);
             }
         }
     }

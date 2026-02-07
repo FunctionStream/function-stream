@@ -12,6 +12,7 @@
 
 import importlib.util
 import logging
+import json
 import sys
 from typing import List, Optional, Tuple
 
@@ -55,7 +56,7 @@ def fs_exec(class_name: str, modules: List[Tuple[str, bytes]]) -> None:
             # is designed to execute trusted user-provided processor code in
             # an isolated WASM sandbox. Only deploy code from trusted sources.
             code = compile(module_source, f"<{module_name}>", "exec")
-            exec(code, module.__dict__)  # noqa: S102  # nosec B102
+            exec(code, module.__dict__)
 
             # Add the module to sys.modules
             sys.modules[module_name] = module

@@ -11,6 +11,7 @@ logs/**
 protocol/generated/**
 function-stream/**
 distribution/
+.function-stream-cli-history
 
 examples/go-processor/bindings/**
 examples/go-processor/build/**

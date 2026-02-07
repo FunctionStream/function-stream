@@ -7,7 +7,7 @@ members = [
 
 [package]
 name = "function-stream"
-version = "0.1.0"
+version = "0.6.0"
 edition = "2024"
 
 [lib]
