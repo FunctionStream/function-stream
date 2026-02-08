@@ -1,6 +1,27 @@
 # Function Stream
 
+[中文](README-zh.md) | [English](README.md)
+
 **Function Stream** is a high-performance, event-driven stream processing framework built in Rust. It provides a modular runtime to orchestrate serverless-style processing functions compiled to **WebAssembly (WASM)**, supporting functions written in **Go, Python, and Rust**.
+
+## Table of Contents
+
+- [Key Features](#key-features)
+- [Repository Layout](#repository-layout)
+- [Prerequisites](#prerequisites)
+- [Quick Start (Local Development)](#quick-start-local-development)
+  - [1. Initialize Environment](#1-initialize-environment)
+  - [2. Build & Run Server](#2-build--run-server)
+  - [3. Run CLI](#3-run-cli)
+- [Building & Packaging](#building--packaging)
+  - [Build Targets](#build-targets)
+  - [Distribution (Packaging)](#distribution-packaging)
+  - [Running the Distribution](#running-the-distribution)
+  - [Using the Startup Script](#using-the-startup-script-binstart-serversh)
+- [Maintenance](#maintenance)
+- [Documentation](#documentation)
+- [Configuration](#configuration)
+- [License](#license)
 
 ## Key Features
 
@@ -143,13 +164,7 @@ We provide a robust shell script to manage the server process, capable of handli
 3. **Custom Configuration** — Start with a specific config file.
 
    ```bash
-   ./bin/start-server.sh -d -c /etc/function-stream/prod.yaml
-   ```
-
-4. **Environment Variable Injection** — Inject environment variables without modifying the script or system env.
-
-   ```bash
-   ./bin/start-server.sh -d -D RUST_LOG=debug
+   ./bin/start-server.sh -d -c config/config.yml
    ```
 
 ## Maintenance

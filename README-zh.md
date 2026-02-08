@@ -1,6 +1,27 @@
 # Function Stream
 
+[中文](README-zh.md) | [English](README.md)
+
 **Function Stream** 是一个基于 Rust 构建的高性能、事件驱动的流处理框架。它提供了一个模块化的运行时，用于编排编译为 **WebAssembly (WASM)** 的 Serverless 风格处理函数，支持使用 **Go、Python 和 Rust** 编写函数。
+
+## 目录
+
+- [核心特性](#核心特性)
+- [仓库结构](#仓库结构)
+- [前置条件](#前置条件)
+- [快速开始 (本地开发)](#快速开始-本地开发)
+  - [1. 初始化环境](#1-初始化环境)
+  - [2. 构建并运行服务端](#2-构建并运行服务端)
+  - [3. 运行 CLI](#3-运行-cli)
+- [构建与打包](#构建与打包)
+  - [构建目标](#构建目标)
+  - [分发 (打包)](#分发-打包)
+  - [运行分发包](#运行分发包)
+  - [使用启动脚本](#使用启动脚本-binstart-serversh)
+- [维护](#维护)
+- [文档](#文档)
+- [配置](#配置)
+- [许可证](#许可证)
 
 ## 核心特性
 
@@ -143,13 +164,7 @@ function-stream-<version>/
 3.  **自定义配置** — 使用特定配置文件启动。
 
     ```bash
-    ./bin/start-server.sh -d -c /etc/function-stream/prod.yaml
-    ```
-
-4.  **环境变量注入** — 在不修改脚本或系统 env 的情况下注入环境变量。
-
-    ```bash
-    ./bin/start-server.sh -d -D RUST_LOG=debug
+    ./bin/start-server.sh -d -c config/config.yml
     ```
 
 ## 维护
