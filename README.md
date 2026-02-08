@@ -16,6 +16,7 @@ function-stream/
 ├── protocol/                # Protocol Buffers definitions
 ├── cli/                     # SQL REPL client
 ├── conf/                    # Default runtime configuration
+├── docs/                    # Documentation (English & Chinese)
 ├── examples/                # Sample processors
 ├── python/                  # Python API, Client, and Runtime (WASM)
 ├── scripts/                 # Build and environment automation scripts
@@ -62,11 +63,11 @@ The project uses a standard Makefile to handle compilation and distribution. Art
 
 ### Build Targets
 
-| Command          | Description                                                       |
-|------------------|------------------------------------------------------------------|
-| `make`           | Alias for `make build`. Compiles Rust binaries and Python WASM runtime. |
-| `make build`     | Builds the Full version (Rust + Python Support).                   |
-| `make build-lite`| Builds the Lite version (Rust only, no Python dependencies).     |
+| Command           | Description                                                             |
+|-------------------|-------------------------------------------------------------------------|
+| `make`            | Alias for `make build`. Compiles Rust binaries and Python WASM runtime. |
+| `make build`      | Builds the Full version (Rust + Python Support).                        |
+| `make build-lite` | Builds the Lite version (Rust only, no Python dependencies).            |
 
 ### Distribution (Packaging)
 
@@ -98,7 +99,9 @@ After extracting the release package, you will see the following structure:
 function-stream-<version>/
 ├── bin/
 │   ├── function-stream      # The compiled binary
-│   └── start-server.sh      # Production startup script
+│   ├── cli                  # The compiled CLI binary
+│   ├── start-server.sh      # Production startup script
+│   └── start-cli.sh         # CLI startup script
 ├── conf/
 │   └── config.yaml          # Default configuration
 ├── data/                    # Runtime data (e.g. WASM cache)
@@ -117,11 +120,11 @@ We provide a robust shell script to manage the server process, capable of handli
 
 **Options:**
 
-| Option              | Description                                                                 |
-|---------------------|-----------------------------------------------------------------------------|
-| `-d`, `--daemon`    | Run the server in the background (Daemon mode).                             |
-| `-c`, `--config <path>` | Specify a custom configuration file path.                              |
-| `-D <KEY>=<VALUE>`  | Inject environment variables (e.g., `-D RUST_LOG=debug`).                   |
+| Option                  | Description                                               |
+|-------------------------|-----------------------------------------------------------|
+| `-d`, `--daemon`        | Run the server in the background (Daemon mode).           |
+| `-c`, `--config <path>` | Specify a custom configuration file path.                 |
+| `-D <KEY>=<VALUE>`      | Inject environment variables (e.g., `-D RUST_LOG=debug`). |
 
 **Examples:**
 
@@ -151,11 +154,21 @@ We provide a robust shell script to manage the server process, capable of handli
 
 ## Maintenance
 
-| Command          | Description                                                                 |
-|------------------|-----------------------------------------------------------------------------|
+| Command          | Description                                                                    |
+|------------------|--------------------------------------------------------------------------------|
 | `make clean`     | Deep clean. Removes `target/`, `dist/`, `.venv/`, and all temporary artifacts. |
-| `make env-clean` | Removes only the Python virtual environment and Python artifacts.           |
-| `make test`      | Runs the Rust test suite.                                                    |
+| `make env-clean` | Removes only the Python virtual environment and Python artifacts.              |
+| `make test`      | Runs the Rust test suite.                                                      |
+
+## Documentation
+
+| Document                                                 | Description                       |
+|----------------------------------------------------------|-----------------------------------|
+| [Server Configuration](docs/server-configuration.md)     | Server Configuration & Operations |
+| [Function Configuration](docs/function-configuration.md) | Task Definition Specification     |
+| [SQL CLI Guide](docs/sql-cli-guide.md)                   | Interactive Management Guide      |
+| [Function Development](docs/function-development.md)     | Management & Development Guide    |
+| [Python SDK Guide](docs/python-sdk-guide.md)             | Python SDK Guide                  |
 
 ## Configuration
 

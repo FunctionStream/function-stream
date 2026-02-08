@@ -88,10 +88,10 @@ dist: build
 	@mkdir -p "$(FULL_PATH)/bin" "$(FULL_PATH)/conf" "$(FULL_PATH)/logs" "$(FULL_PATH)/data/cache/python-runner"
 	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(FULL_PATH)/bin/"
 	@cp "$(TARGET_DIR)/cli" "$(FULL_PATH)/bin/"
-	@cp bin/* "$(FULL_PATH)/bin/"
+	@cp scripts/start-server.sh scripts/start-cli.sh "$(FULL_PATH)/bin/"
 	@cp "$(WASM_SOURCE)" "$(FULL_PATH)/data/cache/python-runner/"
 	@cp conf/config.yaml "$(FULL_PATH)/conf/config.yaml" 2>/dev/null || true
-	@cp LICENSE README.md "$(FULL_PATH)/" 2>/dev/null || true
+	@cp LICENSE "$(FULL_PATH)/" 2>/dev/null || true
 	@printf "Version: $(VERSION)\nBuild: $(ARCH)-$(OS)\nDate: $(DATE)\n" > "$(FULL_PATH)/manifest.txt"
 	$(call log,ARCHIVE,Compressing to $(DIST_ROOT)/...)
 	@cd $(DIST_ROOT) && tar -czf "$(FULL_NAME).tar.gz" "$(FULL_NAME)"
@@ -104,9 +104,9 @@ dist-lite: build-lite
 	@mkdir -p "$(LITE_PATH)/bin" "$(LITE_PATH)/conf" "$(LITE_PATH)/logs" "$(LITE_PATH)/data"
 	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(LITE_PATH)/bin/"
 	@cp "$(TARGET_DIR)/cli" "$(LITE_PATH)/bin/"
-	@cp bin/* "$(LITE_PATH)/bin/"
+	@cp scripts/start-server.sh scripts/start-cli.sh "$(LITE_PATH)/bin/"
 	@cp conf/config.yaml "$(LITE_PATH)/conf/config.yaml" 2>/dev/null || true
-	@cp LICENSE README.md "$(LITE_PATH)/" 2>/dev/null || true
+	@cp LICENSE "$(LITE_PATH)/" 2>/dev/null || true
 	@printf "Version: $(VERSION) (Lite)\nBuild: $(ARCH)-$(OS)\nDate: $(DATE)\n" > "$(LITE_PATH)/manifest.txt"
 	$(call log,ARCHIVE,Compressing to $(DIST_ROOT)/...)
 	@cd $(DIST_ROOT) && tar -czf "$(LITE_NAME).tar.gz" "$(LITE_NAME)"
