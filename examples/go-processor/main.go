@@ -17,10 +17,11 @@ import (
 	"strconv"
 	"strings"
 
-	"go.bytecodealliance.org/cm"
 	"wit_component/bindings/functionstream/core/collector"
 	"wit_component/bindings/functionstream/core/kv"
 	"wit_component/bindings/functionstream/core/processor"
+
+	"go.bytecodealliance.org/cm"
 )
 
 var (

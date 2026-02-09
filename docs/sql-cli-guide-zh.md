@@ -21,16 +21,16 @@ SQL CLI 通过 gRPC 协议与远程 Server 通信。
 
 | 选项                    | 说明                                                                       |
 |-----------------------|--------------------------------------------------------------------------|
-| --host \<HOST\>       | Server 地址，默认 127.0.0.1。可通过环境变量 FUNCTION_STREAM_HOST 覆盖。                  |
-| -P, --port \<PORT\>   | Server 端口，默认从 conf/config.yaml 解析或 8080。可通过环境变量 FUNCTION_STREAM_PORT 覆盖。 |
+| -h, --host \<HOST\>   | Server 地址，默认 127.0.0.1。可通过环境变量 FUNCTION_STREAM_HOST 覆盖。                  |
+| -p, --port \<PORT\>   | Server 端口，默认从 conf/config.yaml 解析或 8080。可通过环境变量 FUNCTION_STREAM_PORT 覆盖。 |
 | -c, --config \<PATH\> | 指定配置文件路径，用于解析 Server 端口。默认 conf/config.yaml。                             |
 
-**示例**：`./bin/start-cli.sh --host 10.0.0.1 -P 8080`
+**示例**：`./bin/start-cli.sh -h 10.0.0.1 -p 8080`
 
 **开发方式**：
 
 ```bash
-cargo run -p function-stream-cli -- --host <SERVER_HOST> -P <SERVER_PORT>
+cargo run -p function-stream-cli -- -h <SERVER_HOST> -p <SERVER_PORT>
 ```
 
 - **终端提示符**：成功连接后显示 `sql>`。

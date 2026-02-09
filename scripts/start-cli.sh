@@ -42,11 +42,11 @@ fi
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --host)
+    -h|--host)
       CLI_HOST="$2"
       shift 2
       ;;
-    -P|--port)
+    -p|--port)
       CLI_PORT="$2"
       shift 2
       ;;
@@ -72,4 +72,4 @@ echo "Home:   $FUNCTION_STREAM_HOME"
 echo "Server: $CLI_HOST:$CLI_PORT"
 echo "------------------------------------------------"
 
-exec "$BINARY" --host "$CLI_HOST" -P "$CLI_PORT"
+exec "$BINARY" -h "$CLI_HOST" -p "$CLI_PORT"

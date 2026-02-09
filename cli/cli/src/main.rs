@@ -20,10 +20,10 @@ use std::process;
 #[command(name = "function-stream-cli")]
 #[command(about = "Interactive SQL CLI for Function Stream", long_about = None)]
 struct Args {
-    #[arg(long = "host", default_value = "127.0.0.1")]
+    #[arg(short = 'h', long = "host", default_value = "127.0.0.1")]
     host: String,
 
-    #[arg(short = 'P', long, default_value = "8080")]
+    #[arg(short = 'p', long = "port", default_value = "8080")]
     port: u16,
 }
 
