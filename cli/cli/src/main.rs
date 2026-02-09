@@ -20,8 +20,8 @@ use std::process;
 #[command(name = "function-stream-cli")]
 #[command(about = "Interactive SQL CLI for Function Stream", long_about = None)]
 struct Args {
-    #[arg(short = 'i', long = "ip", default_value = "127.0.0.1")]
-    ip: String,
+    #[arg(long = "host", default_value = "127.0.0.1")]
+    host: String,
 
     #[arg(short = 'P', long, default_value = "8080")]
     port: u16,
@@ -31,7 +31,7 @@ struct Args {
 async fn main() {
     let args = Args::parse();
 
-    let mut repl = Repl::new(args.ip.clone(), args.port);
+    let mut repl = Repl::new(args.host.clone(), args.port);
 
     if let Err(e) = repl.run_async().await {
         eprintln!("Error: {}", e);

@@ -32,7 +32,7 @@ export FUNCTION_STREAM_HOME="$APP_HOME"
 export FUNCTION_STREAM_CONF="${FUNCTION_STREAM_CONF:-$APP_HOME/conf/config.yaml}"
 
 BINARY="$BIN_DIR/cli"
-CLI_IP="${FUNCTION_STREAM_IP:-127.0.0.1}"
+CLI_HOST="${FUNCTION_STREAM_HOST:-127.0.0.1}"
 CLI_PORT="${FUNCTION_STREAM_PORT:-}"
 
 if [ ! -f "$BINARY" ]; then
@@ -42,8 +42,8 @@ fi
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -i|--ip)
-      CLI_IP="$2"
+    --host)
+      CLI_HOST="$2"
       shift 2
       ;;
     -P|--port)
@@ -69,7 +69,7 @@ CLI_PORT="${CLI_PORT:-8080}"
 echo "------------------------------------------------"
 echo "Function Stream SQL CLI"
 echo "Home:   $FUNCTION_STREAM_HOME"
-echo "Server: $CLI_IP:$CLI_PORT"
+echo "Server: $CLI_HOST:$CLI_PORT"
 echo "------------------------------------------------"
 
-exec "$BINARY" -i "$CLI_IP" -P "$CLI_PORT"
+exec "$BINARY" --host "$CLI_HOST" -P "$CLI_PORT"

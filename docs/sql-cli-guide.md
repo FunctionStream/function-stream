@@ -20,16 +20,16 @@ SQL CLI communicates with the remote Server via the gRPC protocol.
 
 | Option                | Description                                                                                                                |
 |-----------------------|----------------------------------------------------------------------------------------------------------------------------|
-| -i, --ip \<IP\>       | Server address, default 127.0.0.1. Can be overridden by environment variable FUNCTION_STREAM_IP.                           |
+| --host \<HOST\>       | Server address, default 127.0.0.1. Can be overridden by environment variable FUNCTION_STREAM_HOST.                         |
 | -P, --port \<PORT\>   | Server port, default parsed from conf/config.yaml or 8080. Can be overridden by environment variable FUNCTION_STREAM_PORT. |
 | -c, --config \<PATH\> | Specify configuration file path for parsing Server port. Default conf/config.yaml.                                         |
 
-**Example**: `./bin/start-cli.sh -i 10.0.0.1 -P 8080`
+**Example**: `./bin/start-cli.sh --host 10.0.0.1 -P 8080`
 
 **Development Method**:
 
 ```bash
-cargo run -p function-stream-cli -- -i <SERVER_IP> -P <SERVER_PORT>
+cargo run -p function-stream-cli -- --host <SERVER_HOST> -P <SERVER_PORT>
 ```
 
 - **Terminal Prompt**: Displays `sql>` after successful connection.

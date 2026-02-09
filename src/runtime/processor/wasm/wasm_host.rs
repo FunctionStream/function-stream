@@ -15,9 +15,9 @@ use crate::runtime::output::OutputSink;
 use crate::runtime::processor::wasm::wasm_cache;
 use crate::storage::state_backend::{StateStore, StateStoreFactory};
 use std::sync::{Arc, OnceLock};
-use wasmtime::component::{Component, Linker, Resource, bindgen};
-use wasmtime::{Config, Engine, OptLevel, Store, WasmBacktraceDetails};
-use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiView};
+use wasmtime::component::{Component, HasData, Linker, Resource, bindgen};
+use wasmtime::{Config, Engine, Store};
+use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 static GLOBAL_ENGINE: OnceLock<Arc<Engine>> = OnceLock::new();
 
@@ -34,7 +34,7 @@ fn enable_incremental_compilation(config: &mut Config) -> bool {
         }
     }
 
-    config.cache_config_load_default().is_ok()
+    false
 }
 
 fn get_global_engine(_wasm_size: usize) -> anyhow::Result<Arc<Engine>> {
@@ -46,13 +46,11 @@ fn get_global_engine(_wasm_size: usize) -> anyhow::Result<Arc<Engine>> {
         let mut config = Config::new();
         config.wasm_component_model(true);
         config.async_support(false);
-        config.cranelift_opt_level(OptLevel::Speed);
+        config.cranelift_opt_level(wasmtime::OptLevel::Speed);
         config.debug_info(false);
         config.generate_address_map(false);
         config.parallel_compilation(true);
         enable_incremental_compilation(&mut config);
-        config.debug_info(true);
-        config.wasm_backtrace_details(WasmBacktraceDetails::Environment);
 
         let engine = Engine::new(&config).unwrap_or_else(|e| {
             panic!("Failed to create global wasm engine: {}", e);
@@ -67,10 +65,9 @@ fn get_global_engine(_wasm_size: usize) -> anyhow::Result<Arc<Engine>> {
 bindgen!({
     world: "processor",
     path: "wit/processor.wit",
-    async: false,
     with: {
-        "functionstream:core/kv/store": FunctionStreamStoreHandle,
-        "functionstream:core/kv/iterator": FunctionStreamIteratorHandle,
+        "functionstream:core/kv.store": FunctionStreamStoreHandle,
+        "functionstream:core/kv.iterator": FunctionStreamIteratorHandle,
     }
 });
 
@@ -96,12 +93,18 @@ pub struct HostState {
     pub output_sinks: Vec<Box<dyn OutputSink>>,
 }
 
+pub struct HostStateData;
+
+impl HasData for HostStateData {
+    type Data<'a> = &'a mut HostState;
+}
+
 impl WasiView for HostState {
-    fn table(&mut self) -> &mut ResourceTable {
-        &mut self.table
-    }
-    fn ctx(&mut self) -> &mut WasiCtx {
-        &mut self.wasi
+    fn ctx(&mut self) -> WasiCtxView<'_> {
+        WasiCtxView {
+            ctx: &mut self.wasi,
+            table: &mut self.table,
+        }
     }
 }
 
@@ -454,14 +457,11 @@ pub fn create_wasm_host_with_component(
 ) -> anyhow::Result<(Processor, Store<HostState>)> {
     let mut linker = Linker::new(engine);
 
-    wasmtime_wasi::add_to_linker_sync(&mut linker)
+    wasmtime_wasi::p2::add_to_linker_sync(&mut linker)
         .map_err(|e| anyhow::anyhow!("Failed to add WASI to linker: {}", e))?;
 
-    functionstream::core::kv::add_to_linker(&mut linker, |s: &mut HostState| s)
-        .map_err(|e| anyhow::anyhow!("Failed to add kv interface to linker: {}", e))?;
-
-    functionstream::core::collector::add_to_linker(&mut linker, |s: &mut HostState| s)
-        .map_err(|e| anyhow::anyhow!("Failed to add collector interface to linker: {}", e))?;
+    Processor::add_to_linker::<HostState, HostStateData>(&mut linker, |s| s)
+        .map_err(|e| anyhow::anyhow!("Failed to add interfaces to linker: {}", e))?;
 
     let created_at = init_context
         .task_storage

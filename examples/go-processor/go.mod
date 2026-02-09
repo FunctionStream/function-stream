@@ -1,8 +1,5 @@
-module github.com/function-stream/go-processor-example
+module wit_component
 
-go 1.24
+go 1.25.5
 
-require (
-	go.bytecodealliance.org/cm v0.3.0
-	github.com/IBM/sarama v1.43.0
-)
+require go.bytecodealliance.org/cm v0.3.0

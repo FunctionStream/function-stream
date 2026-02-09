@@ -173,14 +173,16 @@ impl WasmProcessorImpl {
             modules.len()
         );
 
-        processor.call_fs_exec(store, class_name, modules).map_err(
-            |e| -> Box<dyn Error + Send> {
-                Box::new(WasmProcessorError::ExecutionError(format!(
-                    "Failed to call fs_exec with class_name '{}': {}",
-                    class_name, e
-                )))
-            },
-        )?;
+        tokio::task::block_in_place(|| {
+            processor.call_fs_exec(store, class_name, modules).map_err(
+                |e| -> Box<dyn Error + Send> {
+                    Box::new(WasmProcessorError::ExecutionError(format!(
+                        "Failed to call fs_exec with class_name '{}': {}",
+                        class_name, e
+                    )))
+                },
+            )
+        })?;
 
         log::info!("fs_exec completed successfully for class '{}'", class_name);
         Ok(())
@@ -608,26 +610,30 @@ impl WasmProcessor for WasmProcessorImpl {
                     .cloned()
                     .unwrap_or_else(|| self.name.clone());
 
-                processor
-                    .call_fs_exec(store, &class_name, &self.modules)
-                    .map_err(|e| -> Box<dyn Error + Send> {
-                        Box::new(WasmProcessorError::InitError(format!(
-                            "Failed to call fs_exec with class_name '{}' and modules: {}",
-                            class_name, e
-                        )))
-                    })?;
+                tokio::task::block_in_place(|| {
+                    processor
+                        .call_fs_exec(store, &class_name, &self.modules)
+                        .map_err(|e| -> Box<dyn Error + Send> {
+                            Box::new(WasmProcessorError::InitError(format!(
+                                "Failed to call fs_exec with class_name '{}' and modules: {}",
+                                class_name, e
+                            )))
+                        })
+                })?;
             }
 
             let mut store_ref = self.store.borrow_mut();
             let store = store_ref.as_mut().unwrap();
-            processor
-                .call_fs_init(store, &config_list)
-                .map_err(|e| -> Box<dyn Error + Send> {
-                    Box::new(WasmProcessorError::InitError(format!(
-                        "Failed to call fs_init: {}",
-                        e
-                    )))
-                })?;
+            tokio::task::block_in_place(|| {
+                processor
+                    .call_fs_init(store, &config_list)
+                    .map_err(|e| -> Box<dyn Error + Send> {
+                        Box::new(WasmProcessorError::InitError(format!(
+                            "Failed to call fs_init: {}",
+                            e
+                        )))
+                    })
+            })?;
         }
 
         Ok(())
