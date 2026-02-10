@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "functionstream-client"
-version = "0.0.1"
+version = "0.6.0"
 description = "Function Stream Python Client - gRPC client library"
 requires-python = ">=3.7"
 license = "Apache-2.0"

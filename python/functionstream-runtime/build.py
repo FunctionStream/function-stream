@@ -18,7 +18,6 @@ This script compiles the python runtime into a WebAssembly component
 using componentize-py. It handles dependency installation, WIT binding
 generation, and the final wasm compilation.
 """
-
 import os
 import sys
 import shutil
@@ -26,264 +25,127 @@ import logging
 import subprocess
 from pathlib import Path
 
-# --- Configuration ---
-
-# Paths (Relative to this script)
+# --- Paths ---
 SCRIPT_DIR = Path(__file__).parent.absolute()
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 WIT_DIR = PROJECT_ROOT / "wit"
-WIT_FILE = WIT_DIR / "processor.wit"
+PROCESSOR_WIT = WIT_DIR / "processor.wit"
+WIT_DEPS_DIR = WIT_DIR / "deps"
+WKG_LOCK = WIT_DIR / "wkg.lock"
 
-# Source & Artifact Paths
 SRC_DIR = SCRIPT_DIR / "src"
 DEPENDENCIES_DIR = SCRIPT_DIR / "dependencies"
-BINDINGS_DIR = SCRIPT_DIR / "bindings"
 TARGET_DIR = SCRIPT_DIR / "target"
 WASM_OUTPUT = TARGET_DIR / "functionstream-python-runtime.wasm"
 
-# Sibling Projects
 FS_API_DIR = SCRIPT_DIR.parent / "functionstream-api"
 
-# Component Configuration
 WORLD_NAME = "processor"
-MAIN_MODULE = "fs_runtime.runner"  # The entry point module
+MAIN_MODULE = "fs_runtime.runner"
 
-# Logging Setup
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - [%(levelname)s] - %(message)s",
-    datefmt="%H:%M:%S"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("fs_wasm_builder")
 
-
 class BuildError(Exception):
-    """Custom exception for build failures."""
-
+    pass
 
 class WasmBuilder:
-    """Encapsulates the wasm build process lifecycle."""
-
     def __init__(self):
         self.python_exec = sys.executable
-        self.componentize_cmd = self._find_componentize_py()
+        self.componentize_cmd = self._find_tool("componentize-py")
+        self.wkg_cmd = shutil.which("wkg")
 
-    def _find_componentize_py(self) -> str:
-        """
-        Locates the 'componentize-py' executable.
-        Prioritizes the active virtual environment, then system PATH.
-        """
-        # 1. Check current venv bin (Reliable method)
+    def _find_tool(self, name: str) -> str:
         venv_bin = Path(sys.executable).parent
-        candidate = venv_bin / "componentize-py"
+        candidate = venv_bin / name
         if candidate.exists() and os.access(candidate, os.X_OK):
             return str(candidate)
-
-        # 2. Check standard PATH (Fallback)
-        path_cmd = shutil.which("componentize-py")
+        path_cmd = shutil.which(name)
         if path_cmd:
             return path_cmd
+        raise BuildError(f"Required tool not found: {name}")
 
-        logger.error("❌ 'componentize-py' not found.")
-        logger.info(
-            "Please install it in your environment: pip install componentize-py"
-        )
-        raise BuildError("Dependency missing: componentize-py")
+    def _ensure_wkg_deps(self):
+        if not self.wkg_cmd:
+            if shutil.which("cargo"):
+                subprocess.run(["cargo", "install", "wkg", "--quiet"], check=True)
+                self.wkg_cmd = shutil.which("wkg")
+            else:
+                raise BuildError("wkg missing")
 
-    def clean(self) -> None:
-        """
-        Cleans build artifacts and temporary directories.
-        CRITICAL: Removes 'bindings' to prevent 'File exists' errors.
-        """
-        logger.info("Cleaning build artifacts...")
+        staging_dir = Path(subprocess.check_output(["mktemp", "-d"]).decode().strip())
+        try:
+            tmp_wit_root = staging_dir / "wit"
+            tmp_wit_root.mkdir()
+            shutil.copy2(PROCESSOR_WIT, tmp_wit_root / "processor.wit")
 
-        dirs_to_clean = [TARGET_DIR, DEPENDENCIES_DIR, BINDINGS_DIR]
-
-        for d in dirs_to_clean:
-            if d.exists():
-                try:
-                    shutil.rmtree(d)
-                    logger.debug(f"Removed: {d}")
-                except OSError as e:
-                    logger.warning(f"Failed to remove {d}: {e}")
-
-        logger.info("✓ Clean completed.")
-
-    def prepare_dependencies(self) -> None:
-        """Installs local dependencies (functionstream-api) into a temp dir."""
-        logger.info("Preparing dependencies...")
-
-        if not FS_API_DIR.exists():
-            raise BuildError(
-                f"functionstream-api source not found at: {FS_API_DIR}"
+            result = subprocess.run(
+                [self.wkg_cmd, "wit", "fetch"],
+                cwd=str(staging_dir),
+                capture_output=True,
+                text=True
             )
 
+            if result.returncode != 0:
+                print(result.stderr, file=sys.stderr)
+                raise BuildError(f"wkg fetch failed: {result.stderr}")
+
+            # Update deps directory (source WIT files)
+            if WIT_DEPS_DIR.exists():
+                shutil.rmtree(WIT_DEPS_DIR)
+
+            tmp_deps = tmp_wit_root / "deps"
+            if tmp_deps.exists():
+                shutil.copytree(tmp_deps, WIT_DEPS_DIR)
+
+            # Update lock file in wit root
+            tmp_lock = staging_dir / "wkg.lock"
+            if tmp_lock.exists():
+                shutil.copy2(tmp_lock, WKG_LOCK)
+
+        finally:
+            shutil.rmtree(staging_dir)
+
+    def prepare_dependencies(self):
+        if DEPENDENCIES_DIR.exists():
+            shutil.rmtree(DEPENDENCIES_DIR)
         DEPENDENCIES_DIR.mkdir(parents=True, exist_ok=True)
-
-        # Install fs-api to local dependencies folder using pip
-        cmd = [
+        subprocess.run([
             self.python_exec, "-m", "pip", "install",
-            "--target", str(DEPENDENCIES_DIR),
-            str(FS_API_DIR)
-        ]
+            "--target", str(DEPENDENCIES_DIR), str(FS_API_DIR)
+        ], check=True, capture_output=True)
 
-        logger.debug(f"Exec: {' '.join(cmd)}")
-        try:
-            # Note: subprocess.run is safe here as cmd is constructed from
-            # controlled build-time inputs, not user-provided data
-            subprocess.run(  # noqa: S603
-                cmd,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            logger.info("✓ Dependencies prepared (fs-api installed).")
-        except subprocess.CalledProcessError as e:
-            logger.error("Failed to install dependencies.")
-            logger.error(f"STDERR: {e.stderr}")
-            raise BuildError("Dependency installation failed.")
-
-    def generate_bindings(self) -> None:
-        """Generates WIT bindings for reference/development."""
-        logger.info("Generating WIT bindings...")
-
-        if not WIT_FILE.exists():
-            raise BuildError(f"WIT file not found: {WIT_FILE}")
-
-        # Ensure directory is fresh
-        BINDINGS_DIR.mkdir(parents=True, exist_ok=True)
-
-        cmd = [
-            self.componentize_cmd,
-            "-d", str(WIT_FILE),
-            "-w", WORLD_NAME,
-            "bindings",
-            str(BINDINGS_DIR)
-        ]
-
-        logger.debug(f"Exec: {' '.join(cmd)}")
-        try:
-            # Note: subprocess.run is safe here as cmd is constructed from
-            # controlled build-time inputs, not user-provided data
-            subprocess.run(  # noqa: S603
-                cmd,
-                cwd=SCRIPT_DIR,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            logger.info(f"✓ Bindings generated at: {BINDINGS_DIR}")
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"Failed to generate bindings: {e.stderr}")
-            logger.warning(
-                "Continuing build process (bindings are optional for the artifact)..."
-            )
-
-    def build_wasm(self) -> None:
-        """Compiles the python code into a wasm component."""
-        logger.info("Compiling wasm component...")
-
+    def build_wasm(self):
         TARGET_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Validate entry point existence
-        # Assumes structure: src/fs_runtime/runner.py
-        module_path = MAIN_MODULE.replace(".", "/") + ".py"
-        entry_file = SRC_DIR / module_path
-
-        if not entry_file.exists():
-            raise BuildError(f"Entry point not found: {entry_file}")
-
+        # Use the directory containing processor.wit and deps/
         cmd = [
             self.componentize_cmd,
-            "-d", str(WIT_FILE),
+            "-d", str(WIT_DIR.absolute()),
             "-w", WORLD_NAME,
             "componentize",
             "--stub-wasi",
-            "-p", str(DEPENDENCIES_DIR), # Path 1: Pre-installed deps (fs-api)
-            "-p", str(SRC_DIR),          # Path 2: Runtime source code
-            MAIN_MODULE,                 # Entry module name
-            "-o", str(WASM_OUTPUT)
+            "-p", str(DEPENDENCIES_DIR.absolute()),
+            "-p", str(SRC_DIR.absolute()),
+            MAIN_MODULE,
+            "-o", str(WASM_OUTPUT.absolute())
         ]
 
-        logger.info("Executing componentize command...")
-        logger.debug(f"Command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, cwd=str(SCRIPT_DIR), capture_output=True, text=True)
+        if result.returncode != 0:
+            print(result.stderr, file=sys.stderr)
+            raise BuildError("componentize-py failed")
 
+        logger.info(f"Generated: {WASM_OUTPUT}")
+
+    def run(self):
         try:
-            # Inherit environment to keep PATH settings
-            env = os.environ.copy()
-
-            # Note: subprocess.run is safe here as cmd is constructed from
-            # controlled build-time inputs, not user-provided data
-            process = subprocess.run(  # noqa: S603
-                cmd,
-                cwd=SCRIPT_DIR,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env
-            )
-
-            # componentize-py outputs helpful info to stdout
-            if process.stdout:
-                logger.debug(process.stdout)
-
-            if WASM_OUTPUT.exists():
-                size_kb = WASM_OUTPUT.stat().st_size / 1024
-                logger.info("✓ wasm Build Successful!")
-                logger.info(f"  Output: {WASM_OUTPUT}")
-                logger.info(f"  Size:   {size_kb:.2f} KB")
-            else:
-                raise BuildError(
-                    "Build command succeeded but output file is missing."
-                )
-
-        except subprocess.CalledProcessError as e:
-            logger.error("wasm compilation failed.")
-            logger.error(f"STDOUT: {e.stdout}")
-            logger.error(f"STDERR: {e.stderr}")
-            raise BuildError("wasm compilation failed.")
-
-    def run(self) -> None:
-        """Main execution flow."""
-        print("=" * 60)
-        print("   Function Stream Runtime - wasm Builder")
-        print("=" * 60)
-
-        try:
-            # 1. Clean first (Fixes 'File exists' errors)
-            self.clean()
-
-            # 2. Prepare environment
+            self._ensure_wkg_deps()
             self.prepare_dependencies()
-
-            # 3. Generate bindings (Optional but good for checking WIT)
-            self.generate_bindings()
-
-            # 4. Build actual artifact
             self.build_wasm()
-
-            print("\n" + "=" * 60)
-            logger.info("Process completed successfully.")
-            print("=" * 60)
-
-        except BuildError as e:
-            logger.error(f"Build failed: {e}")
+        except Exception as e:
+            logger.error(str(e))
             sys.exit(1)
-        except KeyboardInterrupt:
-            logger.error("Build interrupted.")
-            sys.exit(130)
-        except Exception:
-            logger.exception("Unexpected error occurred:")
-            sys.exit(1)
-
-
-def main():
-    builder = WasmBuilder()
-    builder.run()
-
 
 if __name__ == "__main__":
-    main()
+    WasmBuilder().run()

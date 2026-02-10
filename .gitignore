@@ -16,6 +16,8 @@ distribution/
 examples/go-processor/bindings/**
 examples/go-processor/build/**
 examples/go-processor/wit/**
+**/wit/deps/
+wit/wkg.lock
 examples/python-processor/build/**
 examples/python-processor/dependencies/**
 python/functionstream-client/src/fs_client/_proto/

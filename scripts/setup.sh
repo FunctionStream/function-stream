@@ -46,6 +46,58 @@ log_step "CORE_TOOLS"
 "$PIP" install -q --upgrade pip setuptools wheel build twine
 log_ok
 
+log_step "WIT_DEPS"
+WIT_SRC_DIR="$ROOT_DIR/wit"
+PROCESSOR_WIT="$WIT_SRC_DIR/processor.wit"
+WIT_DEPS_DIR="$WIT_SRC_DIR/deps"
+
+download_wasi_wit_deps() {
+    [[ -f "$PROCESSOR_WIT" ]] || exit 1
+
+    if ! command -v wkg &> /dev/null; then
+        command -v cargo &> /dev/null || exit 1
+        cargo install wkg --quiet
+    fi
+
+    # 1. Define staging_dir as local
+    local staging_dir
+    staging_dir=$(mktemp -d)
+
+    # 2. Industrial Fix: Use a safer trap.
+    # '${staging_dir:-}' prevents 'unbound variable' error during script EXIT.
+    # We use both RETURN (for function end) and EXIT (for script crash).
+    trap '[[ -n "${staging_dir:-}" ]] && rm -rf "$staging_dir"' RETURN EXIT
+
+    mkdir -p "$staging_dir/wit"
+    cp "$PROCESSOR_WIT" "$staging_dir/wit/processor.wit"
+
+    local build_log="$staging_dir/error.log"
+
+    if ! (cd "$staging_dir" && wkg wit fetch > "$build_log" 2>&1); then
+        printf "${C_Y} [!] wkg fetch failed:${C_0}\n" >&2
+        cat "$build_log" >&2
+        exit 1
+    fi
+
+    rm -rf "$WIT_DEPS_DIR"
+    mkdir -p "$WIT_DEPS_DIR"
+
+    if [ -d "$staging_dir/wit/deps" ]; then
+        cp -a "$staging_dir/wit/deps/." "$WIT_DEPS_DIR/"
+    fi
+
+    if [ -f "$staging_dir/wkg.lock" ]; then
+        cp "$staging_dir/wkg.lock" "$WIT_SRC_DIR/wkg.lock"
+    fi
+
+    # 3. Explicitly clear trap for this scope to prevent double-run at EXIT
+    trap - RETURN EXIT
+    rm -rf "$staging_dir"
+}
+
+download_wasi_wit_deps
+log_ok
+
 log_step "API_INSTALL"
 "$PIP" install -q -e "$PYTHON_ROOT/functionstream-api"
 log_ok

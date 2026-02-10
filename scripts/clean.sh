@@ -72,4 +72,11 @@ if [ -d "$EXAMPLES_DIR" ]; then
     purge_artifacts "$EXAMPLES_DIR"
 fi
 
+WIT_DEPS="$ROOT_DIR/wit/deps"
+if [ -d "$WIT_DEPS" ]; then
+    log_act "wit/deps"
+    rm -rf "$WIT_DEPS"
+    rm -rf "$ROOT_DIR/wit/wkg.lock"
+fi
+
 log_ok "Done"

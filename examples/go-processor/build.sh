@@ -10,41 +10,74 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#!/bin/bash
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 WIT_DIR="$SCRIPT_DIR/wit"
+PROJECT_WIT_FILE="$PROJECT_ROOT/wit/processor.wit"
+WIT_DEPS_DIR="$WIT_DIR/deps"
+
 BINDINGS_DIR="$SCRIPT_DIR/bindings"
 BUILD_DIR="$SCRIPT_DIR/build"
+BUILD_WIT_DIR="$BUILD_DIR/wit"
 OUTPUT_FILE="$BUILD_DIR/processor.wasm"
 
+cd "$SCRIPT_DIR"
+
+# 1. Validation & Environment Check
+if [ ! -f "$PROJECT_WIT_FILE" ]; then
+    printf "Error: processor.wit not found at %s\n" "$PROJECT_WIT_FILE" >&2
+    exit 1
+fi
+
+if [ ! -d "$WIT_DEPS_DIR" ] || [ -z "$(ls -A "$WIT_DEPS_DIR" 2>/dev/null)" ]; then
+    printf "Error: WIT dependencies missing in %s\n" "$WIT_DEPS_DIR" >&2
+    printf "Please run 'make env' first to resolve dependencies.\n" >&2
+    exit 1
+fi
+
 if ! command -v tinygo &> /dev/null; then
-    echo "Error: tinygo not found"
     exit 1
 fi
 
 if ! command -v wit-bindgen-go &> /dev/null; then
-    echo "Installing wit-bindgen-go..."
-    go install github.com/bytecodealliance/wasm-tools-go/cmd/wit-bindgen-go@latest
+    go install go.bytecodealliance.org/cmd/wit-bindgen-go@latest
 fi
 
+# 2. Cleanup & Sync Build Workspace
 rm -rf "$BINDINGS_DIR" "$BUILD_DIR"
+mkdir -p "$BINDINGS_DIR" "$BUILD_WIT_DIR/deps"
 
-echo "Generating bindings..."
-mkdir -p "$BINDINGS_DIR"
-wit-bindgen-go generate --world processor --out "$BINDINGS_DIR" --cm "go.bytecodealliance.org/cm" "$WIT_DIR"
+# Sync WIT files to build staging to avoid polluting source during codegen
+cp "$PROJECT_WIT_FILE" "$BUILD_WIT_DIR/processor.wit"
+cp -a "$WIT_DEPS_DIR/." "$BUILD_WIT_DIR/deps/"
 
-echo "Tidying dependencies..."
+# 3. Generate Bindings
+wit-bindgen-go generate \
+    --world processor \
+    --out "$BINDINGS_DIR" \
+    --cm "go.bytecodealliance.org/cm" \
+    "$BUILD_WIT_DIR"
+
+# 4. Build Component
+export GOFLAGS="${GOFLAGS:-} -mod=mod"
 go mod tidy
 
-echo "Building WASI P2 component..."
-mkdir -p "$BUILD_DIR"
-tinygo build -tags purego -scheduler=none -target=wasip2 -wit-package "$WIT_DIR" -wit-world processor -o "$OUTPUT_FILE" "$SCRIPT_DIR/main.go"
+mkdir -p "$(dirname "$OUTPUT_FILE")"
 
+tinygo build -target=wasip2 \
+    -tags purego \
+    -wit-package "$BUILD_WIT_DIR" \
+    -wit-world processor \
+    -o "$OUTPUT_FILE" "$SCRIPT_DIR/main.go"
+
+# 5. Optional Post-Build Validation
 if command -v wasm-tools &> /dev/null; then
-    echo "Validating component..."
     wasm-tools validate "$OUTPUT_FILE"
 fi
 
-echo "Build complete: $OUTPUT_FILE"
+printf "Build successful: %s\n" "$OUTPUT_FILE"
