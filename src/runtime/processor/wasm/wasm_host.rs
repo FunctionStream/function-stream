@@ -113,16 +113,16 @@ impl kv::Host for HostState {}
 // Implement WASI traits required by bindgen!
 // These delegate to wasmtime_wasi::p2::add_to_linker_sync which handles the actual implementation
 use crate::runtime::processor::wasm::wasm_host::wasi::cli::{
-    environment, exit, stdin, stdout, stderr, terminal_input, terminal_output, terminal_stdin,
-    terminal_stdout, terminal_stderr,
+    environment, exit, stderr, stdin, stdout, terminal_input, terminal_output, terminal_stderr,
+    terminal_stdin, terminal_stdout,
 };
-use crate::runtime::processor::wasm::wasm_host::wasi::io::{error, poll, streams};
 use crate::runtime::processor::wasm::wasm_host::wasi::clocks::{monotonic_clock, wall_clock};
-use crate::runtime::processor::wasm::wasm_host::wasi::filesystem::{types, preopens};
+use crate::runtime::processor::wasm::wasm_host::wasi::filesystem::{preopens, types};
+use crate::runtime::processor::wasm::wasm_host::wasi::io::{error, poll, streams};
+use crate::runtime::processor::wasm::wasm_host::wasi::random::{insecure, insecure_seed, random};
 use crate::runtime::processor::wasm::wasm_host::wasi::sockets::{
-    network, instance_network, udp, udp_create_socket, tcp, tcp_create_socket, ip_name_lookup,
+    instance_network, ip_name_lookup, network, tcp, tcp_create_socket, udp, udp_create_socket,
 };
-use crate::runtime::processor::wasm::wasm_host::wasi::random::{random, insecure, insecure_seed};
 
 impl environment::Host for HostState {
     fn get_environment(&mut self) -> Vec<(String, String)> {
@@ -151,7 +151,10 @@ impl exit::Host for HostState {
 
 impl error::Host for HostState {}
 impl error::HostError for HostState {
-    fn drop(&mut self, _error: wasmtime::component::Resource<error::Error>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _error: wasmtime::component::Resource<error::Error>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
@@ -167,7 +170,10 @@ impl poll::Host for HostState {
 }
 
 impl poll::HostPollable for HostState {
-    fn drop(&mut self, _pollable: wasmtime::component::Resource<poll::Pollable>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _pollable: wasmtime::component::Resource<poll::Pollable>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
@@ -182,73 +188,144 @@ impl poll::HostPollable for HostState {
 
 impl streams::Host for HostState {}
 impl streams::HostInputStream for HostState {
-    fn drop(&mut self, _stream: wasmtime::component::Resource<streams::InputStream>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::InputStream>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
-    fn read(&mut self, _stream: wasmtime::component::Resource<streams::InputStream>, _len: u64) -> Result<Vec<u8>, streams::StreamError> {
-        Err(streams::StreamError::LastOperationFailed(wasmtime::component::Resource::new_own(0)))
+    fn read(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::InputStream>,
+        _len: u64,
+    ) -> Result<Vec<u8>, streams::StreamError> {
+        Err(streams::StreamError::LastOperationFailed(
+            wasmtime::component::Resource::new_own(0),
+        ))
     }
 
-    fn blocking_read(&mut self, _stream: wasmtime::component::Resource<streams::InputStream>, _len: u64) -> Result<Vec<u8>, streams::StreamError> {
-        Err(streams::StreamError::LastOperationFailed(wasmtime::component::Resource::new_own(0)))
+    fn blocking_read(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::InputStream>,
+        _len: u64,
+    ) -> Result<Vec<u8>, streams::StreamError> {
+        Err(streams::StreamError::LastOperationFailed(
+            wasmtime::component::Resource::new_own(0),
+        ))
     }
 
-    fn skip(&mut self, _stream: wasmtime::component::Resource<streams::InputStream>, _len: u64) -> Result<u64, streams::StreamError> {
-        Err(streams::StreamError::LastOperationFailed(wasmtime::component::Resource::new_own(0)))
+    fn skip(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::InputStream>,
+        _len: u64,
+    ) -> Result<u64, streams::StreamError> {
+        Err(streams::StreamError::LastOperationFailed(
+            wasmtime::component::Resource::new_own(0),
+        ))
     }
 
-    fn blocking_skip(&mut self, _stream: wasmtime::component::Resource<streams::InputStream>, _len: u64) -> Result<u64, streams::StreamError> {
-        Err(streams::StreamError::LastOperationFailed(wasmtime::component::Resource::new_own(0)))
+    fn blocking_skip(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::InputStream>,
+        _len: u64,
+    ) -> Result<u64, streams::StreamError> {
+        Err(streams::StreamError::LastOperationFailed(
+            wasmtime::component::Resource::new_own(0),
+        ))
     }
 
-    fn subscribe(&mut self, _stream: wasmtime::component::Resource<streams::InputStream>) -> wasmtime::component::Resource<poll::Pollable> {
+    fn subscribe(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::InputStream>,
+    ) -> wasmtime::component::Resource<poll::Pollable> {
         wasmtime::component::Resource::new_own(0)
     }
 }
 
 impl streams::HostOutputStream for HostState {
-    fn drop(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
-    fn check_write(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>) -> Result<u64, streams::StreamError> {
+    fn check_write(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+    ) -> Result<u64, streams::StreamError> {
         Ok(0)
     }
 
-    fn write(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>, _contents: Vec<u8>) -> Result<(), streams::StreamError> {
+    fn write(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+        _contents: Vec<u8>,
+    ) -> Result<(), streams::StreamError> {
         Ok(())
     }
 
-    fn blocking_write_and_flush(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>, _contents: Vec<u8>) -> Result<(), streams::StreamError> {
+    fn blocking_write_and_flush(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+        _contents: Vec<u8>,
+    ) -> Result<(), streams::StreamError> {
         Ok(())
     }
 
-    fn flush(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>) -> Result<(), streams::StreamError> {
+    fn flush(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+    ) -> Result<(), streams::StreamError> {
         Ok(())
     }
 
-    fn blocking_flush(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>) -> Result<(), streams::StreamError> {
+    fn blocking_flush(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+    ) -> Result<(), streams::StreamError> {
         Ok(())
     }
 
-    fn subscribe(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>) -> wasmtime::component::Resource<poll::Pollable> {
+    fn subscribe(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+    ) -> wasmtime::component::Resource<poll::Pollable> {
         wasmtime::component::Resource::new_own(0)
     }
 
-    fn write_zeroes(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>, _len: u64) -> Result<(), streams::StreamError> {
+    fn write_zeroes(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+        _len: u64,
+    ) -> Result<(), streams::StreamError> {
         Ok(())
     }
 
-    fn blocking_write_zeroes_and_flush(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>, _len: u64) -> Result<(), streams::StreamError> {
+    fn blocking_write_zeroes_and_flush(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+        _len: u64,
+    ) -> Result<(), streams::StreamError> {
         Ok(())
     }
 
-    fn splice(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>, _src: wasmtime::component::Resource<streams::InputStream>, _len: u64) -> Result<u64, streams::StreamError> {
+    fn splice(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+        _src: wasmtime::component::Resource<streams::InputStream>,
+        _len: u64,
+    ) -> Result<u64, streams::StreamError> {
         Ok(0)
     }
 
-    fn blocking_splice(&mut self, _stream: wasmtime::component::Resource<streams::OutputStream>, _src: wasmtime::component::Resource<streams::InputStream>, _len: u64) -> Result<u64, streams::StreamError> {
+    fn blocking_splice(
+        &mut self,
+        _stream: wasmtime::component::Resource<streams::OutputStream>,
+        _src: wasmtime::component::Resource<streams::InputStream>,
+        _len: u64,
+    ) -> Result<u64, streams::StreamError> {
         Ok(0)
     }
 }
@@ -273,32 +350,44 @@ impl stderr::Host for HostState {
 
 impl terminal_input::Host for HostState {}
 impl terminal_input::HostTerminalInput for HostState {
-    fn drop(&mut self, _terminal_input: wasmtime::component::Resource<terminal_input::TerminalInput>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _terminal_input: wasmtime::component::Resource<terminal_input::TerminalInput>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 }
 
 impl terminal_output::Host for HostState {}
 impl terminal_output::HostTerminalOutput for HostState {
-    fn drop(&mut self, _terminal_output: wasmtime::component::Resource<terminal_output::TerminalOutput>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _terminal_output: wasmtime::component::Resource<terminal_output::TerminalOutput>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 }
 
 impl terminal_stdin::Host for HostState {
-    fn get_terminal_stdin(&mut self) -> Option<wasmtime::component::Resource<terminal_input::TerminalInput>> {
+    fn get_terminal_stdin(
+        &mut self,
+    ) -> Option<wasmtime::component::Resource<terminal_input::TerminalInput>> {
         None
     }
 }
 
 impl terminal_stdout::Host for HostState {
-    fn get_terminal_stdout(&mut self) -> Option<wasmtime::component::Resource<terminal_output::TerminalOutput>> {
+    fn get_terminal_stdout(
+        &mut self,
+    ) -> Option<wasmtime::component::Resource<terminal_output::TerminalOutput>> {
         None
     }
 }
 
 impl terminal_stderr::Host for HostState {
-    fn get_terminal_stderr(&mut self) -> Option<wasmtime::component::Resource<terminal_output::TerminalOutput>> {
+    fn get_terminal_stderr(
+        &mut self,
+    ) -> Option<wasmtime::component::Resource<terminal_output::TerminalOutput>> {
         None
     }
 }
@@ -316,7 +405,10 @@ impl monotonic_clock::Host for HostState {
         wasmtime::component::Resource::new_own(0)
     }
 
-    fn subscribe_duration(&mut self, _duration: u64) -> wasmtime::component::Resource<poll::Pollable> {
+    fn subscribe_duration(
+        &mut self,
+        _duration: u64,
+    ) -> wasmtime::component::Resource<poll::Pollable> {
         wasmtime::component::Resource::new_own(0)
     }
 }
@@ -338,144 +430,280 @@ impl wall_clock::Host for HostState {
 }
 
 impl types::Host for HostState {
-    fn filesystem_error_code(&mut self, _error: wasmtime::component::Resource<types::Error>) -> Option<types::ErrorCode> {
+    fn filesystem_error_code(
+        &mut self,
+        _error: wasmtime::component::Resource<types::Error>,
+    ) -> Option<types::ErrorCode> {
         None
     }
 }
 
 impl types::HostDirectoryEntryStream for HostState {
-    fn read_directory_entry(&mut self, _stream: wasmtime::component::Resource<types::DirectoryEntryStream>) -> Result<Option<types::DirectoryEntry>, types::ErrorCode> {
+    fn read_directory_entry(
+        &mut self,
+        _stream: wasmtime::component::Resource<types::DirectoryEntryStream>,
+    ) -> Result<Option<types::DirectoryEntry>, types::ErrorCode> {
         Ok(None)
     }
 
-    fn drop(&mut self, _stream: wasmtime::component::Resource<types::DirectoryEntryStream>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _stream: wasmtime::component::Resource<types::DirectoryEntryStream>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 }
 
 impl types::HostDescriptor for HostState {
-    fn drop(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
-    fn read_via_stream(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _length: u64) -> Result<wasmtime::component::Resource<streams::InputStream>, types::ErrorCode> {
+    fn read_via_stream(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _length: u64,
+    ) -> Result<wasmtime::component::Resource<streams::InputStream>, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn write_via_stream(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _offset: types::Filesize) -> Result<wasmtime::component::Resource<streams::OutputStream>, types::ErrorCode> {
+    fn write_via_stream(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _offset: types::Filesize,
+    ) -> Result<wasmtime::component::Resource<streams::OutputStream>, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn append_via_stream(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> Result<wasmtime::component::Resource<streams::OutputStream>, types::ErrorCode> {
+    fn append_via_stream(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> Result<wasmtime::component::Resource<streams::OutputStream>, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn advise(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _offset: types::Filesize, _length: types::Filesize, _advice: types::Advice) -> Result<(), types::ErrorCode> {
+    fn advise(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _offset: types::Filesize,
+        _length: types::Filesize,
+        _advice: types::Advice,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn sync_data(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> Result<(), types::ErrorCode> {
+    fn sync_data(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn get_flags(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> Result<types::DescriptorFlags, types::ErrorCode> {
+    fn get_flags(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> Result<types::DescriptorFlags, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn get_type(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> Result<types::DescriptorType, types::ErrorCode> {
+    fn get_type(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> Result<types::DescriptorType, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn set_size(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _size: types::Filesize) -> Result<(), types::ErrorCode> {
+    fn set_size(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _size: types::Filesize,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn set_times(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _data_access_timestamp: types::NewTimestamp, _data_modification_timestamp: types::NewTimestamp) -> Result<(), types::ErrorCode> {
+    fn set_times(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _data_access_timestamp: types::NewTimestamp,
+        _data_modification_timestamp: types::NewTimestamp,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn read(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _length: u64, _offset: types::Filesize) -> Result<(Vec<u8>, bool), types::ErrorCode> {
+    fn read(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _length: u64,
+        _offset: types::Filesize,
+    ) -> Result<(Vec<u8>, bool), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn write(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _buffer: Vec<u8>, _offset: types::Filesize) -> Result<u64, types::ErrorCode> {
+    fn write(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _buffer: Vec<u8>,
+        _offset: types::Filesize,
+    ) -> Result<u64, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn read_directory(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> Result<wasmtime::component::Resource<types::DirectoryEntryStream>, types::ErrorCode> {
+    fn read_directory(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> Result<wasmtime::component::Resource<types::DirectoryEntryStream>, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn sync(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> Result<(), types::ErrorCode> {
+    fn sync(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn create_directory_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _path: String) -> Result<(), types::ErrorCode> {
+    fn create_directory_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _path: String,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn stat(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> Result<types::DescriptorStat, types::ErrorCode> {
+    fn stat(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> Result<types::DescriptorStat, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn stat_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _path_flags: types::PathFlags, _path: String) -> Result<types::DescriptorStat, types::ErrorCode> {
+    fn stat_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _path_flags: types::PathFlags,
+        _path: String,
+    ) -> Result<types::DescriptorStat, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn set_times_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _path_flags: types::PathFlags, _path: String, _data_access_timestamp: types::NewTimestamp, _data_modification_timestamp: types::NewTimestamp) -> Result<(), types::ErrorCode> {
+    fn set_times_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _path_flags: types::PathFlags,
+        _path: String,
+        _data_access_timestamp: types::NewTimestamp,
+        _data_modification_timestamp: types::NewTimestamp,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn link_at(&mut self, _old_descriptor: wasmtime::component::Resource<types::Descriptor>, _old_path_flags: types::PathFlags, _old_path: String, _new_descriptor: wasmtime::component::Resource<types::Descriptor>, _new_path: String) -> Result<(), types::ErrorCode> {
+    fn link_at(
+        &mut self,
+        _old_descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _old_path_flags: types::PathFlags,
+        _old_path: String,
+        _new_descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _new_path: String,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn open_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _path_flags: types::PathFlags, _path: String, _open_flags: types::OpenFlags, _descriptor_flags: types::DescriptorFlags) -> Result<wasmtime::component::Resource<types::Descriptor>, types::ErrorCode> {
+    fn open_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _path_flags: types::PathFlags,
+        _path: String,
+        _open_flags: types::OpenFlags,
+        _descriptor_flags: types::DescriptorFlags,
+    ) -> Result<wasmtime::component::Resource<types::Descriptor>, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn readlink_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _path: String) -> Result<String, types::ErrorCode> {
+    fn readlink_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _path: String,
+    ) -> Result<String, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn remove_directory_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _path: String) -> Result<(), types::ErrorCode> {
+    fn remove_directory_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _path: String,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn rename_at(&mut self, _old_descriptor: wasmtime::component::Resource<types::Descriptor>, _old_path: String, _new_descriptor: wasmtime::component::Resource<types::Descriptor>, _new_path: String) -> Result<(), types::ErrorCode> {
+    fn rename_at(
+        &mut self,
+        _old_descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _old_path: String,
+        _new_descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _new_path: String,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn symlink_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _old_path: String, _new_path: String) -> Result<(), types::ErrorCode> {
+    fn symlink_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _old_path: String,
+        _new_path: String,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn unlink_file_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _path: String) -> Result<(), types::ErrorCode> {
+    fn unlink_file_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _path: String,
+    ) -> Result<(), types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn is_same_object(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _other: wasmtime::component::Resource<types::Descriptor>) -> bool {
+    fn is_same_object(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _other: wasmtime::component::Resource<types::Descriptor>,
+    ) -> bool {
         false
     }
 
-    fn metadata_hash(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>) -> Result<types::MetadataHashValue, types::ErrorCode> {
+    fn metadata_hash(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+    ) -> Result<types::MetadataHashValue, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 
-    fn metadata_hash_at(&mut self, _descriptor: wasmtime::component::Resource<types::Descriptor>, _path_flags: types::PathFlags, _path: String) -> Result<types::MetadataHashValue, types::ErrorCode> {
+    fn metadata_hash_at(
+        &mut self,
+        _descriptor: wasmtime::component::Resource<types::Descriptor>,
+        _path_flags: types::PathFlags,
+        _path: String,
+    ) -> Result<types::MetadataHashValue, types::ErrorCode> {
         Err(types::ErrorCode::BadDescriptor)
     }
 }
 
 impl preopens::Host for HostState {
-    fn get_directories(&mut self) -> Vec<(wasmtime::component::Resource<types::Descriptor>, String)> {
+    fn get_directories(
+        &mut self,
+    ) -> Vec<(wasmtime::component::Resource<types::Descriptor>, String)> {
         vec![]
     }
 }
 
 impl network::Host for HostState {}
 impl network::HostNetwork for HostState {
-    fn drop(&mut self, _network: wasmtime::component::Resource<network::Network>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _network: wasmtime::component::Resource<network::Network>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 }
@@ -488,140 +716,267 @@ impl instance_network::Host for HostState {
 
 impl udp::Host for HostState {}
 impl udp::HostOutgoingDatagramStream for HostState {
-    fn drop(&mut self, _stream: wasmtime::component::Resource<udp::OutgoingDatagramStream>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _stream: wasmtime::component::Resource<udp::OutgoingDatagramStream>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
-    fn check_send(&mut self, _stream: wasmtime::component::Resource<udp::OutgoingDatagramStream>) -> Result<u64, udp::ErrorCode> {
+    fn check_send(
+        &mut self,
+        _stream: wasmtime::component::Resource<udp::OutgoingDatagramStream>,
+    ) -> Result<u64, udp::ErrorCode> {
         Ok(0)
     }
 
-    fn send(&mut self, _stream: wasmtime::component::Resource<udp::OutgoingDatagramStream>, _datagrams: Vec<udp::OutgoingDatagram>) -> Result<u64, udp::ErrorCode> {
+    fn send(
+        &mut self,
+        _stream: wasmtime::component::Resource<udp::OutgoingDatagramStream>,
+        _datagrams: Vec<udp::OutgoingDatagram>,
+    ) -> Result<u64, udp::ErrorCode> {
         Ok(0)
     }
 
-    fn subscribe(&mut self, _stream: wasmtime::component::Resource<udp::OutgoingDatagramStream>) -> wasmtime::component::Resource<poll::Pollable> {
+    fn subscribe(
+        &mut self,
+        _stream: wasmtime::component::Resource<udp::OutgoingDatagramStream>,
+    ) -> wasmtime::component::Resource<poll::Pollable> {
         wasmtime::component::Resource::new_own(0)
     }
 }
 
 impl udp::HostIncomingDatagramStream for HostState {
-    fn drop(&mut self, _stream: wasmtime::component::Resource<udp::IncomingDatagramStream>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _stream: wasmtime::component::Resource<udp::IncomingDatagramStream>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
-    fn receive(&mut self, _stream: wasmtime::component::Resource<udp::IncomingDatagramStream>, _max_results: u64) -> Result<Vec<udp::IncomingDatagram>, udp::ErrorCode> {
+    fn receive(
+        &mut self,
+        _stream: wasmtime::component::Resource<udp::IncomingDatagramStream>,
+        _max_results: u64,
+    ) -> Result<Vec<udp::IncomingDatagram>, udp::ErrorCode> {
         Ok(vec![])
     }
 
-    fn subscribe(&mut self, _stream: wasmtime::component::Resource<udp::IncomingDatagramStream>) -> wasmtime::component::Resource<poll::Pollable> {
+    fn subscribe(
+        &mut self,
+        _stream: wasmtime::component::Resource<udp::IncomingDatagramStream>,
+    ) -> wasmtime::component::Resource<poll::Pollable> {
         wasmtime::component::Resource::new_own(0)
     }
 }
 
 impl udp::HostUdpSocket for HostState {
-    fn drop(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
-    fn start_bind(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>, _network: wasmtime::component::Resource<network::Network>, _local_address: network::IpSocketAddress) -> Result<(), udp::ErrorCode> {
+    fn start_bind(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+        _network: wasmtime::component::Resource<network::Network>,
+        _local_address: network::IpSocketAddress,
+    ) -> Result<(), udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn finish_bind(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> Result<(), udp::ErrorCode> {
+    fn finish_bind(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> Result<(), udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn stream(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>, _remote_address: Option<network::IpSocketAddress>) -> Result<(wasmtime::component::Resource<udp::IncomingDatagramStream>, wasmtime::component::Resource<udp::OutgoingDatagramStream>), udp::ErrorCode> {
+    fn stream(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+        _remote_address: Option<network::IpSocketAddress>,
+    ) -> Result<
+        (
+            wasmtime::component::Resource<udp::IncomingDatagramStream>,
+            wasmtime::component::Resource<udp::OutgoingDatagramStream>,
+        ),
+        udp::ErrorCode,
+    > {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn local_address(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> Result<network::IpSocketAddress, udp::ErrorCode> {
+    fn local_address(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> Result<network::IpSocketAddress, udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn remote_address(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> Result<network::IpSocketAddress, udp::ErrorCode> {
+    fn remote_address(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> Result<network::IpSocketAddress, udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn address_family(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> network::IpAddressFamily {
+    fn address_family(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> network::IpAddressFamily {
         network::IpAddressFamily::Ipv4
     }
 
-    fn unicast_hop_limit(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> Result<u8, udp::ErrorCode> {
+    fn unicast_hop_limit(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> Result<u8, udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn set_unicast_hop_limit(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>, _value: u8) -> Result<(), udp::ErrorCode> {
+    fn set_unicast_hop_limit(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+        _value: u8,
+    ) -> Result<(), udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn receive_buffer_size(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> Result<u64, udp::ErrorCode> {
+    fn receive_buffer_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> Result<u64, udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn set_receive_buffer_size(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>, _value: u64) -> Result<(), udp::ErrorCode> {
+    fn set_receive_buffer_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+        _value: u64,
+    ) -> Result<(), udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn send_buffer_size(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> Result<u64, udp::ErrorCode> {
+    fn send_buffer_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> Result<u64, udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn set_send_buffer_size(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>, _value: u64) -> Result<(), udp::ErrorCode> {
+    fn set_send_buffer_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+        _value: u64,
+    ) -> Result<(), udp::ErrorCode> {
         Err(udp::ErrorCode::NotSupported)
     }
 
-    fn subscribe(&mut self, _socket: wasmtime::component::Resource<udp::UdpSocket>) -> wasmtime::component::Resource<poll::Pollable> {
+    fn subscribe(
+        &mut self,
+        _socket: wasmtime::component::Resource<udp::UdpSocket>,
+    ) -> wasmtime::component::Resource<poll::Pollable> {
         wasmtime::component::Resource::new_own(0)
     }
 }
 
 impl udp_create_socket::Host for HostState {
-    fn create_udp_socket(&mut self, _address_family: network::IpAddressFamily) -> Result<wasmtime::component::Resource<udp::UdpSocket>, udp_create_socket::ErrorCode> {
+    fn create_udp_socket(
+        &mut self,
+        _address_family: network::IpAddressFamily,
+    ) -> Result<wasmtime::component::Resource<udp::UdpSocket>, udp_create_socket::ErrorCode> {
         Err(udp_create_socket::ErrorCode::NotSupported)
     }
 }
 
 impl tcp::Host for HostState {}
 impl tcp::HostTcpSocket for HostState {
-    fn drop(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
-    fn start_bind(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _network: wasmtime::component::Resource<network::Network>, _local_address: network::IpSocketAddress) -> Result<(), tcp::ErrorCode> {
+    fn start_bind(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _network: wasmtime::component::Resource<network::Network>,
+        _local_address: network::IpSocketAddress,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn finish_bind(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<(), tcp::ErrorCode> {
+    fn finish_bind(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn start_connect(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _network: wasmtime::component::Resource<network::Network>, _remote_address: network::IpSocketAddress) -> Result<(), tcp::ErrorCode> {
+    fn start_connect(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _network: wasmtime::component::Resource<network::Network>,
+        _remote_address: network::IpSocketAddress,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn finish_connect(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<(wasmtime::component::Resource<streams::InputStream>, wasmtime::component::Resource<streams::OutputStream>), tcp::ErrorCode> {
+    fn finish_connect(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<
+        (
+            wasmtime::component::Resource<streams::InputStream>,
+            wasmtime::component::Resource<streams::OutputStream>,
+        ),
+        tcp::ErrorCode,
+    > {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn start_listen(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<(), tcp::ErrorCode> {
+    fn start_listen(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn finish_listen(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<(), tcp::ErrorCode> {
+    fn finish_listen(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn accept(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<(wasmtime::component::Resource<tcp::TcpSocket>, wasmtime::component::Resource<streams::InputStream>, wasmtime::component::Resource<streams::OutputStream>), tcp::ErrorCode> {
+    fn accept(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<
+        (
+            wasmtime::component::Resource<tcp::TcpSocket>,
+            wasmtime::component::Resource<streams::InputStream>,
+            wasmtime::component::Resource<streams::OutputStream>,
+        ),
+        tcp::ErrorCode,
+    > {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn local_address(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<network::IpSocketAddress, tcp::ErrorCode> {
+    fn local_address(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<network::IpSocketAddress, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn remote_address(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<network::IpSocketAddress, tcp::ErrorCode> {
+    fn remote_address(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<network::IpSocketAddress, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
@@ -629,101 +984,183 @@ impl tcp::HostTcpSocket for HostState {
         false
     }
 
-    fn address_family(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> network::IpAddressFamily {
+    fn address_family(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> network::IpAddressFamily {
         network::IpAddressFamily::Ipv4
     }
 
-    fn set_listen_backlog_size(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _value: u64) -> Result<(), tcp::ErrorCode> {
+    fn set_listen_backlog_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _value: u64,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn keep_alive_enabled(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<bool, tcp::ErrorCode> {
+    fn keep_alive_enabled(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<bool, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn set_keep_alive_enabled(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _value: bool) -> Result<(), tcp::ErrorCode> {
+    fn set_keep_alive_enabled(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _value: bool,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn keep_alive_idle_time(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<u64, tcp::ErrorCode> {
+    fn keep_alive_idle_time(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<u64, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn set_keep_alive_idle_time(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _value: u64) -> Result<(), tcp::ErrorCode> {
+    fn set_keep_alive_idle_time(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _value: u64,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn keep_alive_interval(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<u64, tcp::ErrorCode> {
+    fn keep_alive_interval(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<u64, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn set_keep_alive_interval(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _value: u64) -> Result<(), tcp::ErrorCode> {
+    fn set_keep_alive_interval(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _value: u64,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn keep_alive_count(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<u32, tcp::ErrorCode> {
+    fn keep_alive_count(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<u32, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn set_keep_alive_count(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _value: u32) -> Result<(), tcp::ErrorCode> {
+    fn set_keep_alive_count(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _value: u32,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn hop_limit(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<u8, tcp::ErrorCode> {
+    fn hop_limit(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<u8, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn set_hop_limit(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _value: u8) -> Result<(), tcp::ErrorCode> {
+    fn set_hop_limit(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _value: u8,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn receive_buffer_size(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<u64, tcp::ErrorCode> {
+    fn receive_buffer_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<u64, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn set_receive_buffer_size(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _value: u64) -> Result<(), tcp::ErrorCode> {
+    fn set_receive_buffer_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _value: u64,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn send_buffer_size(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> Result<u64, tcp::ErrorCode> {
+    fn send_buffer_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> Result<u64, tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn set_send_buffer_size(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _value: u64) -> Result<(), tcp::ErrorCode> {
+    fn set_send_buffer_size(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _value: u64,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 
-    fn subscribe(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>) -> wasmtime::component::Resource<poll::Pollable> {
+    fn subscribe(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+    ) -> wasmtime::component::Resource<poll::Pollable> {
         wasmtime::component::Resource::new_own(0)
     }
 
-    fn shutdown(&mut self, _socket: wasmtime::component::Resource<tcp::TcpSocket>, _shutdown_type: tcp::ShutdownType) -> Result<(), tcp::ErrorCode> {
+    fn shutdown(
+        &mut self,
+        _socket: wasmtime::component::Resource<tcp::TcpSocket>,
+        _shutdown_type: tcp::ShutdownType,
+    ) -> Result<(), tcp::ErrorCode> {
         Err(tcp::ErrorCode::NotSupported)
     }
 }
 
 impl tcp_create_socket::Host for HostState {
-    fn create_tcp_socket(&mut self, _address_family: network::IpAddressFamily) -> Result<wasmtime::component::Resource<tcp::TcpSocket>, tcp_create_socket::ErrorCode> {
+    fn create_tcp_socket(
+        &mut self,
+        _address_family: network::IpAddressFamily,
+    ) -> Result<wasmtime::component::Resource<tcp::TcpSocket>, tcp_create_socket::ErrorCode> {
         Err(tcp_create_socket::ErrorCode::NotSupported)
     }
 }
 
 impl ip_name_lookup::Host for HostState {
-    fn resolve_addresses(&mut self, _network: wasmtime::component::Resource<network::Network>, _name: String) -> Result<wasmtime::component::Resource<ip_name_lookup::ResolveAddressStream>, ip_name_lookup::ErrorCode> {
+    fn resolve_addresses(
+        &mut self,
+        _network: wasmtime::component::Resource<network::Network>,
+        _name: String,
+    ) -> Result<
+        wasmtime::component::Resource<ip_name_lookup::ResolveAddressStream>,
+        ip_name_lookup::ErrorCode,
+    > {
         Err(ip_name_lookup::ErrorCode::NotSupported)
     }
 }
 
 impl ip_name_lookup::HostResolveAddressStream for HostState {
-    fn resolve_next_address(&mut self, _stream: wasmtime::component::Resource<ip_name_lookup::ResolveAddressStream>) -> Result<Option<network::IpAddress>, ip_name_lookup::ErrorCode> {
+    fn resolve_next_address(
+        &mut self,
+        _stream: wasmtime::component::Resource<ip_name_lookup::ResolveAddressStream>,
+    ) -> Result<Option<network::IpAddress>, ip_name_lookup::ErrorCode> {
         Ok(None)
     }
 
-    fn drop(&mut self, _stream: wasmtime::component::Resource<ip_name_lookup::ResolveAddressStream>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        _stream: wasmtime::component::Resource<ip_name_lookup::ResolveAddressStream>,
+    ) -> wasmtime::Result<()> {
         Ok(())
     }
 
-    fn subscribe(&mut self, _stream: wasmtime::component::Resource<ip_name_lookup::ResolveAddressStream>) -> wasmtime::component::Resource<poll::Pollable> {
+    fn subscribe(
+        &mut self,
+        _stream: wasmtime::component::Resource<ip_name_lookup::ResolveAddressStream>,
+    ) -> wasmtime::component::Resource<poll::Pollable> {
         wasmtime::component::Resource::new_own(0)
     }
 }
