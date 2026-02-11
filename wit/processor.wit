@@ -48,7 +48,6 @@ interface collector {
 }
 
 world processor {
-    include wasi:cli/imports@0.2.0;
     import collector;
     import kv;
 
@@ -60,4 +59,9 @@ world processor {
     export fs-close: func();
     export fs-exec: func(class-name: string, modules: list<tuple<string, list<u8>>>);
     export fs-custom: func(payload: list<u8>) -> list<u8>;
+}
+
+world processor-runtime {
+    include wasi:cli/imports@0.2.0;
+    include processor;
 }

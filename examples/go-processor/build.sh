@@ -19,7 +19,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 WIT_DIR="$SCRIPT_DIR/wit"
 PROJECT_WIT_FILE="$PROJECT_ROOT/wit/processor.wit"
-WIT_DEPS_DIR="$WIT_DIR/deps"
+WIT_DEPS_DIR="$PROJECT_ROOT/wit/deps"
 
 BINDINGS_DIR="$SCRIPT_DIR/bindings"
 BUILD_DIR="$SCRIPT_DIR/build"
@@ -56,7 +56,12 @@ mkdir -p "$BINDINGS_DIR" "$BUILD_WIT_DIR/deps"
 cp "$PROJECT_WIT_FILE" "$BUILD_WIT_DIR/processor.wit"
 cp -a "$WIT_DEPS_DIR/." "$BUILD_WIT_DIR/deps/"
 
-# 3. Generate Bindings
+if ! command -v wit-bindgen-go &> /dev/null; then
+    echo "wit-bindgen-go not found. Installing..."
+    go install go.bytecodealliance.org/cmd/wit-bindgen-go@latest
+    export PATH=$PATH:$(go env GOPATH)/bin
+fi
+
 wit-bindgen-go generate \
     --world processor \
     --out "$BINDINGS_DIR" \
@@ -72,7 +77,7 @@ mkdir -p "$(dirname "$OUTPUT_FILE")"
 tinygo build -target=wasip2 \
     -tags purego \
     -wit-package "$BUILD_WIT_DIR" \
-    -wit-world processor \
+    -wit-world processor-runtime \
     -o "$OUTPUT_FILE" "$SCRIPT_DIR/main.go"
 
 # 5. Optional Post-Build Validation

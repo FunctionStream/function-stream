@@ -40,7 +40,7 @@ WASM_OUTPUT = TARGET_DIR / "functionstream-python-runtime.wasm"
 
 FS_API_DIR = SCRIPT_DIR.parent / "functionstream-api"
 
-WORLD_NAME = "processor"
+WORLD_NAME = "processor-runtime"
 MAIN_MODULE = "fs_runtime.runner"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -124,7 +124,6 @@ class WasmBuilder:
             "-d", str(WIT_DIR.absolute()),
             "-w", WORLD_NAME,
             "componentize",
-            "--stub-wasi",
             "-p", str(DEPENDENCIES_DIR.absolute()),
             "-p", str(SRC_DIR.absolute()),
             MAIN_MODULE,
