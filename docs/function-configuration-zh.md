@@ -1,5 +1,3 @@
-# Function 任务配置规范 (Task Definition)
-
 Function Stream 的任务定义采用插件化架构。虽然当前版本重点支持 Kafka 协议，但其配置模型在设计上支持通过 input-type 与 output-type 扩展至任意流媒体系统。
 
 ---

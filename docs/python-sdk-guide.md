@@ -1,5 +1,3 @@
-# Python SDK Development and Interaction Guide
-
 Function Stream provides a complete toolchain for Python developers, covering the entire process from stream operator development (fs_api) to management (fs_client).
 
 ---

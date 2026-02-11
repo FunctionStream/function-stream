@@ -1,5 +1,3 @@
-# Server Configuration and Operations Guide
-
 Function Stream is a cloud-native stream processing platform that supports lightweight computational tasks written in WASM (Go/Rust) and Python.
 
 ---

@@ -1,5 +1,3 @@
-# SQL CLI Interactive Management Guide
-
 Function Stream provides a SQL-like declarative interactive terminal (REPL), designed to provide operations personnel with low-threshold, high-efficiency cluster task control capabilities.
 
 ---

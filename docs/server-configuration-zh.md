@@ -1,5 +1,3 @@
-# 服务端配置与运维指南
-
 Function Stream 是一个云原生流处理平台，支持 WASM (Go/Rust) 与 Python 编写的轻量级计算任务。
 
 ---
