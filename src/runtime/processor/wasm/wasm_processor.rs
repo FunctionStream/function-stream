@@ -241,17 +241,6 @@ impl WasmProcessor for WasmProcessorImpl {
             ))
         })?;
 
-        // Call wasm process function
-        // WIT: export fs-process: func(source-id: u32, data: list<u8>);
-        let payload_str = String::from_utf8_lossy(&data);
-        log::info!(
-            "Calling fs_process: input_index={}, data_len={}, payload={}",
-            input_index,
-            data.len(),
-            payload_str
-        );
-
-        let start = std::time::Instant::now();
         processor
             .call_fs_process(store, input_index as u32, &data)
             .map_err(|e| -> Box<dyn Error + Send> {
@@ -260,12 +249,6 @@ impl WasmProcessor for WasmProcessorImpl {
                     e
                 )))
             })?;
-        let elapsed_us = start.elapsed().as_micros();
-        log::info!(
-            "fs_process completed: input_index={}, elapsed={}us",
-            input_index,
-            elapsed_us
-        );
 
         log::debug!(
             "WasmProcessor '{}' processed {} bytes from input {}",

@@ -474,14 +474,6 @@ impl KafkaOutputSink {
     ) {
         // Use into_buffer() to take ownership, avoids extra copy
         if let Some(payload) = data.into_buffer() {
-            let payload_str = String::from_utf8_lossy(&payload);
-            log::info!(
-                "Sending to Kafka topic '{}': len={}, payload={}",
-                config.topic,
-                payload.len(),
-                payload_str
-            );
-
             let mut record: BaseRecord<'_, (), Vec<u8>> =
                 BaseRecord::to(&config.topic).payload(&payload);
 
@@ -742,17 +734,6 @@ impl OutputSink for KafkaOutputSink {
     // -------------------- collect --------------------
 
     fn collect(&mut self, data: BufferOrEvent) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // Print current state
-        let state = self.state.lock().unwrap().clone();
-        let data_sender_exists = self.data_sender.is_some();
-        log::info!(
-            "KafkaOutputSink collect: sink_id={}, topic={}, state={:?}, data_sender_exists={}",
-            self.sink_id,
-            self.config.topic,
-            state,
-            data_sender_exists
-        );
-
         // Don't check state in main thread, send data directly to channel
         // If runloop is not running, data will be queued in channel
         if let Some(ref sender) = self.data_sender {

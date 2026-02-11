@@ -50,12 +50,7 @@ pub fn init_logging(config: &LogConfig) -> Result<()> {
 
     let subscriber = Registry::default()
         .with(log_level)
-        .with(
-            fmt::layer()
-                .with_writer(non_blocking)
-                .with_ansi(false)
-                .json(),
-        )
+        .with(fmt::layer().with_writer(non_blocking).with_ansi(false))
         .with(fmt::layer().with_writer(std::io::stdout).with_ansi(true));
 
     subscriber.init();
