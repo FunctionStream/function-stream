@@ -12,7 +12,7 @@
 
 use crate::storage::state_backend::error::BackendError;
 use crate::storage::state_backend::factory::StateStoreFactory;
-use rocksdb::{DB, Options};
+use rocksdb::{ColumnFamilyDescriptor, DB, Options};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -100,7 +100,22 @@ impl RocksDBStateStoreFactory {
                 .map_err(|e| BackendError::IoError(format!("Failed to create directory: {}", e)))?;
         }
 
-        let db = DB::open(&opts, db_path)
+        let existing_cfs = if db_path.exists() {
+            DB::list_cf(&opts, db_path).unwrap_or_else(|_| vec!["default".to_string()])
+        } else {
+            vec!["default".to_string()]
+        };
+
+        let cf_descriptors: Vec<_> = existing_cfs
+            .iter()
+            .map(|name| {
+                let mut cf_opts = Options::default();
+                cf_opts.set_merge_operator_associative("appendOp", merge_operator);
+                ColumnFamilyDescriptor::new(name, cf_opts)
+            })
+            .collect();
+
+        let db = DB::open_cf_descriptors(&opts, db_path, cf_descriptors)
             .map_err(|e| BackendError::IoError(format!("Failed to open RocksDB: {}", e)))?;
 
         Ok(Self {
