@@ -32,6 +32,7 @@ impl PythonBuilder {
         task_name: String,
         yaml_value: &Value,
         modules: &[(String, Vec<u8>)],
+        create_time: u64,
     ) -> Result<Box<dyn crate::runtime::task::TaskLifecycle>, Box<dyn std::error::Error + Send>>
     {
         let config_type = yaml_value
@@ -109,6 +110,7 @@ impl PythonBuilder {
             all_inputs,
             processor,
             outputs,
+            create_time,
         );
         let task = Arc::new(task);
 

@@ -42,6 +42,7 @@ impl ProcessorBuilder {
         task_name: String,
         yaml_value: &Value,
         module_bytes: Vec<u8>,
+        create_time: u64,
     ) -> Result<Arc<WasmTask>, Box<dyn std::error::Error + Send>> {
         let config_type = yaml_value
             .get(TYPE)
@@ -118,6 +119,7 @@ impl ProcessorBuilder {
             all_inputs,
             processor,
             outputs,
+            create_time,
         );
         let task = Arc::new(task);
 

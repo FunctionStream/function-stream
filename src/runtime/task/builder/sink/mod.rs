@@ -37,6 +37,7 @@ impl SinkBuilder {
         _task_name: String,
         yaml_value: &Value,
         _module_bytes: Vec<u8>,
+        _create_time: u64,
     ) -> Result<Arc<WasmTask>, Box<dyn std::error::Error + Send>> {
         // Validate configuration type
         let config_type = yaml_value

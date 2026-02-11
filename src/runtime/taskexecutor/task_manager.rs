@@ -24,7 +24,6 @@ use anyhow::{Context, Result, anyhow};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 type SharedTask = Arc<RwLock<Box<dyn TaskLifecycle>>>;
 type TaskMap = Arc<RwLock<HashMap<String, SharedTask>>>;
@@ -87,7 +86,12 @@ impl TaskManager {
 
 impl TaskManager {
     pub fn register_task(&self, config_bytes: &[u8], module_bytes: &[u8]) -> Result<()> {
-        let task = TaskBuilder::from_yaml_config(config_bytes, module_bytes)
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let create_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let task = TaskBuilder::from_yaml_config(config_bytes, module_bytes, create_time)
             .map_err(|e| anyhow!("Failed to build task: {}", e))?;
         let info = task.get_function_info();
         let task_info = StoredTaskInfo {
@@ -96,10 +100,7 @@ impl TaskManager {
             module_bytes: Some(TaskModuleBytes::Wasm(module_bytes.to_vec())),
             config_bytes: config_bytes.to_vec(),
             state: ComponentState::Initialized,
-            created_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            created_at: info.create_time,
             checkpoint_id: None,
         };
         self.register_task_internal(task, Some(task_info))
@@ -112,7 +113,12 @@ impl TaskManager {
     ) -> Result<()> {
         #[cfg(feature = "python")]
         {
-            let task = TaskBuilder::from_python_config(config_bytes, modules)
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let create_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let task = TaskBuilder::from_python_config(config_bytes, modules, create_time)
                 .map_err(|e| anyhow!("Failed to build Python task: {}", e))?;
             let (class_name, module_name, module_bytes) = match modules.first() {
                 Some((name, bytes)) => (name.clone(), name.clone(), Some(bytes.clone())),
@@ -129,10 +135,7 @@ impl TaskManager {
                 }),
                 config_bytes: config_bytes.to_vec(),
                 state: ComponentState::Initialized,
-                created_at: SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                created_at: info.create_time,
                 checkpoint_id: None,
             };
             self.register_task_internal(task, Some(task_info))
@@ -288,10 +291,12 @@ impl TaskManager {
             return Ok(());
         }
 
+        let create_time = stored.created_at;
+
         let task = match &stored.module_bytes {
-            None => TaskBuilder::from_yaml_config(&stored.config_bytes, &[]),
+            None => TaskBuilder::from_yaml_config(&stored.config_bytes, &[], create_time),
             Some(TaskModuleBytes::Wasm(bytes)) => {
-                TaskBuilder::from_yaml_config(&stored.config_bytes, bytes)
+                TaskBuilder::from_yaml_config(&stored.config_bytes, bytes, create_time)
             }
             Some(TaskModuleBytes::Python {
                 class_name: _,
@@ -301,7 +306,7 @@ impl TaskManager {
                 #[cfg(feature = "python")]
                 {
                     let modules = [(module.clone(), py_bytes.clone().unwrap_or_default())];
-                    TaskBuilder::from_python_config(&stored.config_bytes, &modules)
+                    TaskBuilder::from_python_config(&stored.config_bytes, &modules, create_time)
                 }
                 #[cfg(not(feature = "python"))]
                 {

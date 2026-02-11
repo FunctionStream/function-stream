@@ -454,6 +454,7 @@ pub fn create_wasm_host_with_component(
     output_sinks: Vec<Box<dyn OutputSink>>,
     init_context: &crate::runtime::taskexecutor::InitContext,
     task_name: String,
+    create_time: u64,
 ) -> anyhow::Result<(Processor, Store<HostState>)> {
     let mut linker = Linker::new(engine);
 
@@ -463,21 +464,9 @@ pub fn create_wasm_host_with_component(
     Processor::add_to_linker::<HostState, HostStateData>(&mut linker, |s| s)
         .map_err(|e| anyhow::anyhow!("Failed to add interfaces to linker: {}", e))?;
 
-    let created_at = init_context
-        .task_storage
-        .load_task(&task_name)
-        .ok()
-        .map(|info| info.created_at)
-        .unwrap_or_else(|| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-        });
-
     let factory = init_context
         .state_storage_server
-        .create_factory(task_name.clone(), created_at)
+        .create_factory(task_name.clone(), create_time)
         .map_err(|e| anyhow::anyhow!("Failed to create state store factory: {}", e))?;
 
     let mut store = Store::new(
@@ -511,11 +500,19 @@ pub fn create_wasm_host(
     output_sinks: Vec<Box<dyn OutputSink>>,
     init_context: &crate::runtime::taskexecutor::InitContext,
     task_name: String,
+    create_time: u64,
 ) -> anyhow::Result<(Processor, Store<HostState>)> {
     let engine = get_global_engine(wasm_bytes.len())?;
 
     let component = Component::from_binary(&engine, wasm_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to parse WebAssembly component: {}", e))?;
 
-    create_wasm_host_with_component(&engine, &component, output_sinks, init_context, task_name)
+    create_wasm_host_with_component(
+        &engine,
+        &component,
+        output_sinks,
+        init_context,
+        task_name,
+        create_time,
+    )
 }

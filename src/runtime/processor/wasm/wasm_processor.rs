@@ -509,6 +509,7 @@ impl WasmProcessor for WasmProcessorImpl {
         output_sinks: Vec<Box<dyn OutputSink>>,
         init_context: &crate::runtime::taskexecutor::InitContext,
         task_name: String,
+        create_time: u64,
     ) -> Result<(), Box<dyn Error + Send>> {
         use super::wasm_host::create_wasm_host;
 
@@ -536,6 +537,7 @@ impl WasmProcessor for WasmProcessorImpl {
                 output_sinks,
                 init_context,
                 task_name,
+                create_time,
             )
             .map_err(|e| -> Box<dyn Error + Send> {
                 let error_msg = format!(
@@ -564,26 +566,31 @@ impl WasmProcessor for WasmProcessorImpl {
                 .first()
                 .map(|(_, b)| b.as_slice())
                 .unwrap_or(&[]);
-            create_wasm_host(first_bytes, output_sinks, init_context, task_name).map_err(
-                |e| -> Box<dyn Error + Send> {
-                    let error_msg = format!("Failed to create WasmHost: {}", e);
-                    log::error!("{}", error_msg);
-                    let mut full_error = error_msg.clone();
-                    let mut source = e.source();
-                    let mut depth = 0;
-                    while let Some(err) = source {
-                        depth += 1;
-                        full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
-                        source = err.source();
-                        if depth > 10 {
-                            full_error.push_str("\n  ... (error chain too long, truncated)");
-                            break;
-                        }
+            create_wasm_host(
+                first_bytes,
+                output_sinks,
+                init_context,
+                task_name,
+                create_time,
+            )
+            .map_err(|e| -> Box<dyn Error + Send> {
+                let error_msg = format!("Failed to create WasmHost: {}", e);
+                log::error!("{}", error_msg);
+                let mut full_error = error_msg.clone();
+                let mut source = e.source();
+                let mut depth = 0;
+                while let Some(err) = source {
+                    depth += 1;
+                    full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
+                    source = err.source();
+                    if depth > 10 {
+                        full_error.push_str("\n  ... (error chain too long, truncated)");
+                        break;
                     }
-                    log::error!("Full error chain:\n{}", full_error);
-                    Box::new(WasmProcessorError::InitError(full_error))
-                },
-            )?
+                }
+                log::error!("Full error chain:\n{}", full_error);
+                Box::new(WasmProcessorError::InitError(full_error))
+            })?
         };
 
         *self.processor.borrow_mut() = Some(processor);

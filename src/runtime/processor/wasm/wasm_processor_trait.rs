@@ -84,6 +84,7 @@ pub trait WasmProcessor: Send + Sync {
     /// - `output_sinks`: Output sink list
     /// - `init_context`: Initialization context
     /// - `task_name`: Task name
+    /// - `create_time`: Creation timestamp for state storage
     ///
     /// # Returns
     /// Ok(()) if initialization succeeds, or an error if it fails
@@ -92,6 +93,7 @@ pub trait WasmProcessor: Send + Sync {
         _output_sinks: Vec<Box<dyn OutputSink>>,
         _init_context: &InitContext,
         _task_name: String,
+        _create_time: u64,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
         Ok(())
     }

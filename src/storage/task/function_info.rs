@@ -15,4 +15,5 @@ pub struct FunctionInfo {
     pub name: String,
     pub task_type: String,
     pub status: String,
+    pub create_time: u64,
 }

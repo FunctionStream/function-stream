@@ -45,15 +45,26 @@ impl TaskBuilder {
     /// # Arguments
     /// * `config_bytes` - YAML configuration as bytes
     /// * `module_bytes` - WASM/Python module bytes
+    /// * `create_time` - Creation timestamp for the task
     ///
     /// # Returns
     /// A boxed TaskLifecycle implementation based on the task type in config
-    pub fn from_yaml_config(config_bytes: &[u8], module_bytes: &[u8]) -> BuildResult {
+    pub fn from_yaml_config(
+        config_bytes: &[u8],
+        module_bytes: &[u8],
+        create_time: u64,
+    ) -> BuildResult {
         let yaml_value = Self::parse_yaml(config_bytes)?;
         let task_name = Self::extract_task_name(&yaml_value)?;
         let task_type = Self::extract_task_type(&yaml_value, &task_name)?;
 
-        Self::build_task(&task_type, task_name, &yaml_value, module_bytes.to_vec())
+        Self::build_task(
+            &task_type,
+            task_name,
+            &yaml_value,
+            module_bytes.to_vec(),
+            create_time,
+        )
     }
 
     /// Create a Python task from YAML configuration (for fs-exec)
@@ -64,13 +75,18 @@ impl TaskBuilder {
     /// # Arguments
     /// * `config_bytes` - YAML configuration as bytes
     /// * `modules` - Python modules as (name, bytes) pairs
+    /// * `create_time` - Creation timestamp for the task
     #[cfg(feature = "python")]
-    pub fn from_python_config(config_bytes: &[u8], modules: &[(String, Vec<u8>)]) -> BuildResult {
+    pub fn from_python_config(
+        config_bytes: &[u8],
+        modules: &[(String, Vec<u8>)],
+        create_time: u64,
+    ) -> BuildResult {
         let yaml_value = Self::parse_yaml(config_bytes)?;
         let task_name = Self::extract_task_name(&yaml_value)?;
 
         log::debug!("Creating Python task '{}' via fs-exec", task_name);
-        PythonBuilder::build(task_name, &yaml_value, modules)
+        PythonBuilder::build(task_name, &yaml_value, modules, create_time)
     }
 
     /// Parse YAML configuration
@@ -128,18 +144,19 @@ impl TaskBuilder {
         task_name: String,
         yaml: &Value,
         module_bytes: Vec<u8>,
+        create_time: u64,
     ) -> BuildResult {
         match task_type {
             type_values::PROCESSOR => Self::build_wasm_task(
-                ProcessorBuilder::build(task_name.clone(), yaml, module_bytes),
+                ProcessorBuilder::build(task_name.clone(), yaml, module_bytes, create_time),
                 &task_name,
             ),
             type_values::SOURCE => Self::build_wasm_task(
-                SourceBuilder::build(task_name.clone(), yaml, module_bytes),
+                SourceBuilder::build(task_name.clone(), yaml, module_bytes, create_time),
                 &task_name,
             ),
             type_values::SINK => Self::build_wasm_task(
-                SinkBuilder::build(task_name.clone(), yaml, module_bytes),
+                SinkBuilder::build(task_name.clone(), yaml, module_bytes, create_time),
                 &task_name,
             ),
             _ => {

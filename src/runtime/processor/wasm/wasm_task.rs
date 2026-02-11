@@ -118,6 +118,7 @@ pub struct WasmTask {
     failure_cause: Arc<Mutex<Option<String>>>,
     thread_running: Arc<AtomicBool>,
     termination_future: Arc<Mutex<Option<mpsc::Receiver<ExecutionState>>>>,
+    create_time: u64,
 }
 
 impl WasmTask {
@@ -127,6 +128,7 @@ impl WasmTask {
         inputs: Vec<Box<dyn InputSource>>,
         processor: Box<dyn WasmProcessor>,
         sinks: Vec<Box<dyn OutputSink>>,
+        create_time: u64,
     ) -> Self {
         let (_tx, rx) = mpsc::channel();
         Self {
@@ -143,6 +145,7 @@ impl WasmTask {
             failure_cause: Arc::new(Mutex::new(None)),
             thread_running: Arc::new(AtomicBool::new(false)),
             termination_future: Arc::new(Mutex::new(Some(rx))),
+            create_time,
         }
     }
 
@@ -183,7 +186,10 @@ impl WasmTask {
             ))));
         }
 
-        if let Err(e) = processor.init_wasm_host(sinks, &init_context, self.task_name.clone()) {
+        let create_time = self.get_create_time();
+        if let Err(e) =
+            processor.init_wasm_host(sinks, &init_context, self.task_name.clone(), create_time)
+        {
             log::error!("Failed to init WasmHost: {}", e);
             return Err(Box::new(std::io::Error::other(format!(
                 "Failed to init WasmHost: {}",
@@ -789,6 +795,10 @@ impl WasmTask {
         &self.task_name
     }
 
+    pub fn get_create_time(&self) -> u64 {
+        self.create_time
+    }
+
     pub fn take_thread_groups(&mut self) -> Option<Vec<ThreadGroup>> {
         self.thread_groups.take()
     }
@@ -899,6 +909,7 @@ impl TaskLifecycle for WasmTask {
             name: self.task_name.clone(),
             task_type: self.task_type.clone(),
             status: format!("{:?}", self.get_state()),
+            create_time: self.get_create_time(),
         }
     }
 
