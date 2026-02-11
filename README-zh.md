@@ -25,9 +25,9 @@
 
 ## 核心特性
 
-*   **事件驱动的 WASM 运行时**：以接近原生的性能和沙箱隔离的方式执行多语言函数（Go、Python、Rust）。
-*   **持久化状态管理**：内置支持基于 RocksDB 的状态存储，用于有状态流处理。
-*   **SQL 驱动的 CLI**：使用类 SQL 命令进行作业管理和流检测的交互式 REPL。
+- **事件驱动的 WASM 运行时**：以接近原生的性能和沙箱隔离的方式执行多语言函数（Go、Python、Rust）。
+- **持久化状态管理**：内置支持基于 RocksDB 的状态存储，用于有状态流处理。
+- **SQL 驱动的 CLI**：使用类 SQL 命令进行作业管理和流检测的交互式 REPL。
 
 ## 仓库结构
 
@@ -47,10 +47,10 @@ function-stream/
 
 ## 前置条件
 
-*   **Rust 工具链**：Stable >= 1.77 (通过 rustup 安装)。
-*   **Python 3.9+**：构建 Python WASM 运行时所需。
-*   **Protoc**：Protocol Buffers 编译器（用于生成 gRPC 绑定）。
-*   **构建工具**：cmake, pkg-config, OpenSSL headers (用于 rdkafka)。
+- **Rust 工具链**：Stable >= 1.77 (通过 rustup 安装)。
+- **Python 3.9+**：构建 Python WASM 运行时所需。
+- **Protoc**：Protocol Buffers 编译器（用于生成 gRPC 绑定）。
+- **构建工具**：cmake, pkg-config, OpenSSL headers (用于 rdkafka)。
 
 ## 快速开始 (本地开发)
 
@@ -99,8 +99,9 @@ make dist
 ```
 
 **输出：**
-*   `dist/function-stream-<version>.tar.gz`
-*   `dist/function-stream-<version>.zip`
+
+- `dist/function-stream-<version>.tar.gz`
+- `dist/function-stream-<version>.zip`
 
 对于不包含 Python WASM 运行时的轻量级分发：
 
@@ -109,8 +110,9 @@ make dist-lite
 ```
 
 **输出：**
-*   `dist/function-stream-<version>-lite.tar.gz`
-*   `dist/function-stream-<version>-lite.zip`
+
+- `dist/function-stream-<version>-lite.tar.gz`
+- `dist/function-stream-<version>-lite.zip`
 
 ### 运行分发包
 
@@ -149,19 +151,19 @@ function-stream-<version>/
 
 **示例：**
 
-1.  **前台模式 (Docker / 调试)** — 在当前 Shell 中运行服务器。适用于容器化环境 (Kubernetes/Docker) 或调试。
+1. **前台模式 (Docker / 调试)** — 在当前 Shell 中运行服务器。适用于容器化环境 (Kubernetes/Docker) 或调试。
 
     ```bash
     ./bin/start-server.sh
     ```
 
-2.  **守护进程模式 (生产)** — 在后台运行服务器，将 stdout/stderr 重定向到 `logs/`。
+2. **守护进程模式 (生产)** — 在后台运行服务器，将 stdout/stderr 重定向到 `logs/`。
 
     ```bash
     ./bin/start-server.sh -d
     ```
 
-3.  **自定义配置** — 使用特定配置文件启动。
+3. **自定义配置** — 使用特定配置文件启动。
 
     ```bash
     ./bin/start-server.sh -d -c config/config.yml
