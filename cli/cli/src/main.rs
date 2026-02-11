@@ -21,7 +21,6 @@ use std::process;
 #[command(about = "Interactive SQL CLI for Function Stream", long_about = None)]
 #[command(disable_help_flag = true)]
 struct Args {
-
     #[arg(short = 'h', long = "host", default_value = "127.0.0.1")]
     host: String,
 
