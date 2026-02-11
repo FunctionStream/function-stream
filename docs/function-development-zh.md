@@ -1,3 +1,5 @@
+# Function 开发指南
+
 Function 是 Function Stream 的核心计算单元。本指南以 Go (WASM) 模式为例，详细说明 Function 的全生命周期管理，并对比 Python 模式的操作差异。
 
 ---

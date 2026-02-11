@@ -1,4 +1,6 @@
-Function Stream provides a SQL-like declarative interactive terminal (REPL), designed to provide operations personnel with low-threshold, high-efficiency cluster task control capabilities.
+# SQL CLI Guide
+
+Function Stream provides a SQL-like declarative interactive terminal (REPL), designed to provide operations personnel with low-threshold, high-efficiency task control capabilities.
 
 ---
 

@@ -1,4 +1,6 @@
-Function Stream provides a complete toolchain for Python developers, covering the entire process from stream operator development (fs_api) to management (fs_client).
+# Python SDK Guide
+
+Function Stream provides a complete toolchain for Python developers, covering the entire process from function development (fs_api) to management (fs_client).
 
 ---
 

@@ -1,4 +1,6 @@
-Function Stream 为 Python 开发者提供了一套完整的工具链，涵盖了从流算子开发 (fs_api) 到管理 (fs_client) 的全流程。
+# Python SDK 指南
+
+Function Stream 为 Python 开发者提供了一套完整的工具链，涵盖了从 function 开发 (fs_api) 到管理 (fs_client) 的全流程。
 
 ---
 

@@ -1,3 +1,5 @@
+# Function Development Guide
+
 Function is the core computational unit of Function Stream. This guide takes Go (WASM) mode as an example to detail the full lifecycle management of a Function and compares the operational differences with Python mode.
 
 ---

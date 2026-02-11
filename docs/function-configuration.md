@@ -1,3 +1,5 @@
+# Function Configuration
+
 Function Stream's task definition adopts a plugin-based architecture. Although the current version focuses on supporting the Kafka protocol, its configuration model is designed to support extension to any streaming media system via input-type and output-type.
 
 ---
