@@ -15,7 +15,7 @@ use crate::storage::state_backend::key_builder::{build_key, increment_key, is_al
 use crate::storage::state_backend::store::{StateIterator, StateStore};
 use rocksdb::{
     BlockBasedOptions, Cache, ColumnFamilyDescriptor, DB, DBCompressionType, Direction,
-    IteratorMode, Options, ReadOptions, WriteBatch,
+    IteratorMode, Options, ReadOptions, WriteBatch, WriteOptions,
 };
 use std::path::Path;
 use std::sync::Arc;
@@ -23,18 +23,10 @@ use std::sync::Arc;
 pub struct RocksDBStateStore {
     db: Arc<DB>,
     cf_name: String,
+    write_opts: WriteOptions,
 }
 
 impl RocksDBStateStore {
-    /// Create a new state store instance from factory
-    ///
-    /// # Arguments
-    /// - `db`: database instance
-    /// - `column_family`: optional column family name
-    ///
-    /// # Returns
-    /// - `Ok(Box<dyn StateStore>)`: successfully created
-    /// - `Err(BackendError)`: creation failed
     pub fn new_with_factory(
         db: Arc<DB>,
         column_family: Option<String>,
@@ -46,7 +38,16 @@ impl RocksDBStateStore {
                 cf_name
             )));
         }
-        Ok(Box::new(Self { db, cf_name }))
+
+        let mut write_opts = WriteOptions::default();
+        write_opts.set_sync(false);
+        write_opts.disable_wal(false);
+
+        Ok(Box::new(Self {
+            db,
+            cf_name,
+            write_opts,
+        }))
     }
 
     pub fn open<P: AsRef<Path>>(path: P, cf_name: Option<String>) -> Result<Self, BackendError> {
@@ -55,11 +56,14 @@ impl RocksDBStateStore {
         opts.create_missing_column_families(true);
         opts.set_merge_operator_associative("appendOp", merge_operator);
         opts.set_compression_type(DBCompressionType::Lz4);
+        opts.set_enable_pipelined_write(true);
+        opts.increase_parallelism(num_cpus::get() as i32);
 
         let mut block_opts = BlockBasedOptions::default();
         block_opts.set_block_size(16 * 1024);
         block_opts.set_cache_index_and_filter_blocks(true);
-        block_opts.set_block_cache(&Cache::new_lru_cache(128 * 1024 * 1024));
+        block_opts.set_pin_l0_filter_and_index_blocks_in_cache(true);
+        block_opts.set_block_cache(&Cache::new_lru_cache(256 * 1024 * 1024));
         opts.set_block_based_table_factory(&block_opts);
 
         let target_cf = cf_name.unwrap_or_else(|| "default".to_string());
@@ -72,9 +76,13 @@ impl RocksDBStateStore {
         let db = DB::open_cf_descriptors(&opts, path, cf_descriptors)
             .map_err(|e| BackendError::IoError(e.to_string()))?;
 
+        let mut write_opts = WriteOptions::default();
+        write_opts.set_sync(false);
+
         Ok(Self {
             db: Arc::new(db),
             cf_name: target_cf,
+            write_opts,
         })
     }
 
@@ -90,7 +98,7 @@ impl StateStore for RocksDBStateStore {
     fn put_state(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), BackendError> {
         let cf = self.cf_handle()?;
         self.db
-            .put_cf(&cf, key, value)
+            .put_cf_opt(&cf, key, value, &self.write_opts)
             .map_err(|e| BackendError::IoError(e.to_string()))
     }
 
@@ -104,7 +112,7 @@ impl StateStore for RocksDBStateStore {
     fn delete_state(&self, key: Vec<u8>) -> Result<(), BackendError> {
         let cf = self.cf_handle()?;
         self.db
-            .delete_cf(&cf, key)
+            .delete_cf_opt(&cf, key, &self.write_opts)
             .map_err(|e| BackendError::IoError(e.to_string()))
     }
 
@@ -112,6 +120,7 @@ impl StateStore for RocksDBStateStore {
         let cf = self.cf_handle()?;
         let mut ropts = ReadOptions::default();
         ropts.set_iterate_upper_bound(end.clone());
+        ropts.set_readahead_size(2 * 1024 * 1024);
 
         let iter =
             self.db
@@ -139,7 +148,7 @@ impl StateStore for RocksDBStateStore {
         let cf = self.cf_handle()?;
         let full_key = build_key(&key_group, &key, &namespace, &user_key);
         self.db
-            .merge_cf(&cf, full_key, value)
+            .merge_cf_opt(&cf, full_key, value, &self.write_opts)
             .map_err(|e| BackendError::IoError(e.to_string()))
     }
 
@@ -152,7 +161,7 @@ impl StateStore for RocksDBStateStore {
         if !is_all_0xff(&prefix) {
             let end_key = increment_key(&prefix);
             self.db
-                .delete_range_cf(&cf, &prefix, &end_key)
+                .delete_range_cf_opt(&cf, &prefix, &end_key, &self.write_opts)
                 .map_err(|e| BackendError::IoError(e.to_string()))?;
             return Ok(0);
         }
@@ -170,13 +179,13 @@ impl StateStore for RocksDBStateStore {
             count += 1;
             if count % 1000 == 0 {
                 self.db
-                    .write(batch)
+                    .write_opt(batch, &self.write_opts)
                     .map_err(|e| BackendError::IoError(e.to_string()))?;
                 batch = WriteBatch::default();
             }
         }
         self.db
-            .write(batch)
+            .write_opt(batch, &self.write_opts)
             .map_err(|e| BackendError::IoError(e.to_string()))?;
         Ok(count)
     }
@@ -204,6 +213,7 @@ impl RocksDBStateIterator {
                 .ok_or_else(|| BackendError::Other("CF missing".into()))?;
             let mut ropts = ReadOptions::default();
             ropts.set_prefix_same_as_start(true);
+            ropts.set_readahead_size(1024 * 1024);
 
             let iter =
                 db.iterator_cf_opt(&cf, ropts, IteratorMode::From(&prefix, Direction::Forward));

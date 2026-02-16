@@ -48,8 +48,11 @@ fn get_global_engine(_wasm_size: usize) -> anyhow::Result<Arc<Engine>> {
         config.async_support(false);
         config.cranelift_opt_level(wasmtime::OptLevel::Speed);
         config.debug_info(false);
-        config.generate_address_map(false);
         config.parallel_compilation(true);
+        config.cranelift_debug_verifier(false);
+        config.consume_fuel(false);
+        config.epoch_interruption(false);
+        config.compiler_inlining(true);
         enable_incremental_compilation(&mut config);
 
         let engine = Engine::new(&config).unwrap_or_else(|e| {

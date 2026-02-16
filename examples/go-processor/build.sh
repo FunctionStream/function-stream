@@ -78,6 +78,8 @@ tinygo build -target=wasip2 \
     -tags purego \
     -wit-package "$BUILD_WIT_DIR" \
     -wit-world processor-runtime \
+    -opt 2  \
+    -scheduler none \
     -o "$OUTPUT_FILE" "$SCRIPT_DIR/main.go"
 
 # 5. Optional Post-Build Validation
