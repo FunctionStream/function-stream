@@ -21,6 +21,8 @@ use protocol::cli::{function_stream_service_client::FunctionStreamServiceClient,
 use rustyline::error::ReadlineError;
 use rustyline::{Config, DefaultEditor, EditMode};
 use std::io::{self, Cursor, Write};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tonic::Request;
 
 #[derive(Debug, thiserror::Error)]
@@ -269,22 +271,81 @@ impl Repl {
         }
     }
 
-    pub async fn run_async(&mut self) -> io::Result<()> {
-        println!("Function Stream SQL Interface");
-        println!("Server: {}\n", self.server_address());
-
-        if let Err(e) = self.connect().await {
-            eprintln!("Error: {}", e);
-            return Ok(());
+    pub async fn run_async(repl: Arc<Mutex<Self>>) -> io::Result<()> {
+        {
+            let mut guard = repl.lock().await;
+            println!("Function Stream SQL Interface");
+            println!("Server: {}\n", guard.server_address());
+            if let Err(e) = guard.connect().await {
+                eprintln!("Error: {}", e);
+                return Ok(());
+            }
         }
 
+        #[cfg(unix)]
+        let mut sigterm = {
+            use tokio::signal::unix::{signal, SignalKind};
+            signal(SignalKind::terminate()).expect("failed to register SIGTERM handler")
+        };
+
+        let mut skip_save_history = false;
         loop {
-            let input = match self.read_sql_input() {
-                Ok(sql) => sql,
-                Err(ReadlineError::Interrupted) => continue,
-                Err(ReadlineError::Eof) => break,
-                Err(e) => {
+            let repl_clone = repl.clone();
+            let read_result = {
+                #[cfg(unix)]
+                {
+                    tokio::select! {
+                        _ = tokio::signal::ctrl_c() => None,
+                        _ = sigterm.recv() => None,
+                        result = tokio::task::spawn_blocking(move || {
+                            let mut guard = repl_clone.blocking_lock();
+                            guard.read_sql_input()
+                        }) => match result {
+                            Ok(Ok(sql)) => Some(Ok(sql)),
+                            Ok(Err(e)) => Some(Err(e)),
+                            Err(e) => {
+                                eprintln!("Read Error: {}", e);
+                                None
+                            }
+                        },
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    tokio::select! {
+                        _ = tokio::signal::ctrl_c() => None,
+                        result = tokio::task::spawn_blocking(move || {
+                            let mut guard = repl_clone.blocking_lock();
+                            guard.read_sql_input()
+                        }) => match result {
+                            Ok(Ok(sql)) => Some(Ok(sql)),
+                            Ok(Err(e)) => Some(Err(e)),
+                            Err(e) => {
+                                eprintln!("Read Error: {}", e);
+                                None
+                            }
+                        },
+                    }
+                }
+            };
+
+            let input = match read_result {
+                None => {
+                    skip_save_history = true;
+                    break;
+                }
+                Some(Ok(sql)) => sql,
+                Some(Err(ReadlineError::Interrupted)) => {
+                    skip_save_history = true;
+                    break;
+                }
+                Some(Err(ReadlineError::Eof)) => {
+                    skip_save_history = true;
+                    break;
+                }
+                Some(Err(e)) => {
                     eprintln!("Read Error: {}", e);
+                    skip_save_history = true;
                     break;
                 }
             };
@@ -293,20 +354,26 @@ impl Repl {
                 continue;
             }
 
+            let mut guard = repl.lock().await;
             match input.trim().to_lowercase().as_str() {
                 "exit" | "quit" | "q" => break,
-                "help" | "h" => self.print_help(),
+                "help" | "h" => guard.print_help(),
                 _ => {
-                    if let Err(e) = self.execute_sql(&input).await {
+                    if let Err(e) = guard.execute_sql(&input).await {
                         eprintln!("SQL Execution Error: {}", e);
+                    } else {
+                        guard.add_history_entry(&input);
                     }
                 }
             }
+            drop(guard);
             println!();
         }
 
-        if let Some(ref mut ed) = self.editor {
-            let _ = ed.save_history(".function-stream-cli-history");
+        if !skip_save_history {
+            if let Some(ref mut ed) = repl.lock().await.editor {
+                let _ = ed.save_history(".function-stream-cli-history");
+            }
         }
         Ok(())
     }
@@ -314,7 +381,11 @@ impl Repl {
     fn read_sql_input(&mut self) -> Result<String, ReadlineError> {
         let mut lines = Vec::new();
         loop {
-            let prompt = if lines.is_empty() { "sql> " } else { "  -> " };
+            let prompt = if lines.is_empty() {
+                "function-stream> "
+            } else {
+                "  -> "
+            };
 
             let line = match self.editor.as_mut() {
                 Some(ed) => ed.readline(prompt)?,
@@ -332,11 +403,6 @@ impl Repl {
             let trimmed = lines.last().map(|s| s.trim()).unwrap_or("");
 
             if trimmed.ends_with(';') || self.is_balanced(&full_sql) {
-                if let Some(ed) = self.editor.as_mut() {
-                    if !full_sql.is_empty() {
-                        let _ = ed.add_history_entry(full_sql.as_str());
-                    }
-                }
                 return Ok(full_sql);
             }
         }
@@ -346,6 +412,14 @@ impl Repl {
         let open = sql.chars().filter(|&c| c == '(').count();
         let close = sql.chars().filter(|&c| c == ')').count();
         open == close && !sql.trim().is_empty()
+    }
+
+    fn add_history_entry(&mut self, entry: &str) {
+        if let Some(ed) = self.editor.as_mut() {
+            if !entry.trim().is_empty() {
+                let _ = ed.add_history_entry(entry.trim());
+            }
+        }
     }
 
     fn print_help(&self) {

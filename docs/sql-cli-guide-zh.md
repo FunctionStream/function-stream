@@ -53,7 +53,7 @@ SQL CLI 通过 gRPC 协议与远程 Server 通信。
 cargo run -p function-stream-cli -- -h <SERVER_HOST> -p <SERVER_PORT>
 ```
 
-- **终端提示符**：成功连接后显示 `sql>`。
+- **终端提示符**：成功连接后显示 `function-stream>`。
 - **输入规范**：支持多行输入，系统通过 `;`（分号）或括号平衡检测来判定语句结束并提交执行。
 
 ---
@@ -131,7 +131,7 @@ DROP FUNCTION go_processor_demo;
 
 ## 三、REPL 内建辅助指令
 
-在 `sql>` 提示符下，除了标准 SQL 语句，还支持以下便捷指令：
+在 `function-stream>` 提示符下，支持以下便捷指令：
 
 | 指令    | 简写  | 说明                              |
 |-------|-----|---------------------------------|

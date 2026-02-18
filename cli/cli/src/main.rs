@@ -15,6 +15,8 @@ mod repl;
 use clap::Parser;
 use repl::Repl;
 use std::process;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Parser, Debug)]
 #[command(name = "function-stream-cli")]
@@ -35,9 +37,9 @@ struct Args {
 async fn main() {
     let args = Args::parse();
 
-    let mut repl = Repl::new(args.host.clone(), args.port);
+    let repl = Arc::new(Mutex::new(Repl::new(args.host.clone(), args.port)));
 
-    if let Err(e) = repl.run_async().await {
+    if let Err(e) = Repl::run_async(repl).await {
         eprintln!("Error: {}", e);
         process::exit(1);
     }

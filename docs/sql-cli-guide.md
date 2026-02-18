@@ -53,7 +53,7 @@ SQL CLI communicates with the remote Server via the gRPC protocol.
 cargo run -p function-stream-cli -- -h <SERVER_HOST> -p <SERVER_PORT>
 ```
 
-- **Terminal Prompt**: Displays `sql>` after successful connection.
+- **Terminal Prompt**: Displays `function-stream>` after successful connection.
 - **Input Specification**: Supports multi-line input; the system detects statement completion and submits for execution via `;` (semicolon) or parenthesis balancing.
 
 ---
@@ -131,7 +131,7 @@ DROP FUNCTION go_processor_demo;
 
 ## 3. REPL Built-in Auxiliary Commands
 
-At the `sql>` prompt, in addition to standard SQL statements, the following convenient commands are also supported:
+At the `function-stream>` prompt, the following convenient commands are supported:
 
 | Command | Short | Description                                                               |
 |---------|-------|---------------------------------------------------------------------------|
