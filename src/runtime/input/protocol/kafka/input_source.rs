@@ -226,7 +226,7 @@ impl KafkaInputSource {
                             }
                         }
                     }
-                    default(Duration::from_millis(100)) => {
+                    default() => {
                         // Poll messages from Kafka
                         Self::poll_and_send_messages(&consumer, &data_sender, &config);
                     }
@@ -410,7 +410,7 @@ impl KafkaInputSource {
             if data_sender.is_full() {
                 break;
             }
-            match consumer.poll(Duration::from_millis(10)) {
+            match consumer.poll(Duration::from_millis(1000)) {
                 None => break, // No more messages
                 Some(Ok(message)) => {
                     if let Some(payload) = message.payload() {
