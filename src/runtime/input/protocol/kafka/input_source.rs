@@ -33,10 +33,10 @@ use std::time::Duration;
 // ==================== Constants ====================
 
 /// Default channel capacity (maximum number of messages in fixed-length channel)
-const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
+const DEFAULT_CHANNEL_CAPACITY: usize = 10000;
 
 /// Maximum number of messages for single batch consumption (to avoid continuous consumption preventing control signals from being processed)
-const MAX_BATCH_CONSUME_SIZE: usize = 50;
+const MAX_BATCH_CONSUME_SIZE: usize = 10000;
 
 /// Control operation timeout (milliseconds)
 const CONTROL_OPERATION_TIMEOUT_MS: u64 = 5000;

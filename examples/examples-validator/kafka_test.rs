@@ -15,13 +15,11 @@ use clap::Parser;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::{BorrowedMessage, Message};
-use rdkafka::producer::{FutureProducer, FutureRecord};
-use rdkafka::util::Timeout;
+use rdkafka::producer::{BaseRecord, DefaultProducerContext, Producer, ThreadedProducer};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::signal;
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
 #[derive(Parser, Debug, Clone)]
@@ -85,90 +83,6 @@ async fn main() -> Result<()> {
     // Create a notification channel for graceful shutdown
     let shutdown_notify = Arc::new(Notify::new());
     let shutdown_consumer = shutdown_notify.clone();
-
-    // Spawn Producer and Consumer as concurrent async tasks
-    let producer_handle = tokio::spawn(run_producer(config.clone()));
-    let consumer_handle = tokio::spawn(run_consumer(config.clone(), shutdown_consumer));
-
-    // Wait for system signals (Ctrl+C / SIGTERM)
-    match signal::ctrl_c().await {
-        Ok(()) => {
-            info!("Shutdown signal received. Stopping services gracefully...");
-            // Notify the consumer loop to break
-            shutdown_notify.notify_waiters();
-        }
-        Err(err) => {
-            error!("Unable to listen for shutdown signal: {}", err);
-        }
-    }
-
-    // Wait for tasks to finish (cleanup)
-    let _ = tokio::join!(producer_handle, consumer_handle);
-
-    info!("Application execution completed.");
-    Ok(())
-}
-
-// ============================================================================
-// 3. Producer Logic
-// ============================================================================
-
-async fn run_producer(config: AppConfig) -> Result<()> {
-    info!("Initializing Producer targeting topic: {}", config.input_topic);
-
-    let producer: FutureProducer = ClientConfig::new()
-        .set("bootstrap.servers", &config.brokers)
-        .set("message.timeout.ms", "5000")
-        // Enable idempotence for exactly-once semantics
-        .set("enable.idempotence", "true")
-        .create()
-        .context("Failed to create Kafka Producer")?;
-
-    let test_data = vec!["apple", "banana", "cherry", "date", "elderberry"];
-
-    // Simulate data stream
-    for i in 0..config.msg_count {
-        let data = test_data[i % test_data.len()];
-        let key = format!("key-{}", i);
-
-        // Construct the record
-        let record = FutureRecord::to(&config.input_topic)
-            .key(&key)
-            .payload(data);
-
-        // Send asynchronously with a timeout
-        let delivery_status = producer
-            .send(record, Timeout::After(Duration::from_secs(5)))
-            .await;
-
-        match delivery_status {
-            Ok(delivery) => {
-                // Log progress every 1000 messages to reduce noise
-                if (i + 1) % 1000 == 0 {
-                    info!(
-                        "✓ Produced [{}/{}] -> Partition: {}, Offset: {}",
-                        i + 1, config.msg_count, delivery.partition, delivery.offset
-                    );
-                }
-            }
-            Err((e, _)) => error!("✗ Failed to send message #{}: {:?}", i, e),
-        }
-
-        // Slight delay to simulate real-world throughput (prevents local buffer overflow)
-        tokio::time::sleep(Duration::from_millis(1)).await;
-    }
-
-    info!("Producer finished. Total messages sent: {}", config.msg_count);
-    Ok(())
-}
-
-// ============================================================================
-// 4. Consumer Logic
-// ============================================================================
-
-async fn run_consumer(config: AppConfig, shutdown: Arc<Notify>) -> Result<()> {
-    info!("Initializing Consumer listening on topic: {}", config.output_topic);
-
     let consumer: StreamConsumer = ClientConfig::new()
         .set("group.id", &config.group_id)
         .set("bootstrap.servers", &config.brokers)
@@ -183,26 +97,97 @@ async fn run_consumer(config: AppConfig, shutdown: Arc<Notify>) -> Result<()> {
     consumer
         .subscribe(&[&config.output_topic])
         .context("Failed to subscribe to topic")?;
+    info!(
+        "Initializing Consumer listening on topic: {}",
+        config.output_topic
+    );
 
+    let consumer_handle = tokio::spawn(run_consumer(config.clone(), shutdown_consumer, consumer));
+
+    // Spawn Producer and Consumer as concurrent async tasks
+    let _ = tokio::spawn(run_producer(config.clone()));
+
+    info!("Application execution completed.1");
+    // Wait for tasks to finish (cleanup)
+    let _ = tokio::join!(consumer_handle);
+
+    info!("Application execution completed.");
+    Ok(())
+}
+
+// ============================================================================
+// 3. Producer Logic
+// ============================================================================
+
+async fn run_producer(config: AppConfig) -> Result<()> {
+    info!(
+        "Initializing Producer targeting topic: {}",
+        config.input_topic
+    );
+
+    let producer: ThreadedProducer<DefaultProducerContext> = ClientConfig::new()
+        .set("bootstrap.servers", &config.brokers)
+        .set("message.timeout.ms", "5000")
+        // Enable idempotence for exactly-once semantics
+        .set("enable.idempotence", "true")
+        .create()
+        .context("Failed to create Kafka Producer")?;
+
+    let test_data = vec!["apple", "banana", "cherry", "date", "elderberry"];
+    // Simulate data stream
+    for i in 0..config.msg_count {
+        let data = test_data[i % test_data.len()];
+        let key = format!("key-{}", i);
+
+        // Construct the record
+        let record = BaseRecord::to(&config.input_topic).key(&key).payload(data);
+
+        // Send asynchronously with a timeout
+        let _ = producer.send(record);
+
+        if (i + 1) % config.msg_count == 0 {
+            let _ = producer.flush(Duration::from_secs(10));
+        }
+    }
+
+    info!(
+        "Producer finished. Total messages sent: {}",
+        config.msg_count
+    );
+    Ok(())
+}
+
+// ============================================================================
+// 4. Consumer Logic
+// ============================================================================
+
+async fn run_consumer(
+    config: AppConfig,
+    shutdown: Arc<Notify>,
+    consumer: StreamConsumer,
+) -> Result<()> {
     info!("Consumer started. Waiting for messages...");
+
+    let mut i = 0;
 
     loop {
         tokio::select! {
-            // Branch 1: Receive message from Kafka
             recv_result = consumer.recv() => {
                 match recv_result {
                     Ok(m) => {
-                        // Process the message (Validation & Logging)
                         if let Err(e) = process_message(&m) {
-                            error!("Business logic error while processing message: {:?}", e);
+                            error!("Error: {:?}", e);
+                        }
+
+                        i += 1;
+                        if i >= config.msg_count {
+                            return Ok(());
                         }
                     },
-                    Err(e) => warn!("Kafka error during consumption: {}", e),
+                    Err(e) => warn!("Kafka error: {}", e),
                 }
             }
-            // Branch 2: Handle graceful shutdown signal
             _ = shutdown.notified() => {
-                info!("Consumer received shutdown signal. Exiting loop.");
                 break;
             }
         }
@@ -250,7 +235,7 @@ fn process_message(message: &BorrowedMessage) -> Result<()> {
                     "✗ Data Validation FAILED: Sum mismatch"
                 );
             }
-        },
+        }
         Err(e) => {
             // Handling malformed JSON or schema mismatch
             error!(

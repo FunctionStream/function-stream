@@ -26,10 +26,10 @@ use std::sync::Mutex;
 // ==================== Constants ====================
 
 /// Default channel capacity (maximum messages in bounded channel)
-const DEFAULT_CHANNEL_CAPACITY: usize = 1000;
+const DEFAULT_CHANNEL_CAPACITY: usize = 10000;
 
 /// Maximum batch size per consume (prevents control signals from being blocked)
-const MAX_BATCH_CONSUME_SIZE: usize = 100;
+const MAX_BATCH_CONSUME_SIZE: usize = 10000;
 
 /// Default flush timeout (milliseconds)
 const DEFAULT_FLUSH_TIMEOUT_MS: u64 = 5000;
