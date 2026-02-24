@@ -11,9 +11,8 @@
 // limitations under the License.
 
 use crate::runtime::common::TaskCompletionFlag;
-use crate::runtime::processor::function_error::{ErrorReporter, FunctionErrorReport};
+use crate::runtime::processor::function_error::FunctionErrorReport;
 use crossbeam_channel::Sender;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub enum TaskControlSignal {

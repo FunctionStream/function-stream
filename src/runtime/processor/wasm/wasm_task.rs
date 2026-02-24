@@ -267,7 +267,7 @@ impl WasmTask {
         shared_state: Arc<Mutex<ComponentState>>,
         failure_cause: Arc<Mutex<Option<String>>>,
         execution_state: Arc<Mutex<ExecutionState>>,
-        init_context: crate::runtime::taskexecutor::InitContext,
+        _init_context: crate::runtime::taskexecutor::InitContext,
     ) {
         let thread_start_time = std::time::Instant::now();
         use crossbeam_channel::select;

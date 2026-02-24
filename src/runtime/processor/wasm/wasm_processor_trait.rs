@@ -16,7 +16,6 @@
 // for WebAssembly-based data processors in the stream processing system.
 
 use crate::runtime::output::OutputSink;
-use crate::runtime::processor::function_error::FunctionErrorReport;
 use crate::runtime::taskexecutor::InitContext;
 
 /// wasm Processor trait
