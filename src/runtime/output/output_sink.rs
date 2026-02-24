@@ -120,11 +120,7 @@ pub trait OutputSink: Send + Sync {
         Ok(()) // Default implementation: no flush needed
     }
 
-    /// Clone OutputSink (returns Box<dyn OutputSink>)
-    ///
-    /// Used to create a clone of OutputSink
-    ///
-    /// # Returns
-    /// - `Box<dyn OutputSink>`: Cloned OutputSink instance
     fn box_clone(&self) -> Box<dyn OutputSink>;
+
+    fn set_error_state(&self) -> Result<(), Box<dyn std::error::Error + Send>>;
 }

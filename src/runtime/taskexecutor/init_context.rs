@@ -15,6 +15,7 @@
 // Provides various resources needed for task initialization, including state storage, task storage, thread pool, etc.
 
 use crate::runtime::processor::wasm::thread_pool::{TaskThreadPool, ThreadGroup};
+use crate::runtime::task::ControlMailBox;
 use crate::storage::state_backend::StateStorageServer;
 use crate::storage::task::TaskStorage;
 use std::sync::{Arc, Mutex};
@@ -25,6 +26,7 @@ pub struct InitContext {
     pub task_storage: Arc<dyn TaskStorage>,
     pub thread_pool: Arc<TaskThreadPool>,
     pub thread_group_registry: Arc<Mutex<Vec<ThreadGroup>>>,
+    control_mailbox: Arc<Mutex<Option<Arc<ControlMailBox>>>>,
 }
 
 impl InitContext {
@@ -38,7 +40,16 @@ impl InitContext {
             task_storage,
             thread_pool,
             thread_group_registry: Arc::new(Mutex::new(Vec::new())),
+            control_mailbox: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn set_control_mailbox(&self, mailbox: Arc<ControlMailBox>) {
+        *self.control_mailbox.lock().unwrap() = Some(mailbox);
+    }
+
+    pub fn get_control_mailbox(&self) -> Arc<Mutex<Option<Arc<ControlMailBox>>>> {
+        Arc::clone(&self.control_mailbox)
     }
 
     pub fn register_thread_group(&self, thread_group: ThreadGroup) {

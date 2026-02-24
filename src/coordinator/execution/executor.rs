@@ -106,18 +106,6 @@ impl PlanVisitor for Executor {
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
         let result = (|| -> Result<ExecuteResult, ExecuteError> {
-            let status = self
-                .task_manager
-                .get_task_status(&plan.name)
-                .map_err(|e| ExecuteError::Task(format!("Task discovery failed: {}", e)))?;
-
-            if status.is_running() {
-                return Err(ExecuteError::Validation(format!(
-                    "Task '{}' is currently running. Use FORCE to drop.",
-                    plan.name
-                )));
-            }
-
             self.task_manager
                 .remove_task(&plan.name)
                 .map_err(|e| ExecuteError::Task(format!("Removal failed: {}", e)))?;

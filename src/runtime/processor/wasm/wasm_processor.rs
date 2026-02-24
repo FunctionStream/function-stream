@@ -70,13 +70,11 @@ pub struct WasmProcessorImpl {
     error_count: u32,
     processor: RefCell<Option<Processor>>,
     store: RefCell<Option<Store<HostState>>>,
-    custom_engine: Option<std::sync::Arc<wasmtime::Engine>>,
-    custom_component: Option<wasmtime::component::Component>,
+    custom_engine: Option<Arc<Engine>>,
+    custom_component: Option<Component>,
     use_custom_engine_and_component: bool,
 }
 
-// Since there is only one thread, we can safely implement Send + Sync
-// Note: This requires WasmProcessorImpl to only be used in single-threaded environments
 unsafe impl Send for WasmProcessorImpl {}
 unsafe impl Sync for WasmProcessorImpl {}
 
@@ -130,62 +128,6 @@ impl WasmProcessorImpl {
     /// Get the processor name
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    /// Execute Python function by calling fs_exec
-    ///
-    /// # Arguments
-    /// * `class_name` - Name of the Python class to load
-    /// * `modules` - List of modules (name, bytes) to load
-    ///
-    /// # Returns
-    /// Ok(()) if execution succeeds, or an error if it fails
-    pub fn exec_python_function(
-        &self,
-        class_name: &str,
-        modules: &[(String, Vec<u8>)],
-    ) -> Result<(), Box<dyn Error + Send>> {
-        if !self.initialized {
-            return Err(Box::new(WasmProcessorError::InitError(
-                "Processor not initialized. Call init_with_context() first.".to_string(),
-            )));
-        }
-
-        let processor_ref = self.processor.borrow();
-        let processor = processor_ref
-            .as_ref()
-            .ok_or_else(|| -> Box<dyn Error + Send> {
-                Box::new(WasmProcessorError::InitError(
-                    "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
-                ))
-            })?;
-
-        let mut store_ref = self.store.borrow_mut();
-        let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
-            Box::new(WasmProcessorError::InitError(
-                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
-            ))
-        })?;
-
-        log::info!(
-            "Calling fs_exec: class_name='{}', modules={}",
-            class_name,
-            modules.len()
-        );
-
-        tokio::task::block_in_place(|| {
-            processor.call_fs_exec(store, class_name, modules).map_err(
-                |e| -> Box<dyn Error + Send> {
-                    Box::new(WasmProcessorError::ExecutionError(format!(
-                        "Failed to call fs_exec with class_name '{}': {}",
-                        class_name, e
-                    )))
-                },
-            )
-        })?;
-
-        log::info!("fs_exec completed successfully for class '{}'", class_name);
-        Ok(())
     }
 }
 
@@ -242,20 +184,13 @@ impl WasmProcessor for WasmProcessorImpl {
         })?;
 
         processor
-            .call_fs_process(store, input_index as u32, &data)
+            .call_fs_process(&mut *store, input_index as u32, &data)
             .map_err(|e| -> Box<dyn Error + Send> {
                 Box::new(WasmProcessorError::ExecutionError(format!(
                     "Failed to call wasm process: {}",
                     e
                 )))
             })?;
-
-        log::debug!(
-            "WasmProcessor '{}' processed {} bytes from input {}",
-            self.name,
-            data.len(),
-            input_index
-        );
 
         Ok(())
     }
@@ -422,12 +357,6 @@ impl WasmProcessor for WasmProcessorImpl {
             checkpoint_id
         );
 
-        // TODO: In a real implementation, you would:
-        // 1. Load checkpoint data from storage
-        // 2. Restore wasm module state
-        // 3. Restore internal state (watermark, buffers, etc.)
-        // 4. Reinitialize the processor with restored state
-
         self.last_checkpoint_id = Some(checkpoint_id);
         self.is_healthy = true;
         self.error_count = 0;
@@ -451,10 +380,8 @@ impl WasmProcessor for WasmProcessorImpl {
 
     /// Close the wasm processor and clean up resources
     ///
-    /// This method should:
-    /// 1. Clean up any wasm module instances
-    /// 2. Release any allocated resources
-    /// 3. Finalize any pending checkpoints
+    /// 1. Release any allocated resources
+    /// 2. Finalize any pending checkpoints
     ///
     /// # Returns
     /// Ok(()) if cleanup succeeds, or an error if it fails
@@ -468,14 +395,6 @@ impl WasmProcessor for WasmProcessorImpl {
         }
 
         log::info!("Closing WasmProcessor '{}'", self.name);
-
-        // TODO: Implement actual cleanup
-        // In a real implementation, you would:
-        // 1. Drop wasm module instances
-        // 2. Release any allocated memory
-        // 3. Close any open file handles
-        // 4. Finalize any pending checkpoints
-        // 5. Clean up watermark state
 
         // Reset state
         self.initialized = false;
@@ -756,13 +675,19 @@ impl WasmProcessor for WasmProcessorImpl {
         Ok(())
     }
 
-    /// Execute Python function dynamically
-    fn exec_python_function(
-        &self,
-        class_name: &str,
-        modules: &[(String, Vec<u8>)],
-    ) -> Result<(), Box<dyn Error + Send>> {
-        // Call the WasmProcessorImpl implementation
-        WasmProcessorImpl::exec_python_function(self, class_name, modules)
+    fn set_error_state_sinks(&mut self) -> Result<(), Box<dyn Error + Send>> {
+        let mut store_ref = self.store.borrow_mut();
+        let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
+            Box::new(WasmProcessorError::InitError(
+                "WasmHost not initialized. Call init_wasm_host() first.".to_string(),
+            ))
+        })?;
+        let host_state = store.data_mut();
+        for (idx, sink) in host_state.output_sinks.iter().enumerate() {
+            if let Err(e) = sink.set_error_state() {
+                log::error!("Failed to set error state on sink {}: {}", idx, e);
+            }
+        }
+        Ok(())
     }
 }

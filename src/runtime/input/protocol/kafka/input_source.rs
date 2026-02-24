@@ -21,7 +21,9 @@ use super::config::KafkaConfig;
 use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::common::TaskCompletionFlag;
 use crate::runtime::input::{InputSource, InputSourceState};
-use crossbeam_channel::{Receiver, Sender, bounded};
+use crate::runtime::processor::function_error::FunctionErrorReport;
+use crate::runtime::task::ControlMailBox;
+use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use rdkafka::Message;
 use rdkafka::TopicPartitionList;
 use rdkafka::config::ClientConfig;
@@ -67,6 +69,10 @@ enum SourceControlSignal {
         checkpoint_id: u64,
         completion_flag: TaskCompletionFlag,
     },
+    Error {
+        completion_flag: TaskCompletionFlag,
+        error: String,
+    },
 }
 
 /// Control signal processing result
@@ -93,23 +99,15 @@ enum ControlAction {
 ///
 /// Note: Only cares about the byte array content of messages, does not parse internal structure of Kafka messages (topic, partition, offset, etc.)
 pub struct KafkaInputSource {
-    /// Kafka configuration
     config: KafkaConfig,
-    /// Input group ID (starting from 0)
     group_id: usize,
-    /// Input source ID within group (starting from 0, used to identify different input sources within the same group)
     input_id: usize,
-    /// Component state (shared, uniformly managed by runloop thread)
     state: Arc<Mutex<InputSourceState>>,
-    /// Message channel sender (used by runloop thread, sends wrapped BufferOrEvent)
+    mail_box: Option<Arc<ControlMailBox>>,
     data_sender: Option<Sender<BufferOrEvent>>,
-    /// Message channel receiver (Processor consumes BufferOrEvent from here)
     data_receiver: Option<Receiver<BufferOrEvent>>,
-    /// Control signal channel sender (used by main thread, sends control signals)
     control_sender: Option<Sender<SourceControlSignal>>,
-    /// Control signal channel receiver (used by runloop thread, receives control signals)
     control_receiver: Option<Receiver<SourceControlSignal>>,
-    /// Kafka consumer thread handle
     consumer_thread: Option<thread::JoinHandle<()>>,
 }
 
@@ -126,6 +124,7 @@ impl KafkaInputSource {
             group_id,
             input_id,
             state: Arc::new(Mutex::new(InputSourceState::Uninitialized)),
+            mail_box: None,
             data_sender: None,
             data_receiver: None,
             control_sender: None,
@@ -179,6 +178,32 @@ impl KafkaInputSource {
         )))
     }
 
+    fn report_error(
+        control_sender: Option<&Sender<SourceControlSignal>>,
+        mail_box: Option<&Arc<ControlMailBox>>,
+        input_id: usize,
+        error: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
+        let error_for_mailbox = error.clone();
+        if let Some(control_sender) = control_sender {
+            control_sender
+                .send(SourceControlSignal::Error {
+                    completion_flag: TaskCompletionFlag::new(),
+                    error,
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send error signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
+                })?;
+        }
+        if let Some(m) = mail_box {
+            m.send_error_report(FunctionErrorReport::input(input_id, error_for_mailbox))?;
+        }
+        Ok(())
+    }
+
     // ==================== Consumer Thread Main Loop ====================
 
     /// Consumer thread main loop
@@ -191,7 +216,10 @@ impl KafkaInputSource {
         consumer: BaseConsumer,
         data_sender: Sender<BufferOrEvent>,
         control_receiver: Receiver<SourceControlSignal>,
+        control_sender: Sender<SourceControlSignal>,
         state: Arc<Mutex<InputSourceState>>,
+        mail_box: Option<Arc<ControlMailBox>>,
+        input_id: usize,
         config: KafkaConfig,
     ) {
         use crossbeam_channel::select;
@@ -211,7 +239,7 @@ impl KafkaInputSource {
                     recv(control_receiver) -> result => {
                         match result {
                             Ok(signal) => {
-                                match Self::handle_control_signal(signal, &state, &config) {
+                                match Self::handle_control_signal(signal, &consumer, &state, &config) {
                                     ControlAction::Continue => is_running = true,
                                     ControlAction::Pause => {
                                         is_running = false;
@@ -227,18 +255,26 @@ impl KafkaInputSource {
                         }
                     }
                     default() => {
-                        // Poll messages from Kafka
-                        Self::poll_and_send_messages(&consumer, &data_sender, &config);
+                        Self::poll_and_send_messages(
+                            &consumer,
+                            &data_sender,
+                            &control_sender,
+                            mail_box.as_ref(),
+                            input_id,
+                            &config,
+                        );
                     }
                 }
             } else {
                 // ========== Paused state: only block waiting for control signals ==========
                 match control_receiver.recv() {
-                    Ok(signal) => match Self::handle_control_signal(signal, &state, &config) {
-                        ControlAction::Continue => is_running = true,
-                        ControlAction::Pause => is_running = false,
-                        ControlAction::Exit => break,
-                    },
+                    Ok(signal) => {
+                        match Self::handle_control_signal(signal, &consumer, &state, &config) {
+                            ControlAction::Continue => is_running = true,
+                            ControlAction::Pause => is_running = false,
+                            ControlAction::Exit => break,
+                        }
+                    }
                     Err(_) => {
                         log::warn!(
                             "Control channel disconnected for topic: {} partition: {}",
@@ -261,11 +297,9 @@ impl KafkaInputSource {
 
     // ==================== Control Layer Functions ====================
 
-    /// Handle control signal (executed in runloop thread, uniformly manages state changes)
-    ///
-    /// Note: Does not commit offset, allows duplicate consumption
     fn handle_control_signal(
         signal: SourceControlSignal,
+        consumer: &BaseConsumer,
         state: &Arc<Mutex<InputSourceState>>,
         config: &KafkaConfig,
     ) -> ControlAction {
@@ -273,10 +307,11 @@ impl KafkaInputSource {
 
         match signal {
             SourceControlSignal::Start { completion_flag } => {
-                // Can only Start in Initialized or Stopped state
                 if !matches!(
                     current_state,
-                    InputSourceState::Initialized | InputSourceState::Stopped
+                    InputSourceState::Initialized
+                        | InputSourceState::Stopped
+                        | InputSourceState::Error { .. }
                 ) {
                     let error = format!("Cannot start in state: {:?}", current_state);
                     log::error!(
@@ -285,6 +320,19 @@ impl KafkaInputSource {
                         config.topic,
                         config.partition_str()
                     );
+                    completion_flag.mark_error(error);
+                    return ControlAction::Continue;
+                }
+                if let Err(e) =
+                    consumer.fetch_metadata(Some(&config.topic), std::time::Duration::from_secs(5))
+                {
+                    let error = format!(
+                        "Source fetch_metadata failed for topic {} partition {}: {}",
+                        config.topic,
+                        config.partition_str(),
+                        e
+                    );
+                    log::error!("{}", error);
                     completion_flag.mark_error(error);
                     return ControlAction::Continue;
                 }
@@ -298,20 +346,19 @@ impl KafkaInputSource {
                 ControlAction::Continue
             }
             SourceControlSignal::Stop { completion_flag } => {
-                // Can only Stop in Running or Checkpointing state
                 if !matches!(
                     current_state,
                     InputSourceState::Running | InputSourceState::Checkpointing
                 ) {
-                    // Stop operation silently succeeds if state is wrong (idempotent)
-                    log::debug!(
-                        "Stop ignored in state: {:?} for topic: {} partition: {}",
-                        current_state,
+                    let error = format!("Cannot stop in state: {:?}", current_state);
+                    log::error!(
+                        "{} for topic: {} partition: {}",
+                        error,
                         config.topic,
                         config.partition_str()
                     );
-                    completion_flag.mark_completed();
-                    return ControlAction::Pause;
+                    completion_flag.mark_error(error);
+                    return ControlAction::Continue;
                 }
                 log::info!(
                     "Source stop signal received for topic: {} partition: {}",
@@ -323,7 +370,6 @@ impl KafkaInputSource {
                 ControlAction::Pause
             }
             SourceControlSignal::Close { completion_flag } => {
-                // Close can be executed in any state
                 log::info!(
                     "Source close signal received for topic: {} partition: {}",
                     config.topic,
@@ -338,7 +384,6 @@ impl KafkaInputSource {
                 checkpoint_id,
                 completion_flag,
             } => {
-                // Can only Checkpoint in Running state
                 if !matches!(current_state, InputSourceState::Running) {
                     let error = format!("Cannot take checkpoint in state: {:?}", current_state);
                     log::error!(
@@ -368,7 +413,6 @@ impl KafkaInputSource {
                 checkpoint_id,
                 completion_flag,
             } => {
-                // Can only CheckpointFinish in Checkpointing state
                 if !matches!(current_state, InputSourceState::Checkpointing) {
                     let error = format!("Cannot finish checkpoint in state: {:?}", current_state);
                     log::error!(
@@ -390,6 +434,19 @@ impl KafkaInputSource {
                 completion_flag.mark_completed();
                 ControlAction::Continue
             }
+            SourceControlSignal::Error {
+                completion_flag,
+                error,
+            } => {
+                log::error!(
+                    "Source error signal for topic: {} partition: {}",
+                    config.topic,
+                    config.partition_str()
+                );
+                *state.lock().unwrap() = InputSourceState::Error { error };
+                completion_flag.mark_completed();
+                ControlAction::Pause
+            }
         }
     }
 
@@ -400,58 +457,47 @@ impl KafkaInputSource {
     fn poll_and_send_messages(
         consumer: &BaseConsumer,
         data_sender: &Sender<BufferOrEvent>,
+        control_sender: &Sender<SourceControlSignal>,
+        error_reporter: Option<&Arc<ControlMailBox>>,
+        input_id: usize,
         config: &KafkaConfig,
     ) {
-        // Batch consumption, limit quantity
         let mut batch_count = 0;
 
         while batch_count < MAX_BATCH_CONSUME_SIZE {
-            // If queue is full before consumption, exit this batch directly
             if data_sender.is_full() {
                 break;
             }
             match consumer.poll(Duration::from_millis(1000)) {
-                None => break, // No more messages
+                None => break,
                 Some(Ok(message)) => {
                     if let Some(payload) = message.payload() {
                         let bytes = payload.to_vec();
                         let channel_info = Some(config.topic.clone());
-                        // Construct BufferOrEvent in runloop thread
-                        let buffer_or_event = BufferOrEvent::new_buffer(
-                            bytes,
-                            channel_info,
-                            false, // more_available cannot be determined when sending, left for consumer to judge
-                            false, // is_broadcast
-                        );
+                        let buffer_or_event =
+                            BufferOrEvent::new_buffer(bytes, channel_info, false, false);
 
                         match data_sender.try_send(buffer_or_event) {
                             Ok(_) => {
-                                // Don't commit offset, allow duplicate consumption
                                 batch_count += 1;
-                                // Immediately check if queue is full after putting
                                 if data_sender.is_full() {
                                     break;
                                 }
                             }
-                            Err(crossbeam_channel::TrySendError::Full(_)) => {
-                                // Channel full, process next time
-                                break;
-                            }
-                            Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
-                                // Channel disconnected
-                                break;
-                            }
+                            Err(crossbeam_channel::TrySendError::Full(_)) => break,
+                            Err(crossbeam_channel::TrySendError::Disconnected(_)) => break,
                         }
                     }
-                    // Don't commit offset when there's no payload either
                 }
                 Some(Err(e)) => {
+                    let msg = e.to_string();
                     log::error!(
                         "Kafka poll error for topic {} partition {}: {}",
                         config.topic,
                         config.partition_str(),
-                        e
+                        msg
                     );
+                    let _ = Self::report_error(Some(control_sender), error_reporter, input_id, msg);
                     break;
                 }
             }
@@ -548,6 +594,16 @@ impl KafkaInputSource {
             })?;
         }
 
+        match consumer.fetch_metadata(Some(&self.config.topic), std::time::Duration::from_secs(5)) {
+            Ok(_) => {}
+            Err(e) => {
+                return Err(Box::new(std::io::Error::other(format!(
+                    "Connection validation failed: {}",
+                    e
+                ))));
+            }
+        }
+
         Ok(consumer)
     }
 }
@@ -564,18 +620,20 @@ impl InputSource for KafkaInputSource {
             return Ok(());
         }
 
+        let mailbox_handle = init_context.get_control_mailbox();
+        if let Some(ref m) = *mailbox_handle.lock().unwrap() {
+            self.mail_box = Some(Arc::clone(m));
+        }
+
         self.validate_kafka_config()?;
 
         // Create Channel
         let (data_sender, data_receiver) = bounded(DEFAULT_CHANNEL_CAPACITY);
-        let (control_sender, control_receiver) = bounded(10);
+        let (control_sender, control_receiver) = unbounded();
 
-        // Save both ends of channel to struct
-        // data_sender can be cloned, so it can be saved and used simultaneously
-        // control_receiver cannot be cloned, needs to be taken from struct and moved to thread
         self.data_sender = Some(data_sender.clone());
         self.data_receiver = Some(data_receiver);
-        self.control_sender = Some(control_sender);
+        self.control_sender = Some(control_sender.clone());
         self.control_receiver = Some(control_receiver);
 
         // Create Kafka consumer and start thread
@@ -588,6 +646,9 @@ impl InputSource for KafkaInputSource {
             Box::new(std::io::Error::other("control_receiver is None"))
                 as Box<dyn std::error::Error + Send>
         })?;
+
+        let error_reporter_clone = self.mail_box.clone();
+        let input_id = self.input_id;
 
         let thread_name = format!(
             "kafka-source-g{}-i{}-{}-{}",
@@ -603,7 +664,10 @@ impl InputSource for KafkaInputSource {
                     consumer,
                     data_sender,
                     control_receiver_for_thread,
+                    control_sender,
                     state_clone,
+                    error_reporter_clone,
+                    input_id,
                     config_clone,
                 );
             })
@@ -721,7 +785,6 @@ impl InputSource for KafkaInputSource {
     }
 
     fn get_next(&mut self) -> Result<Option<BufferOrEvent>, Box<dyn std::error::Error + Send>> {
-        // Directly get BufferOrEvent constructed by runloop thread from channel
         if let Some(ref receiver) = self.data_receiver {
             match receiver.try_recv() {
                 Ok(buffer_or_event) => Ok(Some(buffer_or_event)),
@@ -799,5 +862,23 @@ impl InputSource for KafkaInputSource {
 
     fn get_group_id(&self) -> usize {
         self.group_id
+    }
+
+    fn set_error_state(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
+        let completion_flag = TaskCompletionFlag::new();
+        if let Some(ref control_sender) = self.control_sender {
+            control_sender
+                .send(SourceControlSignal::Error {
+                    completion_flag: completion_flag.clone(),
+                    error: String::new(),
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to set error state: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
+                })?;
+        }
+        self.wait_with_retry(&completion_flag, "SetErrorState")
     }
 }

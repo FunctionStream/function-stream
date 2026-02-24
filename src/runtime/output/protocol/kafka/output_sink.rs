@@ -19,6 +19,8 @@ use super::producer_config::KafkaProducerConfig;
 use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::common::{ComponentState, TaskCompletionFlag};
 use crate::runtime::output::OutputSink;
+use crate::runtime::processor::function_error::FunctionErrorReport;
+use crate::runtime::task::ControlMailBox;
 use rdkafka::producer::{BaseRecord, DefaultProducerContext, Producer, ThreadedProducer};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -65,6 +67,10 @@ enum SinkControlSignal {
     },
     /// Flush signal
     Flush { completion_flag: TaskCompletionFlag },
+    Error {
+        completion_flag: TaskCompletionFlag,
+        error: String,
+    },
 }
 
 /// Control signal processing result
@@ -88,21 +94,14 @@ enum ControlAction {
 /// - Supports control signals (stop, close, checkpoint)
 /// - State changes are managed uniformly by runloop thread (except init)
 pub struct KafkaOutputSink {
-    /// Kafka configuration
     config: KafkaProducerConfig,
-    /// Output sink ID (starting from 0, identifies different output sinks)
     sink_id: usize,
-    /// Component state (shared, managed uniformly by runloop thread)
     state: Arc<Mutex<ComponentState>>,
-    /// Data send thread
+    mail_box: Option<Arc<ControlMailBox>>,
     send_thread: Option<std::thread::JoinHandle<()>>,
-    /// Data cache Channel sender (main thread writes)
     data_sender: Option<crossbeam_channel::Sender<BufferOrEvent>>,
-    /// Data cache Channel receiver (send thread reads)
     data_receiver: Option<crossbeam_channel::Receiver<BufferOrEvent>>,
-    /// Control signal Channel sender
     control_sender: Option<crossbeam_channel::Sender<SinkControlSignal>>,
-    /// Control signal Channel receiver
     control_receiver: Option<crossbeam_channel::Receiver<SinkControlSignal>>,
 }
 
@@ -119,6 +118,7 @@ impl KafkaOutputSink {
             config,
             sink_id,
             state: Arc::new(Mutex::new(ComponentState::Uninitialized)),
+            mail_box: None,
             send_thread: None,
             data_sender: None,
             data_receiver: None,
@@ -232,7 +232,10 @@ impl KafkaOutputSink {
         producer: ThreadedProducer<DefaultProducerContext>,
         data_receiver: crossbeam_channel::Receiver<BufferOrEvent>,
         control_receiver: crossbeam_channel::Receiver<SinkControlSignal>,
+        control_sender: crossbeam_channel::Sender<SinkControlSignal>,
         state: Arc<Mutex<ComponentState>>,
+        mail_box: Option<Arc<ControlMailBox>>,
+        sink_id: usize,
         config: KafkaProducerConfig,
     ) {
         use crossbeam_channel::select;
@@ -251,7 +254,16 @@ impl KafkaOutputSink {
                     recv(control_receiver) -> result => {
                         match result {
                             Ok(signal) => {
-                                match Self::handle_control_signal(signal, &producer, &data_receiver, &state, &config) {
+                                match Self::handle_control_signal(
+                                    signal,
+                                    &producer,
+                                    &data_receiver,
+                                    &control_sender,
+                                    &state,
+                                    mail_box.as_ref(),
+                                    sink_id,
+                                    &config,
+                                ) {
                                     ControlAction::Continue => is_running = true,
                                     ControlAction::Pause => {
                                         is_running = false;
@@ -269,23 +281,40 @@ impl KafkaOutputSink {
                     recv(data_receiver) -> result => {
                         match result {
                             Ok(data) => {
-                                // Send current message
-                                Self::send_message(&producer, data, &config);
-
-                                // Non-blocking consume and send more data, reduces select! scheduling overhead
-                                // Limit batch size to ensure control signals are processed in time
+                                if !Self::send_message(
+                                    &producer,
+                                    data,
+                                    &config,
+                                    Some(&control_sender),
+                                    mail_box.as_ref(),
+                                    sink_id,
+                                ) {
+                                    break;
+                                }
                                 let mut batch_count = 1;
+                                let mut send_failed = false;
                                 while batch_count < MAX_BATCH_CONSUME_SIZE {
                                     match data_receiver.try_recv() {
                                         Ok(more_data) => {
-                                            Self::send_message(&producer, more_data, &config);
+                                            if !Self::send_message(
+                                                &producer,
+                                                more_data,
+                                                &config,
+                                                Some(&control_sender),
+                                                mail_box.as_ref(),
+                                                sink_id,
+                                            ) {
+                                                send_failed = true;
+                                                break;
+                                            }
                                             batch_count += 1;
                                         }
                                         Err(_) => break,
                                     }
                                 }
-
-                                // Flush after batch ends, ensures messages are sent to Kafka
+                                if send_failed {
+                                    break;
+                                }
                                 Self::flush_producer(&producer);
                             }
                             Err(_) => {
@@ -303,7 +332,10 @@ impl KafkaOutputSink {
                             signal,
                             &producer,
                             &data_receiver,
+                            &control_sender,
                             &state,
+                            mail_box.as_ref(),
+                            sink_id,
                             &config,
                         ) {
                             ControlAction::Continue => is_running = true,
@@ -324,27 +356,42 @@ impl KafkaOutputSink {
 
     // ==================== Control Layer Functions ====================
 
-    /// Handle control signal (executed in runloop thread, manages state changes and checks uniformly)
     fn handle_control_signal(
         signal: SinkControlSignal,
         producer: &ThreadedProducer<DefaultProducerContext>,
         data_receiver: &crossbeam_channel::Receiver<BufferOrEvent>,
+        control_sender: &crossbeam_channel::Sender<SinkControlSignal>,
         state: &Arc<Mutex<ComponentState>>,
+        mail_box: Option<&Arc<ControlMailBox>>,
+        sink_id: usize,
         config: &KafkaProducerConfig,
     ) -> ControlAction {
         let current_state = state.lock().unwrap().clone();
 
         match signal {
             SinkControlSignal::Start { completion_flag } => {
-                // Only Initialized or Stopped state can Start
                 if !matches!(
                     current_state,
-                    ComponentState::Initialized | ComponentState::Stopped
+                    ComponentState::Initialized
+                        | ComponentState::Stopped
+                        | ComponentState::Error { .. }
                 ) {
                     let error = format!("Cannot start in state: {:?}", current_state);
                     log::error!("{} for topic: {}", error, config.topic);
                     completion_flag.mark_error(error);
-                    return ControlAction::Continue;
+                    return ControlAction::Pause;
+                }
+                if let Err(e) = producer.client().fetch_metadata(
+                    Some(config.topic.as_str()),
+                    std::time::Duration::from_secs(5),
+                ) {
+                    let error = format!(
+                        "Sink fetch_metadata failed for topic {}: {}",
+                        config.topic, e
+                    );
+                    log::error!("{}", error);
+                    completion_flag.mark_error(error);
+                    return ControlAction::Pause;
                 }
                 log::debug!("Sink start signal received for topic: {}", config.topic);
                 *state.lock().unwrap() = ComponentState::Running;
@@ -352,18 +399,13 @@ impl KafkaOutputSink {
                 ControlAction::Continue
             }
             SinkControlSignal::Stop { completion_flag } => {
-                // Only Running or Checkpointing state can Stop
                 if !matches!(
                     current_state,
                     ComponentState::Running | ComponentState::Checkpointing
                 ) {
-                    // Stop operation silently succeeds if state is wrong (idempotent)
-                    log::debug!(
-                        "Stop ignored in state: {:?} for topic: {}",
-                        current_state,
-                        config.topic
-                    );
-                    completion_flag.mark_completed();
+                    let error = format!("Cannot stop in state: {:?}", current_state);
+                    log::error!("{} for topic: {}", error, config.topic);
+                    completion_flag.mark_error(error);
                     return ControlAction::Pause;
                 }
                 log::info!("Sink stop signal received for topic: {}", config.topic);
@@ -372,10 +414,16 @@ impl KafkaOutputSink {
                 ControlAction::Pause
             }
             SinkControlSignal::Close { completion_flag } => {
-                // Close can be executed in any state
                 log::info!("Sink close signal received for topic: {}", config.topic);
                 *state.lock().unwrap() = ComponentState::Closing;
-                Self::drain_remaining_data(producer, data_receiver, config);
+                Self::drain_remaining_data(
+                    producer,
+                    data_receiver,
+                    Some(control_sender),
+                    mail_box,
+                    sink_id,
+                    config,
+                );
                 Self::flush_producer(producer);
                 *state.lock().unwrap() = ComponentState::Closed;
                 completion_flag.mark_completed();
@@ -385,7 +433,6 @@ impl KafkaOutputSink {
                 checkpoint_id,
                 completion_flag,
             } => {
-                // Only Running state can Checkpoint
                 if !matches!(current_state, ComponentState::Running) {
                     let error = format!("Cannot take checkpoint in state: {:?}", current_state);
                     log::error!("{} for topic: {}", error, config.topic);
@@ -398,7 +445,14 @@ impl KafkaOutputSink {
                     config.topic
                 );
                 *state.lock().unwrap() = ComponentState::Checkpointing;
-                Self::drain_remaining_data(producer, data_receiver, config);
+                Self::drain_remaining_data(
+                    producer,
+                    data_receiver,
+                    Some(control_sender),
+                    mail_box,
+                    sink_id,
+                    config,
+                );
                 Self::flush_producer(producer);
                 completion_flag.mark_completed();
                 ControlAction::Continue
@@ -407,7 +461,6 @@ impl KafkaOutputSink {
                 checkpoint_id,
                 completion_flag,
             } => {
-                // Only Checkpointing state can CheckpointFinish
                 if !matches!(current_state, ComponentState::Checkpointing) {
                     let error = format!("Cannot finish checkpoint in state: {:?}", current_state);
                     log::error!("{} for topic: {}", error, config.topic);
@@ -425,28 +478,45 @@ impl KafkaOutputSink {
             }
             SinkControlSignal::Flush { completion_flag } => {
                 log::info!("Sink flush signal received for topic: {}", config.topic);
-                Self::drain_remaining_data(producer, data_receiver, config);
+                Self::drain_remaining_data(
+                    producer,
+                    data_receiver,
+                    Some(control_sender),
+                    mail_box,
+                    sink_id,
+                    config,
+                );
                 Self::flush_producer(producer);
                 completion_flag.mark_completed();
                 ControlAction::Continue
             }
+            SinkControlSignal::Error {
+                completion_flag,
+                error,
+            } => {
+                log::error!("Sink error signal for topic: {}", config.topic);
+                *state.lock().unwrap() = ComponentState::Error { error };
+                completion_flag.mark_completed();
+                ControlAction::Pause
+            }
         }
     }
 
-    /// Drain all remaining data from data channel when closing, prevents leakage
     fn drain_remaining_data(
         producer: &ThreadedProducer<DefaultProducerContext>,
         data_receiver: &crossbeam_channel::Receiver<BufferOrEvent>,
+        control_sender: Option<&crossbeam_channel::Sender<SinkControlSignal>>,
+        mail_box: Option<&Arc<ControlMailBox>>,
+        sink_id: usize,
         config: &KafkaProducerConfig,
     ) {
         let mut drained_count = 0;
-
-        // Non-blocking drain and send all remaining data
         while let Ok(data) = data_receiver.try_recv() {
-            Self::send_message(producer, data, config);
+            if !Self::send_message(producer, data, config, control_sender, mail_box, sink_id) {
+                return;
+            }
             drained_count += 1;
         }
-
         if drained_count > 0 {
             log::info!(
                 "Drained {} remaining messages before closing for topic: {}",
@@ -463,16 +533,15 @@ impl KafkaOutputSink {
 
     // ==================== Data Layer Functions ====================
 
-    /// Send single message
-    ///
-    /// ThreadedProducer handles batching internally, no manual batching needed.
     #[inline]
     fn send_message(
         producer: &ThreadedProducer<DefaultProducerContext>,
         data: BufferOrEvent,
         config: &KafkaProducerConfig,
-    ) {
-        // Use into_buffer() to take ownership, avoids extra copy
+        control_sender: Option<&crossbeam_channel::Sender<SinkControlSignal>>,
+        mail_box: Option<&Arc<ControlMailBox>>,
+        sink_id: usize,
+    ) -> bool {
         if let Some(payload) = data.into_buffer() {
             let mut record: BaseRecord<'_, (), Vec<u8>> =
                 BaseRecord::to(&config.topic).payload(&payload);
@@ -482,13 +551,43 @@ impl KafkaOutputSink {
             }
 
             if let Err((e, _)) = producer.send(record) {
+                let msg = e.to_string();
                 log::error!(
                     "Failed to send message to Kafka topic {}: {}",
                     config.topic,
-                    e
+                    msg
                 );
+                let _ = Self::report_error(control_sender, mail_box, sink_id, msg);
+                return false;
             }
         }
+        true
+    }
+
+    fn report_error(
+        control_sender: Option<&crossbeam_channel::Sender<SinkControlSignal>>,
+        mail_box: Option<&Arc<ControlMailBox>>,
+        sink_id: usize,
+        error: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
+        let error_for_mailbox = error.clone();
+        if let Some(control_sender) = control_sender {
+            control_sender
+                .send(SinkControlSignal::Error {
+                    completion_flag: TaskCompletionFlag::new(),
+                    error,
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to send error signal: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
+                })?;
+        }
+        if let Some(m) = mail_box {
+            m.send_error_report(FunctionErrorReport::output(sink_id, error_for_mailbox))?;
+        }
+        Ok(())
     }
 }
 
@@ -504,6 +603,11 @@ impl OutputSink for KafkaOutputSink {
         // init_with_context is the only method that sets state in caller thread (runloop thread not started yet)
         if !matches!(*self.state.lock().unwrap(), ComponentState::Uninitialized) {
             return Ok(());
+        }
+
+        let mailbox_handle = init_context.get_control_mailbox();
+        if let Some(ref m) = *mailbox_handle.lock().unwrap() {
+            self.mail_box = Some(Arc::clone(m));
         }
 
         // Validate configuration
@@ -522,14 +626,15 @@ impl OutputSink for KafkaOutputSink {
 
         // Create Channels
         let (data_sender, data_receiver) = crossbeam_channel::bounded(DEFAULT_CHANNEL_CAPACITY);
-        let (control_sender, control_receiver) = crossbeam_channel::bounded(10);
+        let (control_sender, control_receiver) = crossbeam_channel::unbounded();
         self.data_sender = Some(data_sender);
-        self.control_sender = Some(control_sender);
+        self.control_sender = Some(control_sender.clone());
 
-        // Create Kafka producer and start thread
         let producer = self.config.create_producer()?;
         let config_clone = self.config.clone();
         let state_clone = self.state.clone();
+        let mail_box = self.mail_box.clone();
+        let sink_id = self.sink_id;
 
         let thread_name = format!("kafka-sink-{}-{}", self.sink_id, self.config.topic);
         let thread_handle = std::thread::Builder::new()
@@ -539,7 +644,10 @@ impl OutputSink for KafkaOutputSink {
                     producer,
                     data_receiver,
                     control_receiver,
+                    control_sender,
                     state_clone,
+                    mail_box,
+                    sink_id,
                     config_clone,
                 );
             })
@@ -804,8 +912,24 @@ impl OutputSink for KafkaOutputSink {
     // -------------------- box_clone --------------------
 
     fn box_clone(&self) -> Box<dyn OutputSink> {
-        // Create a new KafkaOutputSink with the same config and sink_id
-        // Note: cloned sink is uninitialized, needs to call init_with_context
         Box::new(KafkaOutputSink::new(self.config.clone(), self.sink_id))
+    }
+
+    fn set_error_state(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
+        let completion_flag = TaskCompletionFlag::new();
+        if let Some(ref control_sender) = self.control_sender {
+            control_sender
+                .send(SinkControlSignal::Error {
+                    completion_flag: completion_flag.clone(),
+                    error: String::new(),
+                })
+                .map_err(|e| {
+                    Box::new(std::io::Error::other(format!(
+                        "Failed to set error state: {}",
+                        e
+                    ))) as Box<dyn std::error::Error + Send>
+                })?;
+        }
+        self.wait_with_retry(&completion_flag, "SetErrorState")
     }
 }

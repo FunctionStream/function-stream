@@ -249,6 +249,9 @@ impl TaskManager {
         );
 
         let mut handle = task_arc.write();
+        if let Some(mailbox) = handle.get_control_mailbox() {
+            init_context.set_control_mailbox(mailbox);
+        }
         handle
             .init_with_context(&init_context)
             .map_err(|e| anyhow!("Failed to init task '{}': {}", task_name, e))?;

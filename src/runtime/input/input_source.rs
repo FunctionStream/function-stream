@@ -101,11 +101,7 @@ pub trait InputSource: Send + Sync {
         checkpoint_id: u64,
     ) -> Result<(), Box<dyn std::error::Error + Send>>;
 
-    /// Get input group ID
-    ///
-    /// Returns the input group index this input source belongs to (0-based)
-    ///
-    /// # Returns
-    /// - `usize`: Input group index
     fn get_group_id(&self) -> usize;
+
+    fn set_error_state(&self) -> Result<(), Box<dyn std::error::Error + Send>>;
 }

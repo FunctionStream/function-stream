@@ -16,6 +16,7 @@
 // for WebAssembly-based data processors in the stream processing system.
 
 use crate::runtime::output::OutputSink;
+use crate::runtime::processor::function_error::FunctionErrorReport;
 use crate::runtime::taskexecutor::InitContext;
 
 /// wasm Processor trait
@@ -253,28 +254,10 @@ pub trait WasmProcessor: Send + Sync {
     /// # Returns
     /// Ok(()) if all sinks close successfully, or an error if any sink fails
     fn close_sinks(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // Default implementation: do nothing
         Ok(())
     }
 
-    /// Execute Python function dynamically
-    ///
-    /// This method calls fs_exec to load and execute Python code dynamically.
-    ///
-    /// # Arguments
-    /// * `class_name` - Name of the Python class to load
-    /// * `modules` - List of modules (name, bytes) to load
-    ///
-    /// # Returns
-    /// Ok(()) if execution succeeds, or an error if it fails
-    fn exec_python_function(
-        &self,
-        _class_name: &str,
-        _modules: &[(String, Vec<u8>)],
-    ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        // Default implementation: not supported
-        Err(Box::new(std::io::Error::other(
-            "exec_python_function not supported by this processor",
-        )))
+    fn set_error_state_sinks(&mut self) -> Result<(), Box<dyn std::error::Error + Send>> {
+        Ok(())
     }
 }

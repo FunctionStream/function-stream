@@ -13,10 +13,12 @@
 // Task module - Task lifecycle management
 
 mod builder;
+mod control_mailbox;
 mod lifecycle;
 mod processor_config;
 mod yaml_keys;
 
 pub use builder::TaskBuilder;
+pub use control_mailbox::{ControlMailBox, TaskControlSignal};
 pub use lifecycle::*;
 pub use processor_config::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};

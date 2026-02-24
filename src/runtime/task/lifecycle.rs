@@ -15,8 +15,10 @@
 // Defines the complete lifecycle management interface for Task, including initialization, start, stop, checkpoint and close
 
 use crate::runtime::common::ComponentState;
+use crate::runtime::task::control_mailbox::ControlMailBox;
 use crate::runtime::taskexecutor::InitContext;
 use crate::storage::task::FunctionInfo;
+use std::sync::Arc;
 
 /// Task lifecycle management interface
 ///
@@ -128,6 +130,10 @@ pub trait TaskLifecycle: Send + Sync {
 
     fn get_function_info(&self) -> FunctionInfo;
 
+    fn get_control_mailbox(&self) -> Option<Arc<ControlMailBox>> {
+        None
+    }
+
     /// Check if task is running
     ///
     /// # Returns
@@ -153,26 +159,5 @@ pub trait TaskLifecycle: Send + Sync {
     /// - `false`: Task is not in error state
     fn is_error(&self) -> bool {
         self.get_state().is_error()
-    }
-
-    /// Execute Python function dynamically
-    ///
-    /// This method calls fs_exec to load and execute Python code dynamically.
-    /// Default implementation returns an error indicating this is not supported.
-    ///
-    /// # Arguments
-    /// * `class_name` - Name of the Python class to load
-    /// * `modules` - List of modules (name, bytes) to load
-    ///
-    /// # Returns
-    /// Ok(()) if execution succeeds, or an error if it fails
-    fn exec_python_function(
-        &self,
-        _class_name: &str,
-        _modules: &[(String, Vec<u8>)],
-    ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        Err(Box::new(std::io::Error::other(
-            "exec_python_function not supported by this task type",
-        )))
     }
 }
