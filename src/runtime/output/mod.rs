@@ -11,12 +11,14 @@
 // limitations under the License.
 
 mod output_protocol;
-mod output;
+mod interface;
 mod output_provider;
 mod output_runner;
 mod protocol;
 
+#[allow(unused_imports)]
 pub use output_protocol::OutputProtocol;
-pub use output::Output;
+pub use interface::Output;
 pub use output_provider::OutputProvider;
+#[allow(unused_imports)]
 pub use output_runner::OutputRunner;

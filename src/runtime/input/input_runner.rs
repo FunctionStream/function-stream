@@ -13,7 +13,7 @@
 use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::common::TaskCompletionFlag;
 use crate::runtime::input::input_protocol::InputProtocol;
-use crate::runtime::input::input::{Input, InputState};
+use crate::runtime::input::{Input, InputState};
 use crate::runtime::processor::function_error::FunctionErrorReport;
 use crate::runtime::task::ControlMailBox;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};

@@ -259,6 +259,7 @@ impl WasmTask {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn task_thread_loop(
         task_name: String,
         mut inputs: Vec<Box<dyn Input>>,
@@ -369,6 +370,7 @@ impl WasmTask {
         log::info!("Task thread exiting: {}", task_name);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn handle_control_signal(
         signal: TaskControlSignal,
         state: &mut TaskState,
