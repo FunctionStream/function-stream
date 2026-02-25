@@ -11,11 +11,11 @@
 // limitations under the License.
 
 mod input_protocol;
-mod interface;
 mod input_provider;
 mod input_runner;
+mod interface;
 pub mod protocol;
 
-pub use interface::{Input, InputState};
 pub use input_provider::InputProvider;
 pub use input_runner::InputRunner;
+pub use interface::{Input, InputState};

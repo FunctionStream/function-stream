@@ -306,7 +306,11 @@ impl<P: OutputProtocol> Output for OutputRunner<P> {
         let output_id = self.output_id;
 
         let thread_handle = thread::Builder::new()
-            .name(format!("output-runner-{}-{}", protocol.name(), self.output_id))
+            .name(format!(
+                "output-runner-{}-{}",
+                protocol.name(),
+                self.output_id
+            ))
             .spawn(move || {
                 Self::worker_loop(protocol, d_r, c_r, c_s, state, mail_box, output_id);
             })

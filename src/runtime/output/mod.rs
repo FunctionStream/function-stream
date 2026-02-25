@@ -10,15 +10,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod output_protocol;
 mod interface;
+mod output_protocol;
 mod output_provider;
 mod output_runner;
 mod protocol;
 
+pub use interface::Output;
 #[allow(unused_imports)]
 pub use output_protocol::OutputProtocol;
-pub use interface::Output;
 pub use output_provider::OutputProvider;
 #[allow(unused_imports)]
 pub use output_runner::OutputRunner;

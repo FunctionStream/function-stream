@@ -464,31 +464,26 @@ impl WasmProcessor for WasmProcessorImpl {
                 .first()
                 .map(|(_, b)| b.as_slice())
                 .unwrap_or(&[]);
-            create_wasm_host(
-                first_bytes,
-                outputs,
-                init_context,
-                task_name,
-                create_time,
-            )
-            .map_err(|e| -> Box<dyn Error + Send> {
-                let error_msg = format!("Failed to create WasmHost: {}", e);
-                log::error!("{}", error_msg);
-                let mut full_error = error_msg.clone();
-                let mut source = e.source();
-                let mut depth = 0;
-                while let Some(err) = source {
-                    depth += 1;
-                    full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
-                    source = err.source();
-                    if depth > 10 {
-                        full_error.push_str("\n  ... (error chain too long, truncated)");
-                        break;
+            create_wasm_host(first_bytes, outputs, init_context, task_name, create_time).map_err(
+                |e| -> Box<dyn Error + Send> {
+                    let error_msg = format!("Failed to create WasmHost: {}", e);
+                    log::error!("{}", error_msg);
+                    let mut full_error = error_msg.clone();
+                    let mut source = e.source();
+                    let mut depth = 0;
+                    while let Some(err) = source {
+                        depth += 1;
+                        full_error.push_str(&format!("\n  Caused by ({}): {}", depth, err));
+                        source = err.source();
+                        if depth > 10 {
+                            full_error.push_str("\n  ... (error chain too long, truncated)");
+                            break;
+                        }
                     }
-                }
-                log::error!("Full error chain:\n{}", full_error);
-                Box::new(WasmProcessorError::InitError(full_error))
-            })?
+                    log::error!("Full error chain:\n{}", full_error);
+                    Box::new(WasmProcessorError::InitError(full_error))
+                },
+            )?
         };
 
         *self.processor.borrow_mut() = Some(processor);
@@ -616,7 +611,10 @@ impl WasmProcessor for WasmProcessorImpl {
         Ok(())
     }
 
-    fn finish_checkpoint_outputs(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn Error + Send>> {
+    fn finish_checkpoint_outputs(
+        &mut self,
+        checkpoint_id: u64,
+    ) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
             Box::new(WasmProcessorError::InitError(
