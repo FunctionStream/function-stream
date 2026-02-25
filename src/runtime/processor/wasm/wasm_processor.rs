@@ -17,7 +17,7 @@
 
 use super::wasm_host::{HostState, Processor};
 use super::wasm_processor_trait::WasmProcessor;
-use crate::runtime::output::OutputSink;
+use crate::runtime::output::Output;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
@@ -140,10 +140,6 @@ impl WasmProcessor for WasmProcessorImpl {
             log::warn!("WasmProcessor '{}' already initialized", self.name);
             return Ok(());
         }
-
-        // Note: WasmHost initialization requires output_sinks
-        // But sinks are not ready yet, so WasmHost will be initialized later via init_wasm_host
-        // Here we only do basic initialization checks
 
         self.initialized = true;
         self.is_healthy = true;
@@ -408,7 +404,7 @@ impl WasmProcessor for WasmProcessorImpl {
 
     fn init_wasm_host(
         &mut self,
-        output_sinks: Vec<Box<dyn OutputSink>>,
+        outputs: Vec<Box<dyn Output>>,
         init_context: &crate::runtime::taskexecutor::InitContext,
         task_name: String,
         create_time: u64,
@@ -436,7 +432,7 @@ impl WasmProcessor for WasmProcessorImpl {
             create_wasm_host_with_component(
                 engine,
                 component,
-                output_sinks,
+                outputs,
                 init_context,
                 task_name,
                 create_time,
@@ -470,7 +466,7 @@ impl WasmProcessor for WasmProcessorImpl {
                 .unwrap_or(&[]);
             create_wasm_host(
                 first_bytes,
-                output_sinks,
+                outputs,
                 init_context,
                 task_name,
                 create_time,
@@ -548,7 +544,7 @@ impl WasmProcessor for WasmProcessorImpl {
         Ok(())
     }
 
-    fn start_sinks(&mut self) -> Result<(), Box<dyn Error + Send>> {
+    fn start_outputs(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
             Box::new(WasmProcessorError::InitError(
@@ -557,25 +553,24 @@ impl WasmProcessor for WasmProcessorImpl {
         })?;
 
         let host_state = store.data_mut();
-        for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
-            if let Err(e) = sink.start() {
-                log::error!("Failed to start sink {}: {}", idx, e);
+        for (idx, out) in host_state.outputs.iter_mut().enumerate() {
+            if let Err(e) = out.start() {
+                log::error!("Failed to start output {}: {}", idx, e);
                 return Err(Box::new(WasmProcessorError::ExecutionError(format!(
-                    "Failed to start sink {}: {}",
+                    "Failed to start output {}: {}",
                     idx, e
                 ))));
             }
         }
 
         log::debug!(
-            "All {} sinks started successfully",
-            host_state.output_sinks.len()
+            "All {} outputs started successfully",
+            host_state.outputs.len()
         );
         Ok(())
     }
 
-    /// Stop all output sinks
-    fn stop_sinks(&mut self) -> Result<(), Box<dyn Error + Send>> {
+    fn stop_outputs(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
             Box::new(WasmProcessorError::InitError(
@@ -584,19 +579,17 @@ impl WasmProcessor for WasmProcessorImpl {
         })?;
 
         let host_state = store.data_mut();
-        for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
-            if let Err(e) = sink.stop() {
-                log::warn!("Failed to stop sink {}: {}", idx, e);
-                // Continue stopping other sinks even if one fails
+        for (idx, out) in host_state.outputs.iter_mut().enumerate() {
+            if let Err(e) = out.stop() {
+                log::warn!("Failed to stop output {}: {}", idx, e);
             }
         }
 
-        log::debug!("All {} sinks stopped", host_state.output_sinks.len());
+        log::debug!("All {} outputs stopped", host_state.outputs.len());
         Ok(())
     }
 
-    /// Take checkpoint for all output sinks
-    fn take_checkpoint_sinks(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn Error + Send>> {
+    fn take_checkpoint_outputs(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
             Box::new(WasmProcessorError::InitError(
@@ -605,26 +598,25 @@ impl WasmProcessor for WasmProcessorImpl {
         })?;
 
         let host_state = store.data_mut();
-        for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
-            if let Err(e) = sink.take_checkpoint(checkpoint_id) {
-                log::error!("Failed to checkpoint sink {}: {}", idx, e);
+        for (idx, out) in host_state.outputs.iter_mut().enumerate() {
+            if let Err(e) = out.take_checkpoint(checkpoint_id) {
+                log::error!("Failed to checkpoint output {}: {}", idx, e);
                 return Err(Box::new(WasmProcessorError::ExecutionError(format!(
-                    "Failed to checkpoint sink {}: {}",
+                    "Failed to checkpoint output {}: {}",
                     idx, e
                 ))));
             }
         }
 
         log::debug!(
-            "Checkpoint {} taken for all {} sinks",
+            "Checkpoint {} taken for all {} outputs",
             checkpoint_id,
-            host_state.output_sinks.len()
+            host_state.outputs.len()
         );
         Ok(())
     }
 
-    /// Finish checkpoint for all output sinks
-    fn finish_checkpoint_sinks(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn Error + Send>> {
+    fn finish_checkpoint_outputs(&mut self, checkpoint_id: u64) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
             Box::new(WasmProcessorError::InitError(
@@ -633,26 +625,25 @@ impl WasmProcessor for WasmProcessorImpl {
         })?;
 
         let host_state = store.data_mut();
-        for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
-            if let Err(e) = sink.finish_checkpoint(checkpoint_id) {
-                log::error!("Failed to finish checkpoint for sink {}: {}", idx, e);
+        for (idx, out) in host_state.outputs.iter_mut().enumerate() {
+            if let Err(e) = out.finish_checkpoint(checkpoint_id) {
+                log::error!("Failed to finish checkpoint for output {}: {}", idx, e);
                 return Err(Box::new(WasmProcessorError::ExecutionError(format!(
-                    "Failed to finish checkpoint for sink {}: {}",
+                    "Failed to finish checkpoint for output {}: {}",
                     idx, e
                 ))));
             }
         }
 
         log::debug!(
-            "Checkpoint {} finished for all {} sinks",
+            "Checkpoint {} finished for all {} outputs",
             checkpoint_id,
-            host_state.output_sinks.len()
+            host_state.outputs.len()
         );
         Ok(())
     }
 
-    /// Close all output sinks
-    fn close_sinks(&mut self) -> Result<(), Box<dyn Error + Send>> {
+    fn close_outputs(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
             Box::new(WasmProcessorError::InitError(
@@ -661,21 +652,20 @@ impl WasmProcessor for WasmProcessorImpl {
         })?;
 
         let host_state = store.data_mut();
-        for (idx, sink) in host_state.output_sinks.iter_mut().enumerate() {
-            if let Err(e) = sink.stop() {
-                log::warn!("Failed to stop sink {} during close: {}", idx, e);
+        for (idx, out) in host_state.outputs.iter_mut().enumerate() {
+            if let Err(e) = out.stop() {
+                log::warn!("Failed to stop output {} during close: {}", idx, e);
             }
-            if let Err(e) = sink.close() {
-                log::warn!("Failed to close sink {}: {}", idx, e);
-                // Continue closing other sinks even if one fails
+            if let Err(e) = out.close() {
+                log::warn!("Failed to close output {}: {}", idx, e);
             }
         }
 
-        log::debug!("All {} sinks closed", host_state.output_sinks.len());
+        log::debug!("All {} outputs closed", host_state.outputs.len());
         Ok(())
     }
 
-    fn set_error_state_sinks(&mut self) -> Result<(), Box<dyn Error + Send>> {
+    fn set_error_state_outputs(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut store_ref = self.store.borrow_mut();
         let store = store_ref.as_mut().ok_or_else(|| -> Box<dyn Error + Send> {
             Box::new(WasmProcessorError::InitError(
@@ -683,9 +673,9 @@ impl WasmProcessor for WasmProcessorImpl {
             ))
         })?;
         let host_state = store.data_mut();
-        for (idx, sink) in host_state.output_sinks.iter().enumerate() {
-            if let Err(e) = sink.set_error_state() {
-                log::error!("Failed to set error state on sink {}: {}", idx, e);
+        for (idx, out) in host_state.outputs.iter().enumerate() {
+            if let Err(e) = out.set_error_state() {
+                log::error!("Failed to set error state on output {}: {}", idx, e);
             }
         }
         Ok(())

@@ -14,8 +14,8 @@
 //
 // Specifically handles building logic for Processor type configuration
 
-use crate::runtime::input::{InputSource, InputSourceProvider};
-use crate::runtime::output::{OutputSink, OutputSinkProvider};
+use crate::runtime::input::{Input, InputProvider};
+use crate::runtime::output::{Output, OutputProvider};
 use crate::runtime::processor::wasm::wasm_processor::WasmProcessorImpl;
 use crate::runtime::processor::wasm::wasm_processor_trait::WasmProcessor;
 use crate::runtime::processor::wasm::wasm_task::WasmTask;
@@ -134,8 +134,8 @@ impl ProcessorBuilder {
     fn create_inputs_from_config(
         inputs: &[InputConfig],
         group_idx: usize,
-    ) -> Result<Vec<Box<dyn InputSource>>, Box<dyn std::error::Error + Send>> {
-        InputSourceProvider::from_input_configs(inputs, group_idx)
+    ) -> Result<Vec<Box<dyn Input>>, Box<dyn std::error::Error + Send>> {
+        InputProvider::from_input_configs(inputs, group_idx)
     }
 
     fn create_processor_from_config(
@@ -151,10 +151,9 @@ impl ProcessorBuilder {
         Ok(Box::new(processor_impl))
     }
 
-    /// Create OutputSink instances from OutputConfig list
     fn create_outputs_from_config(
         outputs: &[OutputConfig],
-    ) -> Result<Vec<Box<dyn OutputSink>>, Box<dyn std::error::Error + Send>> {
-        OutputSinkProvider::from_output_configs(outputs)
+    ) -> Result<Vec<Box<dyn Output>>, Box<dyn std::error::Error + Send>> {
+        OutputProvider::from_output_configs(outputs)
     }
 }

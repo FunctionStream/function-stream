@@ -26,8 +26,8 @@ pub struct TaskThreadPool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadGroupType {
     MainRunloop,
-    InputSource(usize),
-    OutputSink(usize),
+    Input(usize),
+    Output(usize),
     Cleanup,
 }
 

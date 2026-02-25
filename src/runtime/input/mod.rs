@@ -10,16 +10,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Input module - Input module
-//
-// Provides input implementations for various data sources, including:
-// - Input source interface
-// - Input source provider (creates input sources from configuration)
-// - Input source protocols (Kafka, etc.)
-
-mod input_source;
-mod input_source_provider;
+mod input_protocol;
+mod input;
+mod input_provider;
+mod input_runner;
 pub mod protocol;
 
-pub use input_source::{InputSource, InputSourceState};
-pub use input_source_provider::InputSourceProvider;
+pub use input::{Input, InputState};
+pub use input_provider::InputProvider;
+pub use input_runner::InputRunner;

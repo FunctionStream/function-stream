@@ -10,12 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Kafka Protocol - Kafka protocol package
-//
-// Provides Kafka protocol-related output implementations
-
-pub mod output_sink;
+pub mod kafka_protocol;
 pub mod producer_config;
 
-pub use output_sink::*;
-pub use producer_config::*;
+pub use kafka_protocol::KafkaOutputProtocol;
+pub use producer_config::KafkaProducerConfig;

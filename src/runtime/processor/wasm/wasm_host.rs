@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use crate::runtime::buffer_and_event::BufferOrEvent;
-use crate::runtime::output::OutputSink;
+use crate::runtime::output::Output;
 use crate::runtime::processor::wasm::wasm_cache;
 use crate::storage::state_backend::{StateStore, StateStoreFactory};
 use std::sync::{Arc, OnceLock};
@@ -93,7 +93,7 @@ pub struct HostState {
     pub wasi: WasiCtx,
     pub table: ResourceTable,
     pub factory: Arc<dyn StateStoreFactory>,
-    pub output_sinks: Vec<Box<dyn OutputSink>>,
+    pub outputs: Vec<Box<dyn Output>>,
 }
 
 pub struct HostStateData;
@@ -409,29 +409,29 @@ impl HostIterator for HostState {
 
 impl functionstream::core::collector::Host for HostState {
     fn emit(&mut self, target_id: u32, data: Vec<u8>) {
-        let sink_count = self.output_sinks.len();
-        let sink = self
-            .output_sinks
+        let output_count = self.outputs.len();
+        let out = self
+            .outputs
             .get_mut(target_id as usize)
             .unwrap_or_else(|| {
-                panic!("Invalid target_id: {target_id}, available sinks: {sink_count}");
+                panic!("Invalid target_id: {target_id}, available outputs: {output_count}");
             });
 
         let buffer_or_event =
             BufferOrEvent::new_buffer(data, Some(format!("target_{}", target_id)), false, false);
 
-        sink.collect(buffer_or_event).unwrap_or_else(|e| {
+        out.collect(buffer_or_event).unwrap_or_else(|e| {
             panic!("failed to collect output: {e}");
         });
     }
 
     fn emit_watermark(&mut self, target_id: u32, ts: u64) {
-        let sink_count = self.output_sinks.len();
-        let sink = self
-            .output_sinks
+        let output_count = self.outputs.len();
+        let out = self
+            .outputs
             .get_mut(target_id as usize)
             .unwrap_or_else(|| {
-                panic!("Invalid target_id: {target_id}, available sinks: {sink_count}");
+                panic!("Invalid target_id: {target_id}, available outputs: {output_count}");
             });
 
         let mut watermark_data = Vec::with_capacity(12);
@@ -445,7 +445,7 @@ impl functionstream::core::collector::Host for HostState {
             false,
         );
 
-        sink.collect(buffer_or_event).unwrap_or_else(|e| {
+        out.collect(buffer_or_event).unwrap_or_else(|e| {
             panic!("failed to collect watermark: {e}");
         });
     }
@@ -454,7 +454,7 @@ impl functionstream::core::collector::Host for HostState {
 pub fn create_wasm_host_with_component(
     engine: &Engine,
     component: &Component,
-    output_sinks: Vec<Box<dyn OutputSink>>,
+    outputs: Vec<Box<dyn Output>>,
     init_context: &crate::runtime::taskexecutor::InitContext,
     task_name: String,
     create_time: u64,
@@ -482,7 +482,7 @@ pub fn create_wasm_host_with_component(
                 .build(),
             table: ResourceTable::new(),
             factory,
-            output_sinks,
+            outputs,
         },
     );
 
@@ -500,7 +500,7 @@ pub fn create_wasm_host_with_component(
 
 pub fn create_wasm_host(
     wasm_bytes: &[u8],
-    output_sinks: Vec<Box<dyn OutputSink>>,
+    outputs: Vec<Box<dyn Output>>,
     init_context: &crate::runtime::taskexecutor::InitContext,
     task_name: String,
     create_time: u64,
@@ -513,7 +513,7 @@ pub fn create_wasm_host(
     create_wasm_host_with_component(
         &engine,
         &component,
-        output_sinks,
+        outputs,
         init_context,
         task_name,
         create_time,

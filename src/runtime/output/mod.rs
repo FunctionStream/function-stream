@@ -10,16 +10,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Output module - Output module
-//
-// Provides output implementations, including:
-// - Output sink interface
-// - Output sink provider (creates output sinks from configuration)
-// - Output protocols (Kafka, etc.)
-
-mod output_sink;
-mod output_sink_provider;
+mod output_protocol;
+mod output;
+mod output_provider;
+mod output_runner;
 mod protocol;
 
-pub use output_sink::OutputSink;
-pub use output_sink_provider::OutputSinkProvider;
+pub use output_protocol::OutputProtocol;
+pub use output::Output;
+pub use output_provider::OutputProvider;
+pub use output_runner::OutputRunner;

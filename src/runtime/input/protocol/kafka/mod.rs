@@ -10,10 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Kafka Protocol
-
 pub mod config;
-pub mod input_source;
+pub mod kafka_protocol;
 
 pub use config::*;
-pub use input_source::*;
+pub use kafka_protocol::KafkaProtocol;

@@ -14,8 +14,8 @@ use super::thread_pool::ThreadGroup;
 use super::wasm_processor_trait::WasmProcessor;
 use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::common::{ComponentState, TaskCompletionFlag};
-use crate::runtime::input::InputSource;
-use crate::runtime::output::OutputSink;
+use crate::runtime::input::Input;
+use crate::runtime::output::Output;
 use crate::runtime::processor::function_error::FunctionErrorReport;
 use crate::runtime::task::{ControlMailBox, TaskControlSignal, TaskLifecycle};
 use crate::storage::task::FunctionInfo;
@@ -80,9 +80,9 @@ impl ExecutionState {
 pub struct WasmTask {
     task_name: String,
     task_type: String,
-    inputs: Option<Vec<Box<dyn InputSource>>>,
+    inputs: Option<Vec<Box<dyn Input>>>,
     processor: Option<Box<dyn WasmProcessor>>,
-    sinks: Option<Vec<Box<dyn OutputSink>>>,
+    outputs: Option<Vec<Box<dyn Output>>>,
     state: Arc<Mutex<ComponentState>>,
     control_mailbox: Option<Arc<ControlMailBox>>,
     control_receiver: Option<Receiver<TaskControlSignal>>,
@@ -99,9 +99,9 @@ impl WasmTask {
     pub fn new(
         task_name: String,
         task_type: String,
-        inputs: Vec<Box<dyn InputSource>>,
+        inputs: Vec<Box<dyn Input>>,
         processor: Box<dyn WasmProcessor>,
-        sinks: Vec<Box<dyn OutputSink>>,
+        outputs: Vec<Box<dyn Output>>,
         create_time: u64,
     ) -> Self {
         let (_tx, rx) = mpsc::channel();
@@ -112,7 +112,7 @@ impl WasmTask {
             task_type,
             inputs: Some(inputs),
             processor: Some(processor),
-            sinks: Some(sinks),
+            outputs: Some(outputs),
             state: Arc::new(Mutex::new(ComponentState::Uninitialized)),
             control_mailbox: Some(mailbox),
             control_receiver: Some(control_receiver),
@@ -142,18 +142,18 @@ impl WasmTask {
             Box::new(std::io::Error::other("processor already moved to thread"))
                 as Box<dyn std::error::Error + Send>
         })?;
-        let mut sinks = self.sinks.take().ok_or_else(|| {
-            Box::new(std::io::Error::other("sinks already moved to thread"))
+        let mut outputs = self.outputs.take().ok_or_else(|| {
+            Box::new(std::io::Error::other("outputs already moved to thread"))
                 as Box<dyn std::error::Error + Send>
         })?;
 
         let init_context = init_context.clone();
 
-        for (idx, sink) in sinks.iter_mut().enumerate() {
-            if let Err(e) = sink.init_with_context(&init_context) {
-                log::error!("Failed to init sink {}: {}", idx, e);
+        for (idx, out) in outputs.iter_mut().enumerate() {
+            if let Err(e) = out.init_with_context(&init_context) {
+                log::error!("Failed to init output {}: {}", idx, e);
                 return Err(Box::new(std::io::Error::other(format!(
-                    "Failed to init sink {}: {}",
+                    "Failed to init output {}: {}",
                     idx, e
                 ))));
             }
@@ -169,7 +169,7 @@ impl WasmTask {
 
         let create_time = self.get_create_time();
         if let Err(e) =
-            processor.init_wasm_host(sinks, &init_context, self.task_name.clone(), create_time)
+            processor.init_wasm_host(outputs, &init_context, self.task_name.clone(), create_time)
         {
             log::error!("Failed to init WasmHost: {}", e);
             return Err(Box::new(std::io::Error::other(format!(
@@ -261,7 +261,7 @@ impl WasmTask {
 
     fn task_thread_loop(
         task_name: String,
-        mut inputs: Vec<Box<dyn InputSource>>,
+        mut inputs: Vec<Box<dyn Input>>,
         mut processor: Box<dyn WasmProcessor>,
         control_receiver: Receiver<TaskControlSignal>,
         shared_state: Arc<Mutex<ComponentState>>,
@@ -372,7 +372,7 @@ impl WasmTask {
     fn handle_control_signal(
         signal: TaskControlSignal,
         state: &mut TaskState,
-        inputs: &mut [Box<dyn InputSource>],
+        inputs: &mut [Box<dyn Input>],
         processor: &mut Box<dyn WasmProcessor>,
         shared_state: &Arc<Mutex<ComponentState>>,
         task_name: &str,
@@ -399,8 +399,8 @@ impl WasmTask {
                     }
                 }
 
-                if let Err(e) = processor.start_sinks() {
-                    log::error!("Failed to start sinks: {}", e);
+                if let Err(e) = processor.start_outputs() {
+                    log::error!("Failed to start outputs: {}", e);
                 }
 
                 *state = TaskState::Running;
@@ -425,8 +425,8 @@ impl WasmTask {
                     }
                 }
 
-                if let Err(e) = processor.stop_sinks() {
-                    log::warn!("Failed to stop sinks: {}", e);
+                if let Err(e) = processor.stop_outputs() {
+                    log::warn!("Failed to stop outputs: {}", e);
                 }
 
                 *state = TaskState::Stopped;
@@ -482,8 +482,8 @@ impl WasmTask {
                     }
                 }
 
-                if let Err(e) = processor.take_checkpoint_sinks(checkpoint_id) {
-                    log::error!("Failed to checkpoint sinks: {}", e);
+                if let Err(e) = processor.take_checkpoint_outputs(checkpoint_id) {
+                    log::error!("Failed to checkpoint outputs: {}", e);
                 }
 
                 completion_flag.mark_completed();
@@ -513,8 +513,8 @@ impl WasmTask {
                     }
                 }
 
-                if let Err(e) = processor.finish_checkpoint_sinks(checkpoint_id) {
-                    log::error!("Failed to finish checkpoint for sinks: {}", e);
+                if let Err(e) = processor.finish_checkpoint_outputs(checkpoint_id) {
+                    log::error!("Failed to finish checkpoint for outputs: {}", e);
                 }
 
                 *state = TaskState::Running;
@@ -550,8 +550,8 @@ impl WasmTask {
                 *failure_cause.lock().unwrap() = Some(msg.clone());
                 *shared_state.lock().unwrap() = ComponentState::Error { error: msg.clone() };
                 *execution_state.lock().unwrap() = ExecutionState::Failed;
-                if let Err(e) = processor.set_error_state_sinks() {
-                    log::error!("Failed to set error state on sinks: {}", e);
+                if let Err(e) = processor.set_error_state_outputs() {
+                    log::error!("Failed to set error state on outputs: {}", e);
                 }
                 ControlAction::Pause
             }
@@ -560,7 +560,7 @@ impl WasmTask {
 
     #[inline]
     fn process_batch(
-        inputs: &mut [Box<dyn InputSource>],
+        inputs: &mut [Box<dyn Input>],
         processor: &mut Box<dyn WasmProcessor>,
         current_input_index: &mut usize,
     ) -> Result<(), FunctionErrorReport> {
@@ -620,7 +620,7 @@ impl WasmTask {
     }
 
     fn cleanup_resources(
-        inputs: &mut [Box<dyn InputSource>],
+        inputs: &mut [Box<dyn Input>],
         processor: &mut Box<dyn WasmProcessor>,
         task_name: &str,
     ) {
@@ -633,8 +633,8 @@ impl WasmTask {
             }
         }
 
-        if let Err(e) = processor.close_sinks() {
-            log::warn!("Failed to close sinks for {}: {}", task_name, e);
+        if let Err(e) = processor.close_outputs() {
+            log::warn!("Failed to close outputs for {}: {}", task_name, e);
         }
 
         if let Err(e) = processor.close() {
