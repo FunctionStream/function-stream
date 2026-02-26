@@ -29,4 +29,5 @@ pub use paths::{
     get_python_wasm_path, get_state_dir, get_state_dir_for_base, get_task_dir, get_wasm_cache_dir,
     resolve_path,
 };
+#[cfg(feature = "python")]
 pub use python_config::PythonConfig;

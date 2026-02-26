@@ -144,14 +144,14 @@ fn initialize_coordinator(_config: &GlobalConfig) -> Result<()> {
 }
 
 pub fn register_components() -> ComponentRegistry {
-    let mut builder = ComponentRegistryBuilder::new()
-        .register("WasmCache", initialize_wasm_cache)
-        .register("TaskManager", initialize_task_manager);
-
-    #[cfg(feature = "python")]
-    {
-        builder = builder.register("PythonService", initialize_python_service);
-    }
+    let builder = {
+        let b = ComponentRegistryBuilder::new()
+            .register("WasmCache", initialize_wasm_cache)
+            .register("TaskManager", initialize_task_manager);
+        #[cfg(feature = "python")]
+        let b = b.register("PythonService", initialize_python_service);
+        b
+    };
 
     builder
         .register("Coordinator", initialize_coordinator)
