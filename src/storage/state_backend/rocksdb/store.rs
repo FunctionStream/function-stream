@@ -41,7 +41,7 @@ impl RocksDBStateStore {
 
         let mut write_opts = WriteOptions::default();
         write_opts.set_sync(false);
-        write_opts.disable_wal(false);
+        write_opts.disable_wal(true);
 
         Ok(Box::new(Self {
             db,
