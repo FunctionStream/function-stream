@@ -10,6 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::input_strategy::{InputStrategy, RoundRobinStrategy};
 use super::thread_pool::ThreadGroup;
 use super::wasm_processor_trait::WasmProcessor;
 use crate::runtime::buffer_and_event::BufferOrEvent;
@@ -19,7 +20,7 @@ use crate::runtime::output::Output;
 use crate::runtime::processor::function_error::FunctionErrorReport;
 use crate::runtime::task::{ControlMailBox, TaskControlSignal, TaskLifecycle};
 use crate::storage::task::FunctionInfo;
-use crossbeam_channel::{Receiver, unbounded};
+use crossbeam_channel::{Receiver, after, select, unbounded};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -29,6 +30,7 @@ use std::time::Duration;
 const CONTROL_OPERATION_TIMEOUT_MS: u64 = 5000;
 const CONTROL_OPERATION_MAX_RETRIES: u32 = 3;
 const MAX_BATCH_SIZE: usize = 1000;
+const MAX_IDLE_COUNT: u64 = 10000;
 
 enum ControlAction {
     Continue,
@@ -37,7 +39,6 @@ enum ControlAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 enum TaskState {
     Uninitialized,
     Initialized,
@@ -59,22 +60,6 @@ pub enum ExecutionState {
     Canceling,
     Canceled,
     Failed,
-}
-
-impl ExecutionState {
-    fn from_u8(value: u8) -> Self {
-        match value {
-            0 => ExecutionState::Created,
-            1 => ExecutionState::Deploying,
-            2 => ExecutionState::Initializing,
-            3 => ExecutionState::Running,
-            4 => ExecutionState::Finished,
-            5 => ExecutionState::Canceling,
-            6 => ExecutionState::Canceled,
-            7 => ExecutionState::Failed,
-            _ => ExecutionState::Created,
-        }
-    }
 }
 
 pub struct WasmTask {
@@ -270,104 +255,117 @@ impl WasmTask {
         execution_state: Arc<Mutex<ExecutionState>>,
         _init_context: crate::runtime::taskexecutor::InitContext,
     ) {
-        let thread_start_time = std::time::Instant::now();
-        use crossbeam_channel::select;
-
-        let init_start = std::time::Instant::now();
         let mut state = TaskState::Initialized;
-        let mut current_input_index: usize = 0;
+        let mut last_idx: usize = 0;
+        let mut finished_mask: u64 = 0;
         let mut is_running = false;
-        let init_elapsed = init_start.elapsed().as_secs_f64();
-        log::debug!(
-            "[Timing] task_thread_loop - Initialize local state: {:.3}s",
-            init_elapsed
-        );
+        let mut idle_count: u64 = 0;
 
-        let lock_start = std::time::Instant::now();
+        let mut strategy: Box<dyn InputStrategy> = Box::new(RoundRobinStrategy);
+
         *shared_state.lock().unwrap() = ComponentState::Initialized;
-        let lock_elapsed = lock_start.elapsed().as_secs_f64();
-        log::debug!(
-            "[Timing] task_thread_loop - Update shared state: {:.3}s",
-            lock_elapsed
-        );
-
-        let thread_init_elapsed = thread_start_time.elapsed().as_secs_f64();
-        log::debug!(
-            "Task thread started (paused): {} (thread init: {:.3}s)",
-            task_name,
-            thread_init_elapsed
-        );
 
         loop {
             if is_running {
                 select! {
                     recv(control_receiver) -> result => {
-                        match result {
-                            Ok(signal) => {
-                                match Self::handle_control_signal(
-                                    signal,
-                                    &mut state,
-                                    &mut inputs,
-                                    &mut processor,
-                                    &shared_state,
-                                    &task_name,
-                                    &failure_cause,
-                                    &execution_state,
-                                ) {
-                                    ControlAction::Continue => is_running = true,
-                                    ControlAction::Pause => is_running = false,
-                                    ControlAction::Exit => break,
+                        idle_count = 0;
+                        if let Ok(signal) = result {
+                            match Self::handle_control_signal(
+                                signal,
+                                &mut state,
+                                &mut inputs,
+                                &mut processor,
+                                &shared_state,
+                                &task_name,
+                                &failure_cause,
+                                &execution_state,
+                            ) {
+                                ControlAction::Continue => is_running = true,
+                                ControlAction::Pause => is_running = false,
+                                ControlAction::Exit => break,
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    default => {
+                        match Self::process_batch(
+                            &mut inputs,
+                            &mut processor,
+                            &mut last_idx,
+                            &mut finished_mask,
+                            strategy.as_mut(),
+                        ) {
+                            Ok(true) => {
+                                idle_count = 0;
+                            }
+                            Ok(false) => {
+                                idle_count += 1;
+                                if idle_count >= MAX_IDLE_COUNT {
+                                    select! {
+                                        recv(control_receiver) -> res => {
+                                            idle_count = 0;
+                                            if let Ok(sig) = res {
+                                                match Self::handle_control_signal(
+                                                    sig,
+                                                    &mut state,
+                                                    &mut inputs,
+                                                    &mut processor,
+                                                    &shared_state,
+                                                    &task_name,
+                                                    &failure_cause,
+                                                    &execution_state,
+                                                ) {
+                                                    ControlAction::Continue => is_running = true,
+                                                    ControlAction::Pause => is_running = false,
+                                                    ControlAction::Exit => break,
+                                                }
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        recv(after(Duration::from_millis(500))) -> _ => {
+                                            idle_count = 0;
+                                        }
+                                    }
                                 }
                             }
-                            Err(_) => {
-                                log::warn!("Control channel disconnected: {}", task_name);
+                            Err(report) => {
+                                let msg = report.to_string();
+                                *failure_cause.lock().unwrap() = Some(msg.clone());
+                                *shared_state.lock().unwrap() =
+                                    ComponentState::Error { error: msg };
+                                *execution_state.lock().unwrap() = ExecutionState::Failed;
                                 break;
                             }
                         }
                     }
-                    default => {
-                        if let Err(report) = Self::process_batch(
-                            &mut inputs,
-                            &mut processor,
-                            &mut current_input_index,
-                        ) {
-                            let msg = report.to_string();
-                            log::error!("Task {} received error signal: {}", task_name, msg);
-                            *failure_cause.lock().unwrap() = Some(msg.clone());
-                            *shared_state.lock().unwrap() = ComponentState::Error { error: msg };
-                            *execution_state.lock().unwrap() = ExecutionState::Failed;
-                            break;
-                        }
-                    }
+                }
+            } else if let Ok(signal) = control_receiver.recv() {
+                if matches!(
+                    Self::handle_control_signal(
+                        signal,
+                        &mut state,
+                        &mut inputs,
+                        &mut processor,
+                        &shared_state,
+                        &task_name,
+                        &failure_cause,
+                        &execution_state,
+                    ),
+                    ControlAction::Exit
+                ) {
+                    break;
+                }
+                if state == TaskState::Running {
+                    is_running = true;
                 }
             } else {
-                match control_receiver.recv() {
-                    Ok(signal) => {
-                        match Self::handle_control_signal(
-                            signal,
-                            &mut state,
-                            &mut inputs,
-                            &mut processor,
-                            &shared_state,
-                            &task_name,
-                            &failure_cause,
-                            &execution_state,
-                        ) {
-                            ControlAction::Continue => is_running = true,
-                            ControlAction::Pause => is_running = false,
-                            ControlAction::Exit => break,
-                        }
-                    }
-                    Err(_) => {
-                        log::warn!("Control channel disconnected: {}", task_name);
-                        break;
-                    }
-                }
+                break;
             }
         }
-
         Self::cleanup_resources(&mut inputs, &mut processor, &task_name);
-        log::info!("Task thread exiting: {}", task_name);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -377,184 +375,67 @@ impl WasmTask {
         inputs: &mut [Box<dyn Input>],
         processor: &mut Box<dyn WasmProcessor>,
         shared_state: &Arc<Mutex<ComponentState>>,
-        task_name: &str,
+        _task_name: &str,
         failure_cause: &Arc<Mutex<Option<String>>>,
         execution_state: &Arc<Mutex<ExecutionState>>,
     ) -> ControlAction {
         match signal {
             TaskControlSignal::Start { completion_flag } => {
-                if !matches!(
-                    *state,
-                    TaskState::Initialized | TaskState::Stopped | TaskState::Failed
-                ) {
-                    let error = format!("Cannot start in state: {:?}", state);
-                    log::error!("{} for task: {}", error, task_name);
-                    completion_flag.mark_error(error);
-                    return ControlAction::Continue;
+                for input in inputs.iter_mut() {
+                    let _ = input.start();
                 }
-
-                log::debug!("Starting task: {}", task_name);
-
-                for (idx, input) in inputs.iter_mut().enumerate() {
-                    if let Err(e) = input.start() {
-                        log::error!("Failed to start input {}: {}", idx, e);
-                    }
-                }
-
-                if let Err(e) = processor.start_outputs() {
-                    log::error!("Failed to start outputs: {}", e);
-                }
-
+                let _ = processor.start_outputs();
                 *state = TaskState::Running;
                 *shared_state.lock().unwrap() = ComponentState::Running;
                 completion_flag.mark_completed();
                 ControlAction::Continue
             }
-
             TaskControlSignal::Stop { completion_flag } => {
-                if !matches!(*state, TaskState::Running | TaskState::Checkpointing) {
-                    let error = format!("Cannot stop in state: {:?}", state);
-                    log::error!("{} for task: {}", error, task_name);
-                    completion_flag.mark_error(error);
-                    return ControlAction::Continue;
+                for input in inputs.iter_mut() {
+                    let _ = input.stop();
                 }
-
-                log::info!("Stopping task: {}", task_name);
-
-                for (idx, input) in inputs.iter_mut().enumerate() {
-                    if let Err(e) = input.stop() {
-                        log::warn!("Failed to stop input {}: {}", idx, e);
-                    }
-                }
-
-                if let Err(e) = processor.stop_outputs() {
-                    log::warn!("Failed to stop outputs: {}", e);
-                }
-
+                let _ = processor.stop_outputs();
                 *state = TaskState::Stopped;
                 *shared_state.lock().unwrap() = ComponentState::Stopped;
                 completion_flag.mark_completed();
                 ControlAction::Pause
             }
-
             TaskControlSignal::Cancel { completion_flag } => {
-                if !matches!(
-                    *state,
-                    TaskState::Initialized
-                        | TaskState::Running
-                        | TaskState::Stopped
-                        | TaskState::Checkpointing
-                        | TaskState::Failed
-                ) {
-                    let error = format!("Cannot cancel in state: {:?}", state);
-                    log::error!("{} for task: {}", error, task_name);
-                    completion_flag.mark_error(error);
-                    return ControlAction::Continue;
-                }
-
-                log::info!("Canceling task: {}", task_name);
-                *state = TaskState::Stopped;
-                *shared_state.lock().unwrap() = ComponentState::Stopped;
                 completion_flag.mark_completed();
                 ControlAction::Exit
             }
-
             TaskControlSignal::Checkpoint {
                 checkpoint_id,
                 completion_flag,
             } => {
-                if *state != TaskState::Running {
-                    let error = format!("Cannot checkpoint in state: {:?}", state);
-                    log::error!("{} for task: {}", error, task_name);
-                    completion_flag.mark_error(error);
-                    return ControlAction::Continue;
+                for input in inputs.iter_mut() {
+                    let _ = input.take_checkpoint(checkpoint_id);
                 }
-
-                log::info!(
-                    "Checkpoint {} started for task: {}",
-                    checkpoint_id,
-                    task_name
-                );
-                *state = TaskState::Checkpointing;
-                *shared_state.lock().unwrap() = ComponentState::Checkpointing;
-
-                for (idx, input) in inputs.iter_mut().enumerate() {
-                    if let Err(e) = input.take_checkpoint(checkpoint_id) {
-                        log::error!("Failed to checkpoint input {}: {}", idx, e);
-                    }
-                }
-
-                if let Err(e) = processor.take_checkpoint_outputs(checkpoint_id) {
-                    log::error!("Failed to checkpoint outputs: {}", e);
-                }
-
+                let _ = processor.take_checkpoint_outputs(checkpoint_id);
                 completion_flag.mark_completed();
                 ControlAction::Continue
             }
-
             TaskControlSignal::CheckpointFinish {
                 checkpoint_id,
                 completion_flag,
             } => {
-                if *state != TaskState::Checkpointing {
-                    let error = format!("Cannot finish checkpoint in state: {:?}", state);
-                    log::error!("{} for task: {}", error, task_name);
-                    completion_flag.mark_error(error);
-                    return ControlAction::Continue;
+                for input in inputs.iter_mut() {
+                    let _ = input.finish_checkpoint(checkpoint_id);
                 }
-
-                log::info!(
-                    "Checkpoint {} finished for task: {}",
-                    checkpoint_id,
-                    task_name
-                );
-
-                for (idx, input) in inputs.iter_mut().enumerate() {
-                    if let Err(e) = input.finish_checkpoint(checkpoint_id) {
-                        log::error!("Failed to finish checkpoint for input {}: {}", idx, e);
-                    }
-                }
-
-                if let Err(e) = processor.finish_checkpoint_outputs(checkpoint_id) {
-                    log::error!("Failed to finish checkpoint for outputs: {}", e);
-                }
-
-                *state = TaskState::Running;
-                *shared_state.lock().unwrap() = ComponentState::Running;
+                let _ = processor.finish_checkpoint_outputs(checkpoint_id);
                 completion_flag.mark_completed();
                 ControlAction::Continue
             }
-
             TaskControlSignal::Close { completion_flag } => {
-                log::info!("Closing task: {}", task_name);
-                *state = TaskState::Closing;
-                *shared_state.lock().unwrap() = ComponentState::Closing;
-
                 *state = TaskState::Closed;
-                *shared_state.lock().unwrap() = ComponentState::Closed;
                 completion_flag.mark_completed();
                 ControlAction::Exit
             }
-
             TaskControlSignal::ErrorReport(report) => {
                 let msg = report.to_string();
-                log::error!(
-                    "Task {} received error report via MailBox: {}",
-                    task_name,
-                    msg
-                );
-                for (idx, input) in inputs.iter().enumerate() {
-                    if let Err(e) = input.set_error_state() {
-                        log::error!("Failed to set error state on input {}: {}", idx, e);
-                    }
-                }
-                *state = TaskState::Failed;
                 *failure_cause.lock().unwrap() = Some(msg.clone());
-                *shared_state.lock().unwrap() = ComponentState::Error { error: msg.clone() };
+                *shared_state.lock().unwrap() = ComponentState::Error { error: msg };
                 *execution_state.lock().unwrap() = ExecutionState::Failed;
-                if let Err(e) = processor.set_error_state_outputs() {
-                    log::error!("Failed to set error state on outputs: {}", e);
-                }
                 ControlAction::Pause
             }
         }
@@ -564,43 +445,41 @@ impl WasmTask {
     fn process_batch(
         inputs: &mut [Box<dyn Input>],
         processor: &mut Box<dyn WasmProcessor>,
-        current_input_index: &mut usize,
-    ) -> Result<(), FunctionErrorReport> {
+        last_idx: &mut usize,
+        finished_mask: &mut u64,
+        strategy: &mut dyn InputStrategy,
+    ) -> Result<bool, FunctionErrorReport> {
         let input_count = inputs.len();
-        if input_count == 0 {
-            return Ok(());
+        if input_count == 0 || *finished_mask == (1u64 << input_count) - 1 {
+            return Ok(false);
         }
 
         let mut batch_count = 0;
+        let mut made_progress = false;
 
         while batch_count < MAX_BATCH_SIZE {
-            let mut found_data = false;
-
-            for _ in 0..input_count {
-                let input_idx = *current_input_index;
-                let input = &mut inputs[input_idx];
-                *current_input_index = (*current_input_index + 1) % input_count;
-
-                match input.get_next() {
-                    Ok(Some(data)) => {
-                        found_data = true;
-                        Self::process_single_record(data, processor, input.get_group_id())?;
-                        batch_count += 1;
-                        break;
-                    }
-                    Ok(None) => continue,
-                    Err(e) => {
-                        return Err(FunctionErrorReport::input(input_idx, e.to_string()));
-                    }
-                }
-            }
-
-            if !found_data {
+            let mask = strategy.next_mask(input_count, *last_idx, *finished_mask);
+            if mask == 0 {
                 break;
             }
-        }
 
-        Ok(())
+            let i = mask.trailing_zeros() as usize;
+
+            match inputs[i].get_next() {
+                Ok(Some(data)) => {
+                    Self::process_single_record(data, processor, inputs[i].get_group_id())?;
+                    *last_idx = i;
+                    made_progress = true;
+                    batch_count += 1;
+                }
+                Ok(None) => break,
+                Err(_) => {
+                    *finished_mask |= 1 << i;
+                    made_progress = true;
+                }
+            }
+        }
+        Ok(made_progress)
     }
 
     #[inline]
@@ -609,13 +488,9 @@ impl WasmTask {
         processor: &mut Box<dyn WasmProcessor>,
         input_index: usize,
     ) -> Result<(), FunctionErrorReport> {
-        if !data.is_buffer() {
-            return Ok(());
-        }
-
-        if let Some(buffer_bytes) = data.get_buffer() {
+        if let Some(buf) = data.get_buffer() {
             processor
-                .process(buffer_bytes.to_vec(), input_index)
+                .process(buf.to_vec(), input_index)
                 .map_err(|e| FunctionErrorReport::processor(input_index, e.to_string()))?;
         }
         Ok(())
@@ -624,24 +499,14 @@ impl WasmTask {
     fn cleanup_resources(
         inputs: &mut [Box<dyn Input>],
         processor: &mut Box<dyn WasmProcessor>,
-        task_name: &str,
+        _task_name: &str,
     ) {
-        for (idx, input) in inputs.iter_mut().enumerate() {
-            if let Err(e) = input.stop() {
-                log::warn!("Failed to stop input {} for {}: {}", idx, task_name, e);
-            }
-            if let Err(e) = input.close() {
-                log::warn!("Failed to close input {} for {}: {}", idx, task_name, e);
-            }
+        for input in inputs {
+            let _ = input.stop();
+            let _ = input.close();
         }
-
-        if let Err(e) = processor.close_outputs() {
-            log::warn!("Failed to close outputs for {}: {}", task_name, e);
-        }
-
-        if let Err(e) = processor.close() {
-            log::warn!("Failed to close processor for {}: {}", task_name, e);
-        }
+        let _ = processor.close_outputs();
+        let _ = processor.close();
     }
 
     fn wait_with_retry(

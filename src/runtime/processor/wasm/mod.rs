@@ -10,6 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod input_strategy;
 pub mod thread_pool;
 pub mod wasm_cache;
 pub mod wasm_host;
