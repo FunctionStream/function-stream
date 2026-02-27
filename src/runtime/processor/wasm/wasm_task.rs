@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::input_strategy::{InputStrategy, RoundRobinStrategy};
+use super::input_strategy::{InputStrategy, RoundRobinStrategy, from_selector_name};
 use super::thread_pool::ThreadGroup;
 use super::wasm_processor_trait::WasmProcessor;
 use crate::runtime::buffer_and_event::BufferOrEvent;
@@ -18,6 +18,7 @@ use crate::runtime::common::{ComponentState, TaskCompletionFlag};
 use crate::runtime::input::Input;
 use crate::runtime::output::Output;
 use crate::runtime::processor::function_error::FunctionErrorReport;
+use crate::runtime::task::ProcessorRuntimeConfig;
 use crate::runtime::task::{ControlMailBox, TaskControlSignal, TaskLifecycle};
 use crate::storage::task::FunctionInfo;
 use crossbeam_channel::{Receiver, after, select, unbounded};
@@ -26,11 +27,6 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-
-const CONTROL_OPERATION_TIMEOUT_MS: u64 = 5000;
-const CONTROL_OPERATION_MAX_RETRIES: u32 = 3;
-const MAX_BATCH_SIZE: usize = 1000;
-const MAX_IDLE_COUNT: u64 = 10000;
 
 enum ControlAction {
     Continue,
@@ -65,6 +61,8 @@ pub enum ExecutionState {
 pub struct WasmTask {
     task_name: String,
     task_type: String,
+    input_selector: String,
+    processor_runtime: ProcessorRuntimeConfig,
     inputs: Option<Vec<Box<dyn Input>>>,
     processor: Option<Box<dyn WasmProcessor>>,
     outputs: Option<Vec<Box<dyn Output>>>,
@@ -81,9 +79,12 @@ pub struct WasmTask {
 }
 
 impl WasmTask {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         task_name: String,
         task_type: String,
+        input_selector: String,
+        processor_runtime: ProcessorRuntimeConfig,
         inputs: Vec<Box<dyn Input>>,
         processor: Box<dyn WasmProcessor>,
         outputs: Vec<Box<dyn Output>>,
@@ -95,6 +96,8 @@ impl WasmTask {
         Self {
             task_name,
             task_type,
+            input_selector,
+            processor_runtime,
             inputs: Some(inputs),
             processor: Some(processor),
             outputs: Some(outputs),
@@ -194,12 +197,16 @@ impl WasmTask {
 
         let failure_cause = self.failure_cause.clone();
         let init_context_for_loop = init_context.clone();
+        let input_selector = self.input_selector.clone();
+        let processor_runtime = self.processor_runtime.clone();
 
         let thread_handle = thread::Builder::new()
             .name(format!("stream-task-{}", task_name))
             .spawn(move || {
                 Self::task_thread_loop(
                     task_name,
+                    input_selector,
+                    processor_runtime,
                     inputs,
                     processor,
                     control_receiver,
@@ -247,6 +254,8 @@ impl WasmTask {
     #[allow(clippy::too_many_arguments)]
     fn task_thread_loop(
         task_name: String,
+        input_selector: String,
+        processor_runtime: ProcessorRuntimeConfig,
         mut inputs: Vec<Box<dyn Input>>,
         mut processor: Box<dyn WasmProcessor>,
         control_receiver: Receiver<TaskControlSignal>,
@@ -261,7 +270,8 @@ impl WasmTask {
         let mut is_running = false;
         let mut idle_count: u64 = 0;
 
-        let mut strategy: Box<dyn InputStrategy> = Box::new(RoundRobinStrategy);
+        let mut strategy: Box<dyn InputStrategy> =
+            from_selector_name(&input_selector).unwrap_or_else(|| Box::new(RoundRobinStrategy));
 
         *shared_state.lock().unwrap() = ComponentState::Initialized;
 
@@ -296,13 +306,14 @@ impl WasmTask {
                             &mut last_idx,
                             &mut finished_mask,
                             strategy.as_mut(),
+                            &processor_runtime,
                         ) {
                             Ok(true) => {
                                 idle_count = 0;
                             }
                             Ok(false) => {
                                 idle_count += 1;
-                                if idle_count >= MAX_IDLE_COUNT {
+                                if idle_count >= processor_runtime.max_idle_count {
                                     select! {
                                         recv(control_receiver) -> res => {
                                             idle_count = 0;
@@ -325,7 +336,7 @@ impl WasmTask {
                                                 break;
                                             }
                                         }
-                                        recv(after(Duration::from_millis(500))) -> _ => {
+                                        recv(after(Duration::from_millis(processor_runtime.idle_sleep_ms))) -> _ => {
                                             idle_count = 0;
                                         }
                                     }
@@ -448,6 +459,7 @@ impl WasmTask {
         last_idx: &mut usize,
         finished_mask: &mut u64,
         strategy: &mut dyn InputStrategy,
+        processor_runtime: &ProcessorRuntimeConfig,
     ) -> Result<bool, FunctionErrorReport> {
         let input_count = inputs.len();
         if input_count == 0 || *finished_mask == (1u64 << input_count) - 1 {
@@ -456,8 +468,9 @@ impl WasmTask {
 
         let mut batch_count = 0;
         let mut made_progress = false;
+        let max_batch = processor_runtime.max_batch_size;
 
-        while batch_count < MAX_BATCH_SIZE {
+        while batch_count < max_batch {
             let mask = strategy.next_mask(input_count, *last_idx, *finished_mask);
             if mask == 0 {
                 break;
@@ -514,9 +527,10 @@ impl WasmTask {
         completion_flag: &TaskCompletionFlag,
         operation_name: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
-        let timeout = Duration::from_millis(CONTROL_OPERATION_TIMEOUT_MS);
+        let timeout = Duration::from_millis(self.processor_runtime.control_timeout_ms);
+        let max_retries = self.processor_runtime.control_max_retries;
 
-        for retry in 0..CONTROL_OPERATION_MAX_RETRIES {
+        for retry in 0..max_retries {
             match completion_flag.wait_timeout(timeout) {
                 Ok(_) => {
                     if let Some(error) = completion_flag.get_error() {
@@ -532,7 +546,7 @@ impl WasmTask {
                         "{} timeout (retry {}/{}), task: {}",
                         operation_name,
                         retry + 1,
-                        CONTROL_OPERATION_MAX_RETRIES,
+                        max_retries,
                         self.task_name
                     );
                 }
@@ -541,10 +555,7 @@ impl WasmTask {
 
         Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::TimedOut,
-            format!(
-                "{} failed after {} retries",
-                operation_name, CONTROL_OPERATION_MAX_RETRIES
-            ),
+            format!("{} failed after {} retries", operation_name, max_retries),
         )))
     }
 

@@ -43,6 +43,12 @@ pub const INPUTS: &str = "inputs";
 /// Used to specify output sink configuration list
 pub const OUTPUTS: &str = "outputs";
 
+/// Input selector key name
+///
+/// Used to specify the strategy for selecting which input to read next when multiple inputs are available.
+/// Supported values: "round-robin", "sequential", "priority", "group-parallel"
+pub const INPUT_SELECTOR: &str = "input-selector";
+
 /// Configuration type value constants
 pub mod type_values {
     /// Processor configuration type value

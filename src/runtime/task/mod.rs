@@ -21,4 +21,7 @@ mod yaml_keys;
 pub use builder::TaskBuilder;
 pub use control_mailbox::{ControlMailBox, TaskControlSignal};
 pub use lifecycle::*;
-pub use processor_config::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
+pub use processor_config::{
+    InputConfig, InputRuntimeConfig, OutputConfig, OutputRuntimeConfig, ProcessorConfig,
+    ProcessorRuntimeConfig, WasmTaskConfig,
+};

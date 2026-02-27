@@ -57,6 +57,7 @@ impl OutputProvider {
                 topic,
                 partition,
                 extra,
+                runtime: _,
             } => {
                 use crate::runtime::output::output_runner::OutputRunner;
                 use crate::runtime::output::protocol::kafka::{
@@ -84,7 +85,8 @@ impl OutputProvider {
                 let kafka_config =
                     KafkaProducerConfig::new(servers, topic.clone(), partition_opt, properties);
                 let protocol = KafkaOutputProtocol::new(kafka_config);
-                Ok(Box::new(OutputRunner::new(protocol, output_idx)))
+                let runtime = output_config.output_runtime_config();
+                Ok(Box::new(OutputRunner::new(protocol, output_idx, runtime)))
             }
         }
     }

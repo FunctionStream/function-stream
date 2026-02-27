@@ -60,3 +60,21 @@ impl InputStrategy for GroupParallelStrategy {
         }
     }
 }
+
+/// Supported selector names in YAML config
+pub const SELECTOR_ROUND_ROBIN: &str = "round-robin";
+pub const SELECTOR_SEQUENTIAL: &str = "sequential";
+pub const SELECTOR_PRIORITY: &str = "priority";
+pub const SELECTOR_GROUP_PARALLEL: &str = "group-parallel";
+
+/// Create an InputStrategy from the configured selector name.
+/// Returns None for unknown names; caller should fall back to round-robin.
+pub fn from_selector_name(name: &str) -> Option<Box<dyn InputStrategy>> {
+    match name.trim().to_lowercase().as_str() {
+        SELECTOR_ROUND_ROBIN => Some(Box::new(RoundRobinStrategy)),
+        SELECTOR_SEQUENTIAL => Some(Box::new(SequentialStrategy)),
+        SELECTOR_PRIORITY => Some(Box::new(PriorityStrategy)),
+        SELECTOR_GROUP_PARALLEL => Some(Box::new(GroupParallelStrategy)),
+        _ => None,
+    }
+}

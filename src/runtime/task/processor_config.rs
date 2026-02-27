@@ -18,6 +18,111 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct InputRuntimeConfig {
+    #[serde(default = "input_default_channel_capacity")]
+    pub channel_capacity: usize,
+    #[serde(default = "input_default_batch_consume_size")]
+    pub batch_consume_size: usize,
+    #[serde(default = "input_default_poll_timeout_ms")]
+    pub poll_timeout_ms: u64,
+    #[serde(default = "input_default_sleep_when_full_ms")]
+    pub sleep_when_full_ms: u64,
+}
+
+fn input_default_channel_capacity() -> usize {
+    10000
+}
+fn input_default_batch_consume_size() -> usize {
+    10000
+}
+fn input_default_poll_timeout_ms() -> u64 {
+    1000
+}
+fn input_default_sleep_when_full_ms() -> u64 {
+    10
+}
+
+impl Default for InputRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            channel_capacity: input_default_channel_capacity(),
+            batch_consume_size: input_default_batch_consume_size(),
+            poll_timeout_ms: input_default_poll_timeout_ms(),
+            sleep_when_full_ms: input_default_sleep_when_full_ms(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ProcessorRuntimeConfig {
+    #[serde(default = "processor_default_max_batch_size")]
+    pub max_batch_size: usize,
+    #[serde(default = "processor_default_max_idle_count")]
+    pub max_idle_count: u64,
+    #[serde(default = "processor_default_idle_sleep_ms")]
+    pub idle_sleep_ms: u64,
+    #[serde(default = "processor_default_control_timeout_ms")]
+    pub control_timeout_ms: u64,
+    #[serde(default = "processor_default_control_max_retries")]
+    pub control_max_retries: u32,
+}
+
+fn processor_default_max_batch_size() -> usize {
+    1000
+}
+fn processor_default_max_idle_count() -> u64 {
+    10000
+}
+fn processor_default_idle_sleep_ms() -> u64 {
+    500
+}
+fn processor_default_control_timeout_ms() -> u64 {
+    5000
+}
+fn processor_default_control_max_retries() -> u32 {
+    3
+}
+
+impl Default for ProcessorRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            max_batch_size: processor_default_max_batch_size(),
+            max_idle_count: processor_default_max_idle_count(),
+            idle_sleep_ms: processor_default_idle_sleep_ms(),
+            control_timeout_ms: processor_default_control_timeout_ms(),
+            control_max_retries: processor_default_control_max_retries(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutputRuntimeConfig {
+    #[serde(default = "output_default_channel_capacity")]
+    pub channel_capacity: usize,
+    #[serde(default = "output_default_batch_consume_size")]
+    pub batch_consume_size: usize,
+}
+
+fn output_default_channel_capacity() -> usize {
+    10000
+}
+fn output_default_batch_consume_size() -> usize {
+    10000
+}
+
+impl Default for OutputRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            channel_capacity: output_default_channel_capacity(),
+            batch_consume_size: output_default_batch_consume_size(),
+        }
+    }
+}
+
 // ============================================================================
 // Input Configuration
 // ============================================================================
@@ -28,20 +133,16 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "input-type", rename_all = "kebab-case")]
 pub enum InputConfig {
-    /// Kafka input source configuration
     Kafka {
-        /// Kafka server address
         bootstrap_servers: String,
-        /// Topic name
         topic: String,
-        /// Partition number (optional, uses subscribe auto-assignment if not specified)
         #[serde(default)]
         partition: Option<u32>,
-        /// Consumer group ID
         group_id: String,
-        /// Additional Kafka configuration options (optional)
         #[serde(flatten)]
         extra: HashMap<String, String>,
+        #[serde(default)]
+        runtime: InputRuntimeConfig,
     },
 }
 
@@ -71,6 +172,12 @@ impl InputConfig {
     pub fn input_type(&self) -> &'static str {
         match self {
             InputConfig::Kafka { .. } => "kafka",
+        }
+    }
+
+    pub fn input_runtime_config(&self) -> InputRuntimeConfig {
+        match self {
+            InputConfig::Kafka { runtime, .. } => runtime.clone(),
         }
     }
 }
@@ -215,6 +322,11 @@ pub struct ProcessorConfig {
     /// Processor name
     pub name: String,
 
+    /// Input selector strategy when multiple inputs are available.
+    /// Supported values: "round-robin" (default), "sequential", "priority", "group-parallel"
+    #[serde(default = "default_input_selector")]
+    pub input_selector: String,
+
     /// Whether to use built-in Event serialization
     ///
     /// If true, uses the system's built-in Event serialization method.
@@ -239,11 +351,18 @@ pub struct ProcessorConfig {
     /// If not configured, an empty Map is passed.
     #[serde(default)]
     pub init_config: HashMap<String, String>,
+    #[serde(default)]
+    pub runtime: ProcessorRuntimeConfig,
 }
 
 /// Default checkpoint interval (1 second)
 fn default_checkpoint_interval() -> u64 {
     1
+}
+
+/// Default input selector: round-robin
+fn default_input_selector() -> String {
+    "round-robin".to_string()
 }
 
 impl ProcessorConfig {
@@ -266,6 +385,17 @@ impl ProcessorConfig {
             processor_value.insert(
                 serde_yaml::Value::String("name".to_string()),
                 name_val.clone(),
+            );
+        }
+
+        // Copy input_selector / input-selector (if exists)
+        if let Some(sel) = value
+            .get("input_selector")
+            .or_else(|| value.get("input-selector"))
+        {
+            processor_value.insert(
+                serde_yaml::Value::String("input_selector".to_string()),
+                sel.clone(),
             );
         }
 
@@ -296,6 +426,32 @@ impl ProcessorConfig {
             );
         }
 
+        if let Some(runtime_val) = value.get("processor-runtime") {
+            processor_value.insert(
+                serde_yaml::Value::String("runtime".to_string()),
+                runtime_val.clone(),
+            );
+        } else {
+            let mut runtime_map = serde_yaml::Mapping::new();
+            for key in &[
+                "max-batch-size",
+                "max-idle-count",
+                "idle-sleep-ms",
+                "control-timeout-ms",
+                "control-max-retries",
+            ] {
+                if let Some(v) = value.get(*key) {
+                    runtime_map.insert(serde_yaml::Value::String((*key).to_string()), v.clone());
+                }
+            }
+            if !runtime_map.is_empty() {
+                processor_value.insert(
+                    serde_yaml::Value::String("runtime".to_string()),
+                    serde_yaml::Value::Mapping(runtime_map),
+                );
+            }
+        }
+
         // Parse ProcessorConfig from cleaned Value
         let clean_value = serde_yaml::Value::Mapping(processor_value);
         let mut config: ProcessorConfig = serde_yaml::from_value(clean_value).map_err(
@@ -323,6 +479,19 @@ impl ProcessorConfig {
             config.name = "default-processor".to_string();
         }
 
+        // Normalize and validate input_selector
+        let selector = config.input_selector.to_lowercase().trim().to_string();
+        if selector.is_empty()
+            || (!matches!(
+                selector.as_str(),
+                "round-robin" | "sequential" | "priority" | "group-parallel"
+            ))
+        {
+            config.input_selector = default_input_selector();
+        } else {
+            config.input_selector = selector;
+        }
+
         // Validate and fix checkpoint_interval_seconds (minimum value is 1 second)
         if config.checkpoint_interval_seconds < 1 {
             config.checkpoint_interval_seconds = 1;
@@ -342,17 +511,14 @@ impl ProcessorConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "output-type", rename_all = "kebab-case")]
 pub enum OutputConfig {
-    /// Kafka output sink configuration
     Kafka {
-        /// Kafka server address
         bootstrap_servers: String,
-        /// Topic name
         topic: String,
-        /// Partition number
         partition: u32,
-        /// Additional Kafka configuration options (optional)
         #[serde(flatten)]
         extra: HashMap<String, String>,
+        #[serde(default)]
+        runtime: OutputRuntimeConfig,
     },
 }
 
@@ -381,6 +547,12 @@ impl OutputConfig {
     pub fn output_type(&self) -> &'static str {
         match self {
             OutputConfig::Kafka { .. } => "kafka",
+        }
+    }
+
+    pub fn output_runtime_config(&self) -> OutputRuntimeConfig {
+        match self {
+            OutputConfig::Kafka { runtime, .. } => runtime.clone(),
         }
     }
 }

@@ -1,5 +1,6 @@
 name: "python-processor-example"
 type: python
+input-selector: round-robin
 init_config:
   emit_threshold: "6"
   class_name: "CounterProcessor"
@@ -10,9 +11,14 @@ input-groups:
         topic: "input-topic"
         partition: 0
         group_id: "python-processor-group"
+        runtime:
+          channel-capacity: 10000
 outputs:
   - output-type: kafka
     bootstrap_servers: "localhost:9092"
     topic: "output-topic"
     partition: 0
-
+    runtime:
+      channel-capacity: 10000
+processor-runtime:
+  max-batch-size: 1000

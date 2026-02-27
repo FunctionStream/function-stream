@@ -83,10 +83,10 @@ state_storage:
     # Example: 67108864 represents 64MB
     target_file_size_base: 67108864
     
-    # Maximum bytes for level base in bytes (optional)
-    # Default: None (uses RocksDB default)
-    # Example: 268435456 represents 256MB
-    max_bytes_for_level_base: 268435456
+  # Maximum bytes for level base in bytes (optional)
+  # Default: None (uses RocksDB default)
+  # Example: 268435456 represents 256MB
+  max_bytes_for_level_base: 268435456
 
 # Task Storage Configuration
 # Used to store task metadata (task name, wasm bytes, config bytes, status, created_at, etc.)

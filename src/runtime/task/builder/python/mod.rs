@@ -107,6 +107,8 @@ impl PythonBuilder {
         let task = WasmTask::new(
             task_config.task_name.clone(),
             type_values::PYTHON.to_string(),
+            task_config.processor.input_selector.clone(),
+            task_config.processor.runtime.clone(),
             all_inputs,
             processor,
             outputs,

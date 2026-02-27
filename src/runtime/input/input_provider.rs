@@ -64,6 +64,7 @@ impl InputProvider {
                 partition,
                 group_id,
                 extra,
+                runtime: _,
             } => {
                 use crate::runtime::input::InputRunner;
                 use crate::runtime::input::protocol::kafka::{KafkaConfig, KafkaProtocol};
@@ -96,10 +97,12 @@ impl InputProvider {
                     properties,
                 );
 
+                let runtime = input_config.input_runtime_config();
                 Ok(Box::new(InputRunner::new(
                     KafkaProtocol::new(kafka_config),
                     group_idx,
                     input_idx,
+                    runtime,
                 )))
             }
         }

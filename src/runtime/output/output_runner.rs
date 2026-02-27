@@ -16,6 +16,7 @@ use crate::runtime::output::Output;
 use crate::runtime::output::output_protocol::OutputProtocol;
 use crate::runtime::processor::function_error::FunctionErrorReport;
 use crate::runtime::task::ControlMailBox;
+use crate::runtime::task::OutputRuntimeConfig;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -64,6 +65,7 @@ enum ControlAction {
 pub struct OutputRunner<P: OutputProtocol> {
     protocol: Arc<P>,
     output_id: usize,
+    runtime: OutputRuntimeConfig,
     state: Arc<Mutex<ComponentState>>,
     mail_box: Option<Arc<ControlMailBox>>,
     data_sender: Option<Sender<BufferOrEvent>>,
@@ -71,10 +73,11 @@ pub struct OutputRunner<P: OutputProtocol> {
 }
 
 impl<P: OutputProtocol> OutputRunner<P> {
-    pub fn new(protocol: P, output_id: usize) -> Self {
+    pub fn new(protocol: P, output_id: usize, runtime: OutputRuntimeConfig) -> Self {
         Self {
             protocol: Arc::new(protocol),
             output_id,
+            runtime,
             state: Arc::new(Mutex::new(ComponentState::Uninitialized)),
             mail_box: None,
             data_sender: None,
@@ -113,6 +116,7 @@ impl<P: OutputProtocol> OutputRunner<P> {
         )))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn worker_loop(
         protocol: Arc<P>,
         data_rx: Receiver<BufferOrEvent>,
@@ -121,6 +125,7 @@ impl<P: OutputProtocol> OutputRunner<P> {
         state: Arc<Mutex<ComponentState>>,
         mail_box: Option<Arc<ControlMailBox>>,
         output_id: usize,
+        batch_consume_size: usize,
     ) {
         use crossbeam_channel::select;
         let mut is_running = false;
@@ -140,7 +145,7 @@ impl<P: OutputProtocol> OutputRunner<P> {
                     recv(data_rx) -> res => match res {
                         Ok(data) => {
                             if !Self::process_data(&protocol, data, &control_tx, mail_box.as_ref(), output_id) { break; }
-                            for _ in 0..MAX_BATCH_CONSUME_SIZE {
+                            for _ in 0..batch_consume_size {
                                 match data_rx.try_recv() {
                                     Ok(more) => if !Self::process_data(&protocol, more, &control_tx, mail_box.as_ref(), output_id) { break; },
                                     Err(_) => break,
@@ -295,7 +300,10 @@ impl<P: OutputProtocol> Output for OutputRunner<P> {
 
         self.protocol.init()?;
 
-        let (d_s, d_r) = bounded(DEFAULT_CHANNEL_CAPACITY);
+        let channel_capacity = self.runtime.channel_capacity;
+        let batch_consume_size = self.runtime.batch_consume_size;
+
+        let (d_s, d_r) = bounded(channel_capacity);
         let (c_s, c_r) = unbounded();
         self.data_sender = Some(d_s);
         self.control_sender = Some(c_s.clone());
@@ -312,7 +320,16 @@ impl<P: OutputProtocol> Output for OutputRunner<P> {
                 self.output_id
             ))
             .spawn(move || {
-                Self::worker_loop(protocol, d_r, c_r, c_s, state, mail_box, output_id);
+                Self::worker_loop(
+                    protocol,
+                    d_r,
+                    c_r,
+                    c_s,
+                    state,
+                    mail_box,
+                    output_id,
+                    batch_consume_size,
+                );
             })
             .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
 

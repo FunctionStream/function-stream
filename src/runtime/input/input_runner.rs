@@ -16,6 +16,7 @@ use crate::runtime::input::input_protocol::InputProtocol;
 use crate::runtime::input::{Input, InputState};
 use crate::runtime::processor::function_error::FunctionErrorReport;
 use crate::runtime::task::ControlMailBox;
+use crate::runtime::task::InputRuntimeConfig;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -62,6 +63,7 @@ pub struct InputRunner<P: InputProtocol> {
     protocol: Arc<P>,
     group_id: usize,
     input_id: usize,
+    runtime: InputRuntimeConfig,
     state: Arc<Mutex<InputState>>,
     mail_box: Option<Arc<ControlMailBox>>,
     data_sender: Option<Sender<BufferOrEvent>>,
@@ -71,11 +73,12 @@ pub struct InputRunner<P: InputProtocol> {
 }
 
 impl<P: InputProtocol> InputRunner<P> {
-    pub fn new(protocol: P, group_id: usize, input_id: usize) -> Self {
+    pub fn new(protocol: P, group_id: usize, input_id: usize, runtime: InputRuntimeConfig) -> Self {
         Self {
             protocol: Arc::new(protocol),
             group_id,
             input_id,
+            runtime,
             state: Arc::new(Mutex::new(InputState::Uninitialized)),
             mail_box: None,
             data_sender: None,
@@ -116,6 +119,7 @@ impl<P: InputProtocol> InputRunner<P> {
         )))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn worker_loop(
         protocol: Arc<P>,
         data_sender: Sender<BufferOrEvent>,
@@ -124,6 +128,9 @@ impl<P: InputProtocol> InputRunner<P> {
         state: Arc<Mutex<InputState>>,
         mail_box: Option<Arc<ControlMailBox>>,
         input_id: usize,
+        batch_consume_size: usize,
+        poll_timeout_ms: u64,
+        sleep_when_full_ms: u64,
     ) {
         use crossbeam_channel::select;
         let mut is_running = false;
@@ -142,11 +149,11 @@ impl<P: InputProtocol> InputRunner<P> {
                     },
                     default() => {
                         if data_sender.is_full() {
-                            thread::sleep(Duration::from_millis(10));
+                            thread::sleep(Duration::from_millis(sleep_when_full_ms));
                             continue;
                         }
-                        for _ in 0..MAX_BATCH_CONSUME_SIZE {
-                            match protocol.poll(Duration::from_millis(1000)) {
+                        for _ in 0..batch_consume_size {
+                            match protocol.poll(Duration::from_millis(poll_timeout_ms)) {
                                 Ok(Some(data)) => {
                                     if data_sender.send(data).is_err() { break; }
                                     if data_sender.is_full() { break; }
@@ -256,7 +263,12 @@ impl<P: InputProtocol> Input for InputRunner<P> {
 
         self.protocol.init()?;
 
-        let (data_sender, data_receiver) = bounded(DEFAULT_CHANNEL_CAPACITY);
+        let channel_capacity = self.runtime.channel_capacity;
+        let batch_consume_size = self.runtime.batch_consume_size;
+        let poll_timeout_ms = self.runtime.poll_timeout_ms;
+        let sleep_when_full_ms = self.runtime.sleep_when_full_ms;
+
+        let (data_sender, data_receiver) = bounded(channel_capacity);
         let (control_sender, control_receiver) = unbounded();
 
         self.data_sender = Some(data_sender.clone());
@@ -279,6 +291,9 @@ impl<P: InputProtocol> Input for InputRunner<P> {
                     state,
                     mail_box,
                     input_id,
+                    batch_consume_size,
+                    poll_timeout_ms,
+                    sleep_when_full_ms,
                 );
             })
             .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
