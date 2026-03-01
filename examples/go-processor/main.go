@@ -14,110 +14,96 @@ package main
 
 import (
 	"encoding/json"
+	fssdk "github.com/functionstream/function-stream/go-sdk"
 	"strconv"
 	"strings"
-
-	"wit_component/bindings/functionstream/core/collector"
-	"wit_component/bindings/functionstream/core/kv"
-	"wit_component/bindings/functionstream/core/processor"
-
-	"go.bytecodealliance.org/cm"
-)
-
-var (
-	store          kv.Store
-	storeInit      bool
-	counterMap     map[string]int64
-	totalProcessed int64
-	keyPrefix      string
 )
 
 func init() {
-	processor.Exports.FsInit = fsInit
-	processor.Exports.FsProcess = fsProcess
-	processor.Exports.FsProcessWatermark = fsProcessWatermark
-	processor.Exports.FsTakeCheckpoint = fsTakeCheckpoint
-	processor.Exports.FsCheckHeartbeat = fsCheckHeartbeat
-	processor.Exports.FsClose = fsClose
-	processor.Exports.FsExec = fsExec
-	processor.Exports.FsCustom = fsCustom
+	fssdk.Run(&CounterProcessor{})
 }
 
-func fsInit(config cm.List[[2]string]) {
-	counterMap = make(map[string]int64)
-	totalProcessed = 0
-	keyPrefix = ""
+type CounterProcessor struct {
+	fssdk.BaseDriver
+	store          fssdk.Store
+	counterMap     map[string]int64
+	totalProcessed int64
+	keyPrefix      string
+}
 
-	for _, entry := range config.Slice() {
-		if entry[0] == "key_prefix" {
-			keyPrefix = entry[1]
-		}
+func (p *CounterProcessor) Init(ctx fssdk.Context, config map[string]string) error {
+	store, err := ctx.GetOrCreateStore("counter-store")
+	if err != nil {
+		return err
 	}
 
-	store = kv.NewStore("counter-store")
-	storeInit = true
+	p.store = store
+	p.counterMap = make(map[string]int64)
+	p.totalProcessed = 0
+	p.keyPrefix = strings.TrimSpace(config["key_prefix"])
+	return nil
 }
 
-func fsProcess(sourceID uint32, data cm.List[uint8]) {
-	inputStr := strings.TrimSpace(string(data.Slice()))
+func (p *CounterProcessor) Process(ctx fssdk.Context, sourceID uint32, data []byte) error {
+	_ = ctx
+	_ = sourceID
+	inputStr := strings.TrimSpace(string(data))
 	if inputStr == "" {
-		return
+		return nil
 	}
 
-	totalProcessed++
+	if p.store == nil {
+		return nil
+	}
 
-	fullKey := keyPrefix + inputStr
-	result := store.GetState(cm.ToList([]byte(fullKey)))
+	p.totalProcessed++
+
+	fullKey := p.keyPrefix + inputStr
+	existing, found, err := p.store.GetState([]byte(fullKey))
+	if err != nil {
+		return err
+	}
 
 	currentCount := int64(0)
-	if result.OK() != nil {
-		opt := result.OK()
-		if optVal := opt.Some(); optVal != nil {
-			valueBytes := *optVal
-			if count, err := strconv.ParseInt(string(valueBytes.Slice()), 10, 64); err == nil {
-				currentCount = count
-			}
+	if found {
+		if count, parseErr := strconv.ParseInt(string(existing), 10, 64); parseErr == nil {
+			currentCount = count
 		}
 	}
 
 	newCount := currentCount + 1
-	counterMap[inputStr] = newCount
+	p.counterMap[inputStr] = newCount
 
 	newCountStr := strconv.FormatInt(newCount, 10)
-	store.PutState(cm.ToList([]byte(fullKey)), cm.ToList([]byte(newCountStr)))
+	if err = p.store.PutState([]byte(fullKey), []byte(newCountStr)); err != nil {
+		return err
+	}
 
 	outputPayload := map[string]interface{}{
-		"total_processed": totalProcessed,
-		"counter_map":     counterMap,
+		"total_processed": p.totalProcessed,
+		"counter_map":     p.counterMap,
 	}
 
-	if jsonBytes, err := json.Marshal(outputPayload); err == nil {
-		collector.Emit(0, cm.ToList(jsonBytes))
+	jsonBytes, err := json.Marshal(outputPayload)
+	if err != nil {
+		return err
 	}
+	return ctx.Emit(0, jsonBytes)
 }
 
-func fsProcessWatermark(sourceID uint32, watermark uint64) {
-	collector.EmitWatermark(0, watermark)
+func (p *CounterProcessor) ProcessWatermark(ctx fssdk.Context, sourceID uint32, watermark uint64) error {
+	_ = sourceID
+	return ctx.EmitWatermark(0, watermark)
 }
 
-func fsTakeCheckpoint(checkpointID uint64) {}
-
-func fsCheckHeartbeat() bool {
-	return true
+func (p *CounterProcessor) Close(ctx fssdk.Context) error {
+	_ = ctx
+	p.store = nil
+	p.counterMap = nil
+	p.totalProcessed = 0
+	p.keyPrefix = ""
+	return nil
 }
 
-func fsClose() {
-	if storeInit {
-		store.ResourceDrop()
-		storeInit = false
-	}
-	counterMap = nil
+func main() {
 }
-
-func fsExec(className string, modules cm.List[cm.Tuple[string, cm.List[uint8]]]) {}
-
-func fsCustom(payload cm.List[uint8]) cm.List[uint8] {
-	return payload
-}
-
-func main() {}

@@ -60,6 +60,7 @@ function-stream/
 ├── conf/                    # Default runtime configuration
 ├── docs/                    # Documentation (English & Chinese)
 ├── examples/                # Sample processors
+├── go-sdk/                  # Go SDK and generated WIT bindings
 ├── python/                  # Python API, Client, and Runtime (WASM)
 ├── scripts/                 # Build and environment automation scripts
 ├── Makefile                 # Unified build system

@@ -56,7 +56,7 @@ download_wasi_wit_deps() {
 
     if ! command -v wkg &> /dev/null; then
         command -v cargo &> /dev/null || exit 1
-        cargo install wkg --quiet
+        cargo install wkg --version 0.10.0 --locked --quiet
     fi
 
     # 1. Define staging_dir as local
@@ -138,4 +138,9 @@ if [ -f "$WASM_SRC" ]; then
     log_ok
 fi
 
-log_step "0"
+log_step "GO_SDK_BUILD"
+command -v make > /dev/null 2>&1 || exit 1
+if [ -d "$ROOT_DIR/go-sdk" ]; then
+    make -C "$ROOT_DIR/go-sdk" build > /dev/null
+fi
+log_ok

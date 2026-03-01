@@ -79,4 +79,10 @@ if [ -d "$WIT_DEPS" ]; then
     rm -rf "$ROOT_DIR/wit/wkg.lock"
 fi
 
+GO_SDK_DIR="$ROOT_DIR/go-sdk"
+if [ -d "$GO_SDK_DIR" ] && [ -f "$GO_SDK_DIR/Makefile" ] && command -v make >/dev/null 2>&1; then
+    log_act "go-sdk"
+    make -C "$GO_SDK_DIR" clean > /dev/null || true
+fi
+
 log_ok "Done"

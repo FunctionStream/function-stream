@@ -12,11 +12,12 @@ This example demonstrates how to write a WebAssembly-based Function Stream Proce
 
 - **TinyGo**: <https://tinygo.org/getting-started/install/>
 - **wasm-tools**: `cargo install wasm-tools`
-- **wit-bindgen-go**: `go install github.com/bytecodealliance/wasm-tools-go/cmd/wit-bindgen-go@latest`
+- **Go SDK toolchain**: run `make -C go-sdk env` from project root
 
 ## Build
 
 ```bash
+make -C ../../go-sdk build
 ./build.sh
 # Output: build/processor.wasm
 ```
@@ -197,8 +198,7 @@ The processor also accepts runtime configuration via `fs-init`:
 If you see errors about missing WIT files or WASI interfaces:
 
 ```bash
-# Rebuild to regenerate bindings
-rm -rf bindings build
+make -C ../../go-sdk bindings
 ./build.sh
 ```
 
@@ -227,12 +227,16 @@ examples/go-processor/
 ├── main.go               # Go processor implementation
 ├── go.mod                # Go module definition
 ├── config.yaml           # Function configuration (Kafka I/O)
-├── wit/                  # WIT interface definitions
-│   ├── processor.wit     # Processor interface with WASI imports
-│   └── deps/             # WASI dependencies (cli, io, clocks, etc.)
-├── bindings/             # Generated Go bindings (auto-generated)
 └── build/                # Build output
     └── processor.wasm    # WASI P2 component
+
+go-sdk/
+├── Makefile              # Go SDK build pipeline
+├── runtime.go            # SDK runtime bootstrap
+├── context.go            # SDK context APIs
+├── store.go              # SDK state store APIs
+├── wit/                  # Generated WIT package and dependencies
+└── bindings/             # Generated Go bindings
 ```
 
 ## See Also

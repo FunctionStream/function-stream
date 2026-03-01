@@ -42,7 +42,7 @@ C_0 := \033[0m
 log = @printf "$(C_B)[-]$(C_0) %-15s %s\n" "$(1)" "$(2)"
 success = @printf "$(C_G)[✔]$(C_0) %s\n" "$(1)"
 
-.PHONY: all help build build-lite dist dist-lite clean test env env-clean docker docker-run docker-push .check-env .build-wasm
+.PHONY: all help build build-lite dist dist-lite clean test env env-clean go-sdk-env go-sdk-build go-sdk-clean docker docker-run docker-push .check-env .build-wasm
 
 all: build
 
@@ -54,6 +54,9 @@ help:
 	@echo "  dist        Package full build (.tar.gz / .zip)"
 	@echo "  dist-lite   Package lite build (.tar.gz / .zip)"
 	@echo "  env         Setup Python dev environment (.venv)"
+	@echo "  go-sdk-env  Setup Go SDK toolchain"
+	@echo "  go-sdk-build Copy WIT, generate bindings, build Go SDK"
+	@echo "  go-sdk-clean Remove generated Go SDK artifacts"
 	@echo "  test        Run unit tests"
 	@echo "  clean       Cleanup all artifacts"
 	@echo "  docker      Build Docker image"
@@ -121,6 +124,16 @@ env:
 	$(call log,ENV,Initializing Python environment)
 	@./scripts/setup.sh
 	$(call success,Environment Ready)
+
+go-sdk-build:
+	$(call log,GO,Building Go SDK)
+	@$(MAKE) -C go-sdk build
+	$(call success,Go SDK build complete)
+
+go-sdk-clean:
+	$(call log,GO,Cleaning Go SDK generated artifacts)
+	@$(MAKE) -C go-sdk clean
+	$(call success,Go SDK artifacts removed)
 
 env-clean:
 	$(call log,CLEAN,Python artifacts)
