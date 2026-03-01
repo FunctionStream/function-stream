@@ -71,8 +71,8 @@ class CounterProcessor(FSProcessorDriver):
             # REQUIREMENT: Emit output for every single message processed
             self._emit_snapshot(ctx)
 
-        except Exception as e:
-            raise e
+        except Exception:
+            raise
 
     def _emit_snapshot(self, ctx: Context):
         """Helper: Serialize and emit current state."""

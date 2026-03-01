@@ -10,7 +10,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#!/bin/bash
 
 set -euo pipefail
 
@@ -41,6 +40,10 @@ if [ ! -d "$WIT_DEPS_DIR" ] || [ -z "$(ls -A "$WIT_DEPS_DIR" 2>/dev/null)" ]; th
 fi
 
 if ! command -v tinygo &> /dev/null; then
+    printf "Error: 'tinygo' command not found.\n" >&2
+    printf "TinyGo is required to build the WebAssembly component.\n" >&2
+    printf "Please install TinyGo and ensure it is on your PATH.\n" >&2
+    printf "See https://tinygo.org/getting-started/install/ for installation instructions.\n" >&2
     exit 1
 fi
 
