@@ -1,0 +1,134 @@
+// =============================================================================
+// FUNCTION SQL Grammar
+// 
+// Using pest PEG syntax, referencing ANTLR style
+// =============================================================================
+
+// =============================================================================
+// 1. Whitespace (automatically skipped)
+// =============================================================================
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+// =============================================================================
+// 2. Keywords (case-insensitive)
+// =============================================================================
+
+kw_create    = _{ C ~ R ~ E ~ A ~ T ~ E }
+kw_drop      = _{ D ~ R ~ O ~ P }
+kw_start     = _{ S ~ T ~ A ~ R ~ T }
+kw_stop      = _{ S ~ T ~ O ~ P }
+kw_show      = _{ S ~ H ~ O ~ W }
+kw_with      = _{ W ~ I ~ T ~ H }
+kw_function  = _{ F ~ U ~ N ~ C ~ T ~ I ~ O ~ N }
+kw_functions = _{ F ~ U ~ N ~ C ~ T ~ I ~ O ~ N ~ S }
+
+// =============================================================================
+// 3. Operators & Symbols
+// =============================================================================
+
+LPAREN  = _{ "(" }
+RPAREN  = _{ ")" }
+COMMA   = _{ "," }
+EQ      = _{ "=" }
+SQUOTE  = _{ "'" }
+DQUOTE  = _{ "\"" }
+
+// =============================================================================
+// 4. Literals
+// =============================================================================
+
+// String literal (single or double quotes)
+string_literal = @{ 
+    SQUOTE ~ string_inner_single ~ SQUOTE | 
+    DQUOTE ~ string_inner_double ~ DQUOTE 
+}
+
+string_inner_single = @{ (!(SQUOTE | "\\") ~ ANY | escape_seq)* }
+string_inner_double = @{ (!(DQUOTE | "\\") ~ ANY | escape_seq)* }
+escape_seq = @{ "\\" ~ ANY }
+
+// =============================================================================
+// 5. Identifiers
+// =============================================================================
+
+// Task name identifier
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_" | "-")* }
+
+// =============================================================================
+// 6. Statements
+// =============================================================================
+
+// Entry rule
+statement = _{ 
+    SOI ~ (
+        create_stmt | 
+        drop_stmt | 
+        start_stmt | 
+        stop_stmt | 
+        show_stmt
+    ) ~ EOI 
+}
+
+// CREATE FUNCTION WITH (...)
+// Note: name is read from config file, not from SQL statement
+create_stmt = { kw_create ~ kw_function ~ kw_with ~ properties }
+
+// DROP FUNCTION name
+drop_stmt = { kw_drop ~ kw_function ~ identifier }
+
+// START FUNCTION name
+start_stmt = { kw_start ~ kw_function ~ identifier }
+
+// STOP FUNCTION name
+stop_stmt = { kw_stop ~ kw_function ~ identifier }
+
+// SHOW FUNCTIONS
+show_stmt = { kw_show ~ kw_functions }
+
+// =============================================================================
+// 7. Properties
+// =============================================================================
+
+// Property list ('key'='value', ...)
+properties = { LPAREN ~ property ~ (COMMA ~ property)* ~ RPAREN }
+
+// Single property 'key'='value'
+property = { property_key ~ EQ ~ property_value }
+
+// Property key (string)
+property_key = { string_literal }
+
+// Property value (string)
+property_value = { string_literal }
+
+// =============================================================================
+// 8. Character Fragments (for case-insensitive matching)
+// =============================================================================
+
+A = _{ "A" | "a" }
+B = _{ "B" | "b" }
+C = _{ "C" | "c" }
+D = _{ "D" | "d" }
+E = _{ "E" | "e" }
+F = _{ "F" | "f" }
+G = _{ "G" | "g" }
+H = _{ "H" | "h" }
+I = _{ "I" | "i" }
+J = _{ "J" | "j" }
+K = _{ "K" | "k" }
+L = _{ "L" | "l" }
+M = _{ "M" | "m" }
+N = _{ "N" | "n" }
+O = _{ "O" | "o" }
+P = _{ "P" | "p" }
+Q = _{ "Q" | "q" }
+R = _{ "R" | "r" }
+S = _{ "S" | "s" }
+T = _{ "T" | "t" }
+U = _{ "U" | "u" }
+V = _{ "V" | "v" }
+W = _{ "W" | "w" }
+X = _{ "X" | "x" }
+Y = _{ "Y" | "y" }
+Z = _{ "Z" | "z" }

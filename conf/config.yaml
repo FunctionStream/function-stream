@@ -1,0 +1,119 @@
+# Function Stream Configuration
+service:
+  service_id: "my-service-001"
+  service_name: "function-stream"
+  version: "1.0.0"
+  host: "127.0.0.1"
+  port: 8080
+  # workers: null  # If specified, overrides worker_multiplier
+  # worker_multiplier: 4  # CPU cores × multiplier (default: 4 if not specified)
+  debug: false
+
+logging:
+  level: info
+  format: json
+  file_path: logs/app.log  # Log file path (directory will be created automatically)
+  max_file_size: 100
+  max_files: 5
+
+# Python Runtime Configuration
+# Configuration for python wasm runtime parameters
+python:
+  # Path to python wasm file
+  # Default: data/cache/python-runner/functionstream-python-runtime.wasm
+  wasm_path: data/cache/python-runner/functionstream-python-runtime.wasm
+  
+  # Pre-compiled component cache directory
+  # Default: data/cache/python-runner
+  cache_dir: data/cache/python-runner
+  
+  # Enable component caching
+  # If true, pre-compiled components will be cached to speed up subsequent loads
+  # Default: true
+  enable_cache: true
+
+# WASM Runtime Configuration
+# Configuration for wasm incremental compilation cache parameters
+wasm:
+  # Incremental compilation cache directory
+  # Default: .cache/wasm-incremental
+  cache_dir: .cache/wasm-incremental
+  
+  # Enable incremental compilation cache
+  # If true, compiled wasm modules will be cached to speed up subsequent compilations
+  # Default: true
+  enable_cache: true
+  
+  # Maximum cache size (bytes)
+  # Default: 100MB (104857600 bytes)
+  # When cache exceeds this size, least recently used items will be evicted
+  max_cache_size: 104857600
+
+# State Storage Configuration
+# Used to store runtime state data for tasks
+state_storage:
+  # Storage type: memory or rocksdb (persistent)
+  # Default: memory
+  storage_type: rocksdb
+  
+  # Base directory path (only used when storage_type is rocksdb)
+  # Final path format: {base_dir}/state/{task_name}-{created_at}
+  # Example: if base_dir is "data", task name is "my_task", created_at is 1234567890
+  # then full path is: data/state/my_task-1234567890
+  # Default: data
+  base_dir: data
+  
+  # RocksDB configuration (only used when storage_type is rocksdb)
+  rocksdb:
+    # Maximum number of open files (optional)
+    # Default: None (uses RocksDB default)
+    max_open_files: 1000
+    
+    # Write buffer size in bytes (optional)
+    # Default: None (uses RocksDB default)
+    # Example: 67108864 represents 64MB
+    write_buffer_size: 67108864
+    
+    # Maximum number of write buffers (optional)
+    # Default: None (uses RocksDB default)
+    max_write_buffer_number: 3
+    
+    # Target file size base in bytes (optional)
+    # Default: None (uses RocksDB default)
+    # Example: 67108864 represents 64MB
+    target_file_size_base: 67108864
+    
+  # Maximum bytes for level base in bytes (optional)
+  # Default: None (uses RocksDB default)
+  # Example: 268435456 represents 256MB
+  max_bytes_for_level_base: 268435456
+
+# Task Storage Configuration
+# Used to store task metadata (task name, wasm bytes, config bytes, status, created_at, etc.)
+task_storage:
+  # Storage type: rocksdb (persistent)
+  # Default: rocksdb
+  storage_type: rocksdb
+  
+  # Database path (optional)
+  # If null or not specified, uses default path: data/task/{task_name}
+  # Example: if task name is "my_task", default path is data/task/my_task
+  # If a path is specified, uses the specified path
+  db_path: null
+  
+  # RocksDB configuration
+  rocksdb:
+    # Maximum number of open files (optional)
+    max_open_files: 1000
+    
+    # Write buffer size in bytes (optional)
+    write_buffer_size: 67108864
+    
+    # Maximum number of write buffers (optional)
+    max_write_buffer_number: 3
+    
+    # Target file size base in bytes (optional)
+    target_file_size_base: 67108864
+    
+    # Maximum bytes for level base in bytes (optional)
+    max_bytes_for_level_base: 268435456

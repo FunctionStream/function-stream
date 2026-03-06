@@ -1,0 +1,85 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Package Verification
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-package:
+    name: Build & Dist Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            libssl-dev \
+            pkg-config \
+            libsasl2-dev \
+            protobuf-compiler
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Generate Protocol
+        run: cargo build --package protocol
+
+      - name: Check Formatting
+        run: cargo fmt -p function-stream -p function-stream-cli -- --check
+
+      - name: Initialize Environment
+        run: make env
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --workspace -- -D warnings
+
+      - name: Run Unit Tests
+        run: make test
+
+      - name: Build & Package (Full)
+        run: make dist
+
+      - name: Build & Package (Lite)
+        run: make dist-lite
+
+      - name: Verify Artifacts
+        run: |
+          ls -lh dist/*.tar.gz dist/*.zip
+          VERSION=$(grep '^version' Cargo.toml | head -1 | awk -F '"' '{print $2}')
+          test -f "dist/function-stream-${VERSION}.tar.gz"
+          test -f "dist/function-stream-${VERSION}-lite.tar.gz"

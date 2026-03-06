@@ -1,0 +1,29 @@
+name: "go-processor-example"
+type: processor
+input-selector: round-robin
+input-groups:
+  - inputs:
+      - input-type: kafka
+        bootstrap_servers: "localhost:9092"
+        topic: "input-topic"
+        partition: 0
+        group_id: "go-processor-group"
+        runtime:
+          channel-capacity: 10000
+          batch-consume-size: 10000
+          poll-timeout-ms: 1000
+          sleep-when-full-ms: 10
+outputs:
+  - output-type: kafka
+    bootstrap_servers: "localhost:9092"
+    topic: "output-topic"
+    partition: 0
+    runtime:
+      channel-capacity: 10000
+      batch-consume-size: 10000
+processor-runtime:
+  max-batch-size: 1000
+  max-idle-count: 10000
+  idle-sleep-ms: 500
+  control-timeout-ms: 5000
+  control-max-retries: 3

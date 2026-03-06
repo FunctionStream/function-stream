@@ -1,0 +1,67 @@
+package functionstream:core@0.1.0;
+
+interface kv {
+    variant error {
+        not-found,
+        io-error(string),
+        other(string),
+    }
+
+    record complex-key {
+        key-group: list<u8>,
+        key: list<u8>,
+        namespace: list<u8>,
+        user-key: list<u8>,
+    }
+
+    resource iterator {
+        has-next: func() -> result<bool, error>;
+        next: func() -> result<option<tuple<list<u8>, list<u8>>>, error>;
+    }
+
+    resource store {
+        constructor(name: string);
+
+        // --- Simple KV (Bytes) ---
+        put-state: func(key: list<u8>, value: list<u8>) -> result<_, error>;
+        get-state: func(key: list<u8>) -> result<option<list<u8>>, error>;
+        delete-state: func(key: list<u8>) -> result<_, error>;
+        list-states: func(start-inclusive: list<u8>, end-exclusive: list<u8>) -> result<list<list<u8>>, error>;  
+
+        // --- Complex KV ---
+        put: func(key: complex-key, value: list<u8>) -> result<_, error>;
+        get: func(key: complex-key) -> result<option<list<u8>>, error>;
+        delete: func(key: complex-key) -> result<_, error>;
+        merge: func(key: complex-key, value: list<u8>) -> result<_, error>;
+        delete-prefix: func(key: complex-key) -> result<_, error>;
+        list-complex: func(key-group: list<u8>, key: list<u8>, namespace: list<u8>, start-inclusive: list<u8>, end-exclusive: list<u8>) -> result<list<list<u8>>, error>;
+
+        // --- Iterator ---
+        scan-complex: func(key-group: list<u8>, key: list<u8>, namespace: list<u8>) -> result<iterator, error>;
+
+    }
+}
+
+interface collector {
+    emit: func(target-id: u32, data: list<u8>);
+    emit-watermark: func(target-id: u32, watermark: u64);
+}
+
+world processor {
+    import collector;
+    import kv;
+
+    export fs-init: func(config: list<tuple<string, string>>);
+    export fs-process: func(source-id: u32, data: list<u8>);
+    export fs-process-watermark: func(source-id: u32, watermark: u64);
+    export fs-take-checkpoint: func(checkpoint-id: u64);
+    export fs-check-heartbeat: func() -> bool;
+    export fs-close: func();
+    export fs-exec: func(class-name: string, modules: list<tuple<string, list<u8>>>);
+    export fs-custom: func(payload: list<u8>) -> list<u8>;
+}
+
+world processor-runtime {
+    include wasi:cli/imports@0.2.0;
+    include processor;
+}

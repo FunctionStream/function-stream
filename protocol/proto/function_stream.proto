@@ -1,0 +1,136 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Function Stream Protocol Buffers Definition
+// This file defines the gRPC interfaces for Function Stream service
+
+syntax = "proto3";
+
+package function_stream;
+
+// Status codes for API responses
+enum StatusCode {
+  // Unknown status (default)
+  STATUS_UNKNOWN = 0;
+
+  // Success codes (2xx)
+  OK = 200;
+  CREATED = 201;
+  ACCEPTED = 202;
+  NO_CONTENT = 204;
+
+  // Client error codes (4xx)
+  BAD_REQUEST = 400;
+  UNAUTHORIZED = 401;
+  FORBIDDEN = 403;
+  NOT_FOUND = 404;
+  METHOD_NOT_ALLOWED = 405;
+  CONFLICT = 409;
+  UNPROCESSABLE_ENTITY = 422;
+  TOO_MANY_REQUESTS = 429;
+
+  // Server error codes (5xx)
+  INTERNAL_SERVER_ERROR = 500;
+  NOT_IMPLEMENTED = 501;
+  BAD_GATEWAY = 502;
+  SERVICE_UNAVAILABLE = 503;
+  GATEWAY_TIMEOUT = 504;
+}
+
+// Unified response structure
+message Response {
+  StatusCode status_code = 1;
+  string message = 2;
+  optional bytes data = 3;
+}
+
+// SQL execution request
+message SqlRequest {
+  string sql = 1;
+}
+
+// Create function request
+message CreateFunctionRequest {
+  bytes config_bytes = 1;
+  bytes function_bytes = 2;
+}
+
+// Python module information
+message PythonModule {
+  string module_name = 1;
+  bytes module_bytes = 2;
+}
+
+// Create Python function request (for creating Python function dynamically)
+message CreatePythonFunctionRequest {
+  string class_name = 1;
+  repeated PythonModule modules = 2;
+  string config_content = 3;
+}
+
+// Function information (for ShowFunctions response)
+message FunctionInfo {
+  string name = 1;
+  string task_type = 2;
+  string status = 3;
+}
+
+// Drop function request
+message DropFunctionRequest {
+  string function_name = 1;
+}
+
+// Show functions request (optional filter, empty for list all)
+message ShowFunctionsRequest {
+  optional string filter = 1;
+}
+
+// Show functions response (status_code, message, and list of FunctionInfo)
+message ShowFunctionsResponse {
+  StatusCode status_code = 1;
+  string message = 2;
+  repeated FunctionInfo functions = 3;
+}
+
+// Start function request
+message StartFunctionRequest {
+  string function_name = 1;
+}
+
+// Stop function request
+message StopFunctionRequest {
+  string function_name = 1;
+}
+
+// Function Stream service
+service FunctionStreamService {
+  // SQL execution
+  rpc ExecuteSql(SqlRequest) returns (Response);
+  
+  // Create function
+  rpc CreateFunction(CreateFunctionRequest) returns (Response);
+  
+  // Create Python function dynamically
+  rpc CreatePythonFunction(CreatePythonFunctionRequest) returns (Response);
+  
+  // Drop function
+  rpc DropFunction(DropFunctionRequest) returns (Response);
+  
+  // Show functions (returns list of FunctionInfo)
+  rpc ShowFunctions(ShowFunctionsRequest) returns (ShowFunctionsResponse);
+  
+  // Start function
+  rpc StartFunction(StartFunctionRequest) returns (Response);
+  
+  // Stop function
+  rpc StopFunction(StopFunctionRequest) returns (Response);
+}

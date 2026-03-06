@@ -1,171 +1,220 @@
 <!--
-  Copyright 2024 Function Stream Org.
 
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
+    Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
 
-      http://www.apache.org/licenses/LICENSE-2.0
+        http://www.apache.org/licenses/LICENSE-2.0
 
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+    Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
 -->
 
 # Function Stream
 
-Function stream is an event-streaming function platform based on Apache Pulsar and WebAssembly. It enables efficient and
-scalable processing of data streams by leveraging the power of WebAssembly. Function Stream provides seamless
-integration with Apache Pulsar, allowing users to take full advantage of its robust messaging capabilities.
+[中文](README-zh.md) | [English](README.md)
 
-## Features
+**Function Stream** is a high-performance, event-driven stream processing framework built in Rust. It provides a modular runtime to orchestrate serverless-style processing functions compiled to **WebAssembly (WASM)**, supporting functions written in **Go, Python, and Rust**.
 
-1. **Support for Multiple Programming Languages**: Function Stream aims to provide the capability to write code using
-   multiple programming languages. This allows developers to use their preferred language and harness its specific
-   strengths while working with Function Stream.
-2. **High Performance and Throughput**: Function Stream is designed to deliver high performance and handle substantial
-   throughput. It strives to optimize resource utilization and minimize latency, enabling efficient execution of code
-   and processing of data.
-3. **Isolated Environment**: Function Stream offers an isolated environment for executing code. This ensures that each
-   function runs independently, without interference from other functions or external factors. The isolation enhances
-   the security, reliability, and predictability of code execution.
-4. **Scalability and Fault Tolerance**: Function Stream focuses on scalability by offering the ability to effortlessly
-   scale up or down based on workload demands. Additionally, it emphasizes fault tolerance, ensuring that system
-   failures or errors do not disrupt the overall functioning of the platform.
-4. **Support for Complex Data Schema**: Function Stream acknowledges the need to handle diverse data types and formats.
-   It provides support for complex data schema, including bytes data and JSON format data, among others. This
-   versatility enables developers to process and manipulate data efficiently within the platform.
-6. **Stateful/Stateless Computing**: Function Stream caters to both stateful and stateless computing requirements. It
-   accommodates scenarios where functions require maintaining state between invocations as well as situations where a
-   stateless approach is more suitable. This flexibility allows developers to implement the desired architectural
-   patterns.
-7. **Cross-Architecture Platform Execution**: Function Stream aims to be a cross-architecture platform capable of
-   executing code across different hardware architectures seamlessly. It provides compatibility and portability,
-   allowing developers to run their code on various platforms without concerns about underlying hardware dependencies.
+## Table of Contents
 
-## Architecture and Components
+- [Key Features](#key-features)
+- [Repository Layout](#repository-layout)
+- [Prerequisites](#prerequisites)
+- [Quick Start (Local Development)](#quick-start-local-development)
+  - [1. Initialize Environment](#1-initialize-environment)
+  - [2. Build & Run Server](#2-build--run-server)
+  - [3. Run CLI](#3-run-cli)
+- [Building & Packaging](#building--packaging)
+  - [Build Targets](#build-targets)
+  - [Distribution (Packaging)](#distribution-packaging)
+  - [Running the Distribution](#running-the-distribution)
+  - [Using the Startup Script](#using-the-startup-script-binstart-serversh)
+- [Maintenance](#maintenance)
+- [Documentation](#documentation)
+- [Configuration](#configuration)
+- [License](#license)
 
-Function Stream is composed of three main components: the WebAssembly runtime engine, the Pulsar client, and the
-Function Stream service. The following figure shows the overview of the Function Stream architecture.
-![Architecture](docs/images/arch.png)
+## Key Features
 
-The **WebAssembly runtime engine** is responsible for executing the WebAssembly modules that implement the stream
-processing logic. The runtime engine supports an interface for the underlying wasm runtime library. We use [wazero
-](https://github.com/tetratelabs/wazero) as the
-WebAssembly runtime library, as they are both fast and lightweight. The WebAssembly runtime
-engine communicates with the Pulsar client through standard IO and file systems.
+* **Event-Driven WASM Runtime**: Executes polyglot functions (Go, Python, Rust) with near-native performance and sandboxed isolation.
+* **Durable State Management**: Built-in support for RocksDB-backed state stores for stateful stream processing.
+* **SQL-Powered CLI**: Interactive REPL for job management and stream inspection using SQL-like commands.
 
-**The Pulsar client** is responsible for consuming and publishing the messages from and to the Apache Pulsar cluster. We
-use [Pulsar Go client](https://github.com/apache/pulsar-client-go), which is a pure go implementation of the pulsar
-client library, to interact with the Pulsar brokers. The Pulsar client handles the data schema, the message metadata,
-and the processing guarantees of the messages.
+## Repository Layout
 
-**The Function Stream service** is responsible for managing the lifecycle and coordination of the WebAssembly instances.
-
-## Directory Structure
-
-The Function Stream project is organized as follows:
-```plaintext
-├── LICENSE                 # The license for Function Stream
-├── Makefile                # Contains build automation and commands
-├── README.md               # README file for the project
-├── benchmark               # Contains benchmarking tools or results
-├── bin                     # Contains compiled binary files
-├── cmd                     # Contains the command line executable source files
-├── common                  # Contains common utilities and libraries used across the project
-├── docs                    # Documentation for the project
-├── examples                # Example configurations, scripts, and other reference materials
-├── go.mod                  # Defines the module's module path and its dependency requirements
-├── go.sum                  # Contains the expected cryptographic checksums of the content of specific module versions
-├── fs                      # Core library files for Function Stream
-├── license-checker         # Tools related to checking license compliance
-├── openapi.yaml            # API definition file
-├── perf                    # Performance testing scripts
-├── restclient              # REST client library
-├── server                  # Server-side application source files
-└── tests                   # Contains test scripts and test data
+```text
+function-stream/
+├── src/                     # Core runtime, coordinator, server, config
+├── protocol/                # Protocol Buffers definitions
+├── cli/                     # SQL REPL client
+├── conf/                    # Default runtime configuration
+├── docs/                    # Documentation (English & Chinese)
+├── examples/                # Sample processors
+├── go-sdk/                  # Go SDK and generated WIT bindings
+├── python/                  # Python API, Client, and Runtime (WASM)
+├── scripts/                 # Build and environment automation scripts
+├── Makefile                 # Unified build system
+└── Cargo.toml               # Workspace manifest
 ```
 
-## Building Instructions
+## Prerequisites
 
-To compile Function Stream, use this command:
+* **Rust Toolchain**: Stable >= 1.77 (via rustup).
+* **Python 3.9+**: Required for building the Python WASM runtime.
+* **Protoc**: Protocol Buffers compiler (for generating gRPC bindings).
+* **Build Tools**: cmake, pkg-config, OpenSSL headers (for rdkafka).
 
-```shell
-make build-all
+## Quick Start (Local Development)
+
+### 1. Initialize Environment
+
+We provide an automated script to set up the Python virtual environment (`.venv`), install dependencies, and compile necessary sub-modules.
+
+```bash
+make env
 ```
 
-This creates the function-stream binary program and example wasm files in the `bin` directory,
-like `bin/example_basic.wasm`.
+### 2. Build & Run Server
 
-## Running Instructions
+Start the control plane in release mode. The build system will automatically compile the Python WASM runtime if it's missing.
 
-You have two ways to start the function stream server.
-
-Use this command to start the function stream server:
-
-```shell
-bin/function-stream server
+```bash
+cargo run --release --bin function-stream
 ```
 
-### Creating a Function
+### 3. Run CLI
 
-We'll use `example_basic.wasm` as an example wasm file. This function increases the money by 1. See the
-code [here](examples/basic/main.go).
+In a separate terminal, launch the SQL REPL:
 
-After starting the server, create a function with this command:
-
-```shell
-bin/function-stream client create -n example -a "bin/example_basic.wasm" -i example-input -o example-output -r 1
+```bash
+cargo run -p function-stream-cli -- --host 127.0.0.1 --port 8080
 ```
 
-This creates a function named `example` using `example_basic.wasm`. It takes messages from `example-input`, produces
-messages to `example-output`, and runs with 1 replica.
+## Building & Packaging
 
-### Consuming a Message from the Function Output
+The project uses a standard Makefile to handle compilation and distribution. Artifacts are generated in the `dist/` directory.
 
-After creating the function, consume a message from the output topic with this command:
+### Build Targets
 
-```shell
-bin/function-stream client consume -n example-output
+| Command           | Description                                                             |
+|-------------------|-------------------------------------------------------------------------|
+| `make`            | Alias for `make build`. Compiles Rust binaries and Python WASM runtime. |
+| `make build`      | Builds the Full version (Rust + Python Support).                        |
+| `make build-lite` | Builds the Lite version (Rust only, no Python dependencies).            |
+
+### Distribution (Packaging)
+
+To create production-ready archives (`.tar.gz` and `.zip`), use the dist targets.
+
+```bash
+make dist
 ```
 
-### Producing a Message to the Function Input
+**Output:**
+* `dist/function-stream-<version>.tar.gz`
+* `dist/function-stream-<version>.zip`
 
-In a new terminal, produce a message to the input topic with this command:
+For a lightweight distribution without Python WASM runtime:
 
-```shell
-bin/function-stream client produce -n example-input -c '{"name":"rbt","money":2}'
+```bash
+make dist-lite
 ```
 
-You'll see this log:
+**Output:**
+* `dist/function-stream-<version>-lite.tar.gz`
+* `dist/function-stream-<version>-lite.zip`
 
+### Running the Distribution
+
+After extracting the release package, you will see the following structure:
+
+```text
+function-stream-<version>/
+├── bin/
+│   ├── function-stream      # The compiled binary
+│   ├── cli                  # The compiled CLI binary
+│   ├── start-server.sh      # Production startup script
+│   └── start-cli.sh         # CLI startup script
+├── conf/
+│   └── config.yaml          # Default configuration
+├── data/                    # Runtime data (e.g. WASM cache)
+└── logs/                    # Log directory (created on runtime)
 ```
-Event produced
+
+### Using the Startup Script (bin/start-server.sh)
+
+We provide a robust shell script to manage the server process, capable of handling environment injection, daemonization, and configuration overrides.
+
+**Usage:**
+
+```bash
+./bin/start-server.sh [options]
 ```
 
-### Checking the Output
+**Options:**
 
-In the terminal where you consume the message from the output topic, you'll see this log:
+| Option                  | Description                                               |
+|-------------------------|-----------------------------------------------------------|
+| `-d`, `--daemon`        | Run the server in the background (Daemon mode).           |
+| `-c`, `--config <path>` | Specify a custom configuration file path.                 |
+| `-D <KEY>=<VALUE>`      | Inject environment variables (e.g., `-D RUST_LOG=debug`). |
 
+**Examples:**
+
+1. **Foreground Mode (Docker / Debugging)** — Runs the server in the current shell. Useful for containerized environments (Kubernetes/Docker) or debugging.
+
+   ```bash
+   ./bin/start-server.sh
+   ```
+
+2. **Daemon Mode (Production)** — Runs the server in the background, redirects stdout/stderr to `logs/`.
+
+   ```bash
+   ./bin/start-server.sh -d
+   ```
+
+3. **Custom Configuration** — Start with a specific config file.
+
+   ```bash
+   ./bin/start-server.sh -d -c config/config.yml
+   ```
+
+## Maintenance
+
+| Command          | Description                                                                    |
+|------------------|--------------------------------------------------------------------------------|
+| `make clean`     | Deep clean. Removes `target/`, `dist/`, `.venv/`, and all temporary artifacts. |
+| `make env-clean` | Removes only the Python virtual environment and Python artifacts.              |
+| `make test`      | Runs the Rust test suite.                                                      |
+
+## Documentation
+
+| Document                                                 | Description                       |
+|----------------------------------------------------------|-----------------------------------|
+| [Server Configuration](docs/server-configuration.md)     | Server Configuration & Operations |
+| [Function Configuration](docs/function-configuration.md) | Task Definition Specification     |
+| [SQL CLI Guide](docs/sql-cli-guide.md)                   | Interactive Management Guide      |
+| [Function Development](docs/function-development.md)     | Management & Development Guide    |
+| [Python SDK Guide](docs/python-sdk-guide.md)             | Python SDK Guide                  |
+
+## Configuration
+
+The runtime behavior is controlled by `conf/config.yaml`. You can override the configuration location using environment variables:
+
+```bash
+export FUNCTION_STREAM_CONF=/path/to/custom/config.yaml
 ```
-"{\"name\":\"rbt\",\"money\":3,\"expected\":0}"
-```
-
-### Deleting the Function
-
-After testing, delete the function with this command:
-
-```shell
-bin/function-stream client delete -n example
-```
-
-## Contributing
-
-We're happy to receive contributions from the community. If you find a bug or have a feature request, please open an
-issue or submit a pull request.
 
 ## License
 
-This project is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

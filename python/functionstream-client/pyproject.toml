@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "functionstream-client"
+version = "0.6.0"
+description = "Function Stream Python Client - gRPC client library"
+requires-python = ">=3.7"
+license = "Apache-2.0"
+authors = [
+    {name = "Function Stream Team"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "functionstream-api>=0.0.1",
+    "grpcio>=1.50.0",
+    "protobuf>=4.21.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools>=1.50.0",
+    "mypy-protobuf>=3.0.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["fs_client", "fs_client._proto"]

@@ -10,65 +10,160 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: license
-build:
-	go build -v -o bin/function-stream ./cmd
 
-build-example:
-	tinygo build -o bin/example_basic.wasm -target=wasi ./examples/basic
-	go build -o bin/example_external_function ./examples/basic
+APP_NAME    := function-stream
+VERSION     := $(shell grep '^version' Cargo.toml | head -1 | awk -F '"' '{print $$2}')
+ARCH        := $(shell uname -m)
+OS          := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+DATE        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-run-example-external-functions:
-	FS_SOCKET_PATH=/tmp/fs.sock FS_FUNCTION_NAME=fs/external-function ./bin/example_external_function
+DIST_ROOT   := dist
+TARGET_DIR  := target/release
+PYTHON_ROOT := python
+WASM_SOURCE := $(PYTHON_ROOT)/functionstream-runtime/target/functionstream-python-runtime.wasm
 
-lint:
-	golangci-lint run
+PYTHON_EXEC := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
-lint-fix:
-	golangci-lint run --fix
+FULL_NAME   := $(APP_NAME)-$(VERSION)
+LITE_NAME   := $(APP_NAME)-$(VERSION)-lite
+FULL_PATH   := $(DIST_ROOT)/$(FULL_NAME)
+LITE_PATH   := $(DIST_ROOT)/$(LITE_NAME)
 
-build-all: build build-example
+DOCKER_REPO := functionstream
+DOCKER_TAG  := $(VERSION)
+IMAGE_NAME  := $(DOCKER_REPO):$(DOCKER_TAG)
+
+C_R := \033[0;31m
+C_G := \033[0;32m
+C_B := \033[0;34m
+C_Y := \033[0;33m
+C_0 := \033[0m
+
+log = @printf "$(C_B)[-]$(C_0) %-15s %s\n" "$(1)" "$(2)"
+success = @printf "$(C_G)[✔]$(C_0) %s\n" "$(1)"
+
+.PHONY: all help build build-lite dist dist-lite clean test env env-clean go-sdk-env go-sdk-build go-sdk-clean docker docker-run docker-push .check-env .build-wasm
+
+all: build
+
+help:
+	@echo "Usage: make [TARGET]"
+	@echo ""
+	@echo "  build       Build full release (Rust + Python WASM)"
+	@echo "  build-lite  Build lightweight release (Rust only)"
+	@echo "  dist        Package full build (.tar.gz / .zip)"
+	@echo "  dist-lite   Package lite build (.tar.gz / .zip)"
+	@echo "  env         Setup Python dev environment (.venv)"
+	@echo "  go-sdk-env  Setup Go SDK toolchain"
+	@echo "  go-sdk-build Copy WIT, generate bindings, build Go SDK"
+	@echo "  go-sdk-clean Remove generated Go SDK artifacts"
+	@echo "  test        Run unit tests"
+	@echo "  clean       Cleanup all artifacts"
+	@echo "  docker      Build Docker image"
+	@echo "  docker-run  Run container (port 8080, mount logs)"
+	@echo "  docker-push Push image to registry"
+	@echo ""
+	@echo "  Version: $(VERSION) | Arch: $(ARCH) | OS: $(OS)"
+
+build: .check-env .build-wasm
+	$(call log,BUILD,Rust Full Features)
+	@cargo build --release --features python --quiet
+	$(call log,BUILD,CLI)
+	@cargo build --release -p function-stream-cli --quiet
+	$(call success,Target: $(TARGET_DIR)/$(APP_NAME) $(TARGET_DIR)/cli)
+
+build-lite: .check-env
+	$(call log,BUILD,Rust Lite No Python)
+	@cargo build --release --no-default-features --features incremental-cache --quiet
+	$(call log,BUILD,CLI for dist)
+	@cargo build --release -p function-stream-cli --quiet
+	$(call success,Target: $(TARGET_DIR)/$(APP_NAME) $(TARGET_DIR)/cli)
+
+.build-wasm:
+	$(call log,WASM,Building Python Runtime using $(PYTHON_EXEC))
+	@cd $(PYTHON_ROOT)/functionstream-runtime && \
+		PYTHONPATH=../functionstream-api ../../$(PYTHON_EXEC) build.py > /dev/null
+	@[ -f "$(WASM_SOURCE)" ] || (printf "$(C_R)[X] WASM Build Failed$(C_0)\n" && exit 1)
+
+dist: build
+	$(call log,DIST,Layout: $(FULL_PATH))
+	@rm -rf "$(FULL_PATH)"
+	@mkdir -p "$(FULL_PATH)/bin" "$(FULL_PATH)/conf" "$(FULL_PATH)/logs" "$(FULL_PATH)/data/cache/python-runner"
+	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(FULL_PATH)/bin/"
+	@cp "$(TARGET_DIR)/cli" "$(FULL_PATH)/bin/"
+	@cp scripts/start-server.sh scripts/start-cli.sh "$(FULL_PATH)/bin/"
+	@cp "$(WASM_SOURCE)" "$(FULL_PATH)/data/cache/python-runner/"
+	@cp conf/config.yaml "$(FULL_PATH)/conf/config.yaml" 2>/dev/null || true
+	@cp LICENSE "$(FULL_PATH)/" 2>/dev/null || true
+	@printf "Version: $(VERSION)\nBuild: $(ARCH)-$(OS)\nDate: $(DATE)\n" > "$(FULL_PATH)/manifest.txt"
+	$(call log,ARCHIVE,Compressing to $(DIST_ROOT)/...)
+	@cd $(DIST_ROOT) && tar -czf "$(FULL_NAME).tar.gz" "$(FULL_NAME)"
+	@cd $(DIST_ROOT) && zip -rq "$(FULL_NAME).zip" "$(FULL_NAME)"
+	$(call success,Ready: $(DIST_ROOT)/$(FULL_NAME).tar.gz)
+
+dist-lite: build-lite
+	$(call log,DIST,Layout: $(LITE_PATH))
+	@rm -rf "$(LITE_PATH)"
+	@mkdir -p "$(LITE_PATH)/bin" "$(LITE_PATH)/conf" "$(LITE_PATH)/logs" "$(LITE_PATH)/data"
+	@cp "$(TARGET_DIR)/$(APP_NAME)" "$(LITE_PATH)/bin/"
+	@cp "$(TARGET_DIR)/cli" "$(LITE_PATH)/bin/"
+	@cp scripts/start-server.sh scripts/start-cli.sh "$(LITE_PATH)/bin/"
+	@cp conf/config.yaml "$(LITE_PATH)/conf/config.yaml" 2>/dev/null || true
+	@cp LICENSE "$(LITE_PATH)/" 2>/dev/null || true
+	@printf "Version: $(VERSION) (Lite)\nBuild: $(ARCH)-$(OS)\nDate: $(DATE)\n" > "$(LITE_PATH)/manifest.txt"
+	$(call log,ARCHIVE,Compressing to $(DIST_ROOT)/...)
+	@cd $(DIST_ROOT) && tar -czf "$(LITE_NAME).tar.gz" "$(LITE_NAME)"
+	@cd $(DIST_ROOT) && zip -rq "$(LITE_NAME).zip" "$(LITE_NAME)"
+	$(call success,Ready: $(DIST_ROOT)/$(LITE_NAME).tar.gz)
 
 test:
-	go test -race ./... -timeout 10m
+	$(call log,TEST,Running cargo tests)
+	@cargo test --quiet
 
-bench:
-	go test -bench=. ./benchmark -timeout 10m
+env:
+	$(call log,ENV,Initializing Python environment)
+	@./scripts/setup.sh
+	$(call success,Environment Ready)
 
-bench_race:
-	go test -race -bench=. ./benchmark -timeout 10m
+go-sdk-build:
+	$(call log,GO,Building Go SDK)
+	@$(MAKE) -C go-sdk build
+	$(call success,Go SDK build complete)
 
-get-apidocs:
-	curl -o apidocs.json http://localhost:7300/apidocs
+go-sdk-clean:
+	$(call log,GO,Cleaning Go SDK generated artifacts)
+	@$(MAKE) -C go-sdk clean
+	$(call success,Go SDK artifacts removed)
 
-ADMIN_CLIENT_DIR := admin/client
-FILES_TO_REMOVE := go.mod go.sum .travis.yml .openapi-generator-ignore git_push.sh .openapi-generator api test
+env-clean:
+	$(call log,CLEAN,Python artifacts)
+	@./scripts/clean.sh
+	$(call success,Done)
 
-gen-rest-client:
-	-rm -r $(ADMIN_CLIENT_DIR)
-	mkdir -p $(ADMIN_CLIENT_DIR)
-	openapi-generator generate -i ./apidocs.json -g go -o $(ADMIN_CLIENT_DIR) \
-		--git-user-id functionstream \
-		--git-repo-id function-stream/$(ADMIN_CLIENT_DIR) \
-		--package-name adminclient \
-		--global-property apiDocs,apis,models,supportingFiles
-	rm -r $(addprefix $(ADMIN_CLIENT_DIR)/, $(FILES_TO_REMOVE))
+clean:
+	$(call log,CLEAN,Removing all artifacts)
+	@cargo clean
+	@rm -rf $(DIST_ROOT) data logs
+	@./scripts/clean.sh 2>/dev/null || true
+	$(call success,Done)
 
-proto:
-	for PROTO_FILE in $$(find . -name '*.proto'); do \
-		echo "generating codes for $$PROTO_FILE"; \
-		protoc \
-			--go_out=. \
-			--go_opt paths=source_relative \
-			--plugin protoc-gen-go="${GOPATH}/bin/protoc-gen-go" \
-			--go-grpc_out=. \
-			--go-grpc_opt paths=source_relative \
-			--plugin protoc-gen-go-grpc="${GOPATH}/bin/protoc-gen-go-grpc" \
-			$$PROTO_FILE; \
-	done
+.check-env:
+	@command -v cargo >/dev/null 2>&1 || { printf "$(C_R)[X] Cargo not found$(C_0)\n"; exit 1; }
+	@command -v python3 >/dev/null 2>&1 || { printf "$(C_R)[X] Python3 not found$(C_0)\n"; exit 1; }
 
-license:
-	./license-checker/license-checker.sh
+docker:
+	$(call log,DOCKER,Building Image: $(IMAGE_NAME))
+	@docker build -t $(IMAGE_NAME) .
+	$(call success,Image Ready: $(IMAGE_NAME))
 
-gen-changelog:
-	.chglog/gen-chg-log.sh
+docker-run:
+	$(call log,DOCKER,Starting Container)
+	@docker run --rm -it \
+		-p 8080:8080 \
+		-v $(CURDIR)/logs:/app/logs \
+		$(IMAGE_NAME)
+
+docker-push:
+	$(call log,DOCKER,Pushing $(IMAGE_NAME))
+	@docker push $(IMAGE_NAME)
+	$(call success,Push Complete)

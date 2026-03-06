@@ -1,0 +1,23 @@
+# Codacy configuration file
+# Exclude some warnings that are acceptable during refactoring phase
+
+exclude_paths:
+  - "target/**"
+  - "**/generated/**"
+  - "**/bindings/**"
+  - "examples/**"
+  - "README.md"
+  - "cli/README.md"
+  # Build scripts use subprocess with controlled build-time inputs only
+  - "python/functionstream-runtime/build.py"
+  - "python/functionstream-api/build_package.py"
+  # Ignore: apt pin versions, exec (required for Python module loading), pass style
+  - "Dockerfile"
+  - "python/functionstream-runtime/src/fs_runtime/runner.py"
+  - "python/functionstream-client/src/fs_client/exceptions.py"
+
+# Exclude some code quality checks (during refactoring phase)
+exclude_patterns:
+  - ".*unused.*"
+  - ".*complexity.*"
+  - ".*duplication.*"

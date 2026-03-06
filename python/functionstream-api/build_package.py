@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Build script for Function Stream API python Package.
+
+This script handles the lifecycle of building the python distribution artifacts
+(Wheel and Source Distribution) using modern python packaging standards.
+
+Note: This file is named build_package.py (not build.py) on purpose. A local
+build.py would shadow the PyPA "build" module when running "python -m build",
+causing infinite recursion. Use "python build_package.py" for this script, or
+"python -m build" / "make build" for the standard build.
+"""
+
+import sys
+import shutil
+import logging
+import subprocess
+import importlib.util
+from pathlib import Path
+from typing import List
+
+# --- Configuration ---
+SCRIPT_DIR = Path(__file__).parent.absolute()
+DIST_DIR = SCRIPT_DIR / "dist"
+BUILD_DIR = SCRIPT_DIR / "build"
+EGG_INFO_PATTERN = "*.egg-info"
+
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - [%(levelname)s] - %(message)s",
+    datefmt="%H:%M:%S"
+)
+logger = logging.getLogger("fs_builder")
+
+
+class BuildError(Exception):
+    """Custom exception for build failures."""
+
+
+class Builder:
+    """Encapsulates the build logic."""
+
+    def __init__(self, work_dir: Path):
+        self.work_dir = work_dir
+        self.dist_dir = work_dir / "dist"
+        self.python_exec = sys.executable
+
+    def check_environment(self) -> None:
+        """
+        Verifies that the build environment has necessary tools.
+        Raises BuildError if tools are missing.
+        """
+        logger.info("Checking build environment...")
+
+        required_modules = ["setuptools", "wheel", "build"]
+        missing = []
+
+        for mod in required_modules:
+            if importlib.util.find_spec(mod) is None:
+                missing.append(mod)
+
+        if missing:
+            logger.error(f"Missing build dependencies: {', '.join(missing)}")
+            logger.info("Please run: pip install --upgrade build setuptools wheel")
+            raise BuildError("Environment check failed.")
+
+        logger.info("✓ Environment check passed.")
+
+    def clean(self) -> None:
+        """
+        Cleans up previous build artifacts.
+        """
+        logger.info("Cleaning build artifacts...")
+
+        paths_to_clean: List[Path] = [
+            self.work_dir / "build",
+            self.work_dir / "dist",
+            ]
+
+        # Add egg-info directories
+        paths_to_clean.extend(self.work_dir.glob(EGG_INFO_PATTERN))
+
+        for path in paths_to_clean:
+            if not path.exists():
+                continue
+
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                    logger.debug(f"Removed directory: {path}")
+                else:
+                    path.unlink()
+                    logger.debug(f"Removed file: {path}")
+            except OSError as e:
+                logger.warning(f"Failed to remove {path}: {e}")
+
+        logger.info("✓ Clean completed.")
+
+    def build(self) -> None:
+        """
+        Executes the build process using the PyPA `build` module.
+        Runs from work_dir.parent with work_dir as srcdir so that a local
+        build.py in work_dir cannot shadow "python -m build", avoiding
+        infinite recursion.
+        """
+        logger.info("Building python package...")
+
+        self.dist_dir.mkdir(parents=True, exist_ok=True)
+
+        # Run from parent directory and explicitly pass project path to avoid
+        # local build.py shadowing PyPA's build
+        cmd = [
+            self.python_exec, "-m", "build",
+            "--outdir", str(self.dist_dir),
+            str(self.work_dir),
+        ]
+        # Cannot be work_dir, otherwise "python -m build" will load local
+        # build.py causing infinite recursion
+        run_cwd = self.work_dir.parent
+
+        logger.info(f"Executing: {' '.join(cmd)}")
+
+        try:
+            # Use inherit (stdout/stderr=None) to avoid PIPE buffer full
+            # causing subprocess blocking or timeout
+            # Note: subprocess.run is safe here as cmd is constructed from
+            # controlled build-time inputs, not user-provided data
+            subprocess.run(  # noqa: S603
+                cmd,
+                cwd=run_cwd,
+                check=True,
+                stdout=None,
+                stderr=None,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error("Build process failed.")
+            # When using inherit, no captured content, prompt user to check
+            # terminal output above
+            if e.stdout or e.stderr:
+                logger.error(f"STDOUT:\n{e.stdout}")
+                logger.error(f"STDERR:\n{e.stderr}")
+            else:
+                logger.error("See terminal output above for details.")
+            raise BuildError("Build command failed.") from e
+
+        self._summarize_artifacts()
+
+    def _summarize_artifacts(self) -> None:
+        """Log the results of the build."""
+        if not self.dist_dir.exists():
+            raise BuildError("Dist directory was not created.")
+
+        artifacts = list(self.dist_dir.glob("*"))
+        if not artifacts:
+            raise BuildError("No artifacts found in dist directory.")
+
+        logger.info("✓ Build Successful! Generated artifacts:")
+        for artifact in sorted(artifacts):
+            size_kb = artifact.stat().st_size / 1024
+            logger.info(f"  - {artifact.name:<30} ({size_kb:.2f} KB)")
+
+    def verify(self) -> None:
+        """
+        Performs post-build verification.
+        """
+        logger.info("Verifying package artifacts...")
+
+        has_wheel = any(self.dist_dir.glob("*.whl"))
+        has_sdist = any(self.dist_dir.glob("*.tar.gz"))
+
+        if not has_wheel:
+            logger.warning("⚠️ No Wheel (.whl) file found.")
+        if not has_sdist:
+            logger.warning("⚠️ No Source Distribution (.tar.gz) found.")
+
+        if not (has_wheel or has_sdist):
+            raise BuildError("Verification failed: No valid artifacts generated.")
+
+        logger.info("✓ Verification passed.")
+
+    def run(self) -> None:
+        """Main execution flow."""
+        print("=" * 60)
+        print("   Function Stream API - Builder")
+        print("=" * 60)
+
+        try:
+            self.check_environment()
+            self.clean()
+            self.build()
+            self.verify()
+
+            print("\n" + "=" * 60)
+            logger.info("Process completed successfully.")
+            print("To install:")
+            print(f"  pip install {self.dist_dir}/*.whl")
+            print("=" * 60)
+
+        except BuildError as e:
+            logger.error(f"Build failed: {e}")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            logger.error("Build interrupted by user.")
+            sys.exit(130)
+        except Exception:
+            logger.exception("An unexpected error occurred:")
+            sys.exit(1)
+
+
+def main():
+    builder = Builder(work_dir=SCRIPT_DIR)
+    builder.run()
+
+
+if __name__ == "__main__":
+    main()
