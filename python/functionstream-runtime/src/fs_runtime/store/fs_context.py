@@ -13,7 +13,19 @@
 from typing import Dict, List, Tuple
 
 from fs_api.context import Context
-from fs_api.store import KvStore
+from fs_api.store import (
+    Codec,
+    KvStore,
+    ValueState,
+    MapState,
+    ListState,
+    PriorityQueueState,
+    KeyedStateFactory,
+    KeyedValueState,
+    KeyedMapState,
+    KeyedListState,
+    KeyedPriorityQueueState,
+)
 
 from .fs_collector import emit, emit_watermark
 from .fs_store import FSStore
@@ -59,6 +71,42 @@ class WitContext(Context):
 
     def getConfig(self) -> Dict[str, str]:
         return self._CONFIG.copy()
+
+    def getOrCreateValueState(self, state_name: str, codec: Codec, store_name: str = "__fssdk_structured_state__") -> ValueState:
+        store = self.getOrCreateKVStore(store_name)
+        return ValueState(store, state_name, codec)
+
+    def getOrCreateMapState(self, state_name: str, key_codec: Codec, value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> MapState:
+        store = self.getOrCreateKVStore(store_name)
+        return MapState(store, state_name, key_codec, value_codec)
+
+    def getOrCreateListState(self, state_name: str, codec: Codec, store_name: str = "__fssdk_structured_state__") -> ListState:
+        store = self.getOrCreateKVStore(store_name)
+        return ListState(store, state_name, codec)
+
+    def getOrCreatePriorityQueueState(self, state_name: str, codec: Codec, store_name: str = "__fssdk_structured_state__") -> PriorityQueueState:
+        store = self.getOrCreateKVStore(store_name)
+        return PriorityQueueState(store, state_name, codec)
+
+    def getOrCreateKeyedStateFactory(self, state_name: str, store_name: str = "__fssdk_structured_state__") -> KeyedStateFactory:
+        store = self.getOrCreateKVStore(store_name)
+        return KeyedStateFactory(store, state_name)
+
+    def getOrCreateKeyedValueState(self, state_name: str, key_codec: Codec, value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> KeyedValueState:
+        factory = self.getOrCreateKeyedStateFactory(state_name, store_name)
+        return factory.new_keyed_value(key_codec, value_codec)
+
+    def getOrCreateKeyedMapState(self, state_name: str, key_codec: Codec, map_key_codec: Codec, map_value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> KeyedMapState:
+        factory = self.getOrCreateKeyedStateFactory(state_name, store_name)
+        return factory.new_keyed_map(key_codec, map_key_codec, map_value_codec)
+
+    def getOrCreateKeyedListState(self, state_name: str, key_codec: Codec, value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> KeyedListState:
+        factory = self.getOrCreateKeyedStateFactory(state_name, store_name)
+        return factory.new_keyed_list(key_codec, value_codec)
+
+    def getOrCreateKeyedPriorityQueueState(self, state_name: str, key_codec: Codec, value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> KeyedPriorityQueueState:
+        factory = self.getOrCreateKeyedStateFactory(state_name, store_name)
+        return factory.new_keyed_priority_queue(key_codec, value_codec)
 
 
 __all__ = ['WitContext', 'convert_config_to_dict']
