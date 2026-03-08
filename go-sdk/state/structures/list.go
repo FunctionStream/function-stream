@@ -19,24 +19,20 @@ type ListState[T any] struct {
 	serializeBatch func([]T) ([]byte, error)
 }
 
-func NewListState[T any](store common.Store, name string, itemCodec codec.Codec[T]) (*ListState[T], error) {
-	stateName, err := common.ValidateStateName(name)
-	if err != nil {
-		return nil, err
-	}
+func NewListState[T any](store common.Store, itemCodec codec.Codec[T]) (*ListState[T], error) {
 	if store == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "list state %q store must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "list state store must not be nil")
 	}
 	if itemCodec == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "list state %q codec must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "list state codec must not be nil")
 	}
 	fixedSize, isFixed := codec.FixedEncodedSize[T](itemCodec)
 	l := &ListState[T]{
 		store: store,
 		complexKey: api.ComplexKey{
-			KeyGroup:  []byte(common.StateListGroup),
-			Key:       []byte(stateName),
-			Namespace: []byte(""),
+			KeyGroup:  []byte{},
+			Key:       []byte{},
+			Namespace: []byte{},
 			UserKey:   []byte{},
 		},
 		codec:     itemCodec,

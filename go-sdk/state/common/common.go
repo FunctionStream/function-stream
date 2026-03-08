@@ -10,17 +10,6 @@ import (
 
 type Store = api.Store
 
-const (
-	StateValuePrefix       = "__fssdk__/value/"
-	StateListPrefix        = "__fssdk__/list/"
-	StatePQPrefix          = "__fssdk__/priority_queue/"
-	StateMapGroup          = "__fssdk__/map"
-	StateListGroup         = "__fssdk__/list"
-	StatePQGroup           = "__fssdk__/priority_queue"
-	StateAggregatingPrefix = "__fssdk__/aggregating/"
-	StateReducingPrefix    = "__fssdk__/reducing/"
-)
-
 func ValidateStateName(name string) (string, error) {
 	stateName := strings.TrimSpace(name)
 	if stateName == "" {

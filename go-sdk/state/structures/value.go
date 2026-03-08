@@ -14,21 +14,17 @@ type ValueState[T any] struct {
 	codec      codec.Codec[T]
 }
 
-func NewValueState[T any](store common.Store, name string, valueCodec codec.Codec[T]) (*ValueState[T], error) {
-	stateName, err := common.ValidateStateName(name)
-	if err != nil {
-		return nil, err
-	}
+func NewValueState[T any](store common.Store, valueCodec codec.Codec[T]) (*ValueState[T], error) {
 	if store == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "value state %q store must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "value state store must not be nil")
 	}
 	if valueCodec == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "value state %q codec must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "value state codec must not be nil")
 	}
 	ck := api.ComplexKey{
-		KeyGroup:  []byte(common.StateValuePrefix),
-		Key:       []byte(stateName),
-		Namespace: []byte("data"),
+		KeyGroup:  []byte{},
+		Key:       []byte{},
+		Namespace: []byte{},
 		UserKey:   []byte{},
 	}
 	return &ValueState[T]{store: store, complexKey: ck, codec: valueCodec}, nil

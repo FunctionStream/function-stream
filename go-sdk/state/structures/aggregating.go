@@ -24,27 +24,22 @@ type AggregatingState[T any, ACC any, R any] struct {
 
 func NewAggregatingState[T any, ACC any, R any](
 	store common.Store,
-	name string,
 	accCodec codec.Codec[ACC],
 	aggFunc AggregateFunc[T, ACC, R],
 ) (*AggregatingState[T, ACC, R], error) {
-	stateName, err := common.ValidateStateName(name)
-	if err != nil {
-		return nil, err
-	}
 	if store == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "aggregating state %q store must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "aggregating state store must not be nil")
 	}
 	if accCodec == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "aggregating state %q acc codec must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "aggregating state acc codec must not be nil")
 	}
 	if aggFunc == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "aggregating state %q agg func must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "aggregating state agg func must not be nil")
 	}
 	ck := api.ComplexKey{
-		KeyGroup:  []byte(common.StateAggregatingPrefix),
-		Key:       []byte(stateName),
-		Namespace: []byte("data"),
+		KeyGroup:  []byte{},
+		Key:       []byte{},
+		Namespace: []byte{},
 		UserKey:   []byte{},
 	}
 	return &AggregatingState[T, ACC, R]{

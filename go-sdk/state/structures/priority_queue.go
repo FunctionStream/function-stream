@@ -17,25 +17,21 @@ type PriorityQueueState[T any] struct {
 	valueCodec codec.Codec[T]
 }
 
-func NewPriorityQueueState[T any](store common.Store, name string, itemCodec codec.Codec[T]) (*PriorityQueueState[T], error) {
-	stateName, err := common.ValidateStateName(name)
-	if err != nil {
-		return nil, err
-	}
+func NewPriorityQueueState[T any](store common.Store, itemCodec codec.Codec[T]) (*PriorityQueueState[T], error) {
 	if store == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "priority queue state %q store must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "priority queue state store must not be nil")
 	}
 	if itemCodec == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "priority queue state %q codec must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "priority queue state codec must not be nil")
 	}
 	if !itemCodec.IsOrderedKeyCodec() {
 		return nil, api.NewError(api.ErrStoreInternal, "priority queue value codec must be ordered")
 	}
 	return &PriorityQueueState[T]{
 		store:      store,
-		keyGroup:   []byte(common.StatePQGroup),
-		key:        []byte(stateName),
-		namespace:  []byte("items"),
+		keyGroup:   []byte{},
+		key:        []byte{},
+		namespace:  []byte{},
 		valueCodec: itemCodec,
 	}, nil
 }

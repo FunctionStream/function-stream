@@ -13,7 +13,7 @@
 from dataclasses import dataclass
 from typing import Any, Generator, Generic, List, Optional, Tuple, Type, TypeVar
 
-from ..common import MAP_GROUP, validate_state_name
+from ..common import validate_state_name
 from ..codec import (
     BoolCodec,
     BytesCodec,
@@ -48,8 +48,9 @@ class MapState(Generic[K, V]):
         self._store = store
         self._key_codec = key_codec
         self._value_codec = value_codec
-        self._key = name.encode("utf-8")
-        self._namespace = b"entries"
+        self._key_group = b""
+        self._key = b""
+        self._namespace = b""
 
     @classmethod
     def with_auto_key_codec(
@@ -82,7 +83,7 @@ class MapState(Generic[K, V]):
         self._store.delete_prefix(self._ck(b""))
 
     def all(self) -> Generator[Tuple[K, V], None, None]:
-        it = self._store.scan_complex(MAP_GROUP, self._key, self._namespace)
+        it = self._store.scan_complex(self._key_group, self._key, self._namespace)
         while it.has_next():
             item = it.next()
             if item is None:
@@ -91,7 +92,7 @@ class MapState(Generic[K, V]):
             yield self._key_codec.decode(key_bytes), self._value_codec.decode(value_bytes)
 
     def len(self) -> int:
-        it = self._store.scan_complex(MAP_GROUP, self._key, self._namespace)
+        it = self._store.scan_complex(self._key_group, self._key, self._namespace)
         size = 0
         while it.has_next():
             item = it.next()
@@ -101,7 +102,7 @@ class MapState(Generic[K, V]):
         return size
 
     def entries(self) -> List[MapEntry[K, V]]:
-        it = self._store.scan_complex(MAP_GROUP, self._key, self._namespace)
+        it = self._store.scan_complex(self._key_group, self._key, self._namespace)
         out: List[MapEntry[K, V]] = []
         while it.has_next():
             item = it.next()
@@ -119,7 +120,7 @@ class MapState(Generic[K, V]):
     def range(self, start_inclusive: K, end_exclusive: K) -> List[MapEntry[K, V]]:
         start_bytes = self._key_codec.encode(start_inclusive)
         end_bytes = self._key_codec.encode(end_exclusive)
-        user_keys = self._store.list_complex(MAP_GROUP, self._key, self._namespace, start_bytes, end_bytes)
+        user_keys = self._store.list_complex(self._key_group, self._key, self._namespace, start_bytes, end_bytes)
         out: List[MapEntry[K, V]] = []
         for user_key in user_keys:
             raw = self._store.get(self._ck(user_key))
@@ -135,7 +136,7 @@ class MapState(Generic[K, V]):
 
     def _ck(self, user_key: bytes) -> ComplexKey:
         return ComplexKey(
-            key_group=MAP_GROUP,
+            key_group=self._key_group,
             key=self._key,
             namespace=self._namespace,
             user_key=user_key,

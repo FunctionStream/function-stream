@@ -12,7 +12,7 @@
 
 from typing import Generic, Optional, Tuple, TypeVar
 
-from ..common import VALUE_PREFIX, validate_state_name
+from ..common import validate_state_name
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
@@ -32,9 +32,9 @@ class ValueState(Generic[T]):
         self._codec = codec
         state_name = name.strip()
         self._ck = ComplexKey(
-            key_group=VALUE_PREFIX,
-            key=state_name.encode("utf-8"),
-            namespace=b"data",
+            key_group=b"",
+            key=b"",
+            namespace=b"",
             user_key=b"",
         )
 

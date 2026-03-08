@@ -12,7 +12,7 @@
 
 from typing import Generic, Iterator, Optional, Tuple, TypeVar
 
-from ..common import PQ_GROUP, validate_state_name
+from ..common import validate_state_name
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
@@ -32,13 +32,13 @@ class PriorityQueueState(Generic[T]):
             raise KvError("priority queue value codec must be ordered")
         self._store = store
         self._codec = codec
-        state_name = name.strip()
-        self._key = state_name.encode("utf-8")
-        self._namespace = b"items"
+        self._key_group = b""
+        self._key = b""
+        self._namespace = b""
 
     def _ck(self, user_key: bytes) -> ComplexKey:
         return ComplexKey(
-            key_group=PQ_GROUP,
+            key_group=self._key_group,
             key=self._key,
             namespace=self._namespace,
             user_key=user_key,
@@ -49,7 +49,7 @@ class PriorityQueueState(Generic[T]):
         self._store.put(self._ck(user_key), b"")
 
     def peek(self) -> Tuple[Optional[T], bool]:
-        it = self._store.scan_complex(PQ_GROUP, self._key, self._namespace)
+        it = self._store.scan_complex(self._key_group, self._key, self._namespace)
         if not it.has_next():
             return (None, False)
         item = it.next()
@@ -68,11 +68,11 @@ class PriorityQueueState(Generic[T]):
 
     def clear(self) -> None:
         self._store.delete_prefix(
-            ComplexKey(key_group=PQ_GROUP, key=self._key, namespace=self._namespace, user_key=b"")
+            ComplexKey(key_group=self._key_group, key=self._key, namespace=self._namespace, user_key=b"")
         )
 
     def all(self) -> Iterator[T]:
-        it = self._store.scan_complex(PQ_GROUP, self._key, self._namespace)
+        it = self._store.scan_complex(self._key_group, self._key, self._namespace)
         while it.has_next():
             item = it.next()
             if item is None:

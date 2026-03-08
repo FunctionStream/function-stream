@@ -13,7 +13,7 @@
 import struct
 from typing import Generic, List, TypeVar
 
-from ..common import LIST_GROUP, validate_state_name
+from ..common import validate_state_name
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
@@ -33,8 +33,8 @@ class ListState(Generic[T]):
         self._codec = codec
         state_name = name.strip()
         self._ck = ComplexKey(
-            key_group=LIST_GROUP,
-            key=state_name.encode("utf-8"),
+            key_group=b"",
+            key=b"",
             namespace=b"",
             user_key=b"",
         )

@@ -19,24 +19,19 @@ type ReducingState[V any] struct {
 
 func NewReducingState[V any](
 	store common.Store,
-	name string,
 	valueCodec codec.Codec[V],
 	reduceFunc ReduceFunc[V],
 ) (*ReducingState[V], error) {
-	stateName, err := common.ValidateStateName(name)
-	if err != nil {
-		return nil, err
-	}
 	if store == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "reducing state %q store must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "reducing state store must not be nil")
 	}
 	if valueCodec == nil || reduceFunc == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "reducing state %q value codec and reduce function are required", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "reducing state value codec and reduce function are required")
 	}
 	ck := api.ComplexKey{
-		KeyGroup:  []byte(common.StateReducingPrefix),
-		Key:       []byte(stateName),
-		Namespace: []byte("data"),
+		KeyGroup:  []byte{},
+		Key:       []byte{},
+		Namespace: []byte{},
 		UserKey:   []byte{},
 	}
 	return &ReducingState[V]{

@@ -23,32 +23,28 @@ type MapState[K any, V any] struct {
 	valueCodec codec.Codec[V]
 }
 
-func NewMapState[K any, V any](store common.Store, name string, keyCodec codec.Codec[K], valueCodec codec.Codec[V]) (*MapState[K, V], error) {
-	stateName, err := common.ValidateStateName(name)
-	if err != nil {
-		return nil, err
-	}
+func NewMapState[K any, V any](store common.Store, keyCodec codec.Codec[K], valueCodec codec.Codec[V]) (*MapState[K, V], error) {
 	if store == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "map state %q store must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "map state store must not be nil")
 	}
 	if keyCodec == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "map state %q key codec must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "map state key codec must not be nil")
 	}
 	if valueCodec == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "map state %q value codec must not be nil", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "map state value codec must not be nil")
 	}
 	if !keyCodec.IsOrderedKeyCodec() {
-		return nil, api.NewError(api.ErrStoreInternal, "map state %q key codec must be ordered (IsOrderedKeyCodec)", stateName)
+		return nil, api.NewError(api.ErrStoreInternal, "map state key codec must be ordered (IsOrderedKeyCodec)")
 	}
-	return &MapState[K, V]{store: store, keyGroup: []byte(common.StateMapGroup), key: []byte(stateName), namespace: []byte("entries"), keyCodec: keyCodec, valueCodec: valueCodec}, nil
+	return &MapState[K, V]{store: store, keyGroup: []byte{}, key: []byte{}, namespace: []byte{}, keyCodec: keyCodec, valueCodec: valueCodec}, nil
 }
 
-func NewMapStateAutoKeyCodec[K any, V any](store common.Store, name string, valueCodec codec.Codec[V]) (*MapState[K, V], error) {
+func NewMapStateAutoKeyCodec[K any, V any](store common.Store, valueCodec codec.Codec[V]) (*MapState[K, V], error) {
 	autoKeyCodec, err := inferOrderedKeyCodec[K]()
 	if err != nil {
 		return nil, err
 	}
-	return NewMapState[K, V](store, name, autoKeyCodec, valueCodec)
+	return NewMapState[K, V](store, autoKeyCodec, valueCodec)
 }
 
 func (m *MapState[K, V]) Put(key K, value V) error {
