@@ -31,17 +31,61 @@ class KeyedMapEntry(Generic[MK, MV]):
     value: MV
 
 
+class KeyedMapStateFactory(Generic[MK, MV]):
+    def __init__(
+        self,
+        store: KvStore,
+        namespace: bytes,
+        key_group: bytes,
+        map_key_codec: Codec[MK],
+        map_value_codec: Codec[MV],
+    ):
+        if store is None:
+            raise KvError("keyed map state factory store must not be None")
+        if namespace is None:
+            raise KvError("keyed map state factory namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed map state factory key_group must not be None")
+        if map_key_codec is None or map_value_codec is None:
+            raise KvError("keyed map state factory map_key_codec and map_value_codec must not be None")
+        ensure_ordered_key_codec(map_key_codec, "keyed map inner")
+        self._store = store
+        self._namespace = namespace
+        self._key_group = key_group
+        self._map_key_codec = map_key_codec
+        self._map_value_codec = map_value_codec
+
+    def new_map(self, key_codec: Codec[K]) -> "KeyedMapState[K, MK, MV]":
+        ensure_ordered_key_codec(key_codec, "keyed map")
+        return KeyedMapState(
+            self._store,
+            self._namespace,
+            key_codec,
+            self._map_key_codec,
+            self._map_value_codec,
+            self._key_group,
+        )
+
+
 class KeyedMapState(Generic[K, MK, MV]):
     def __init__(
         self,
         store: KvStore,
-        name: str,
+        namespace: bytes,
         key_codec: Codec[K],
         map_key_codec: Codec[MK],
         map_value_codec: Codec[MV],
+        key_group: bytes,
     ):
+        if namespace is None:
+            raise KvError("keyed map state namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed map state key_group must not be None")
+        if map_key_codec is None or map_value_codec is None:
+            raise KvError("keyed map state map_key_codec and map_value_codec must not be None")
         self._store = store
-        self._name = name.strip()
+        self._namespace = namespace
+        self._key_group = key_group
         self._key_codec = key_codec
         self._map_key_codec = map_key_codec
         self._map_value_codec = map_value_codec
@@ -50,18 +94,18 @@ class KeyedMapState(Generic[K, MK, MV]):
 
     def put(self, key: K, map_key: MK, value: MV) -> None:
         ck = ComplexKey(
-            key_group=KEYED_MAP_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=self._map_key_codec.encode(map_key),
         )
         self._store.put(ck, self._map_value_codec.encode(value))
 
     def get(self, key: K, map_key: MK) -> Optional[MV]:
         ck = ComplexKey(
-            key_group=KEYED_MAP_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=self._map_key_codec.encode(map_key),
         )
         raw = self._store.get(ck)
@@ -71,27 +115,27 @@ class KeyedMapState(Generic[K, MK, MV]):
 
     def delete(self, key: K, map_key: MK) -> None:
         ck = ComplexKey(
-            key_group=KEYED_MAP_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=self._map_key_codec.encode(map_key),
         )
         self._store.delete(ck)
 
     def clear(self, key: K) -> None:
         prefix_ck = ComplexKey(
-            key_group=KEYED_MAP_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=b"",
         )
         self._store.delete_prefix(prefix_ck)
 
     def all(self, key: K):
         it = self._store.scan_complex(
-            KEYED_MAP_GROUP,
+            self._key_group,
             self._key_codec.encode(key),
-            self._name.encode("utf-8"),
+            self._namespace,
         )
         while it.has_next():
             item = it.next()
@@ -102,9 +146,9 @@ class KeyedMapState(Generic[K, MK, MV]):
 
     def len(self, key: K) -> int:
         it = self._store.scan_complex(
-            KEYED_MAP_GROUP,
+            self._key_group,
             self._key_codec.encode(key),
-            self._name.encode("utf-8"),
+            self._namespace,
         )
         n = 0
         while it.has_next():
@@ -125,15 +169,15 @@ class KeyedMapState(Generic[K, MK, MV]):
         start_bytes = self._map_key_codec.encode(start_inclusive)
         end_bytes = self._map_key_codec.encode(end_exclusive)
         user_keys = self._store.list_complex(
-            KEYED_MAP_GROUP, key_bytes, self._name.encode("utf-8"),
+            self._key_group, key_bytes, self._namespace,
             start_bytes, end_bytes,
         )
         out = []
         for uk in user_keys:
             ck = ComplexKey(
-                key_group=KEYED_MAP_GROUP,
+                key_group=self._key_group,
                 key=key_bytes,
-                namespace=self._name.encode("utf-8"),
+                namespace=self._namespace,
                 user_key=uk,
             )
             raw = self._store.get(ck)
@@ -146,4 +190,4 @@ class KeyedMapState(Generic[K, MK, MV]):
         return out
 
 
-__all__ = ["KeyedMapEntry", "KeyedMapState"]
+__all__ = ["KeyedMapEntry", "KeyedMapState", "KeyedMapStateFactory"]

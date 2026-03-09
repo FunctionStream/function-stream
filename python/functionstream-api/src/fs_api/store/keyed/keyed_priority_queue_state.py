@@ -14,6 +14,7 @@ from typing import Generic, Iterator, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
+from ..error import KvError
 from ..store import KvStore
 
 from ._keyed_common import KEYED_PQ_GROUP, ensure_ordered_key_codec
@@ -22,10 +23,57 @@ K = TypeVar("K")
 V = TypeVar("V")
 
 
-class KeyedPriorityQueueState(Generic[K, V]):
-    def __init__(self, store: KvStore, name: str, key_codec: Codec[K], value_codec: Codec[V]):
+class KeyedPriorityQueueStateFactory(Generic[V]):
+    def __init__(
+        self,
+        store: KvStore,
+        namespace: bytes,
+        key_group: bytes,
+        value_codec: Codec[V],
+    ):
+        if store is None:
+            raise KvError("keyed priority queue state factory store must not be None")
+        if namespace is None:
+            raise KvError("keyed priority queue state factory namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed priority queue state factory key_group must not be None")
+        if value_codec is None:
+            raise KvError("keyed priority queue state factory value codec must not be None")
+        ensure_ordered_key_codec(value_codec, "keyed priority queue value")
         self._store = store
-        self._name = name.strip()
+        self._namespace = namespace
+        self._key_group = key_group
+        self._value_codec = value_codec
+
+    def new_priority_queue(self, key_codec: Codec[K]) -> "KeyedPriorityQueueState[K, V]":
+        ensure_ordered_key_codec(key_codec, "keyed priority queue")
+        return KeyedPriorityQueueState(
+            self._store,
+            self._namespace,
+            key_codec,
+            self._value_codec,
+            self._key_group,
+        )
+
+
+class KeyedPriorityQueueState(Generic[K, V]):
+    def __init__(
+        self,
+        store: KvStore,
+        namespace: bytes,
+        key_codec: Codec[K],
+        value_codec: Codec[V],
+        key_group: bytes,
+    ):
+        if namespace is None:
+            raise KvError("keyed priority queue state namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed priority queue state key_group must not be None")
+        if value_codec is None:
+            raise KvError("keyed priority queue state value_codec must not be None")
+        self._store = store
+        self._namespace = namespace
+        self._key_group = key_group
         self._key_codec = key_codec
         self._value_codec = value_codec
         ensure_ordered_key_codec(key_codec, "keyed priority queue")
@@ -33,17 +81,17 @@ class KeyedPriorityQueueState(Generic[K, V]):
 
     def _ck(self, key: K, user_key: bytes) -> ComplexKey:
         return ComplexKey(
-            key_group=KEYED_PQ_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=user_key,
         )
 
     def _prefix_ck(self, key: K) -> ComplexKey:
         return ComplexKey(
-            key_group=KEYED_PQ_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=b"",
         )
 
@@ -53,9 +101,9 @@ class KeyedPriorityQueueState(Generic[K, V]):
 
     def peek(self, key: K) -> Tuple[Optional[V], bool]:
         it = self._store.scan_complex(
-            KEYED_PQ_GROUP,
+            self._key_group,
             self._key_codec.encode(key),
-            self._name.encode("utf-8"),
+            self._namespace,
         )
         if not it.has_next():
             return (None, False)
@@ -77,9 +125,9 @@ class KeyedPriorityQueueState(Generic[K, V]):
 
     def all(self, key: K) -> Iterator[V]:
         it = self._store.scan_complex(
-            KEYED_PQ_GROUP,
+            self._key_group,
             self._key_codec.encode(key),
-            self._name.encode("utf-8"),
+            self._namespace,
         )
         while it.has_next():
             item = it.next()
@@ -89,4 +137,4 @@ class KeyedPriorityQueueState(Generic[K, V]):
             yield self._value_codec.decode(user_key)
 
 
-__all__ = ["KeyedPriorityQueueState"]
+__all__ = ["KeyedPriorityQueueState", "KeyedPriorityQueueStateFactory"]

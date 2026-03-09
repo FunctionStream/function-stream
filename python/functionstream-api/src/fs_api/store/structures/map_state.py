@@ -13,7 +13,6 @@
 from dataclasses import dataclass
 from typing import Any, Generator, Generic, List, Optional, Tuple, Type, TypeVar
 
-from ..common import validate_state_name
 from ..codec import (
     BoolCodec,
     BytesCodec,
@@ -37,8 +36,7 @@ class MapEntry(Generic[K, V]):
 
 
 class MapState(Generic[K, V]):
-    def __init__(self, store: KvStore, name: str, key_codec: Codec[K], value_codec: Codec[V]):
-        validate_state_name(name)
+    def __init__(self, store: KvStore, key_codec: Codec[K], value_codec: Codec[V]):
         if store is None:
             raise KvError("map state store must not be None")
         if key_codec is None or value_codec is None:
@@ -56,12 +54,11 @@ class MapState(Generic[K, V]):
     def with_auto_key_codec(
         cls,
         store: KvStore,
-        name: str,
         key_type: Type[K],
         value_codec: Codec[V],
     ) -> "MapState[K, V]":
         key_codec = infer_ordered_key_codec(key_type)
-        return cls(store, name, key_codec, value_codec)
+        return cls(store, key_codec, value_codec)
 
     def put(self, key: K, value: V) -> None:
         encoded_key = self._key_codec.encode(key)
@@ -159,11 +156,10 @@ def infer_ordered_key_codec(key_type: Type[Any]) -> Codec[Any]:
 
 def create_map_state_auto_key_codec(
     store: KvStore,
-    name: str,
     key_type: Type[K],
     value_codec: Codec[V],
 ) -> MapState[K, V]:
-    return MapState.with_auto_key_codec(store, name, key_type, value_codec)
+    return MapState.with_auto_key_codec(store, key_type, value_codec)
 
 
 __all__ = ["MapEntry", "MapState", "infer_ordered_key_codec", "create_map_state_auto_key_codec"]

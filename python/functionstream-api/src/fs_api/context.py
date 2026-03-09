@@ -10,13 +10,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-fs_api.context
-
-Context: Context object
-"""
 import abc
-from typing import Dict
+from typing import Dict, Optional, Type
+
 from .store import (
     Codec,
     KvStore,
@@ -24,17 +20,18 @@ from .store import (
     MapState,
     ListState,
     PriorityQueueState,
-    KeyedStateFactory,
-    KeyedValueState,
-    KeyedMapState,
-    KeyedListState,
-    KeyedPriorityQueueState,
+    AggregatingState,
+    ReducingState,
+    KeyedListStateFactory,
+    KeyedValueStateFactory,
+    KeyedMapStateFactory,
+    KeyedPriorityQueueStateFactory,
+    KeyedAggregatingStateFactory,
+    KeyedReducingStateFactory,
 )
 
 
 class Context(abc.ABC):
-    """Context object"""
-
     @abc.abstractmethod
     def emit(self, data: bytes, channel: int = 0):
         pass
@@ -49,47 +46,135 @@ class Context(abc.ABC):
 
     @abc.abstractmethod
     def getConfig(self) -> Dict[str, str]:
-        """
-        Get global configuration Map
-
-        Returns:
-            Dict[str, str]: Configuration dictionary
-        """
-
-    @abc.abstractmethod
-    def getOrCreateValueState(self, state_name: str, codec: Codec, store_name: str = "__fssdk_structured_state__") -> ValueState:
         pass
 
     @abc.abstractmethod
-    def getOrCreateMapState(self, state_name: str, key_codec: Codec, value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> MapState:
+    def getOrCreateValueState(self, store_name: str, codec: Codec) -> ValueState:
         pass
 
     @abc.abstractmethod
-    def getOrCreateListState(self, state_name: str, codec: Codec, store_name: str = "__fssdk_structured_state__") -> ListState:
+    def getOrCreateValueStateAutoCodec(self, store_name: str) -> ValueState:
         pass
 
     @abc.abstractmethod
-    def getOrCreatePriorityQueueState(self, state_name: str, codec: Codec, store_name: str = "__fssdk_structured_state__") -> PriorityQueueState:
+    def getOrCreateMapState(self, store_name: str, key_codec: Codec, value_codec: Codec) -> MapState:
         pass
 
     @abc.abstractmethod
-    def getOrCreateKeyedStateFactory(self, state_name: str, store_name: str = "__fssdk_structured_state__") -> KeyedStateFactory:
+    def getOrCreateMapStateAutoKeyCodec(self, store_name: str, value_codec: Codec) -> MapState:
         pass
 
     @abc.abstractmethod
-    def getOrCreateKeyedValueState(self, state_name: str, key_codec: Codec, value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> KeyedValueState:
+    def getOrCreateListState(self, store_name: str, codec: Codec) -> ListState:
         pass
 
     @abc.abstractmethod
-    def getOrCreateKeyedMapState(self, state_name: str, key_codec: Codec, map_key_codec: Codec, map_value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> KeyedMapState:
+    def getOrCreateListStateAutoCodec(self, store_name: str) -> ListState:
         pass
 
     @abc.abstractmethod
-    def getOrCreateKeyedListState(self, state_name: str, key_codec: Codec, value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> KeyedListState:
+    def getOrCreatePriorityQueueState(self, store_name: str, codec: Codec) -> PriorityQueueState:
         pass
 
     @abc.abstractmethod
-    def getOrCreateKeyedPriorityQueueState(self, state_name: str, key_codec: Codec, value_codec: Codec, store_name: str = "__fssdk_structured_state__") -> KeyedPriorityQueueState:
+    def getOrCreatePriorityQueueStateAutoCodec(self, store_name: str) -> PriorityQueueState:
         pass
 
-__all__ = ['Context']
+    @abc.abstractmethod
+    def getOrCreateAggregatingState(
+        self, store_name: str, acc_codec: Codec, agg_func: object
+    ) -> AggregatingState:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateAggregatingStateAutoCodec(
+        self, store_name: str, agg_func: object
+    ) -> AggregatingState:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateReducingState(
+        self, store_name: str, value_codec: Codec, reduce_func: object
+    ) -> ReducingState:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateReducingStateAutoCodec(
+        self, store_name: str, reduce_func: object
+    ) -> ReducingState:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedListStateFactory(
+        self, store_name: str, namespace: bytes, key_group: bytes, value_codec: Codec
+    ) -> KeyedListStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedListStateFactoryAutoCodec(
+        self, store_name: str, namespace: bytes, key_group: bytes, value_type: Optional[Type] = None
+    ) -> KeyedListStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedValueStateFactory(
+        self, store_name: str, namespace: bytes, key_group: bytes, value_codec: Codec
+    ) -> KeyedValueStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedValueStateFactoryAutoCodec(
+        self, store_name: str, namespace: bytes, key_group: bytes, value_type: Optional[Type] = None
+    ) -> KeyedValueStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedMapStateFactory(
+        self, store_name: str, namespace: bytes, key_group: bytes, key_codec: Codec, value_codec: Codec
+    ) -> KeyedMapStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedMapStateFactoryAutoCodec(
+        self, store_name: str, namespace: bytes, key_group: bytes, value_codec: Codec
+    ) -> KeyedMapStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedPriorityQueueStateFactory(
+        self, store_name: str, namespace: bytes, key_group: bytes, item_codec: Codec
+    ) -> KeyedPriorityQueueStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedPriorityQueueStateFactoryAutoCodec(
+        self, store_name: str, namespace: bytes, key_group: bytes, item_type: Optional[Type] = None
+    ) -> KeyedPriorityQueueStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedAggregatingStateFactory(
+        self, store_name: str, namespace: bytes, key_group: bytes, acc_codec: Codec, agg_func: object
+    ) -> KeyedAggregatingStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedAggregatingStateFactoryAutoCodec(
+        self, store_name: str, namespace: bytes, key_group: bytes, agg_func: object, acc_type: Optional[Type] = None
+    ) -> KeyedAggregatingStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedReducingStateFactory(
+        self, store_name: str, namespace: bytes, key_group: bytes, value_codec: Codec, reduce_func: object
+    ) -> KeyedReducingStateFactory:
+        pass
+
+    @abc.abstractmethod
+    def getOrCreateKeyedReducingStateFactoryAutoCodec(
+        self, store_name: str, namespace: bytes, key_group: bytes, reduce_func: object, value_type: Optional[Type] = None
+    ) -> KeyedReducingStateFactory:
+        pass
+
+
+__all__ = ["Context"]

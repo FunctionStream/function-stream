@@ -12,7 +12,6 @@
 
 from typing import Callable, Generic, Optional, Tuple, TypeVar
 
-from ..common import validate_state_name
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
@@ -24,8 +23,7 @@ ReduceFunc = Callable[[V, V], V]
 
 
 class ReducingState(Generic[V]):
-    def __init__(self, store: KvStore, name: str, value_codec: Codec[V], reduce_func: ReduceFunc[V]):
-        validate_state_name(name)
+    def __init__(self, store: KvStore, value_codec: Codec[V], reduce_func: ReduceFunc[V]):
         if store is None:
             raise KvError("reducing state store must not be None")
         if value_codec is None or reduce_func is None:
@@ -33,7 +31,6 @@ class ReducingState(Generic[V]):
         self._store = store
         self._value_codec = value_codec
         self._reduce_func = reduce_func
-        state_name = name.strip()
         self._ck = ComplexKey(
             key_group=b"",
             key=b"",

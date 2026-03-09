@@ -11,15 +11,21 @@
 # limitations under the License.
 
 from .keyed_state_factory import KeyedStateFactory
-from .keyed_value_state import KeyedValueState
-from .keyed_list_state import KeyedListState
-from .keyed_map_state import KeyedMapEntry, KeyedMapState
-from .keyed_priority_queue_state import KeyedPriorityQueueState
-from .keyed_aggregating_state import AggregateFunc, KeyedAggregatingState
-from .keyed_reducing_state import KeyedReducingState, ReduceFunc
+from .keyed_value_state import KeyedValueState, KeyedValueStateFactory
+from .keyed_list_state import KeyedListState, KeyedListStateFactory
+from .keyed_map_state import KeyedMapEntry, KeyedMapState, KeyedMapStateFactory
+from .keyed_priority_queue_state import KeyedPriorityQueueState, KeyedPriorityQueueStateFactory
+from .keyed_aggregating_state import AggregateFunc, KeyedAggregatingState, KeyedAggregatingStateFactory
+from .keyed_reducing_state import KeyedReducingState, KeyedReducingStateFactory, ReduceFunc
 
 __all__ = [
     "KeyedStateFactory",
+    "KeyedListStateFactory",
+    "KeyedValueStateFactory",
+    "KeyedMapStateFactory",
+    "KeyedPriorityQueueStateFactory",
+    "KeyedAggregatingStateFactory",
+    "KeyedReducingStateFactory",
     "KeyedValueState",
     "KeyedListState",
     "KeyedMapEntry",

@@ -14,6 +14,7 @@ from .error import KvError, KvNotFoundError, KvIOError, KvOtherError
 from .complexkey import ComplexKey
 from .iterator import KvIterator
 from .store import KvStore
+from .common import StateKind
 
 from .codec import (
     Codec,
@@ -34,6 +35,7 @@ from .codec import (
     OrderedUint32Codec,
     OrderedFloat64Codec,
     OrderedFloat32Codec,
+    default_codec_for,
 )
 
 from .structures import (
@@ -52,6 +54,12 @@ from .structures import (
 
 from .keyed import (
     KeyedStateFactory,
+    KeyedListStateFactory,
+    KeyedValueStateFactory,
+    KeyedMapStateFactory,
+    KeyedPriorityQueueStateFactory,
+    KeyedAggregatingStateFactory,
+    KeyedReducingStateFactory,
     KeyedValueState,
     KeyedMapState,
     KeyedListState,
@@ -68,6 +76,7 @@ __all__ = [
     "ComplexKey",
     "KvIterator",
     "KvStore",
+    "StateKind",
     "Codec",
     "JsonCodec",
     "PickleCodec",
@@ -86,6 +95,7 @@ __all__ = [
     "OrderedUint32Codec",
     "OrderedFloat64Codec",
     "OrderedFloat32Codec",
+    "default_codec_for",
     "ValueState",
     "MapEntry",
     "MapState",
@@ -98,6 +108,12 @@ __all__ = [
     "ReduceFunc",
     "ReducingState",
     "KeyedStateFactory",
+    "KeyedListStateFactory",
+    "KeyedValueStateFactory",
+    "KeyedMapStateFactory",
+    "KeyedPriorityQueueStateFactory",
+    "KeyedAggregatingStateFactory",
+    "KeyedReducingStateFactory",
     "KeyedValueState",
     "KeyedMapState",
     "KeyedListState",

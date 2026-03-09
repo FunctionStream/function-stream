@@ -11,18 +11,45 @@
 # limitations under the License.
 
 import struct
+from enum import IntEnum
 from typing import Tuple
 
 from ..error import KvError
 
-VALUE_PREFIX = b"__fssdk__/value/"
-LIST_PREFIX = b"__fssdk__/list/"
-PQ_PREFIX = b"__fssdk__/priority_queue/"
-AGGREGATING_PREFIX = b"__fssdk__/aggregating/"
-REDUCING_PREFIX = b"__fssdk__/reducing/"
-MAP_GROUP = b"__fssdk__/map"
-LIST_GROUP = b"__fssdk__/list"
-PQ_GROUP = b"__fssdk__/priority_queue"
+
+class StateKind(IntEnum):
+    VALUE = 0
+    LIST = 1
+    PRIORITY_QUEUE = 2
+    MAP = 3
+    AGGREGATING = 4
+    REDUCING = 5
+
+    def prefix(self) -> bytes:
+        if self == StateKind.VALUE:
+            return b"__fssdk__/value/"
+        if self == StateKind.LIST:
+            return b"__fssdk__/list/"
+        if self == StateKind.PRIORITY_QUEUE:
+            return b"__fssdk__/priority_queue/"
+        if self == StateKind.MAP:
+            return b""
+        if self == StateKind.AGGREGATING:
+            return b"__fssdk__/aggregating/"
+        if self == StateKind.REDUCING:
+            return b"__fssdk__/reducing/"
+        return b""
+
+    def group(self) -> bytes:
+        if self in (StateKind.VALUE, StateKind.AGGREGATING, StateKind.REDUCING):
+            return b""
+        if self == StateKind.LIST:
+            return b"__fssdk__/list"
+        if self == StateKind.PRIORITY_QUEUE:
+            return b"__fssdk__/priority_queue"
+        if self == StateKind.MAP:
+            return b"__fssdk__/map"
+        return b""
 
 
 def validate_state_name(name: str) -> None:
@@ -53,14 +80,7 @@ def decode_priority_key(data: bytes) -> Tuple[int, int]:
 
 
 __all__ = [
-    "VALUE_PREFIX",
-    "LIST_PREFIX",
-    "PQ_PREFIX",
-    "AGGREGATING_PREFIX",
-    "REDUCING_PREFIX",
-    "MAP_GROUP",
-    "LIST_GROUP",
-    "PQ_GROUP",
+    "StateKind",
     "validate_state_name",
     "encode_int64_lex",
     "encode_priority_key",

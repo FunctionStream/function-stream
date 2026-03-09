@@ -11,7 +11,7 @@
 # limitations under the License.
 
 import struct
-from typing import Generic, List, TypeVar
+from typing import Generic, List, Optional, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -24,19 +24,65 @@ K = TypeVar("K")
 V = TypeVar("V")
 
 
-class KeyedListState(Generic[K, V]):
-    def __init__(self, store: KvStore, name: str, key_codec: Codec[K], value_codec: Codec[V]):
+class KeyedListStateFactory(Generic[V]):
+    def __init__(
+        self,
+        store: KvStore,
+        namespace: bytes,
+        key_group: bytes,
+        value_codec: Codec[V],
+    ):
+        if store is None:
+            raise KvError("keyed list state factory store must not be None")
+        if namespace is None:
+            raise KvError("keyed list state factory namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed list state factory key_group must not be None")
+        if value_codec is None:
+            raise KvError("keyed list value codec must not be None")
         self._store = store
-        self._name = name.strip()
+        self._namespace = namespace
+        self._key_group = key_group
+        self._value_codec = value_codec
+
+    def new_list(self, key_codec: Codec[K]) -> "KeyedListState[K, V]":
+        ensure_ordered_key_codec(key_codec, "keyed list")
+        return KeyedListState(
+            self._store,
+            self._namespace,
+            key_codec,
+            self._value_codec,
+            self._key_group,
+        )
+
+
+class KeyedListState(Generic[K, V]):
+    def __init__(
+        self,
+        store: KvStore,
+        namespace: bytes,
+        key_codec: Codec[K],
+        value_codec: Codec[V],
+        key_group: bytes,
+    ):
+        if namespace is None:
+            raise KvError("keyed list state namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed list state key_group must not be None")
+        if value_codec is None:
+            raise KvError("keyed list state value_codec must not be None")
+        self._store = store
+        self._namespace = namespace
+        self._key_group = key_group
         self._key_codec = key_codec
         self._value_codec = value_codec
         ensure_ordered_key_codec(key_codec, "keyed list")
 
     def _build_ck(self, key: K) -> ComplexKey:
         return ComplexKey(
-            key_group=KEYED_LIST_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=b"",
         )
 
@@ -91,4 +137,4 @@ class KeyedListState(Generic[K, V]):
         return out
 
 
-__all__ = ["KeyedListState"]
+__all__ = ["KeyedListState", "KeyedListStateFactory"]

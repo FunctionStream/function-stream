@@ -33,36 +33,49 @@ R = TypeVar("R")
 
 
 class KeyedStateFactory:
-    def __init__(self, store: KvStore, name: str):
+    def __init__(self, store: KvStore, namespace: bytes, key_group: bytes):
         if store is None:
             raise KvError("keyed state factory store must not be None")
-        if not isinstance(name, str) or not name.strip():
-            raise KvError("keyed state factory name must be non-empty")
+        if namespace is None:
+            raise KvError("keyed state factory namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed state factory key_group must not be None")
         self._store = store
-        self._name = name.strip()
+        self._namespace = namespace
+        self._key_group = key_group
         self._kind = None
 
     def new_keyed_value(self, key_codec: Codec[K], value_codec: Codec[V]) -> KeyedValueState[K, V]:
         self._claim_kind("value")
-        return KeyedValueState(self._store, self._name, key_codec, value_codec)
+        if value_codec is None:
+            raise KvError("keyed value state value_codec must not be None")
+        return KeyedValueState(self._store, self._namespace, key_codec, value_codec, self._key_group)
 
     def new_keyed_map(
         self, key_codec: Codec[K], map_key_codec: Codec[MK], map_value_codec: Codec[MV]
     ) -> KeyedMapState[K, MK, MV]:
         self._claim_kind("map")
+        if map_key_codec is None or map_value_codec is None:
+            raise KvError("keyed map state map_key_codec and map_value_codec must not be None")
         return KeyedMapState(
-            self._store, self._name, key_codec, map_key_codec, map_value_codec
+            self._store, self._namespace, key_codec, map_key_codec, map_value_codec, self._key_group
         )
 
     def new_keyed_list(self, key_codec: Codec[K], value_codec: Codec[V]) -> KeyedListState[K, V]:
         self._claim_kind("list")
-        return KeyedListState(self._store, self._name, key_codec, value_codec)
+        if value_codec is None:
+            raise KvError("keyed list state value_codec must not be None")
+        return KeyedListState(self._store, self._namespace, key_codec, value_codec, self._key_group)
 
     def new_keyed_priority_queue(
         self, key_codec: Codec[K], value_codec: Codec[V]
     ) -> KeyedPriorityQueueState[K, V]:
         self._claim_kind("priority_queue")
-        return KeyedPriorityQueueState(self._store, self._name, key_codec, value_codec)
+        if value_codec is None:
+            raise KvError("keyed priority queue state value_codec must not be None")
+        return KeyedPriorityQueueState(
+            self._store, self._namespace, key_codec, value_codec, self._key_group
+        )
 
     def new_keyed_aggregating(
         self,
@@ -71,15 +84,21 @@ class KeyedStateFactory:
         agg_func: AggregateFunc[T_agg, ACC, R],
     ) -> KeyedAggregatingState[K, T_agg, ACC, R]:
         self._claim_kind("aggregating")
+        if acc_codec is None or agg_func is None:
+            raise KvError("keyed aggregating state acc_codec and agg_func must not be None")
         return KeyedAggregatingState(
-            self._store, self._name, key_codec, acc_codec, agg_func
+            self._store, self._namespace, key_codec, acc_codec, agg_func, self._key_group
         )
 
     def new_keyed_reducing(
         self, key_codec: Codec[K], value_codec: Codec[V], reduce_func: ReduceFunc[V]
     ) -> KeyedReducingState[K, V]:
         self._claim_kind("reducing")
-        return KeyedReducingState(self._store, self._name, key_codec, value_codec, reduce_func)
+        if value_codec is None or reduce_func is None:
+            raise KvError("keyed reducing state value_codec and reduce_func must not be None")
+        return KeyedReducingState(
+            self._store, self._namespace, key_codec, value_codec, reduce_func, self._key_group
+        )
 
     def _claim_kind(self, kind: str) -> None:
         if self._kind is None:
@@ -87,7 +106,7 @@ class KeyedStateFactory:
             return
         if self._kind != kind:
             raise KvError(
-                f"keyed state factory '{self._name}' already bound to '{self._kind}', cannot create '{kind}'"
+                f"keyed state factory already bound to '{self._kind}', cannot create '{kind}'"
             )
 
 

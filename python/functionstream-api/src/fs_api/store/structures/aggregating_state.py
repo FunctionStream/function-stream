@@ -12,7 +12,6 @@
 
 from typing import Generic, Optional, Protocol, Tuple, TypeVar
 
-from ..common import validate_state_name
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
@@ -41,11 +40,9 @@ class AggregatingState(Generic[T, ACC, R]):
     def __init__(
         self,
         store: KvStore,
-        name: str,
         acc_codec: Codec[ACC],
         agg_func: AggregateFunc[T, ACC, R],
     ):
-        validate_state_name(name)
         if store is None:
             raise KvError("aggregating state store must not be None")
         if acc_codec is None:
@@ -55,7 +52,6 @@ class AggregatingState(Generic[T, ACC, R]):
         self._store = store
         self._acc_codec = acc_codec
         self._agg_func = agg_func
-        state_name = name.strip()
         self._ck = ComplexKey(
             key_group=b"",
             key=b"",

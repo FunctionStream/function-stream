@@ -14,6 +14,7 @@ from typing import Generic, Optional, Protocol, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
+from ..error import KvError
 from ..store import KvStore
 
 from ._keyed_common import KEYED_AGGREGATING_GROUP, ensure_ordered_key_codec
@@ -31,17 +32,60 @@ class AggregateFunc(Protocol[T_agg, ACC, R]):
     def merge(self, a: ACC, b: ACC) -> ACC: ...
 
 
+class KeyedAggregatingStateFactory(Generic[T_agg, ACC, R]):
+    def __init__(
+        self,
+        store: KvStore,
+        namespace: bytes,
+        key_group: bytes,
+        acc_codec: Codec[ACC],
+        agg_func: "AggregateFunc[T_agg, ACC, R]",
+    ):
+        if store is None:
+            raise KvError("keyed aggregating state factory store must not be None")
+        if namespace is None:
+            raise KvError("keyed aggregating state factory namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed aggregating state factory key_group must not be None")
+        if acc_codec is None or agg_func is None:
+            raise KvError("keyed aggregating state factory acc_codec and agg_func must not be None")
+        self._store = store
+        self._namespace = namespace
+        self._key_group = key_group
+        self._acc_codec = acc_codec
+        self._agg_func = agg_func
+
+    def new_aggregating(self, key_codec: Codec[K]) -> "KeyedAggregatingState[K, T_agg, ACC, R]":
+        ensure_ordered_key_codec(key_codec, "keyed aggregating")
+        return KeyedAggregatingState(
+            self._store,
+            self._namespace,
+            key_codec,
+            self._acc_codec,
+            self._agg_func,
+            self._key_group,
+        )
+
+
 class KeyedAggregatingState(Generic[K, T_agg, ACC, R]):
     def __init__(
         self,
         store: KvStore,
-        name: str,
+        namespace: bytes,
         key_codec: Codec[K],
         acc_codec: Codec[ACC],
         agg_func: AggregateFunc[T_agg, ACC, R],
+        key_group: bytes,
     ):
+        if namespace is None:
+            raise KvError("keyed aggregating state namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed aggregating state key_group must not be None")
+        if acc_codec is None:
+            raise KvError("keyed aggregating state acc_codec must not be None")
         self._store = store
-        self._name = name.strip()
+        self._namespace = namespace
+        self._key_group = key_group
         self._key_codec = key_codec
         self._acc_codec = acc_codec
         self._agg_func = agg_func
@@ -49,9 +93,9 @@ class KeyedAggregatingState(Generic[K, T_agg, ACC, R]):
 
     def _build_ck(self, key: K) -> ComplexKey:
         return ComplexKey(
-            key_group=KEYED_AGGREGATING_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=b"",
         )
 
@@ -77,4 +121,4 @@ class KeyedAggregatingState(Generic[K, T_agg, ACC, R]):
         self._store.delete(self._build_ck(key))
 
 
-__all__ = ["AggregateFunc", "KeyedAggregatingState"]
+__all__ = ["AggregateFunc", "KeyedAggregatingState", "KeyedAggregatingStateFactory"]

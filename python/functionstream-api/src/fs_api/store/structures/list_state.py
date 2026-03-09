@@ -13,7 +13,6 @@
 import struct
 from typing import Generic, List, TypeVar
 
-from ..common import validate_state_name
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
@@ -23,15 +22,13 @@ T = TypeVar("T")
 
 
 class ListState(Generic[T]):
-    def __init__(self, store: KvStore, name: str, codec: Codec[T]):
-        validate_state_name(name)
+    def __init__(self, store: KvStore, codec: Codec[T]):
         if store is None:
             raise KvError("list state store must not be None")
         if codec is None:
             raise KvError("list state codec must not be None")
         self._store = store
         self._codec = codec
-        state_name = name.strip()
         self._ck = ComplexKey(
             key_group=b"",
             key=b"",

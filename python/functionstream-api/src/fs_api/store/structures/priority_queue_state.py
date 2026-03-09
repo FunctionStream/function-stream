@@ -12,7 +12,6 @@
 
 from typing import Generic, Iterator, Optional, Tuple, TypeVar
 
-from ..common import validate_state_name
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
@@ -22,14 +21,15 @@ T = TypeVar("T")
 
 
 class PriorityQueueState(Generic[T]):
-    def __init__(self, store: KvStore, name: str, codec: Codec[T]):
-        validate_state_name(name)
+    """State for a priority queue. codec must support ordered key encoding (supports_ordered_keys=True)."""
+
+    def __init__(self, store: KvStore, codec: Codec[T]):
         if store is None:
             raise KvError("priority queue store must not be None")
         if codec is None:
             raise KvError("priority queue codec must not be None")
         if not getattr(codec, "supports_ordered_keys", False):
-            raise KvError("priority queue value codec must be ordered")
+            raise KvError("priority queue codec must support ordered key encoding")
         self._store = store
         self._codec = codec
         self._key_group = b""

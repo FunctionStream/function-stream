@@ -14,6 +14,7 @@ from typing import Callable, Generic, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
+from ..error import KvError
 from ..store import KvStore
 
 from ._keyed_common import KEYED_REDUCING_GROUP, ensure_ordered_key_codec
@@ -24,17 +25,60 @@ V = TypeVar("V")
 ReduceFunc = Callable[[V, V], V]
 
 
+class KeyedReducingStateFactory(Generic[V]):
+    def __init__(
+        self,
+        store: KvStore,
+        namespace: bytes,
+        key_group: bytes,
+        value_codec: Codec[V],
+        reduce_func: ReduceFunc[V],
+    ):
+        if store is None:
+            raise KvError("keyed reducing state factory store must not be None")
+        if namespace is None:
+            raise KvError("keyed reducing state factory namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed reducing state factory key_group must not be None")
+        if value_codec is None or reduce_func is None:
+            raise KvError("keyed reducing state factory value_codec and reduce_func must not be None")
+        self._store = store
+        self._namespace = namespace
+        self._key_group = key_group
+        self._value_codec = value_codec
+        self._reduce_func = reduce_func
+
+    def new_reducing(self, key_codec: Codec[K]) -> "KeyedReducingState[K, V]":
+        ensure_ordered_key_codec(key_codec, "keyed reducing")
+        return KeyedReducingState(
+            self._store,
+            self._namespace,
+            key_codec,
+            self._value_codec,
+            self._reduce_func,
+            self._key_group,
+        )
+
+
 class KeyedReducingState(Generic[K, V]):
     def __init__(
         self,
         store: KvStore,
-        name: str,
+        namespace: bytes,
         key_codec: Codec[K],
         value_codec: Codec[V],
         reduce_func: ReduceFunc[V],
+        key_group: bytes,
     ):
+        if namespace is None:
+            raise KvError("keyed reducing state namespace must not be None")
+        if key_group is None:
+            raise KvError("keyed reducing state key_group must not be None")
+        if value_codec is None:
+            raise KvError("keyed reducing state value_codec must not be None")
         self._store = store
-        self._name = name.strip()
+        self._namespace = namespace
+        self._key_group = key_group
         self._key_codec = key_codec
         self._value_codec = value_codec
         self._reduce_func = reduce_func
@@ -42,9 +86,9 @@ class KeyedReducingState(Generic[K, V]):
 
     def _build_ck(self, key: K) -> ComplexKey:
         return ComplexKey(
-            key_group=KEYED_REDUCING_GROUP,
+            key_group=self._key_group,
             key=self._key_codec.encode(key),
-            namespace=self._name.encode("utf-8"),
+            namespace=self._namespace,
             user_key=b"",
         )
 
@@ -67,4 +111,4 @@ class KeyedReducingState(Generic[K, V]):
         self._store.delete(self._build_ck(key))
 
 
-__all__ = ["ReduceFunc", "KeyedReducingState"]
+__all__ = ["ReduceFunc", "KeyedReducingState", "KeyedReducingStateFactory"]
