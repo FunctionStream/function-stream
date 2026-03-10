@@ -15,13 +15,9 @@ from typing import Any, Type
 from .base import Codec
 from .bool_codec import BoolCodec
 from .bytes_codec import BytesCodec
+from .float_codec import FloatCodec
+from .int_codec import IntCodec
 from .json_codec import JsonCodec
-from .ordered_float32_codec import OrderedFloat32Codec
-from .ordered_float64_codec import OrderedFloat64Codec
-from .ordered_int32_codec import OrderedInt32Codec
-from .ordered_int64_codec import OrderedInt64Codec
-from .ordered_uint32_codec import OrderedUint32Codec
-from .ordered_uint64_codec import OrderedUint64Codec
 from .pickle_codec import PickleCodec
 from .string_codec import StringCodec
 
@@ -34,16 +30,16 @@ def default_codec_for(value_type: Type[Any]) -> Codec[Any]:
     if value_type is bool:
         return BoolCodec()
     if value_type is int:
-        return OrderedInt64Codec()
+        return IntCodec()
     if value_type is float:
-        return OrderedFloat64Codec()
+        return FloatCodec()
     if value_type is str:
         return StringCodec()
     if value_type is bytes:
         return BytesCodec()
     try:
         if issubclass(value_type, int) and value_type is not bool:
-            return OrderedInt64Codec()
+            return IntCodec()
     except TypeError:
         pass
     if value_type is list or value_type is dict:

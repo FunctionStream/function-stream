@@ -15,13 +15,19 @@ import struct
 from .base import Codec
 
 
-class Uint32Codec(Codec[int]):
+class IntCodec(Codec[int]):
+    """Ordered int codec for range scans (lexicographic byte order)."""
+    supports_ordered_keys = True
+
     def encode(self, value: int) -> bytes:
-        if value < 0:
-            raise ValueError("uint32 value must be >= 0")
-        return struct.pack(">I", value)
+        mapped = (value & 0xFFFFFFFFFFFFFFFF) ^ (1 << 63)
+        return struct.pack(">Q", mapped)
 
     def decode(self, data: bytes) -> int:
-        if len(data) != 4:
-            raise ValueError(f"invalid uint32 payload length: {len(data)}")
-        return struct.unpack(">I", data)[0]
+        if len(data) != 8:
+            raise ValueError(f"invalid int payload length: {len(data)}")
+        mapped = struct.unpack(">Q", data)[0]
+        raw = mapped ^ (1 << 63)
+        if raw >= (1 << 63):
+            return raw - (1 << 64)
+        return raw

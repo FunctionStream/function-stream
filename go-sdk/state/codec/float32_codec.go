@@ -21,8 +21,14 @@ import (
 type Float32Codec struct{}
 
 func (c Float32Codec) Encode(value float32) ([]byte, error) {
+	bits := math.Float32bits(value)
+	if (bits & (uint32(1) << 31)) != 0 {
+		bits = ^bits
+	} else {
+		bits ^= uint32(1) << 31
+	}
 	out := make([]byte, 4)
-	binary.BigEndian.PutUint32(out, math.Float32bits(value))
+	binary.BigEndian.PutUint32(out, bits)
 	return out, nil
 }
 
@@ -30,8 +36,15 @@ func (c Float32Codec) Decode(data []byte) (float32, error) {
 	if len(data) != 4 {
 		return 0, fmt.Errorf("invalid float32 payload length: %d", len(data))
 	}
-	return math.Float32frombits(binary.BigEndian.Uint32(data)), nil
+	encoded := binary.BigEndian.Uint32(data)
+	if (encoded & (uint32(1) << 31)) != 0 {
+		encoded ^= uint32(1) << 31
+	} else {
+		encoded = ^encoded
+	}
+	return math.Float32frombits(encoded), nil
 }
 
-func (c Float32Codec) EncodedSize() int        { return 4 }
-func (c Float32Codec) IsOrderedKeyCodec() bool { return false }
+func (c Float32Codec) EncodedSize() int { return 4 }
+
+func (c Float32Codec) IsOrderedKeyCodec() bool { return true }

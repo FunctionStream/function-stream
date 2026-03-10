@@ -23,7 +23,7 @@ import (
 type ReduceFunc[V any] func(value1 V, value2 V) (V, error)
 
 type KeyedReducingStateFactory[V any] struct {
-	inner      *keyedStateFactory
+	store      common.Store
 	groupKey   []byte
 	valueCodec codec.Codec[V]
 	reduceFunc ReduceFunc[V]
@@ -36,11 +36,9 @@ func NewKeyedReducingStateFactory[V any](
 	reduceFunc ReduceFunc[V],
 ) (*KeyedReducingStateFactory[V], error) {
 
-	inner, err := newKeyedStateFactory(store, "", "reducing")
-	if err != nil {
-		return nil, err
+	if store == nil {
+		return nil, api.NewError(api.ErrStoreInternal, "keyed reducing state factory store must not be nil")
 	}
-
 	if keyGroup == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "keyed reducing state factory key_group must not be nil")
 	}
@@ -49,7 +47,7 @@ func NewKeyedReducingStateFactory[V any](
 	}
 
 	return &KeyedReducingStateFactory[V]{
-		inner:      inner,
+		store:      store,
 		groupKey:   common.DupBytes(keyGroup),
 		valueCodec: valueCodec,
 		reduceFunc: reduceFunc,
@@ -84,7 +82,7 @@ func (s *KeyedReducingState[V]) buildCK() api.ComplexKey {
 
 func (s *KeyedReducingState[V]) Add(value V) error {
 	ck := s.buildCK()
-	raw, found, err := s.factory.inner.store.Get(ck)
+	raw, found, err := s.factory.store.Get(ck)
 	if err != nil {
 		return fmt.Errorf("failed to get old value for reducing state: %w", err)
 	}
@@ -109,13 +107,13 @@ func (s *KeyedReducingState[V]) Add(value V) error {
 		return fmt.Errorf("failed to encode reduced value: %w", err)
 	}
 
-	return s.factory.inner.store.Put(ck, encoded)
+	return s.factory.store.Put(ck, encoded)
 }
 
 func (s *KeyedReducingState[V]) Get() (V, bool, error) {
 	var zero V
 	ck := s.buildCK()
-	raw, found, err := s.factory.inner.store.Get(ck)
+	raw, found, err := s.factory.store.Get(ck)
 	if err != nil || !found {
 		return zero, found, err
 	}
@@ -127,5 +125,5 @@ func (s *KeyedReducingState[V]) Get() (V, bool, error) {
 }
 
 func (s *KeyedReducingState[V]) Clear() error {
-	return s.factory.inner.store.Delete(s.buildCK())
+	return s.factory.store.Delete(s.buildCK())
 }

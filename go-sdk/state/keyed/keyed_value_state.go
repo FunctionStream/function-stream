@@ -21,7 +21,7 @@ import (
 )
 
 type KeyedValueStateFactory[V any] struct {
-	inner      *keyedStateFactory
+	store      common.Store
 	groupKey   []byte
 	valueCodec codec.Codec[V]
 }
@@ -32,11 +32,9 @@ func NewKeyedValueStateFactory[V any](
 	valueCodec codec.Codec[V],
 ) (*KeyedValueStateFactory[V], error) {
 
-	inner, err := newKeyedStateFactory(store, "", "value")
-	if err != nil {
-		return nil, err
+	if store == nil {
+		return nil, api.NewError(api.ErrStoreInternal, "keyed value state factory store must not be nil")
 	}
-
 	if keyGroup == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "keyed value state factory key_group must not be nil")
 	}
@@ -45,7 +43,7 @@ func NewKeyedValueStateFactory[V any](
 	}
 
 	return &KeyedValueStateFactory[V]{
-		inner:      inner,
+		store:      store,
 		groupKey:   common.DupBytes(keyGroup),
 		valueCodec: valueCodec,
 	}, nil
@@ -83,13 +81,13 @@ func (s *KeyedValueState[V]) Update(value V) error {
 	if err != nil {
 		return fmt.Errorf("encode value state failed: %w", err)
 	}
-	return s.factory.inner.store.Put(ck, encoded)
+	return s.factory.store.Put(ck, encoded)
 }
 
 func (s *KeyedValueState[V]) Value() (V, bool, error) {
 	var zero V
 	ck := s.buildCK()
-	raw, found, err := s.factory.inner.store.Get(ck)
+	raw, found, err := s.factory.store.Get(ck)
 	if err != nil || !found {
 		return zero, found, err
 	}
@@ -101,5 +99,5 @@ func (s *KeyedValueState[V]) Value() (V, bool, error) {
 }
 
 func (s *KeyedValueState[V]) Clear() error {
-	return s.factory.inner.store.Delete(s.buildCK())
+	return s.factory.store.Delete(s.buildCK())
 }

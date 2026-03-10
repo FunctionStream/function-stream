@@ -21,7 +21,8 @@ type Int64Codec struct{}
 
 func (c Int64Codec) Encode(value int64) ([]byte, error) {
 	out := make([]byte, 8)
-	binary.BigEndian.PutUint64(out, uint64(value))
+	mapped := uint64(value) ^ (uint64(1) << 63)
+	binary.BigEndian.PutUint64(out, mapped)
 	return out, nil
 }
 
@@ -29,8 +30,11 @@ func (c Int64Codec) Decode(data []byte) (int64, error) {
 	if len(data) != 8 {
 		return 0, fmt.Errorf("invalid int64 payload length: %d", len(data))
 	}
-	return int64(binary.BigEndian.Uint64(data)), nil
+	mapped := binary.BigEndian.Uint64(data)
+	raw := int64(mapped ^ (uint64(1) << 63))
+	return raw, nil
 }
 
-func (c Int64Codec) EncodedSize() int        { return 8 }
-func (c Int64Codec) IsOrderedKeyCodec() bool { return false }
+func (c Int64Codec) EncodedSize() int { return 8 }
+
+func (c Int64Codec) IsOrderedKeyCodec() bool { return true }

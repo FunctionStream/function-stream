@@ -17,21 +17,21 @@ import (
 	"fmt"
 )
 
-type OrderedUint32Codec struct{}
+type Int16Codec struct{}
 
-func (c OrderedUint32Codec) Encode(value uint32) ([]byte, error) {
-	out := make([]byte, 4)
-	binary.BigEndian.PutUint32(out, value)
+func (c Int16Codec) Encode(value int16) ([]byte, error) {
+	out := make([]byte, 2)
+	binary.BigEndian.PutUint16(out, uint16(value)^(uint16(1)<<15))
 	return out, nil
 }
 
-func (c OrderedUint32Codec) Decode(data []byte) (uint32, error) {
-	if len(data) != 4 {
-		return 0, fmt.Errorf("invalid ordered uint32 payload length: %d", len(data))
+func (c Int16Codec) Decode(data []byte) (int16, error) {
+	if len(data) != 2 {
+		return 0, fmt.Errorf("invalid int16 payload length: %d", len(data))
 	}
-	return binary.BigEndian.Uint32(data), nil
+	return int16(binary.BigEndian.Uint16(data) ^ (uint16(1) << 15)), nil
 }
 
-func (c OrderedUint32Codec) EncodedSize() int { return 4 }
+func (c Int16Codec) EncodedSize() int { return 2 }
 
-func (c OrderedUint32Codec) IsOrderedKeyCodec() bool { return true }
+func (c Int16Codec) IsOrderedKeyCodec() bool { return true }

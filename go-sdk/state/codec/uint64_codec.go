@@ -32,5 +32,6 @@ func (c Uint64Codec) Decode(data []byte) (uint64, error) {
 	return binary.BigEndian.Uint64(data), nil
 }
 
-func (c Uint64Codec) EncodedSize() int        { return 8 }
-func (c Uint64Codec) IsOrderedKeyCodec() bool { return false }
+func (c Uint64Codec) EncodedSize() int { return 8 }
+
+func (c Uint64Codec) IsOrderedKeyCodec() bool { return true }

@@ -30,7 +30,7 @@ from fs_api.store import (
     KeyedReducingStateFactory,
     PickleCodec,
     BytesCodec,
-    OrderedInt64Codec,
+    IntCodec,
     default_codec_for,
 )
 
@@ -109,7 +109,7 @@ class WitContext(Context):
 
     def getOrCreatePriorityQueueStateAutoCodec(self, store_name: str) -> PriorityQueueState:
         store = self.getOrCreateKVStore(store_name)
-        return PriorityQueueState(store, OrderedInt64Codec())
+        return PriorityQueueState(store, IntCodec())
 
     def getOrCreateAggregatingState(
         self, store_name: str, acc_codec: Codec, agg_func: object
@@ -183,7 +183,7 @@ class WitContext(Context):
         self, store_name: str, namespace: bytes, key_group: bytes, item_type=None
     ) -> KeyedPriorityQueueStateFactory:
         store = self.getOrCreateKVStore(store_name)
-        codec = default_codec_for(item_type) if item_type is not None else OrderedInt64Codec()
+        codec = default_codec_for(item_type) if item_type is not None else IntCodec()
         return KeyedPriorityQueueStateFactory(store, namespace, key_group, codec)
 
     def getOrCreateKeyedAggregatingStateFactory(

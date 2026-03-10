@@ -11,14 +11,14 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, Iterator, List, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
 from ..store import KvStore
 
-from ._keyed_common import KEYED_MAP_GROUP, ensure_ordered_key_codec
+from ._keyed_common import ensure_ordered_key_codec
 
 K = TypeVar("K")
 MK = TypeVar("MK")
@@ -131,7 +131,7 @@ class KeyedMapState(Generic[K, MK, MV]):
         )
         self._store.delete_prefix(prefix_ck)
 
-    def all(self, key: K):
+    def all(self, key: K) -> Iterator[Tuple[MK, MV]]:
         it = self._store.scan_complex(
             self._key_group,
             self._key_codec.encode(key),
@@ -143,51 +143,6 @@ class KeyedMapState(Generic[K, MK, MV]):
                 break
             key_bytes, value_bytes = item
             yield self._map_key_codec.decode(key_bytes), self._map_value_codec.decode(value_bytes)
-
-    def len(self, key: K) -> int:
-        it = self._store.scan_complex(
-            self._key_group,
-            self._key_codec.encode(key),
-            self._namespace,
-        )
-        n = 0
-        while it.has_next():
-            it.next()
-            n += 1
-        return n
-
-    def entries(self, key: K) -> List[KeyedMapEntry[MK, MV]]:
-        return [
-            KeyedMapEntry(key=k, value=v)
-            for k, v in self.all(key)
-        ]
-
-    def range(
-        self, key: K, start_inclusive: MK, end_exclusive: MK
-    ) -> List[KeyedMapEntry[MK, MV]]:
-        key_bytes = self._key_codec.encode(key)
-        start_bytes = self._map_key_codec.encode(start_inclusive)
-        end_bytes = self._map_key_codec.encode(end_exclusive)
-        user_keys = self._store.list_complex(
-            self._key_group, key_bytes, self._namespace,
-            start_bytes, end_bytes,
-        )
-        out = []
-        for uk in user_keys:
-            ck = ComplexKey(
-                key_group=self._key_group,
-                key=key_bytes,
-                namespace=self._namespace,
-                user_key=uk,
-            )
-            raw = self._store.get(ck)
-            if raw is None:
-                raise KvError("map range key disappeared during scan")
-            out.append(KeyedMapEntry(
-                key=self._map_key_codec.decode(uk),
-                value=self._map_value_codec.decode(raw),
-            ))
-        return out
 
 
 __all__ = ["KeyedMapEntry", "KeyedMapState", "KeyedMapStateFactory"]

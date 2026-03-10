@@ -22,27 +22,26 @@ import (
 )
 
 type KeyedListStateFactory[V any] struct {
-	inner      *keyedStateFactory
+	store      common.Store
 	keyGroup   []byte
 	fixedSize  int
 	valueCodec codec.Codec[V]
 	isFixed    bool
 }
 
-func NewKeyedListStateFactory[V any](store common.Store, name string, keyGroup []byte, valueCodec codec.Codec[V]) (*KeyedListStateFactory[V], error) {
-	inner, err := newKeyedStateFactory(store, name, "list")
-	if err != nil {
-		return nil, err
+func NewKeyedListStateFactory[V any](store common.Store,keyGroup []byte, valueCodec codec.Codec[V]) (*KeyedListStateFactory[V], error) {
+	if store == nil {
+		return nil, api.NewError(api.ErrStoreInternal, "keyed list state factory store must not be nil")
 	}
 	if keyGroup == nil {
-		return nil, api.NewError(api.ErrStoreInternal, "keyed list state factory %q key group must not be nil", inner.name)
+		return nil, api.NewError(api.ErrStoreInternal, "keyed list state factory key group must not be nil")
 	}
 	if valueCodec == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "keyed list value codec must not be nil")
 	}
 	fixedSize, isFixed := codec.FixedEncodedSize[V](valueCodec)
 	return &KeyedListStateFactory[V]{
-		inner:      inner,
+		store:      store,
 		keyGroup:   common.DupBytes(keyGroup),
 		fixedSize:  fixedSize,
 		valueCodec: valueCodec,
@@ -50,12 +49,12 @@ func NewKeyedListStateFactory[V any](store common.Store, name string, keyGroup [
 	}, nil
 }
 
-func NewKeyedListStateFactoryAutoCodec[V any](store common.Store, name string, keyGroup []byte) (*KeyedListStateFactory[V], error) {
+func NewKeyedListStateFactoryAutoCodec[V any](store common.Store, keyGroup []byte) (*KeyedListStateFactory[V], error) {
 	valueCodec, err := codec.DefaultCodecFor[V]()
 	if err != nil {
 		return nil, err
 	}
-	return NewKeyedListStateFactory[V](store, name, keyGroup, valueCodec)
+	return NewKeyedListStateFactory[V](store, keyGroup, valueCodec)
 }
 
 type KeyedListState[V any] struct {
@@ -110,7 +109,7 @@ func (s *KeyedListState[V]) Add(value V) error {
 	if err != nil {
 		return err
 	}
-	return s.factory.inner.store.Merge(s.complexKey, payload)
+	return s.factory.store.Merge(s.complexKey, payload)
 }
 
 func (s *KeyedListState[V]) AddAll(values []V) error {
@@ -118,14 +117,14 @@ func (s *KeyedListState[V]) AddAll(values []V) error {
 	if err != nil {
 		return err
 	}
-	if err := s.factory.inner.store.Merge(s.complexKey, payload); err != nil {
+	if err := s.factory.store.Merge(s.complexKey, payload); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (s *KeyedListState[V]) Get() ([]V, error) {
-	raw, found, err := s.factory.inner.store.Get(s.complexKey)
+	raw, found, err := s.factory.store.Get(s.complexKey)
 	if err != nil {
 		return nil, err
 	}
@@ -144,11 +143,11 @@ func (s *KeyedListState[V]) Update(values []V) error {
 	if err != nil {
 		return err
 	}
-	return s.factory.inner.store.Put(s.complexKey, payload)
+	return s.factory.store.Put(s.complexKey, payload)
 }
 
 func (s *KeyedListState[V]) Clear() error {
-	return s.factory.inner.store.Delete(s.complexKey)
+	return s.factory.store.Delete(s.complexKey)
 }
 
 func (s *KeyedListState[V]) serializeValueVarLen(value V) ([]byte, error) {

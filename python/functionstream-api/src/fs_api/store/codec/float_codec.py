@@ -15,23 +15,24 @@ import struct
 from .base import Codec
 
 
-class OrderedFloat32Codec(Codec[float]):
+class FloatCodec(Codec[float]):
+    """Ordered float codec for range scans (lexicographic byte order)."""
     supports_ordered_keys = True
 
     def encode(self, value: float) -> bytes:
-        bits = struct.unpack(">I", struct.pack(">f", value))[0]
-        if bits & (1 << 31):
-            mapped = (~bits) & 0xFFFFFFFF
+        bits = struct.unpack(">Q", struct.pack(">d", value))[0]
+        if bits & (1 << 63):
+            mapped = (~bits) & 0xFFFFFFFFFFFFFFFF
         else:
-            mapped = bits ^ (1 << 31)
-        return struct.pack(">I", mapped)
+            mapped = bits ^ (1 << 63)
+        return struct.pack(">Q", mapped)
 
     def decode(self, data: bytes) -> float:
-        if len(data) != 4:
-            raise ValueError(f"invalid ordered float32 payload length: {len(data)}")
-        mapped = struct.unpack(">I", data)[0]
-        if mapped & (1 << 31):
-            bits = mapped ^ (1 << 31)
+        if len(data) != 8:
+            raise ValueError(f"invalid float payload length: {len(data)}")
+        mapped = struct.unpack(">Q", data)[0]
+        if mapped & (1 << 63):
+            bits = mapped ^ (1 << 63)
         else:
-            bits = (~mapped) & 0xFFFFFFFF
-        return struct.unpack(">f", struct.pack(">I", bits))[0]
+            bits = (~mapped) & 0xFFFFFFFFFFFFFFFF
+        return struct.unpack(">d", struct.pack(">Q", bits))[0]

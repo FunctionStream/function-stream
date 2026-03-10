@@ -16,18 +16,8 @@ from .pickle_codec import PickleCodec
 from .bytes_codec import BytesCodec
 from .string_codec import StringCodec
 from .bool_codec import BoolCodec
-from .int64_codec import Int64Codec
-from .uint64_codec import Uint64Codec
-from .int32_codec import Int32Codec
-from .uint32_codec import Uint32Codec
-from .float64_codec import Float64Codec
-from .float32_codec import Float32Codec
-from .ordered_int64_codec import OrderedInt64Codec
-from .ordered_uint64_codec import OrderedUint64Codec
-from .ordered_int32_codec import OrderedInt32Codec
-from .ordered_uint32_codec import OrderedUint32Codec
-from .ordered_float64_codec import OrderedFloat64Codec
-from .ordered_float32_codec import OrderedFloat32Codec
+from .int_codec import IntCodec
+from .float_codec import FloatCodec
 from .default_codec import default_codec_for
 
 __all__ = [
@@ -37,17 +27,7 @@ __all__ = [
     "BytesCodec",
     "StringCodec",
     "BoolCodec",
-    "Int64Codec",
-    "Uint64Codec",
-    "Int32Codec",
-    "Uint32Codec",
-    "Float64Codec",
-    "Float32Codec",
-    "OrderedInt64Codec",
-    "OrderedUint64Codec",
-    "OrderedInt32Codec",
-    "OrderedUint32Codec",
-    "OrderedFloat64Codec",
-    "OrderedFloat32Codec",
+    "IntCodec",
+    "FloatCodec",
     "default_codec_for",
 ]

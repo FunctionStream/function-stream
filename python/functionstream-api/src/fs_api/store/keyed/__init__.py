@@ -10,7 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .keyed_state_factory import KeyedStateFactory
 from .keyed_value_state import KeyedValueState, KeyedValueStateFactory
 from .keyed_list_state import KeyedListState, KeyedListStateFactory
 from .keyed_map_state import KeyedMapEntry, KeyedMapState, KeyedMapStateFactory
@@ -19,7 +18,6 @@ from .keyed_aggregating_state import AggregateFunc, KeyedAggregatingState, Keyed
 from .keyed_reducing_state import KeyedReducingState, KeyedReducingStateFactory, ReduceFunc
 
 __all__ = [
-    "KeyedStateFactory",
     "KeyedListStateFactory",
     "KeyedValueStateFactory",
     "KeyedMapStateFactory",

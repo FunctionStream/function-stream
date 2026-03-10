@@ -11,15 +11,11 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Generator, Generic, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Generic, Iterator, Optional, Tuple, Type, TypeVar
 
 from ..codec import (
-    BoolCodec,
-    BytesCodec,
     Codec,
-    OrderedFloat64Codec,
-    OrderedInt64Codec,
-    StringCodec,
+    default_codec_for,
 )
 from ..complexkey import ComplexKey
 from ..error import KvError
@@ -57,7 +53,7 @@ class MapState(Generic[K, V]):
         key_type: Type[K],
         value_codec: Codec[V],
     ) -> "MapState[K, V]":
-        key_codec = infer_ordered_key_codec(key_type)
+        key_codec = default_codec_for(key_type)
         return cls(store, key_codec, value_codec)
 
     def put(self, key: K, value: V) -> None:
@@ -79,7 +75,7 @@ class MapState(Generic[K, V]):
     def clear(self) -> None:
         self._store.delete_prefix(self._ck(b""))
 
-    def all(self) -> Generator[Tuple[K, V], None, None]:
+    def all(self) -> Iterator[Tuple[K, V]]:
         it = self._store.scan_complex(self._key_group, self._key, self._namespace)
         while it.has_next():
             item = it.next()
@@ -87,49 +83,6 @@ class MapState(Generic[K, V]):
                 break
             key_bytes, value_bytes = item
             yield self._key_codec.decode(key_bytes), self._value_codec.decode(value_bytes)
-
-    def len(self) -> int:
-        it = self._store.scan_complex(self._key_group, self._key, self._namespace)
-        size = 0
-        while it.has_next():
-            item = it.next()
-            if item is None:
-                break
-            size += 1
-        return size
-
-    def entries(self) -> List[MapEntry[K, V]]:
-        it = self._store.scan_complex(self._key_group, self._key, self._namespace)
-        out: List[MapEntry[K, V]] = []
-        while it.has_next():
-            item = it.next()
-            if item is None:
-                break
-            key_bytes, value_bytes = item
-            out.append(
-                MapEntry(
-                    key=self._key_codec.decode(key_bytes),
-                    value=self._value_codec.decode(value_bytes),
-                )
-            )
-        return out
-
-    def range(self, start_inclusive: K, end_exclusive: K) -> List[MapEntry[K, V]]:
-        start_bytes = self._key_codec.encode(start_inclusive)
-        end_bytes = self._key_codec.encode(end_exclusive)
-        user_keys = self._store.list_complex(self._key_group, self._key, self._namespace, start_bytes, end_bytes)
-        out: List[MapEntry[K, V]] = []
-        for user_key in user_keys:
-            raw = self._store.get(self._ck(user_key))
-            if raw is None:
-                raise KvError("map range key disappeared during scan")
-            out.append(
-                MapEntry(
-                    key=self._key_codec.decode(user_key),
-                    value=self._value_codec.decode(raw),
-                )
-            )
-        return out
 
     def _ck(self, user_key: bytes) -> ComplexKey:
         return ComplexKey(
@@ -140,20 +93,6 @@ class MapState(Generic[K, V]):
         )
 
 
-def infer_ordered_key_codec(key_type: Type[Any]) -> Codec[Any]:
-    if key_type is str:
-        return StringCodec()
-    if key_type is bytes:
-        return BytesCodec()
-    if key_type is bool:
-        return BoolCodec()
-    if key_type is int:
-        return OrderedInt64Codec()
-    if key_type is float:
-        return OrderedFloat64Codec()
-    raise KvError("unsupported map key type for auto codec")
-
-
 def create_map_state_auto_key_codec(
     store: KvStore,
     key_type: Type[K],
@@ -162,4 +101,9 @@ def create_map_state_auto_key_codec(
     return MapState.with_auto_key_codec(store, key_type, value_codec)
 
 
-__all__ = ["MapEntry", "MapState", "infer_ordered_key_codec", "create_map_state_auto_key_codec"]
+def infer_ordered_key_codec(key_type: Type[Any]) -> Codec[Any]:
+    """Return an ordered key codec for the given key type (uses default_codec_for)."""
+    return default_codec_for(key_type)
+
+
+__all__ = ["MapEntry", "MapState", "create_map_state_auto_key_codec", "infer_ordered_key_codec"]

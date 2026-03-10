@@ -22,7 +22,7 @@ import (
 )
 
 type KeyedPriorityQueueStateFactory[V any] struct {
-	inner      *keyedStateFactory
+	store      common.Store
 	groupKey   []byte
 	valueCodec codec.Codec[V]
 }
@@ -33,11 +33,9 @@ func NewKeyedPriorityQueueStateFactory[V any](
 	valueCodec codec.Codec[V],
 ) (*KeyedPriorityQueueStateFactory[V], error) {
 
-	inner, err := newKeyedStateFactory(store, "", "pq")
-	if err != nil {
-		return nil, err
+	if store == nil {
+		return nil, api.NewError(api.ErrStoreInternal, "keyed priority queue state factory store must not be nil")
 	}
-
 	if keyGroup == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "keyed priority queue state factory key_group must not be nil")
 	}
@@ -50,7 +48,7 @@ func NewKeyedPriorityQueueStateFactory[V any](
 	}
 
 	return &KeyedPriorityQueueStateFactory[V]{
-		inner:      inner,
+		store:      store,
 		groupKey:   common.DupBytes(keyGroup),
 		valueCodec: valueCodec,
 	}, nil
@@ -86,13 +84,13 @@ func (s *KeyedPriorityQueueState[V]) Add(value V) error {
 		UserKey:   userKey,
 	}
 
-	return s.factory.inner.store.Put(ck, []byte{})
+	return s.factory.store.Put(ck, []byte{})
 }
 
 func (s *KeyedPriorityQueueState[V]) Peek() (V, bool, error) {
 	var zero V
 
-	iter, err := s.factory.inner.store.ScanComplex(
+	iter, err := s.factory.store.ScanComplex(
 		s.factory.groupKey,
 		s.primaryKey,
 		s.namespace,
@@ -133,12 +131,12 @@ func (s *KeyedPriorityQueueState[V]) Poll() (V, bool, error) {
 		UserKey:   userKey,
 	}
 
-	err = s.factory.inner.store.Delete(ck)
+	err = s.factory.store.Delete(ck)
 	return val, true, err
 }
 
 func (s *KeyedPriorityQueueState[V]) Clear() error {
-	return s.factory.inner.store.DeletePrefix(api.ComplexKey{
+	return s.factory.store.DeletePrefix(api.ComplexKey{
 		KeyGroup:  s.factory.groupKey,
 		Key:       s.primaryKey,
 		Namespace: s.namespace,
@@ -148,7 +146,7 @@ func (s *KeyedPriorityQueueState[V]) Clear() error {
 
 func (s *KeyedPriorityQueueState[V]) All() iter.Seq[V] {
 	return func(yield func(V) bool) {
-		iter, err := s.factory.inner.store.ScanComplex(
+		iter, err := s.factory.store.ScanComplex(
 			s.factory.groupKey,
 			s.primaryKey,
 			s.namespace,

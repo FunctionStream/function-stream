@@ -14,7 +14,6 @@ from .error import KvError, KvNotFoundError, KvIOError, KvOtherError
 from .complexkey import ComplexKey
 from .iterator import KvIterator
 from .store import KvStore
-from .common import StateKind
 
 from .codec import (
     Codec,
@@ -23,18 +22,8 @@ from .codec import (
     BytesCodec,
     StringCodec,
     BoolCodec,
-    Int64Codec,
-    Uint64Codec,
-    Int32Codec,
-    Uint32Codec,
-    Float64Codec,
-    Float32Codec,
-    OrderedInt64Codec,
-    OrderedUint64Codec,
-    OrderedInt32Codec,
-    OrderedUint32Codec,
-    OrderedFloat64Codec,
-    OrderedFloat32Codec,
+    IntCodec,
+    FloatCodec,
     default_codec_for,
 )
 
@@ -53,7 +42,6 @@ from .structures import (
 )
 
 from .keyed import (
-    KeyedStateFactory,
     KeyedListStateFactory,
     KeyedValueStateFactory,
     KeyedMapStateFactory,
@@ -76,25 +64,14 @@ __all__ = [
     "ComplexKey",
     "KvIterator",
     "KvStore",
-    "StateKind",
     "Codec",
     "JsonCodec",
     "PickleCodec",
     "BytesCodec",
     "StringCodec",
     "BoolCodec",
-    "Int64Codec",
-    "Uint64Codec",
-    "Int32Codec",
-    "Uint32Codec",
-    "Float64Codec",
-    "Float32Codec",
-    "OrderedInt64Codec",
-    "OrderedUint64Codec",
-    "OrderedInt32Codec",
-    "OrderedUint32Codec",
-    "OrderedFloat64Codec",
-    "OrderedFloat32Codec",
+    "IntCodec",
+    "FloatCodec",
     "default_codec_for",
     "ValueState",
     "MapEntry",
@@ -107,7 +84,6 @@ __all__ = [
     "AggregatingState",
     "ReduceFunc",
     "ReducingState",
-    "KeyedStateFactory",
     "KeyedListStateFactory",
     "KeyedValueStateFactory",
     "KeyedMapStateFactory",

@@ -17,8 +17,6 @@ from ..complexkey import ComplexKey
 from ..error import KvError
 from ..store import KvStore
 
-from ._keyed_common import KEYED_VALUE_GROUP, ensure_ordered_key_codec
-
 K = TypeVar("K")
 V = TypeVar("V")
 

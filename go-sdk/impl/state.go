@@ -87,20 +87,20 @@ func NewReducingState[V any](ctx api.Context, storeName string, valueCodec codec
 	return structures.NewReducingState(s, valueCodec, reduceFunc)
 }
 
-func NewKeyedListStateFactory[V any](ctx api.Context, storeName, name string, keyGroup []byte, valueCodec codec.Codec[V]) (*keyed.KeyedListStateFactory[V], error) {
+func NewKeyedListStateFactory[V any](ctx api.Context, storeName string, keyGroup []byte, valueCodec codec.Codec[V]) (*keyed.KeyedListStateFactory[V], error) {
 	s, err := getStoreFromContext(ctx, storeName)
 	if err != nil {
 		return nil, err
 	}
-	return keyed.NewKeyedListStateFactory(s, name, keyGroup, valueCodec)
+	return keyed.NewKeyedListStateFactory(s, keyGroup, valueCodec)
 }
 
-func NewKeyedListStateFactoryAutoCodec[V any](ctx api.Context, storeName, name string, keyGroup []byte) (*keyed.KeyedListStateFactory[V], error) {
+func NewKeyedListStateFactoryAutoCodec[V any](ctx api.Context, storeName string, keyGroup []byte) (*keyed.KeyedListStateFactory[V], error) {
 	s, err := getStoreFromContext(ctx, storeName)
 	if err != nil {
 		return nil, err
 	}
-	return keyed.NewKeyedListStateFactoryAutoCodec[V](s, name, keyGroup)
+	return keyed.NewKeyedListStateFactoryAutoCodec[V](s,  keyGroup)
 }
 
 func NewKeyedValueStateFactory[V any](ctx api.Context, storeName string, keyGroup []byte, valueCodec codec.Codec[V]) (*keyed.KeyedValueStateFactory[V], error) {

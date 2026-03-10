@@ -28,7 +28,7 @@ type AggregateFunc[T any, ACC any, R any] interface {
 }
 
 type KeyedAggregatingStateFactory[T any, ACC any, R any] struct {
-	inner    *keyedStateFactory
+	store    common.Store
 	groupKey []byte
 	accCodec codec.Codec[ACC]
 	aggFunc  AggregateFunc[T, ACC, R]
@@ -41,11 +41,9 @@ func NewKeyedAggregatingStateFactory[T any, ACC any, R any](
 	aggFunc AggregateFunc[T, ACC, R],
 ) (*KeyedAggregatingStateFactory[T, ACC, R], error) {
 
-	inner, err := newKeyedStateFactory(store, "", "aggregating")
-	if err != nil {
-		return nil, err
+	if store == nil {
+		return nil, api.NewError(api.ErrStoreInternal, "keyed aggregating state factory store must not be nil")
 	}
-
 	if keyGroup == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "keyed aggregating state factory key_group must not be nil")
 	}
@@ -57,7 +55,7 @@ func NewKeyedAggregatingStateFactory[T any, ACC any, R any](
 	}
 
 	return &KeyedAggregatingStateFactory[T, ACC, R]{
-		inner:    inner,
+		store:    store,
 		groupKey: common.DupBytes(keyGroup),
 		accCodec: accCodec,
 		aggFunc:  aggFunc,
@@ -90,7 +88,7 @@ func (s *KeyedAggregatingState[T, ACC, R]) buildCK() api.ComplexKey {
 func (s *KeyedAggregatingState[T, ACC, R]) Add(value T) error {
 	ck := s.buildCK()
 
-	raw, found, err := s.factory.inner.store.Get(ck)
+	raw, found, err := s.factory.store.Get(ck)
 	if err != nil {
 		return fmt.Errorf("failed to get accumulator: %w", err)
 	}
@@ -112,13 +110,13 @@ func (s *KeyedAggregatingState[T, ACC, R]) Add(value T) error {
 	if err != nil {
 		return fmt.Errorf("failed to encode new accumulator: %w", err)
 	}
-	return s.factory.inner.store.Put(ck, encoded)
+	return s.factory.store.Put(ck, encoded)
 }
 
 func (s *KeyedAggregatingState[T, ACC, R]) Get() (R, bool, error) {
 	var zero R
 	ck := s.buildCK()
-	raw, found, err := s.factory.inner.store.Get(ck)
+	raw, found, err := s.factory.store.Get(ck)
 	if err != nil || !found {
 		return zero, found, err
 	}
@@ -132,5 +130,5 @@ func (s *KeyedAggregatingState[T, ACC, R]) Get() (R, bool, error) {
 }
 
 func (s *KeyedAggregatingState[T, ACC, R]) Clear() error {
-	return s.factory.inner.store.Delete(s.buildCK())
+	return s.factory.store.Delete(s.buildCK())
 }

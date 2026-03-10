@@ -22,7 +22,7 @@ import (
 )
 
 type KeyedMapStateFactory[MK any, MV any] struct {
-	inner         *keyedStateFactory
+	store         common.Store
 	groupKey      []byte
 	mapKeyCodec   codec.Codec[MK]
 	mapValueCodec codec.Codec[MV]
@@ -35,11 +35,9 @@ func NewKeyedMapStateFactory[MK any, MV any](
 	mapValueCodec codec.Codec[MV],
 ) (*KeyedMapStateFactory[MK, MV], error) {
 
-	inner, err := newKeyedStateFactory(store, "", "map")
-	if err != nil {
-		return nil, err
+	if store == nil {
+		return nil, api.NewError(api.ErrStoreInternal, "keyed map state factory store must not be nil")
 	}
-
 	if keyGroup == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "keyed map state factory key_group must not be nil")
 	}
@@ -52,7 +50,7 @@ func NewKeyedMapStateFactory[MK any, MV any](
 	}
 
 	return &KeyedMapStateFactory[MK, MV]{
-		inner:         inner,
+		store:         store,
 		groupKey:      common.DupBytes(keyGroup),
 		mapKeyCodec:   mapKeyCodec,
 		mapValueCodec: mapValueCodec,
@@ -98,7 +96,7 @@ func (s *KeyedMapState[MK, MV]) Put(mapKey MK, value MV) error {
 	if err != nil {
 		return err
 	}
-	return s.factory.inner.store.Put(ck, encodedValue)
+	return s.factory.store.Put(ck, encodedValue)
 }
 
 func (s *KeyedMapState[MK, MV]) Get(mapKey MK) (MV, bool, error) {
@@ -107,7 +105,7 @@ func (s *KeyedMapState[MK, MV]) Get(mapKey MK) (MV, bool, error) {
 	if err != nil {
 		return zero, false, err
 	}
-	raw, found, err := s.factory.inner.store.Get(ck)
+	raw, found, err := s.factory.store.Get(ck)
 	if err != nil || !found {
 		return zero, found, err
 	}
@@ -123,11 +121,11 @@ func (s *KeyedMapState[MK, MV]) Delete(mapKey MK) error {
 	if err != nil {
 		return err
 	}
-	return s.factory.inner.store.Delete(ck)
+	return s.factory.store.Delete(ck)
 }
 
 func (s *KeyedMapState[MK, MV]) Clear() error {
-	return s.factory.inner.store.DeletePrefix(api.ComplexKey{
+	return s.factory.store.DeletePrefix(api.ComplexKey{
 		KeyGroup:  s.factory.groupKey,
 		Key:       s.primaryKey,
 		Namespace: s.namespace,
@@ -137,7 +135,7 @@ func (s *KeyedMapState[MK, MV]) Clear() error {
 
 func (s *KeyedMapState[MK, MV]) All() iter.Seq2[MK, MV] {
 	return func(yield func(MK, MV) bool) {
-		iter, err := s.factory.inner.store.ScanComplex(
+		iter, err := s.factory.store.ScanComplex(
 			s.factory.groupKey,
 			s.primaryKey,
 			s.namespace,
