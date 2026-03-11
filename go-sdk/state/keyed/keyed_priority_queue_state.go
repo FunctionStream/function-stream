@@ -27,7 +27,29 @@ type KeyedPriorityQueueStateFactory[V any] struct {
 	valueCodec codec.Codec[V]
 }
 
-func NewKeyedPriorityQueueStateFactory[V any](
+// NewKeyedPriorityQueueStateFactoryFromContext creates a KeyedPriorityQueueStateFactory using the store from ctx.GetOrCreateStore(storeName).
+func NewKeyedPriorityQueueStateFactoryFromContext[V any](ctx api.Context, storeName string, keyGroup []byte, itemCodec codec.Codec[V]) (*KeyedPriorityQueueStateFactory[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedPriorityQueueStateFactory(store, keyGroup, itemCodec)
+}
+
+// NewKeyedPriorityQueueStateFactoryFromContextAutoCodec creates a KeyedPriorityQueueStateFactory with default value codec. V must have an ordered default codec.
+func NewKeyedPriorityQueueStateFactoryFromContextAutoCodec[V any](ctx api.Context, storeName string, keyGroup []byte) (*KeyedPriorityQueueStateFactory[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	valueCodec, err := codec.DefaultCodecFor[V]()
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedPriorityQueueStateFactory(store, keyGroup, valueCodec)
+}
+
+func newKeyedPriorityQueueStateFactory[V any](
 	store common.Store,
 	keyGroup []byte,
 	valueCodec codec.Codec[V],

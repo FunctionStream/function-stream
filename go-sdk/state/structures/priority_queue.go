@@ -30,8 +30,30 @@ type PriorityQueueState[T any] struct {
 	valueCodec codec.Codec[T]
 }
 
-// NewPriorityQueueState creates a priority queue state. itemCodec must support ordered key encoding.
-func NewPriorityQueueState[T any](store common.Store, itemCodec codec.Codec[T]) (*PriorityQueueState[T], error) {
+// NewPriorityQueueStateFromContext creates a PriorityQueueState using the store from ctx.GetOrCreateStore(storeName).
+func NewPriorityQueueStateFromContext[T any](ctx api.Context, storeName string, itemCodec codec.Codec[T]) (*PriorityQueueState[T], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newPriorityQueueState(store, itemCodec)
+}
+
+// NewPriorityQueueStateFromContextAutoCodec creates a PriorityQueueState with default codec for T. T must have an ordered default codec (e.g. primitive types).
+func NewPriorityQueueStateFromContextAutoCodec[T any](ctx api.Context, storeName string) (*PriorityQueueState[T], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	itemCodec, err := codec.DefaultCodecFor[T]()
+	if err != nil {
+		return nil, err
+	}
+	return newPriorityQueueState(store, itemCodec)
+}
+
+// newPriorityQueueState creates a priority queue state. itemCodec must support ordered key encoding.
+func newPriorityQueueState[T any](store common.Store, itemCodec codec.Codec[T]) (*PriorityQueueState[T], error) {
 	if store == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "priority queue state store must not be nil")
 	}

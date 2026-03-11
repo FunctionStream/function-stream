@@ -26,7 +26,29 @@ type ValueState[T any] struct {
 	codec      codec.Codec[T]
 }
 
-func NewValueState[T any](store common.Store, valueCodec codec.Codec[T]) (*ValueState[T], error) {
+// NewValueStateFromContext creates a ValueState using the store from ctx.GetOrCreateStore(storeName).
+func NewValueStateFromContext[T any](ctx api.Context, storeName string, valueCodec codec.Codec[T]) (*ValueState[T], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newValueState(store, valueCodec)
+}
+
+// NewValueStateFromContextAutoCodec creates a ValueState with default codec for T from ctx.GetOrCreateStore(storeName).
+func NewValueStateFromContextAutoCodec[T any](ctx api.Context, storeName string) (*ValueState[T], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	valueCodec, err := codec.DefaultCodecFor[T]()
+	if err != nil {
+		return nil, err
+	}
+	return newValueState(store, valueCodec)
+}
+
+func newValueState[T any](store common.Store, valueCodec codec.Codec[T]) (*ValueState[T], error) {
 	if store == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "value state store must not be nil")
 	}

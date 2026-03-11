@@ -34,7 +34,29 @@ type KeyedAggregatingStateFactory[T any, ACC any, R any] struct {
 	aggFunc  AggregateFunc[T, ACC, R]
 }
 
-func NewKeyedAggregatingStateFactory[T any, ACC any, R any](
+// NewKeyedAggregatingStateFactoryFromContext creates a KeyedAggregatingStateFactory using the store from ctx.GetOrCreateStore(storeName).
+func NewKeyedAggregatingStateFactoryFromContext[T any, ACC any, R any](ctx api.Context, storeName string, keyGroup []byte, accCodec codec.Codec[ACC], aggFunc AggregateFunc[T, ACC, R]) (*KeyedAggregatingStateFactory[T, ACC, R], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedAggregatingStateFactory(store, keyGroup, accCodec, aggFunc)
+}
+
+// NewKeyedAggregatingStateFactoryFromContextAutoCodec creates a KeyedAggregatingStateFactory with default accumulator codec from ctx.GetOrCreateStore(storeName).
+func NewKeyedAggregatingStateFactoryFromContextAutoCodec[T any, ACC any, R any](ctx api.Context, storeName string, keyGroup []byte, aggFunc AggregateFunc[T, ACC, R]) (*KeyedAggregatingStateFactory[T, ACC, R], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	accCodec, err := codec.DefaultCodecFor[ACC]()
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedAggregatingStateFactory(store, keyGroup, accCodec, aggFunc)
+}
+
+func newKeyedAggregatingStateFactory[T any, ACC any, R any](
 	store common.Store,
 	keyGroup []byte,
 	accCodec codec.Codec[ACC],

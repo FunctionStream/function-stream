@@ -29,7 +29,29 @@ type KeyedReducingStateFactory[V any] struct {
 	reduceFunc ReduceFunc[V]
 }
 
-func NewKeyedReducingStateFactory[V any](
+// NewKeyedReducingStateFactoryFromContext creates a KeyedReducingStateFactory using the store from ctx.GetOrCreateStore(storeName).
+func NewKeyedReducingStateFactoryFromContext[V any](ctx api.Context, storeName string, keyGroup []byte, valueCodec codec.Codec[V], reduceFunc ReduceFunc[V]) (*KeyedReducingStateFactory[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedReducingStateFactory(store, keyGroup, valueCodec, reduceFunc)
+}
+
+// NewKeyedReducingStateFactoryFromContextAutoCodec creates a KeyedReducingStateFactory with default value codec from ctx.GetOrCreateStore(storeName).
+func NewKeyedReducingStateFactoryFromContextAutoCodec[V any](ctx api.Context, storeName string, keyGroup []byte, reduceFunc ReduceFunc[V]) (*KeyedReducingStateFactory[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	valueCodec, err := codec.DefaultCodecFor[V]()
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedReducingStateFactory(store, keyGroup, valueCodec, reduceFunc)
+}
+
+func newKeyedReducingStateFactory[V any](
 	store common.Store,
 	keyGroup []byte,
 	valueCodec codec.Codec[V],

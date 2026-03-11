@@ -26,7 +26,29 @@ type KeyedValueStateFactory[V any] struct {
 	valueCodec codec.Codec[V]
 }
 
-func NewKeyedValueStateFactory[V any](
+// NewKeyedValueStateFactoryFromContext creates a KeyedValueStateFactory using the store from ctx.GetOrCreateStore(storeName).
+func NewKeyedValueStateFactoryFromContext[V any](ctx api.Context, storeName string, keyGroup []byte, valueCodec codec.Codec[V]) (*KeyedValueStateFactory[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedValueStateFactory(store, keyGroup, valueCodec)
+}
+
+// NewKeyedValueStateFactoryFromContextAutoCodec creates a KeyedValueStateFactory with default value codec from ctx.GetOrCreateStore(storeName).
+func NewKeyedValueStateFactoryFromContextAutoCodec[V any](ctx api.Context, storeName string, keyGroup []byte) (*KeyedValueStateFactory[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	valueCodec, err := codec.DefaultCodecFor[V]()
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedValueStateFactory(store, keyGroup, valueCodec)
+}
+
+func newKeyedValueStateFactory[V any](
 	store common.Store,
 	keyGroup []byte,
 	valueCodec codec.Codec[V],

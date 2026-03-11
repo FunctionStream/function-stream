@@ -35,7 +35,42 @@ type MapState[K any, V any] struct {
 	valueCodec codec.Codec[V]
 }
 
-func NewMapState[K any, V any](store common.Store, keyCodec codec.Codec[K], valueCodec codec.Codec[V]) (*MapState[K, V], error) {
+// NewMapStateFromContext creates a MapState using the store from ctx.GetOrCreateStore(storeName).
+func NewMapStateFromContext[K any, V any](ctx api.Context, storeName string, keyCodec codec.Codec[K], valueCodec codec.Codec[V]) (*MapState[K, V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newMapState(store, keyCodec, valueCodec)
+}
+
+// NewMapStateAutoKeyCodecFromContext creates a MapState with default key codec using the store from context.
+func NewMapStateAutoKeyCodecFromContext[K any, V any](ctx api.Context, storeName string, valueCodec codec.Codec[V]) (*MapState[K, V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newMapStateAutoKeyCodec[K, V](store, valueCodec)
+}
+
+// NewMapStateFromContextAutoCodec creates a MapState with default key and value codecs from ctx.GetOrCreateStore(storeName). Key type K must have an ordered default codec.
+func NewMapStateFromContextAutoCodec[K any, V any](ctx api.Context, storeName string) (*MapState[K, V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	keyCodec, err := codec.DefaultCodecFor[K]()
+	if err != nil {
+		return nil, err
+	}
+	valueCodec, err := codec.DefaultCodecFor[V]()
+	if err != nil {
+		return nil, err
+	}
+	return newMapState(store, keyCodec, valueCodec)
+}
+
+func newMapState[K any, V any](store common.Store, keyCodec codec.Codec[K], valueCodec codec.Codec[V]) (*MapState[K, V], error) {
 	if store == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "map state store must not be nil")
 	}
@@ -51,12 +86,12 @@ func NewMapState[K any, V any](store common.Store, keyCodec codec.Codec[K], valu
 	return &MapState[K, V]{store: store, keyGroup: []byte{}, key: []byte{}, namespace: []byte{}, keyCodec: keyCodec, valueCodec: valueCodec}, nil
 }
 
-func NewMapStateAutoKeyCodec[K any, V any](store common.Store, valueCodec codec.Codec[V]) (*MapState[K, V], error) {
+func newMapStateAutoKeyCodec[K any, V any](store common.Store, valueCodec codec.Codec[V]) (*MapState[K, V], error) {
 	autoKeyCodec, err := codec.DefaultCodecFor[K]()
 	if err != nil {
 		return nil, err
 	}
-	return NewMapState[K, V](store, autoKeyCodec, valueCodec)
+	return newMapState[K, V](store, autoKeyCodec, valueCodec)
 }
 
 func (m *MapState[K, V]) Put(key K, value V) error {

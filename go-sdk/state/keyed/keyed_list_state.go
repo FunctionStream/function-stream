@@ -29,7 +29,25 @@ type KeyedListStateFactory[V any] struct {
 	isFixed    bool
 }
 
-func NewKeyedListStateFactory[V any](store common.Store,keyGroup []byte, valueCodec codec.Codec[V]) (*KeyedListStateFactory[V], error) {
+// NewKeyedListStateFactoryFromContext creates a KeyedListStateFactory using the store from ctx.GetOrCreateStore(storeName).
+func NewKeyedListStateFactoryFromContext[V any](ctx api.Context, storeName string, keyGroup []byte, valueCodec codec.Codec[V]) (*KeyedListStateFactory[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedListStateFactory(store, keyGroup, valueCodec)
+}
+
+// NewKeyedListStateFactoryAutoCodecFromContext creates a KeyedListStateFactory with default value codec using the store from context.
+func NewKeyedListStateFactoryAutoCodecFromContext[V any](ctx api.Context, storeName string, keyGroup []byte) (*KeyedListStateFactory[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedListStateFactoryAutoCodec[V](store, keyGroup)
+}
+
+func newKeyedListStateFactory[V any](store common.Store, keyGroup []byte, valueCodec codec.Codec[V]) (*KeyedListStateFactory[V], error) {
 	if store == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "keyed list state factory store must not be nil")
 	}
@@ -49,12 +67,12 @@ func NewKeyedListStateFactory[V any](store common.Store,keyGroup []byte, valueCo
 	}, nil
 }
 
-func NewKeyedListStateFactoryAutoCodec[V any](store common.Store, keyGroup []byte) (*KeyedListStateFactory[V], error) {
+func newKeyedListStateFactoryAutoCodec[V any](store common.Store, keyGroup []byte) (*KeyedListStateFactory[V], error) {
 	valueCodec, err := codec.DefaultCodecFor[V]()
 	if err != nil {
 		return nil, err
 	}
-	return NewKeyedListStateFactory[V](store, keyGroup, valueCodec)
+	return newKeyedListStateFactory[V](store, keyGroup, valueCodec)
 }
 
 type KeyedListState[V any] struct {

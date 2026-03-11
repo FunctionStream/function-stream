@@ -28,7 +28,33 @@ type KeyedMapStateFactory[MK any, MV any] struct {
 	mapValueCodec codec.Codec[MV]
 }
 
-func NewKeyedMapStateFactory[MK any, MV any](
+// NewKeyedMapStateFactoryFromContext creates a KeyedMapStateFactory using the store from ctx.GetOrCreateStore(storeName).
+func NewKeyedMapStateFactoryFromContext[MK any, MV any](ctx api.Context, storeName string, keyGroup []byte, keyCodec codec.Codec[MK], valueCodec codec.Codec[MV]) (*KeyedMapStateFactory[MK, MV], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedMapStateFactory(store, keyGroup, keyCodec, valueCodec)
+}
+
+// NewKeyedMapStateFactoryFromContextAutoCodec creates a KeyedMapStateFactory with default map-key and map-value codecs. MK must have an ordered default codec.
+func NewKeyedMapStateFactoryFromContextAutoCodec[MK any, MV any](ctx api.Context, storeName string, keyGroup []byte) (*KeyedMapStateFactory[MK, MV], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	mapKeyCodec, err := codec.DefaultCodecFor[MK]()
+	if err != nil {
+		return nil, err
+	}
+	mapValueCodec, err := codec.DefaultCodecFor[MV]()
+	if err != nil {
+		return nil, err
+	}
+	return newKeyedMapStateFactory(store, keyGroup, mapKeyCodec, mapValueCodec)
+}
+
+func newKeyedMapStateFactory[MK any, MV any](
 	store common.Store,
 	keyGroup []byte,
 	mapKeyCodec codec.Codec[MK],

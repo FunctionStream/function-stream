@@ -31,7 +31,29 @@ type ListState[T any] struct {
 	serializeBatch func([]T) ([]byte, error)
 }
 
-func NewListState[T any](store common.Store, itemCodec codec.Codec[T]) (*ListState[T], error) {
+// NewListStateFromContext creates a ListState using the store from ctx.GetOrCreateStore(storeName).
+func NewListStateFromContext[T any](ctx api.Context, storeName string, itemCodec codec.Codec[T]) (*ListState[T], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newListState(store, itemCodec)
+}
+
+// NewListStateFromContextAutoCodec creates a ListState with default codec for T from ctx.GetOrCreateStore(storeName).
+func NewListStateFromContextAutoCodec[T any](ctx api.Context, storeName string) (*ListState[T], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	itemCodec, err := codec.DefaultCodecFor[T]()
+	if err != nil {
+		return nil, err
+	}
+	return newListState(store, itemCodec)
+}
+
+func newListState[T any](store common.Store, itemCodec codec.Codec[T]) (*ListState[T], error) {
 	if store == nil {
 		return nil, api.NewError(api.ErrStoreInternal, "list state store must not be nil")
 	}

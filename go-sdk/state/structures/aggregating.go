@@ -34,7 +34,38 @@ type AggregatingState[T any, ACC any, R any] struct {
 	aggFunc    AggregateFunc[T, ACC, R]
 }
 
-func NewAggregatingState[T any, ACC any, R any](
+// NewAggregatingStateFromContext creates an AggregatingState using the store from ctx.GetOrCreateStore(storeName).
+func NewAggregatingStateFromContext[T any, ACC any, R any](
+	ctx api.Context,
+	storeName string,
+	accCodec codec.Codec[ACC],
+	aggFunc AggregateFunc[T, ACC, R],
+) (*AggregatingState[T, ACC, R], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newAggregatingState(store, accCodec, aggFunc)
+}
+
+// NewAggregatingStateFromContextAutoCodec creates an AggregatingState with default accumulator codec from ctx.GetOrCreateStore(storeName).
+func NewAggregatingStateFromContextAutoCodec[T any, ACC any, R any](
+	ctx api.Context,
+	storeName string,
+	aggFunc AggregateFunc[T, ACC, R],
+) (*AggregatingState[T, ACC, R], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	accCodec, err := codec.DefaultCodecFor[ACC]()
+	if err != nil {
+		return nil, err
+	}
+	return newAggregatingState(store, accCodec, aggFunc)
+}
+
+func newAggregatingState[T any, ACC any, R any](
 	store common.Store,
 	accCodec codec.Codec[ACC],
 	aggFunc AggregateFunc[T, ACC, R],

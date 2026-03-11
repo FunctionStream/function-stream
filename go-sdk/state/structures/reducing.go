@@ -29,7 +29,38 @@ type ReducingState[V any] struct {
 	reduceFunc ReduceFunc[V]
 }
 
-func NewReducingState[V any](
+// NewReducingStateFromContext creates a ReducingState using the store from ctx.GetOrCreateStore(storeName).
+func NewReducingStateFromContext[V any](
+	ctx api.Context,
+	storeName string,
+	valueCodec codec.Codec[V],
+	reduceFunc ReduceFunc[V],
+) (*ReducingState[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	return newReducingState(store, valueCodec, reduceFunc)
+}
+
+// NewReducingStateFromContextAutoCodec creates a ReducingState with default value codec from ctx.GetOrCreateStore(storeName).
+func NewReducingStateFromContextAutoCodec[V any](
+	ctx api.Context,
+	storeName string,
+	reduceFunc ReduceFunc[V],
+) (*ReducingState[V], error) {
+	store, err := ctx.GetOrCreateStore(storeName)
+	if err != nil {
+		return nil, err
+	}
+	valueCodec, err := codec.DefaultCodecFor[V]()
+	if err != nil {
+		return nil, err
+	}
+	return newReducingState(store, valueCodec, reduceFunc)
+}
+
+func newReducingState[V any](
 	store common.Store,
 	valueCodec codec.Codec[V],
 	reduceFunc ReduceFunc[V],
