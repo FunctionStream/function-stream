@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Generic, Iterator, Optional, Tuple, TypeVar
+from typing import Any, Generic, Iterator, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -44,6 +44,34 @@ class KeyedPriorityQueueStateFactory(Generic[V]):
         self._namespace = namespace
         self._key_group = key_group
         self._value_codec = value_codec
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        value_codec: Codec[V],
+    ) -> "KeyedPriorityQueueStateFactory[V]":
+        """Create a KeyedPriorityQueueStateFactory from a context and store name (for keyed operators)."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, namespace, key_group, value_codec)
+
+    @classmethod
+    def from_context_auto_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        item_type: Optional[type] = None,
+    ) -> "KeyedPriorityQueueStateFactory[V]":
+        """Create a KeyedPriorityQueueStateFactory with default codec from context and store name."""
+        from ..codec import IntCodec, default_codec_for
+        store = ctx.getOrCreateKVStore(store_name)
+        codec = default_codec_for(item_type) if item_type is not None else IntCodec()
+        return cls(store, namespace, key_group, codec)
 
     def new_priority_queue(self, key_codec: Codec[K]) -> "KeyedPriorityQueueState[K, V]":
         ensure_ordered_key_codec(key_codec, "keyed priority queue")

@@ -10,12 +10,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Generic, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
 from ..error import KvError
 from ..store import KvStore
+
+from ._keyed_common import ensure_ordered_key_codec
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -41,6 +43,34 @@ class KeyedValueStateFactory(Generic[V]):
         self._namespace = namespace
         self._key_group = key_group
         self._value_codec = value_codec
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        value_codec: Codec[V],
+    ) -> "KeyedValueStateFactory[V]":
+        """Create a KeyedValueStateFactory from a context and store name (for keyed operators)."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, namespace, key_group, value_codec)
+
+    @classmethod
+    def from_context_auto_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        value_type: Optional[type] = None,
+    ) -> "KeyedValueStateFactory[V]":
+        """Create a KeyedValueStateFactory with default codec from context and store name."""
+        from ..codec import PickleCodec, default_codec_for
+        store = ctx.getOrCreateKVStore(store_name)
+        codec = default_codec_for(value_type) if value_type is not None else PickleCodec()
+        return cls(store, namespace, key_group, codec)
 
     def new_value(self, key_codec: Codec[K]) -> "KeyedValueState[K, V]":
         ensure_ordered_key_codec(key_codec, "keyed value")

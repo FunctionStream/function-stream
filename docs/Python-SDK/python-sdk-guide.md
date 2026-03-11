@@ -148,3 +148,11 @@ with FsClient(host="10.0.0.1", port=8080) as client:
 | BadRequestError (400) | YAML configuration does not meet specifications or Kafka parameters are incorrect | Check configuration items in WasmTaskBuilder.                 |
 | ServerError (500)     | Server-side runtime environment (e.g., RocksDB) exception                         | Check permissions of storage path in server conf/config.yaml. |
 | NotFoundError (404)   | Operating on a non-existent function or invalid Checkpoint                        | Confirm if the function name is correct.                      |
+
+---
+
+## 5. Advanced State API
+
+For typed state (ValueState, ListState, MapState, Keyed\* factories, etc.) and `from_context` / `from_context_auto_codec` usage, see the dedicated document:
+
+- **[Python SDK — Advanced State API](python-sdk-advanced-state-api.md)**

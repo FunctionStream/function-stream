@@ -11,7 +11,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Generic, Iterator, List, Optional, Tuple, TypeVar
+from typing import Any, Generic, Iterator, List, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -54,6 +54,34 @@ class KeyedMapStateFactory(Generic[MK, MV]):
         self._key_group = key_group
         self._map_key_codec = map_key_codec
         self._map_value_codec = map_value_codec
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        map_key_codec: Codec[MK],
+        map_value_codec: Codec[MV],
+    ) -> "KeyedMapStateFactory[MK, MV]":
+        """Create a KeyedMapStateFactory from a context and store name (for keyed operators)."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, namespace, key_group, map_key_codec, map_value_codec)
+
+    @classmethod
+    def from_context_auto_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        value_codec: Codec[MV],
+    ) -> "KeyedMapStateFactory[MK, MV]":
+        """Create a KeyedMapStateFactory with default (bytes) map key codec from context and store name."""
+        from ..codec import BytesCodec
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, namespace, key_group, BytesCodec(), value_codec)
 
     def new_map(self, key_codec: Codec[K]) -> "KeyedMapState[K, MK, MV]":
         ensure_ordered_key_codec(key_codec, "keyed map")

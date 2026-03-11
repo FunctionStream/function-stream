@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Generic, Iterator, Optional, Tuple, TypeVar
+from typing import Any, Generic, Iterator, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -35,6 +35,19 @@ class PriorityQueueState(Generic[T]):
         self._key_group = b""
         self._key = b""
         self._namespace = b""
+
+    @classmethod
+    def from_context(cls, ctx: Any, store_name: str, codec: Codec[T]) -> "PriorityQueueState[T]":
+        """Create a PriorityQueueState from a context and store name."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, codec)
+
+    @classmethod
+    def from_context_auto_codec(cls, ctx: Any, store_name: str) -> "PriorityQueueState[T]":
+        """Create a PriorityQueueState with default (int) codec from context and store name."""
+        from ..codec import IntCodec
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, IntCodec())
 
     def _ck(self, user_key: bytes) -> ComplexKey:
         return ComplexKey(

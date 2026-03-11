@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Generic, Optional, Tuple, TypeVar
+from typing import Any, Callable, Generic, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -37,6 +37,30 @@ class ReducingState(Generic[V]):
             namespace=b"",
             user_key=b"",
         )
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        value_codec: Codec[V],
+        reduce_func: ReduceFunc[V],
+    ) -> "ReducingState[V]":
+        """Create a ReducingState from a context and store name."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, value_codec, reduce_func)
+
+    @classmethod
+    def from_context_auto_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        reduce_func: ReduceFunc[V],
+    ) -> "ReducingState[V]":
+        """Create a ReducingState with default (pickle) value codec from context and store name."""
+        from ..codec import PickleCodec
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, PickleCodec(), reduce_func)
 
     def add(self, value: V) -> None:
         raw = self._store.get(self._ck)

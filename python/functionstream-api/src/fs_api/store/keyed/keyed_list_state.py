@@ -11,7 +11,7 @@
 # limitations under the License.
 
 import struct
-from typing import Generic, List, Optional, TypeVar
+from typing import Any, Generic, List, Optional, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -44,6 +44,34 @@ class KeyedListStateFactory(Generic[V]):
         self._namespace = namespace
         self._key_group = key_group
         self._value_codec = value_codec
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        value_codec: Codec[V],
+    ) -> "KeyedListStateFactory[V]":
+        """Create a KeyedListStateFactory from a context and store name (for keyed operators)."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, namespace, key_group, value_codec)
+
+    @classmethod
+    def from_context_auto_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        value_type: Optional[type] = None,
+    ) -> "KeyedListStateFactory[V]":
+        """Create a KeyedListStateFactory with default codec from context and store name."""
+        from ..codec import PickleCodec, default_codec_for
+        store = ctx.getOrCreateKVStore(store_name)
+        codec = default_codec_for(value_type) if value_type is not None else PickleCodec()
+        return cls(store, namespace, key_group, codec)
 
     def new_list(self, key_codec: Codec[K]) -> "KeyedListState[K, V]":
         ensure_ordered_key_codec(key_codec, "keyed list")

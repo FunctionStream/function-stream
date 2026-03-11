@@ -148,3 +148,11 @@ with FsClient(host="10.0.0.1", port=8080) as client:
 | BadRequestError (400) | YAML 配置不满足规范或 Kafka 参数错误   | 检查 WasmTaskBuilder 中的配置项。      |
 | ServerError (500)     | Server 侧运行时环境（如 RocksDB）异常 | 检查服务端 conf/config.yaml 存储路径权限。 |
 | NotFoundError (404)   | 操作了不存在的函数或无效的 Checkpoint   | 确认函数名是否输入正确。                   |
+
+---
+
+## 五、Advanced State API（高级状态 API）
+
+带类型状态（ValueState、ListState、MapState、Keyed\* 工厂等）及 `from_context` / `from_context_auto_codec` 用法请参见独立文档：
+
+- **[Python SDK — 高级状态 API](python-sdk-advanced-state-api-zh.md)**

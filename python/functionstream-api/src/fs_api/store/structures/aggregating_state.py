@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Generic, Optional, Protocol, Tuple, TypeVar
+from typing import Any, Generic, Optional, Protocol, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -58,6 +58,30 @@ class AggregatingState(Generic[T, ACC, R]):
             namespace=b"",
             user_key=b"",
         )
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        acc_codec: Codec[ACC],
+        agg_func: AggregateFunc[T, ACC, R],
+    ) -> "AggregatingState[T, ACC, R]":
+        """Create an AggregatingState from a context and store name."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, acc_codec, agg_func)
+
+    @classmethod
+    def from_context_auto_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        agg_func: AggregateFunc[T, ACC, R],
+    ) -> "AggregatingState[T, ACC, R]":
+        """Create an AggregatingState with default (pickle) accumulator codec from context and store name."""
+        from ..codec import PickleCodec
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, PickleCodec(), agg_func)
 
     def add(self, value: T) -> None:
         raw = self._store.get(self._ck)

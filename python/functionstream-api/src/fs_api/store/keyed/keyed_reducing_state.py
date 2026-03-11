@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Generic, Optional, Tuple, TypeVar
+from typing import Any, Callable, Generic, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -47,6 +47,36 @@ class KeyedReducingStateFactory(Generic[V]):
         self._key_group = key_group
         self._value_codec = value_codec
         self._reduce_func = reduce_func
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        value_codec: Codec[V],
+        reduce_func: ReduceFunc[V],
+    ) -> "KeyedReducingStateFactory[V]":
+        """Create a KeyedReducingStateFactory from a context and store name (for keyed operators)."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, namespace, key_group, value_codec, reduce_func)
+
+    @classmethod
+    def from_context_auto_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        reduce_func: ReduceFunc[V],
+        value_type: Optional[type] = None,
+    ) -> "KeyedReducingStateFactory[V]":
+        """Create a KeyedReducingStateFactory with default value codec from context and store name."""
+        from ..codec import PickleCodec, default_codec_for
+        store = ctx.getOrCreateKVStore(store_name)
+        codec = default_codec_for(value_type) if value_type is not None else PickleCodec()
+        return cls(store, namespace, key_group, codec, reduce_func)
 
     def new_reducing(self, key_codec: Codec[K]) -> "KeyedReducingState[K, V]":
         ensure_ordered_key_codec(key_codec, "keyed reducing")

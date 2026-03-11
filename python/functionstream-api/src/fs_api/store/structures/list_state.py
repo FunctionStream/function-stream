@@ -11,7 +11,7 @@
 # limitations under the License.
 
 import struct
-from typing import Generic, List, TypeVar
+from typing import Generic, List, TypeVar, Any
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -35,6 +35,19 @@ class ListState(Generic[T]):
             namespace=b"",
             user_key=b"",
         )
+
+    @classmethod
+    def from_context(cls, ctx: Any, store_name: str, codec: Codec[T]) -> "ListState[T]":
+        """Create a ListState from a context and store name."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, codec)
+
+    @classmethod
+    def from_context_auto_codec(cls, ctx: Any, store_name: str) -> "ListState[T]":
+        """Create a ListState with default (pickle) codec from context and store name."""
+        from ..codec import PickleCodec
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, PickleCodec())
 
     def add(self, value: T) -> None:
         payload = self._serialize_one(value)

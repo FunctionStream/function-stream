@@ -56,6 +56,30 @@ class MapState(Generic[K, V]):
         key_codec = default_codec_for(key_type)
         return cls(store, key_codec, value_codec)
 
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        key_codec: Codec[K],
+        value_codec: Codec[V],
+    ) -> "MapState[K, V]":
+        """Create a MapState from a context and store name."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, key_codec, value_codec)
+
+    @classmethod
+    def from_context_auto_key_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        value_codec: Codec[V],
+    ) -> "MapState[K, V]":
+        """Create a MapState with default (bytes) key codec from context and store name."""
+        from ..codec import BytesCodec
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, BytesCodec(), value_codec)
+
     def put(self, key: K, value: V) -> None:
         encoded_key = self._key_codec.encode(key)
         encoded_value = self._value_codec.encode(value)

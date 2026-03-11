@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Generic, Optional, Tuple, TypeVar
+from typing import Any, Generic, Optional, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -34,6 +34,24 @@ class ValueState(Generic[T]):
             namespace=b"",
             user_key=b"",
         )
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        codec: Codec[T],
+    ) -> "ValueState[T]":
+        """Create a ValueState from a context and store name (same as ctx.getOrCreateValueState(store_name, codec))."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, codec)
+
+    @classmethod
+    def from_context_auto_codec(cls, ctx: Any, store_name: str) -> "ValueState[T]":
+        """Create a ValueState with default (pickle) codec from context and store name."""
+        from ..codec import PickleCodec
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, PickleCodec())
 
     def update(self, value: T) -> None:
         self._store.put(self._ck, self._codec.encode(value))

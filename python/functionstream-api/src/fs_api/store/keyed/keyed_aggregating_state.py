@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Generic, Optional, Protocol, Tuple, TypeVar
+from typing import Any, Generic, Optional, Protocol, Tuple, TypeVar
 
 from ..codec import Codec
 from ..complexkey import ComplexKey
@@ -54,6 +54,36 @@ class KeyedAggregatingStateFactory(Generic[T_agg, ACC, R]):
         self._key_group = key_group
         self._acc_codec = acc_codec
         self._agg_func = agg_func
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        acc_codec: Codec[ACC],
+        agg_func: "AggregateFunc[T_agg, ACC, R]",
+    ) -> "KeyedAggregatingStateFactory[T_agg, ACC, R]":
+        """Create a KeyedAggregatingStateFactory from a context and store name (for keyed operators)."""
+        store = ctx.getOrCreateKVStore(store_name)
+        return cls(store, namespace, key_group, acc_codec, agg_func)
+
+    @classmethod
+    def from_context_auto_codec(
+        cls,
+        ctx: Any,
+        store_name: str,
+        namespace: bytes,
+        key_group: bytes,
+        agg_func: "AggregateFunc[T_agg, ACC, R]",
+        acc_type: Optional[type] = None,
+    ) -> "KeyedAggregatingStateFactory[T_agg, ACC, R]":
+        """Create a KeyedAggregatingStateFactory with default accumulator codec from context and store name."""
+        from ..codec import PickleCodec, default_codec_for
+        store = ctx.getOrCreateKVStore(store_name)
+        codec = default_codec_for(acc_type) if acc_type is not None else PickleCodec()
+        return cls(store, namespace, key_group, codec, agg_func)
 
     def new_aggregating(self, key_codec: Codec[K]) -> "KeyedAggregatingState[K, T_agg, ACC, R]":
         ensure_ordered_key_codec(key_codec, "keyed aggregating")
