@@ -66,7 +66,7 @@ impl InputProtocol for NatsProtocol {
         })?;
 
         match sub.next_timeout(timeout) {
-            Some(msg) => {
+            Ok(msg) => {
                 let payload = msg.data.to_vec();
                 Ok(Some(BufferOrEvent::new_buffer(
                     payload,
@@ -75,7 +75,8 @@ impl InputProtocol for NatsProtocol {
                     false,
                 )))
             }
-            None => Ok(None),
+            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => Ok(None),
+            Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send>),
         }
     }
 }
