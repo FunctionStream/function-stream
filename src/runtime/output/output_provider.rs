@@ -88,6 +88,23 @@ impl OutputProvider {
                 let runtime = output_config.output_runtime_config();
                 Ok(Box::new(OutputRunner::new(protocol, output_idx, runtime)))
             }
+            OutputConfig::RocksMQ {
+                path,
+                topic,
+                extra,
+                runtime: _,
+            } => {
+                use crate::runtime::output::output_runner::OutputRunner;
+                use crate::runtime::output::protocol::rocksmq::{
+                    RocksMQOutputProtocol, RocksMQProducerConfig,
+                };
+
+                let rocksmq_config =
+                    RocksMQProducerConfig::new(path.clone(), topic.clone(), extra.clone());
+                let protocol = RocksMQOutputProtocol::new(rocksmq_config);
+                let runtime = output_config.output_runtime_config();
+                Ok(Box::new(OutputRunner::new(protocol, output_idx, runtime)))
+            }
         }
     }
 }

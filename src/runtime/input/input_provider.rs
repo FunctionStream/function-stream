@@ -105,6 +105,30 @@ impl InputProvider {
                     runtime,
                 )))
             }
+            InputConfig::RocksMQ {
+                path,
+                topic,
+                consumer_id,
+                extra,
+                runtime: _,
+            } => {
+                use crate::runtime::input::InputRunner;
+                use crate::runtime::input::protocol::rocksmq::{RocksMQConfig, RocksMQProtocol};
+
+                let rocksmq_config = RocksMQConfig::new(
+                    path.clone(),
+                    topic.clone(),
+                    consumer_id.clone(),
+                    extra.clone(),
+                );
+                let runtime = input_config.input_runtime_config();
+                Ok(Box::new(InputRunner::new(
+                    RocksMQProtocol::new(rocksmq_config),
+                    group_idx,
+                    input_idx,
+                    runtime,
+                )))
+            }
         }
     }
 }

@@ -15,3 +15,4 @@
 // Provides implementations of various output protocols
 
 pub mod kafka;
+pub mod rocksmq;

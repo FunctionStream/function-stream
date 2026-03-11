@@ -144,6 +144,17 @@ pub enum InputConfig {
         #[serde(default)]
         runtime: InputRuntimeConfig,
     },
+    /// RocksMQ (e.g. Milvus embedded MQ). Stub implementation; requires a real client when available.
+    RocksMQ {
+        path: String,
+        topic: String,
+        #[serde(default)]
+        consumer_id: Option<String>,
+        #[serde(flatten)]
+        extra: HashMap<String, String>,
+        #[serde(default)]
+        runtime: InputRuntimeConfig,
+    },
 }
 
 impl InputConfig {
@@ -172,12 +183,14 @@ impl InputConfig {
     pub fn input_type(&self) -> &'static str {
         match self {
             InputConfig::Kafka { .. } => "kafka",
+            InputConfig::RocksMQ { .. } => "rocksmq",
         }
     }
 
     pub fn input_runtime_config(&self) -> InputRuntimeConfig {
         match self {
             InputConfig::Kafka { runtime, .. } => runtime.clone(),
+            InputConfig::RocksMQ { runtime, .. } => runtime.clone(),
         }
     }
 }
@@ -520,6 +533,15 @@ pub enum OutputConfig {
         #[serde(default)]
         runtime: OutputRuntimeConfig,
     },
+    /// RocksMQ (e.g. Milvus embedded MQ). Stub implementation; requires a real client when available.
+    RocksMQ {
+        path: String,
+        topic: String,
+        #[serde(flatten)]
+        extra: HashMap<String, String>,
+        #[serde(default)]
+        runtime: OutputRuntimeConfig,
+    },
 }
 
 impl OutputConfig {
@@ -547,12 +569,14 @@ impl OutputConfig {
     pub fn output_type(&self) -> &'static str {
         match self {
             OutputConfig::Kafka { .. } => "kafka",
+            OutputConfig::RocksMQ { .. } => "rocksmq",
         }
     }
 
     pub fn output_runtime_config(&self) -> OutputRuntimeConfig {
         match self {
             OutputConfig::Kafka { runtime, .. } => runtime.clone(),
+            OutputConfig::RocksMQ { runtime, .. } => runtime.clone(),
         }
     }
 }

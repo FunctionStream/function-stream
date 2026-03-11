@@ -10,5 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod kafka;
-pub mod rocksmq;
+pub mod producer_config;
+pub mod rocksmq_protocol;
+
+pub use producer_config::RocksMQProducerConfig;
+pub use rocksmq_protocol::RocksMQOutputProtocol;

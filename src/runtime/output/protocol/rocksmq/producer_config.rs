@@ -10,5 +10,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod kafka;
-pub mod rocksmq;
+//! RocksMQ producer config (stub). Replace with real client config when available.
+
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub struct RocksMQProducerConfig {
+    pub path: String,
+    pub topic: String,
+    pub properties: HashMap<String, String>,
+}
+
+impl RocksMQProducerConfig {
+    pub fn new(path: String, topic: String, properties: HashMap<String, String>) -> Self {
+        Self {
+            path,
+            topic,
+            properties,
+        }
+    }
+}
