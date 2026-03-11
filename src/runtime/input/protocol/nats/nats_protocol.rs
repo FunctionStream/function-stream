@@ -11,6 +11,7 @@
 // limitations under the License.
 
 use super::config::NatsConfig;
+use super::options;
 use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::input::input_protocol::InputProtocol;
 use std::sync::OnceLock;
@@ -36,7 +37,7 @@ impl InputProtocol for NatsProtocol {
     }
 
     fn init(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        let nc = nats::connect(&self.config.url)
+        let nc = options::nats_connect(&self.config.url, &self.config.properties)
             .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
 
         let sub = if let Some(q) = &self.config.queue_group {

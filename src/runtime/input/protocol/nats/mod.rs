@@ -12,6 +12,7 @@
 
 pub mod config;
 pub mod nats_protocol;
+pub mod options;
 
 pub use config::NatsConfig;
 pub use nats_protocol::NatsProtocol;

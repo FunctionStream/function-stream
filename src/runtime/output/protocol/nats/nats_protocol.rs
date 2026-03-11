@@ -12,6 +12,7 @@
 
 use super::producer_config::NatsProducerConfig;
 use crate::runtime::buffer_and_event::BufferOrEvent;
+use crate::runtime::input::protocol::nats::options;
 use crate::runtime::output::output_protocol::OutputProtocol;
 use std::sync::Mutex;
 
@@ -35,7 +36,7 @@ impl OutputProtocol for NatsOutputProtocol {
     }
 
     fn init(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        let nc = nats::connect(&self.config.url)
+        let nc = options::nats_connect(&self.config.url, &self.config.properties)
             .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
         *self.connection.lock().unwrap() = Some(nc);
         Ok(())
