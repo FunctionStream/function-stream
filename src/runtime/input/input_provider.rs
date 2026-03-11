@@ -105,6 +105,43 @@ impl InputProvider {
                     runtime,
                 )))
             }
+            InputConfig::Pulsar {
+                url,
+                topic,
+                subscription,
+                subscription_type,
+                extra,
+                runtime: _,
+            } => {
+                use crate::runtime::input::InputRunner;
+                use crate::runtime::input::protocol::pulsar::{PulsarConfig, PulsarProtocol};
+
+                if url.is_empty() {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid pulsar url in input config (group #{}): empty (topic: {})",
+                            group_idx + 1,
+                            topic
+                        ),
+                    )) as Box<dyn std::error::Error + Send>);
+                }
+
+                let pulsar_config = PulsarConfig::new(
+                    url.clone(),
+                    topic.clone(),
+                    subscription.clone(),
+                    subscription_type.clone(),
+                    extra.clone(),
+                );
+                let runtime = input_config.input_runtime_config();
+                Ok(Box::new(InputRunner::new(
+                    PulsarProtocol::new(pulsar_config),
+                    group_idx,
+                    input_idx,
+                    runtime,
+                )))
+            }
         }
     }
 }

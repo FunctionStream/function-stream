@@ -10,9 +10,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Output Protocol - Output protocol module
-//
-// Provides implementations of various output protocols
+use std::collections::HashMap;
 
-pub mod kafka;
-pub mod pulsar;
+/// PulsarProducerConfig - Pulsar producer configuration
+#[derive(Debug, Clone)]
+pub struct PulsarProducerConfig {
+    pub url: String,
+    pub topic: String,
+    pub properties: HashMap<String, String>,
+}
+
+impl PulsarProducerConfig {
+    pub fn new(url: String, topic: String, properties: HashMap<String, String>) -> Self {
+        Self {
+            url,
+            topic,
+            properties,
+        }
+    }
+}

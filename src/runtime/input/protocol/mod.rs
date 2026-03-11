@@ -11,3 +11,4 @@
 // limitations under the License.
 
 pub mod kafka;
+pub mod pulsar;
