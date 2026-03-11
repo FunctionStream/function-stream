@@ -145,7 +145,10 @@ func (s *KeyedPriorityQueueState[V]) Poll() (V, bool, error) {
 		return val, found, err
 	}
 
-	userKey, _ := s.factory.valueCodec.Encode(val)
+	userKey, err := s.factory.valueCodec.Encode(val)
+	if err != nil {
+		return val, true, fmt.Errorf("encode pq element for delete failed: %w", err)
+	}
 	ck := api.ComplexKey{
 		KeyGroup:  s.factory.groupKey,
 		Key:       s.primaryKey,
@@ -188,7 +191,10 @@ func (s *KeyedPriorityQueueState[V]) All() iter.Seq[V] {
 				return
 			}
 
-			v, _ := s.factory.valueCodec.Decode(userKey)
+			v, err := s.factory.valueCodec.Decode(userKey)
+			if err != nil {
+				continue // skip entry on decode error to avoid yielding corrupted zero values
+			}
 			if !yield(v) {
 				return
 			}

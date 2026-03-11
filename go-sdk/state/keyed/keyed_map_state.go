@@ -181,8 +181,14 @@ func (s *KeyedMapState[MK, MV]) All() iter.Seq2[MK, MV] {
 				return
 			}
 
-			k, _ := s.factory.mapKeyCodec.Decode(keyRaw)
-			v, _ := s.factory.mapValueCodec.Decode(valRaw)
+			k, err := s.factory.mapKeyCodec.Decode(keyRaw)
+			if err != nil {
+				continue // skip entry on decode error to avoid yielding corrupted zero values
+			}
+			v, err := s.factory.mapValueCodec.Decode(valRaw)
+			if err != nil {
+				continue
+			}
 
 			if !yield(k, v) {
 				return

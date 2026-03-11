@@ -115,7 +115,10 @@ func (q *PriorityQueueState[T]) Poll() (T, bool, error) {
 		return val, found, err
 	}
 
-	userKey, _ := q.valueCodec.Encode(val)
+	userKey, err := q.valueCodec.Encode(val)
+	if err != nil {
+		return val, true, fmt.Errorf("encode pq element for delete failed: %w", err)
+	}
 	if err = q.store.Delete(q.ck(userKey)); err != nil {
 		return val, true, err
 	}
@@ -149,7 +152,10 @@ func (q *PriorityQueueState[T]) All() iter.Seq[T] {
 				return
 			}
 
-			v, _ := q.valueCodec.Decode(userKey)
+			v, err := q.valueCodec.Decode(userKey)
+			if err != nil {
+				continue // skip entry on decode error to avoid yielding corrupted zero values
+			}
 			if !yield(v) {
 				return
 			}

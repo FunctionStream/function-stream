@@ -156,8 +156,14 @@ func (m *MapState[K, V]) All() iter.Seq2[K, V] {
 				return
 			}
 
-			k, _ := m.keyCodec.Decode(keyRaw)
-			v, _ := m.valueCodec.Decode(valRaw)
+			k, err := m.keyCodec.Decode(keyRaw)
+			if err != nil {
+				continue // skip entry on decode error to avoid yielding corrupted zero values
+			}
+			v, err := m.valueCodec.Decode(valRaw)
+			if err != nil {
+				continue
+			}
 
 			if !yield(k, v) {
 				return
