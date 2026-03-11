@@ -54,12 +54,17 @@ impl InputProtocol for PulsarProtocol {
                 let mut consumer_opt = consumer_cell.borrow_mut();
 
                 if consumer_opt.is_none() {
-                    let rt = tokio::runtime::Runtime::new()
-                        .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
+                    let rt = tokio::runtime::Runtime::new().map_err(|e| {
+                        Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>
+                    })?;
                     let url = self.config.url.clone();
                     let topic = self.config.topic.clone();
                     let subscription = self.config.subscription.clone();
-                    let sub_type = self.config.subscription_type.as_deref().unwrap_or("Exclusive");
+                    let sub_type = self
+                        .config
+                        .subscription_type
+                        .as_deref()
+                        .unwrap_or("Exclusive");
                     let sub_type_enum = match sub_type.to_lowercase().as_str() {
                         "shared" => SubType::Shared,
                         "key_shared" => SubType::KeyShared,
@@ -78,7 +83,9 @@ impl InputProtocol for PulsarProtocol {
                             let consumer = builder.build().await?;
                             Result::<_, pulsar::Error>::Ok(consumer)
                         })
-                        .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
+                        .map_err(|e| {
+                            Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>
+                        })?;
 
                     *rt_opt = Some(rt);
                     *consumer_opt = Some(consumer);
@@ -93,7 +100,9 @@ impl InputProtocol for PulsarProtocol {
                     let next_fut = consumer.next();
                     match tokio::time::timeout(Duration::from_millis(timeout_ms), next_fut).await {
                         Ok(Some(Ok(msg))) => {
-                            let payload = msg.deserialize().unwrap_or_else(|_| msg.payload.data.clone());
+                            let payload = msg
+                                .deserialize()
+                                .unwrap_or_else(|_| msg.payload.data.clone());
                             let _ = consumer.ack(&msg).await;
                             Some(Ok(payload))
                         }
@@ -109,7 +118,9 @@ impl InputProtocol for PulsarProtocol {
                         false,
                         false,
                     ))),
-                    Some(Err(e)) => Err(Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>),
+                    Some(Err(e)) => {
+                        Err(Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)
+                    }
                     None => Ok(None),
                 }
             })

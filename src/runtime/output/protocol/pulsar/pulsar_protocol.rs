@@ -48,22 +48,22 @@ impl OutputProtocol for PulsarOutputProtocol {
                     let mut producer_opt = producer_cell.borrow_mut();
 
                     if producer_opt.is_none() {
-                        let rt = tokio::runtime::Runtime::new()
-                            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
+                        let rt = tokio::runtime::Runtime::new().map_err(|e| {
+                            Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>
+                        })?;
                         let url = self.config.url.clone();
                         let topic = self.config.topic.clone();
 
                         let producer: Producer<TokioExecutor> = rt
                             .block_on(async {
                                 let pulsar = Pulsar::builder(&url, TokioExecutor).build().await?;
-                                let producer = pulsar
-                                    .producer()
-                                    .with_topic(&topic)
-                                    .build()
-                                    .await?;
+                                let producer = pulsar.producer().with_topic(&topic).build().await?;
                                 Result::<_, pulsar::Error>::Ok(producer)
                             })
-                            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
+                            .map_err(|e| {
+                                Box::new(std::io::Error::other(e))
+                                    as Box<dyn std::error::Error + Send>
+                            })?;
 
                         *rt_opt = Some(rt);
                         *producer_opt = Some(producer);
@@ -79,7 +79,8 @@ impl OutputProtocol for PulsarOutputProtocol {
                             .send()
                             .await
                             .map_err(|e| {
-                                Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>
+                                Box::new(std::io::Error::other(e))
+                                    as Box<dyn std::error::Error + Send>
                             })
                     })?;
                 })
