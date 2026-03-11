@@ -14,14 +14,14 @@ use super::config::PulsarConfig;
 use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::input::input_protocol::InputProtocol;
 use futures::StreamExt;
-use pulsar::consumer::SubType;
+use pulsar::message::proto::command_subscribe::SubType;
 use pulsar::{Consumer, Pulsar, TokioExecutor};
 use std::cell::RefCell;
 use std::time::Duration;
 
 thread_local! {
-    static PULSAR_RT: RefCell<Option<tokio::runtime::Runtime>> = RefCell::new(None);
-    static PULSAR_CONSUMER: RefCell<Option<Consumer<Vec<u8>, TokioExecutor>>> = RefCell::new(None);
+    static PULSAR_RT: RefCell<Option<tokio::runtime::Runtime>> = const { RefCell::new(None) };
+    static PULSAR_CONSUMER: RefCell<Option<Consumer<Vec<u8>, TokioExecutor>>> = const { RefCell::new(None) };
 }
 
 pub struct PulsarProtocol {
@@ -75,7 +75,7 @@ impl InputProtocol for PulsarProtocol {
                     let consumer: Consumer<Vec<u8>, _> = rt
                         .block_on(async {
                             let pulsar = Pulsar::builder(&url, TokioExecutor).build().await?;
-                            let mut builder = pulsar
+                            let builder = pulsar
                                 .consumer()
                                 .with_topic(&topic)
                                 .with_subscription(&subscription)
@@ -100,9 +100,7 @@ impl InputProtocol for PulsarProtocol {
                     let next_fut = consumer.next();
                     match tokio::time::timeout(Duration::from_millis(timeout_ms), next_fut).await {
                         Ok(Some(Ok(msg))) => {
-                            let payload = msg
-                                .deserialize()
-                                .unwrap_or_else(|_| msg.payload.data.clone());
+                            let payload = msg.payload.data.clone();
                             let _ = consumer.ack(&msg).await;
                             Some(Ok(payload))
                         }

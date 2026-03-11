@@ -17,8 +17,8 @@ use pulsar::{Producer, Pulsar, TokioExecutor};
 use std::cell::RefCell;
 
 thread_local! {
-    static PULSAR_OUT_RT: RefCell<Option<tokio::runtime::Runtime>> = RefCell::new(None);
-    static PULSAR_PRODUCER: RefCell<Option<Producer<TokioExecutor>>> = RefCell::new(None);
+    static PULSAR_OUT_RT: RefCell<Option<tokio::runtime::Runtime>> = const { RefCell::new(None) };
+    static PULSAR_PRODUCER: RefCell<Option<Producer<TokioExecutor>>> = const { RefCell::new(None) };
 }
 
 pub struct PulsarOutputProtocol {
@@ -43,7 +43,7 @@ impl OutputProtocol for PulsarOutputProtocol {
     fn send(&self, data: BufferOrEvent) -> Result<(), Box<dyn std::error::Error + Send>> {
         if let Some(payload) = data.into_buffer() {
             PULSAR_OUT_RT.with(|rt_cell| {
-                PULSAR_PRODUCER.with(|producer_cell| {
+                PULSAR_PRODUCER.with(|producer_cell| -> Result<(), Box<dyn std::error::Error + Send>> {
                     let mut rt_opt = rt_cell.borrow_mut();
                     let mut producer_opt = producer_cell.borrow_mut();
 
@@ -76,15 +76,16 @@ impl OutputProtocol for PulsarOutputProtocol {
                         producer
                             .create_message()
                             .with_content(payload)
-                            .send()
+                            .send_non_blocking()
                             .await
                             .map_err(|e| {
                                 Box::new(std::io::Error::other(e))
                                     as Box<dyn std::error::Error + Send>
                             })
                     })?;
+                    Ok(())
                 })
-            });
+            })?;
         }
         Ok(())
     }
