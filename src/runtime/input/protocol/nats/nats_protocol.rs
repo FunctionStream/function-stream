@@ -36,9 +36,8 @@ impl InputProtocol for NatsProtocol {
     }
 
     fn init(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        let nc = nats::connect(&self.config.url).map_err(|e| {
-            Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>
-        })?;
+        let nc = nats::connect(&self.config.url)
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
 
         let sub = if let Some(q) = &self.config.queue_group {
             nc.queue_subscribe(&self.config.subject, q).map_err(|e| {

@@ -35,9 +35,8 @@ impl OutputProtocol for NatsOutputProtocol {
     }
 
     fn init(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
-        let nc = nats::connect(&self.config.url).map_err(|e| {
-            Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>
-        })?;
+        let nc = nats::connect(&self.config.url)
+            .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
         *self.connection.lock().unwrap() = Some(nc);
         Ok(())
     }
@@ -49,8 +48,9 @@ impl OutputProtocol for NatsOutputProtocol {
                 Box::new(std::io::Error::other("NATS connection not initialized"))
                     as Box<dyn std::error::Error + Send>
             })?;
-            nc.publish(&self.config.subject, &payload)
-                .map_err(|e| Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>)?;
+            nc.publish(&self.config.subject, &payload).map_err(|e| {
+                Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>
+            })?;
         }
         Ok(())
     }
