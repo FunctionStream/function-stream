@@ -43,48 +43,53 @@ impl OutputProtocol for PulsarOutputProtocol {
     fn send(&self, data: BufferOrEvent) -> Result<(), Box<dyn std::error::Error + Send>> {
         if let Some(payload) = data.into_buffer() {
             PULSAR_OUT_RT.with(|rt_cell| {
-                PULSAR_PRODUCER.with(|producer_cell| -> Result<(), Box<dyn std::error::Error + Send>> {
-                    let mut rt_opt = rt_cell.borrow_mut();
-                    let mut producer_opt = producer_cell.borrow_mut();
+                PULSAR_PRODUCER.with(
+                    |producer_cell| -> Result<(), Box<dyn std::error::Error + Send>> {
+                        let mut rt_opt = rt_cell.borrow_mut();
+                        let mut producer_opt = producer_cell.borrow_mut();
 
-                    if producer_opt.is_none() {
-                        let rt = tokio::runtime::Runtime::new().map_err(|e| {
-                            Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send>
-                        })?;
-                        let url = self.config.url.clone();
-                        let topic = self.config.topic.clone();
-
-                        let producer: Producer<TokioExecutor> = rt
-                            .block_on(async {
-                                let pulsar = Pulsar::builder(&url, TokioExecutor).build().await?;
-                                let producer = pulsar.producer().with_topic(&topic).build().await?;
-                                Result::<_, pulsar::Error>::Ok(producer)
-                            })
-                            .map_err(|e| {
+                        if producer_opt.is_none() {
+                            let rt = tokio::runtime::Runtime::new().map_err(|e| {
                                 Box::new(std::io::Error::other(e))
                                     as Box<dyn std::error::Error + Send>
                             })?;
+                            let url = self.config.url.clone();
+                            let topic = self.config.topic.clone();
 
-                        *rt_opt = Some(rt);
-                        *producer_opt = Some(producer);
-                    }
+                            let producer: Producer<TokioExecutor> = rt
+                                .block_on(async {
+                                    let pulsar =
+                                        Pulsar::builder(&url, TokioExecutor).build().await?;
+                                    let producer =
+                                        pulsar.producer().with_topic(&topic).build().await?;
+                                    Result::<_, pulsar::Error>::Ok(producer)
+                                })
+                                .map_err(|e| {
+                                    Box::new(std::io::Error::other(e))
+                                        as Box<dyn std::error::Error + Send>
+                                })?;
 
-                    let rt = rt_opt.as_ref().unwrap();
-                    let producer = producer_opt.as_mut().unwrap();
+                            *rt_opt = Some(rt);
+                            *producer_opt = Some(producer);
+                        }
 
-                    rt.block_on(async {
-                        producer
-                            .create_message()
-                            .with_content(payload)
-                            .send_non_blocking()
-                            .await
-                            .map_err(|e| {
-                                Box::new(std::io::Error::other(e))
-                                    as Box<dyn std::error::Error + Send>
-                            })
-                    })?;
-                    Ok(())
-                })
+                        let rt = rt_opt.as_ref().unwrap();
+                        let producer = producer_opt.as_mut().unwrap();
+
+                        rt.block_on(async {
+                            producer
+                                .create_message()
+                                .with_content(payload)
+                                .send_non_blocking()
+                                .await
+                                .map_err(|e| {
+                                    Box::new(std::io::Error::other(e))
+                                        as Box<dyn std::error::Error + Send>
+                                })
+                        })?;
+                        Ok(())
+                    },
+                )
             })?;
         }
         Ok(())
