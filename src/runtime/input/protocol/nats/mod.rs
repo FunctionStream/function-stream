@@ -10,9 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Output Protocol - Output protocol module
-//
-// Provides implementations of various output protocols
+pub mod config;
+pub mod nats_protocol;
 
-pub mod kafka;
-pub mod nats;
+pub use config::NatsConfig;
+pub use nats_protocol::NatsProtocol;

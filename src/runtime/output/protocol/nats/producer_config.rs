@@ -10,9 +10,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Output Protocol - Output protocol module
-//
-// Provides implementations of various output protocols
+use std::collections::HashMap;
 
-pub mod kafka;
-pub mod nats;
+/// NatsProducerConfig - NATS producer configuration
+#[derive(Debug, Clone)]
+pub struct NatsProducerConfig {
+    pub url: String,
+    pub subject: String,
+    pub properties: HashMap<String, String>,
+}
+
+impl NatsProducerConfig {
+    pub fn new(url: String, subject: String, properties: HashMap<String, String>) -> Self {
+        Self {
+            url,
+            subject,
+            properties,
+        }
+    }
+}

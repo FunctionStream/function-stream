@@ -144,6 +144,16 @@ pub enum InputConfig {
         #[serde(default)]
         runtime: InputRuntimeConfig,
     },
+    Nats {
+        url: String,
+        subject: String,
+        #[serde(default)]
+        queue_group: Option<String>,
+        #[serde(flatten)]
+        extra: HashMap<String, String>,
+        #[serde(default)]
+        runtime: InputRuntimeConfig,
+    },
 }
 
 impl InputConfig {
@@ -172,12 +182,14 @@ impl InputConfig {
     pub fn input_type(&self) -> &'static str {
         match self {
             InputConfig::Kafka { .. } => "kafka",
+            InputConfig::Nats { .. } => "nats",
         }
     }
 
     pub fn input_runtime_config(&self) -> InputRuntimeConfig {
         match self {
             InputConfig::Kafka { runtime, .. } => runtime.clone(),
+            InputConfig::Nats { runtime, .. } => runtime.clone(),
         }
     }
 }
@@ -520,6 +532,14 @@ pub enum OutputConfig {
         #[serde(default)]
         runtime: OutputRuntimeConfig,
     },
+    Nats {
+        url: String,
+        subject: String,
+        #[serde(flatten)]
+        extra: HashMap<String, String>,
+        #[serde(default)]
+        runtime: OutputRuntimeConfig,
+    },
 }
 
 impl OutputConfig {
@@ -547,12 +567,14 @@ impl OutputConfig {
     pub fn output_type(&self) -> &'static str {
         match self {
             OutputConfig::Kafka { .. } => "kafka",
+            OutputConfig::Nats { .. } => "nats",
         }
     }
 
     pub fn output_runtime_config(&self) -> OutputRuntimeConfig {
         match self {
             OutputConfig::Kafka { runtime, .. } => runtime.clone(),
+            OutputConfig::Nats { runtime, .. } => runtime.clone(),
         }
     }
 }

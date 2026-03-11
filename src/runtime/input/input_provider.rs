@@ -105,6 +105,41 @@ impl InputProvider {
                     runtime,
                 )))
             }
+            InputConfig::Nats {
+                url,
+                subject,
+                queue_group,
+                extra,
+                runtime: _,
+            } => {
+                use crate::runtime::input::InputRunner;
+                use crate::runtime::input::protocol::nats::{NatsConfig, NatsProtocol};
+
+                if url.is_empty() {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid nats url in input config (group #{}): empty (subject: {})",
+                            group_idx + 1,
+                            subject
+                        ),
+                    )) as Box<dyn std::error::Error + Send>);
+                }
+
+                let nats_config = NatsConfig::new(
+                    url.clone(),
+                    subject.clone(),
+                    queue_group.clone(),
+                    extra.clone(),
+                );
+                let runtime = input_config.input_runtime_config();
+                Ok(Box::new(InputRunner::new(
+                    NatsProtocol::new(nats_config),
+                    group_idx,
+                    input_idx,
+                    runtime,
+                )))
+            }
         }
     }
 }
