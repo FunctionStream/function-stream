@@ -77,15 +77,13 @@ pub fn build_nats_options(properties: &HashMap<String, String>) -> nats::Options
         opts
     };
 
-    let opts = if let Some(ca) =
+    if let Some(ca) =
         get_prop(properties, "root_certificate").or_else(|| get_prop(properties, "tls_ca"))
     {
         opts.add_root_certificate(Path::new(ca))
     } else {
         opts
-    };
-
-    opts
+    }
 }
 
 /// Connect to NATS using URL and properties (auth, name, TLS, etc.).
