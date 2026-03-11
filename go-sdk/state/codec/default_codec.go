@@ -42,13 +42,13 @@ func DefaultCodecFor[V any]() (Codec[V], error) {
 	case reflect.String:
 		return any(StringCodec{}).(Codec[V]), nil
 	case reflect.Int:
-		return any(Int64Codec{}).(Codec[V]), nil
+		return any(IntCodec{}).(Codec[V]), nil
 	case reflect.Int8:
 		return any(Int8Codec{}).(Codec[V]), nil
 	case reflect.Int16:
 		return any(Int16Codec{}).(Codec[V]), nil
 	case reflect.Uint:
-		return any(Uint64Codec{}).(Codec[V]), nil
+		return any(UintCodec{}).(Codec[V]), nil
 	case reflect.Uint8:
 		return any(Uint8Codec{}).(Codec[V]), nil
 	case reflect.Uint16:
