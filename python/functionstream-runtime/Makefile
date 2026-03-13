@@ -88,8 +88,9 @@ venv: $(PYTHON)
 install-deps: venv
 	$(call log_info, Installing build dependencies...)
 	@$(PIP) install componentize-py
-	@# [FIX 3] Use PYTHON_ROOT to find the sibling 'functionstream-api'
+	@# [FIX 3] Use PYTHON_ROOT to find the sibling 'functionstream-api' and 'functionstream-api-advanced'
 	@$(PIP) install -e $(PYTHON_ROOT)/functionstream-api
+	@$(PIP) install -e $(PYTHON_ROOT)/functionstream-api-advanced
 	@$(call log_success, Dependencies installed.)
 
 # Build the wasm component

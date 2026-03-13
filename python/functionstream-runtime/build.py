@@ -39,6 +39,7 @@ TARGET_DIR = SCRIPT_DIR / "target"
 WASM_OUTPUT = TARGET_DIR / "functionstream-python-runtime.wasm"
 
 FS_API_DIR = SCRIPT_DIR.parent / "functionstream-api"
+FS_API_ADVANCED_DIR = SCRIPT_DIR.parent / "functionstream-api-advanced"
 
 WORLD_NAME = "processor-runtime"
 MAIN_MODULE = "fs_runtime.runner"
@@ -113,6 +114,10 @@ class WasmBuilder:
         subprocess.run([
             self.python_exec, "-m", "pip", "install",
             "--target", str(DEPENDENCIES_DIR), str(FS_API_DIR)
+        ], check=True, capture_output=True)
+        subprocess.run([
+            self.python_exec, "-m", "pip", "install",
+            "--target", str(DEPENDENCIES_DIR), "--no-deps", str(FS_API_ADVANCED_DIR)
         ], check=True, capture_output=True)
 
     def build_wasm(self):
