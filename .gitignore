@@ -22,6 +22,8 @@ examples/python-processor/build/**
 examples/python-processor/dependencies/**
 python/functionstream-client/src/fs_client/_proto/
 python/functionstream-api/build
+python/functionstream-api-advanced/build
+
 
 
 # python Runtime - Build artifacts and intermediate files
