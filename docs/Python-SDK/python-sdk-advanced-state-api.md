@@ -21,7 +21,7 @@
 
 # Python SDK — Advanced State API
 
-This document describes the **high-level state API** for the Python SDK: typed state abstractions (ValueState, ListState, MapState, etc.) built on top of the low-level KvStore, with serialization via **codecs** and optional **keyed state** per primary key. The design aligns with the [Go SDK Advanced State API](../Go-SDK/go-sdk-guide.md#7-advanced-state-api).
+This document describes the **high-level state API** for the Python SDK: typed state abstractions (ValueState, ListState, MapState, etc.) built on top of the low-level KvStore, with serialization via **codecs** and optional **keyed state** per primary key.
 
 **Two separate libraries:** The advanced state API is provided by **functionstream-api-advanced**, which depends on the low-level **functionstream-api**. Install with: `pip install functionstream-api functionstream-api-advanced`. Import Codec, ValueState, ListState, MapState, etc. from `fs_api_advanced`.
 
@@ -34,7 +34,7 @@ This document describes the **high-level state API** for the Python SDK: typed s
 
 ## 1. Overview
 
-Use the advanced state API when you need structured state (single value, list, map, priority queue, aggregation, reduction) without manual byte encoding or key layout. You can create state either from the **runtime Context** (e.g. `ctx.getOrCreateValueState(...)` when using functionstream-runtime) or via **type-level constructors** on the state class (recommended for clarity and reuse, same pattern as the Go SDK).
+Use the advanced state API when you need structured state (single value, list, map, priority queue, aggregation, reduction) without manual byte encoding or key layout. You can create state either from the **runtime Context** (e.g. `ctx.getOrCreateValueState(...)` when using functionstream-runtime) or via **type-level constructors** on the state class (recommended for clarity and reuse).
 
 ---
 
@@ -44,7 +44,7 @@ Use the advanced state API when you need structured state (single value, list, m
 
 When using **functionstream-api-advanced**, the runtime Context implementation (e.g. WitContext in functionstream-runtime) provides `getOrCreateValueState(store_name, codec)`, `getOrCreateValueStateAutoCodec(store_name)`, and the same pattern for ListState, MapState, PriorityQueueState, AggregatingState, ReducingState, and all Keyed\* factories; these delegate to the type-level `from_context` / `from_context_auto_codec` methods below.
 
-### 2.2 From the state type (recommended, same as Go SDK)
+### 2.2 From the state type (recommended)
 
 Each state type and keyed factory provides:
 
@@ -95,9 +95,15 @@ All of the above can also be obtained via the corresponding `ctx.getOrCreate*` m
 
 You can also use the corresponding `ctx.getOrCreateKeyed*Factory(...)` methods, which delegate to these constructors.
 
+### 4.3 KeyedValueState
+
+KeyedValueState requires only a **value codec**; no ordered codec. Create state from the factory with `factory.new_keyed_value(primary_key, state_name="")`, yielding `KeyedValueState[V]`. State methods: `update(value)`, `value()` (returns `Optional[V]`), `clear()`. The primary key is fixed at creation time via `primary_key` (bytes).
+
 ---
 
-## 5. Example: ValueState with from_context_auto_codec
+## 5. Examples
+
+### 5.1 ValueState (from_context_auto_codec)
 
 Import ValueState from **fs_api_advanced** (Codec, ListState, MapState, etc. are in the same package):
 
@@ -108,8 +114,32 @@ from fs_api_advanced import ValueState
 class CounterProcessor(FSProcessorDriver):
     def process(self, ctx: Context, source_id: int, data: bytes):
         state = ValueState.from_context_auto_codec(ctx, "my-store")
-        cur, found = state.value()
-        if not found or cur is None:
+        cur = state.value()
+        if cur is None:
+            cur = 0
+        state.update(cur + 1)
+        ctx.emit(str(cur + 1).encode(), 0)
+```
+
+### 5.2 KeyedValueState (keyed operator)
+
+When the stream is partitioned by key, create the factory in `init` and obtain state per record’s `primary_key` in `process`, then use `update(value)` / `value()` / `clear()`:
+
+```python
+from fs_api import FSProcessorDriver, Context
+from fs_api_advanced import KeyedValueStateFactory
+
+class KeyedCounterProcessor(FSProcessorDriver):
+    def init(self, ctx: Context, config: dict):
+        self._factory = KeyedValueStateFactory.from_context_auto_codec(
+            ctx, "counters", b"", b"by_key", value_type=int
+        )
+
+    def process(self, ctx: Context, source_id: int, data: bytes):
+        primary_key = data[:8]
+        state = self._factory.new_keyed_value(primary_key, "count")
+        cur = state.value()
+        if cur is None:
             cur = 0
         state.update(cur + 1)
         ctx.emit(str(cur + 1).encode(), 0)
@@ -122,4 +152,3 @@ Same pattern for other state types: use `XxxState.from_context(ctx, store_name, 
 ## 6. See also
 
 - [Python SDK Guide](python-sdk-guide.md) — main guide for fs_api, fs_client, and basic Context/KvStore usage.
-- [Go SDK Guide — Advanced State API](../Go-SDK/go-sdk-guide.md#7-advanced-state-api) — equivalent API in the Go SDK.

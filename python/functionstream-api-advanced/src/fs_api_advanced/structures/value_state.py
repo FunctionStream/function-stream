@@ -53,7 +53,7 @@ class ValueState(Generic[T]):
     def update(self, value: T) -> None:
         self._store.put(self._ck, self._codec.encode(value))
 
-    def value(self) -> Tuple[Optional[T], bool]:
+    def value(self) -> Optional[T]:
         raw = self._store.get(self._ck)
         if raw is None:
             return (None, False)

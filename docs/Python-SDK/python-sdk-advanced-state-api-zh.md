@@ -21,7 +21,7 @@
 
 # Python SDK — 高级状态 API
 
-本文档介绍 Python SDK 的**高级状态 API**：基于底层 KvStore 的带类型状态抽象（ValueState、ListState、MapState 等），通过 **codec** 序列化，并支持按主键的 **keyed state**。设计与 [Go SDK 高级状态 API](../Go-SDK/go-sdk-guide.md#7-advanced-state-api) 对齐。
+本文档介绍 Python SDK 的**高级状态 API**：基于底层 KvStore 的带类型状态抽象（ValueState、ListState、MapState 等），通过 **codec** 序列化，并支持按主键的 **keyed state**。
 
 **两个独立库：** 高级状态 API 由 **functionstream-api-advanced** 提供，依赖低阶 **functionstream-api**。安装：`pip install functionstream-api functionstream-api-advanced`。使用时从 `fs_api_advanced` 导入 Codec、ValueState、ListState、MapState 等。
 
@@ -34,7 +34,7 @@
 
 ## 1. 概述
 
-当需要结构化状态（单值、列表、Map、优先队列、聚合、归约）而不想手写字节编码或 key 布局时，可使用高级状态 API。创建方式有两种：通过**运行时的 Context**（如使用 functionstream-runtime 时 `ctx.getOrCreateValueState(...)`）或通过状态类型上的**类型级构造方法**（推荐，便于复用，与 Go SDK 用法一致）。
+当需要结构化状态（单值、列表、Map、优先队列、聚合、归约）而不想手写字节编码或 key 布局时，可使用高级状态 API。创建方式有两种：通过**运行时的 Context**（如使用 functionstream-runtime 时 `ctx.getOrCreateValueState(...)`）或通过状态类型上的**类型级构造方法**（推荐，便于复用）。
 
 ---
 
@@ -44,7 +44,7 @@
 
 使用 **functionstream-api-advanced** 时，运行时的 Context 实现（如 functionstream-runtime 的 WitContext）会提供 `getOrCreateValueState(store_name, codec)`、`getOrCreateValueStateAutoCodec(store_name)` 以及 ListState、MapState、PriorityQueueState、AggregatingState、ReducingState 与所有 Keyed\* 工厂的对应方法，内部委托给下面所述的类型级 `from_context` / `from_context_auto_codec`。
 
-### 2.2 通过状态类型（推荐，与 Go SDK 一致）
+### 2.2 通过状态类型（推荐）
 
 每种状态类型和 keyed 工厂提供：
 
@@ -95,9 +95,15 @@
 
 也可使用 Context 的 `ctx.getOrCreateKeyed*Factory(...)` 方法，其内部会委托给上述构造方法。
 
+### 4.3 KeyedValueState
+
+KeyedValueState 只需 **value codec**，不要求有序。工厂创建状态：`factory.new_keyed_value(primary_key, state_name="")`，得到 `KeyedValueState[V]`。状态方法：`update(value)`、`value()`（返回 `Optional[V]`）、`clear()`。主键由创建时传入的 `primary_key`（bytes）固定。
+
 ---
 
-## 5. 示例：使用 from_context_auto_codec 的 ValueState
+## 5. 示例
+
+### 5.1 ValueState（from_context_auto_codec）
 
 从 **fs_api_advanced** 导入 ValueState（Codec、ListState、MapState 等同此包）：
 
@@ -108,18 +114,41 @@ from fs_api_advanced import ValueState
 class CounterProcessor(FSProcessorDriver):
     def process(self, ctx: Context, source_id: int, data: bytes):
         state = ValueState.from_context_auto_codec(ctx, "my-store")
-        cur, found = state.value()
-        if not found or cur is None:
+        cur = state.value()
+        if cur is None:
             cur = 0
         state.update(cur + 1)
         ctx.emit(str(cur + 1).encode(), 0)
 ```
 
-其他状态类型用法相同：按上表使用 `XxxState.from_context(ctx, store_name, ...)` 或 `XxxState.from_context_auto_codec(ctx, store_name)`。
+### 5.2 KeyedValueState（keyed 算子）
+
+流按 key 分区时，在 `init` 中创建工厂，在 `process` 中按当前记录的 `primary_key` 取状态，再 `update(value)` / `value()` / `clear()`：
+
+```python
+from fs_api import FSProcessorDriver, Context
+from fs_api_advanced import KeyedValueStateFactory
+
+class KeyedCounterProcessor(FSProcessorDriver):
+    def init(self, ctx: Context, config: dict):
+        self._factory = KeyedValueStateFactory.from_context_auto_codec(
+            ctx, "counters", b"", b"by_key", value_type=int
+        )
+
+    def process(self, ctx: Context, source_id: int, data: bytes):
+        primary_key = data[:8]
+        state = self._factory.new_keyed_value(primary_key, "count")
+        cur = state.value()
+        if cur is None:
+            cur = 0
+        state.update(cur + 1)
+        ctx.emit(str(cur + 1).encode(), 0)
+```
+
+其他状态类型按上表使用 `XxxState.from_context(ctx, store_name, ...)` 或 `XxxState.from_context_auto_codec(ctx, store_name)`。
 
 ---
 
 ## 6. 参见
 
 - [Python SDK 指南](python-sdk-guide-zh.md) — fs_api、fs_client 及 Context/KvStore 基础用法。
-- [Go SDK 指南 — 高级状态 API](../Go-SDK/go-sdk-guide.md#7-advanced-state-api) — Go SDK 中的等价 API。
