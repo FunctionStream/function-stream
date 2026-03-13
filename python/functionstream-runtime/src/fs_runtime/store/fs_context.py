@@ -14,21 +14,6 @@ from typing import Dict, List, Tuple
 
 from fs_api.context import Context
 from fs_api.store import KvStore
-from fs_api_advanced import (
-    Codec,
-    ValueState,
-    MapState,
-    ListState,
-    PriorityQueueState,
-    AggregatingState,
-    ReducingState,
-    KeyedListStateFactory,
-    KeyedValueStateFactory,
-    KeyedMapStateFactory,
-    KeyedPriorityQueueStateFactory,
-    KeyedAggregatingStateFactory,
-    KeyedReducingStateFactory,
-)
 
 from .fs_collector import emit, emit_watermark
 from .fs_store import FSStore
@@ -74,111 +59,6 @@ class WitContext(Context):
 
     def getConfig(self) -> Dict[str, str]:
         return self._CONFIG.copy()
-
-    def getOrCreateValueState(self, store_name: str, codec: Codec) -> ValueState:
-        return ValueState.from_context(self, store_name, codec)
-
-    def getOrCreateValueStateAutoCodec(self, store_name: str) -> ValueState:
-        return ValueState.from_context_auto_codec(self, store_name)
-
-    def getOrCreateMapState(self, store_name: str, key_codec: Codec, value_codec: Codec) -> MapState:
-        return MapState.from_context(self, store_name, key_codec, value_codec)
-
-    def getOrCreateMapStateAutoKeyCodec(self, store_name: str, value_codec: Codec) -> MapState:
-        return MapState.from_context_auto_key_codec(self, store_name, value_codec)
-
-    def getOrCreateListState(self, store_name: str, codec: Codec) -> ListState:
-        return ListState.from_context(self, store_name, codec)
-
-    def getOrCreateListStateAutoCodec(self, store_name: str) -> ListState:
-        return ListState.from_context_auto_codec(self, store_name)
-
-    def getOrCreatePriorityQueueState(self, store_name: str, codec: Codec) -> PriorityQueueState:
-        return PriorityQueueState.from_context(self, store_name, codec)
-
-    def getOrCreatePriorityQueueStateAutoCodec(self, store_name: str) -> PriorityQueueState:
-        return PriorityQueueState.from_context_auto_codec(self, store_name)
-
-    def getOrCreateAggregatingState(
-        self, store_name: str, acc_codec: Codec, agg_func: object
-    ) -> AggregatingState:
-        return AggregatingState.from_context(self, store_name, acc_codec, agg_func)
-
-    def getOrCreateAggregatingStateAutoCodec(
-        self, store_name: str, agg_func: object
-    ) -> AggregatingState:
-        return AggregatingState.from_context_auto_codec(self, store_name, agg_func)
-
-    def getOrCreateReducingState(
-        self, store_name: str, value_codec: Codec, reduce_func: object
-    ) -> ReducingState:
-        return ReducingState.from_context(self, store_name, value_codec, reduce_func)
-
-    def getOrCreateReducingStateAutoCodec(
-        self, store_name: str, reduce_func: object
-    ) -> ReducingState:
-        return ReducingState.from_context_auto_codec(self, store_name, reduce_func)
-
-    def getOrCreateKeyedListStateFactory(
-        self, store_name: str, namespace: bytes, key_group: bytes, value_codec: Codec
-    ) -> KeyedListStateFactory:
-        return KeyedListStateFactory.from_context(self, store_name, namespace, key_group, value_codec)
-
-    def getOrCreateKeyedListStateFactoryAutoCodec(
-        self, store_name: str, namespace: bytes, key_group: bytes, value_type=None
-    ) -> KeyedListStateFactory:
-        return KeyedListStateFactory.from_context_auto_codec(self, store_name, namespace, key_group, value_type)
-
-    def getOrCreateKeyedValueStateFactory(
-        self, store_name: str, namespace: bytes, key_group: bytes, value_codec: Codec
-    ) -> KeyedValueStateFactory:
-        return KeyedValueStateFactory.from_context(self, store_name, namespace, key_group, value_codec)
-
-    def getOrCreateKeyedValueStateFactoryAutoCodec(
-        self, store_name: str, namespace: bytes, key_group: bytes, value_type=None
-    ) -> KeyedValueStateFactory:
-        return KeyedValueStateFactory.from_context_auto_codec(self, store_name, namespace, key_group, value_type)
-
-    def getOrCreateKeyedMapStateFactory(
-        self, store_name: str, namespace: bytes, key_group: bytes, key_codec: Codec, value_codec: Codec
-    ) -> KeyedMapStateFactory:
-        return KeyedMapStateFactory.from_context(self, store_name, namespace, key_group, key_codec, value_codec)
-
-    def getOrCreateKeyedMapStateFactoryAutoCodec(
-        self, store_name: str, namespace: bytes, key_group: bytes, value_codec: Codec
-    ) -> KeyedMapStateFactory:
-        return KeyedMapStateFactory.from_context_auto_codec(self, store_name, namespace, key_group, value_codec)
-
-    def getOrCreateKeyedPriorityQueueStateFactory(
-        self, store_name: str, namespace: bytes, key_group: bytes, item_codec: Codec
-    ) -> KeyedPriorityQueueStateFactory:
-        return KeyedPriorityQueueStateFactory.from_context(self, store_name, namespace, key_group, item_codec)
-
-    def getOrCreateKeyedPriorityQueueStateFactoryAutoCodec(
-        self, store_name: str, namespace: bytes, key_group: bytes, item_type=None
-    ) -> KeyedPriorityQueueStateFactory:
-        return KeyedPriorityQueueStateFactory.from_context_auto_codec(self, store_name, namespace, key_group, item_type)
-
-    def getOrCreateKeyedAggregatingStateFactory(
-        self, store_name: str, namespace: bytes, key_group: bytes, acc_codec: Codec, agg_func: object
-    ) -> KeyedAggregatingStateFactory:
-        return KeyedAggregatingStateFactory.from_context(self, store_name, namespace, key_group, acc_codec, agg_func)
-
-    def getOrCreateKeyedAggregatingStateFactoryAutoCodec(
-        self, store_name: str, namespace: bytes, key_group: bytes, agg_func: object, acc_type=None
-    ) -> KeyedAggregatingStateFactory:
-        return KeyedAggregatingStateFactory.from_context_auto_codec(self, store_name, namespace, key_group, agg_func, acc_type)
-
-    def getOrCreateKeyedReducingStateFactory(
-        self, store_name: str, namespace: bytes, key_group: bytes, value_codec: Codec, reduce_func: object
-    ) -> KeyedReducingStateFactory:
-        return KeyedReducingStateFactory.from_context(self, store_name, namespace, key_group, value_codec, reduce_func)
-
-    def getOrCreateKeyedReducingStateFactoryAutoCodec(
-        self, store_name: str, namespace: bytes, key_group: bytes, reduce_func: object, value_type=None
-    ) -> KeyedReducingStateFactory:
-        return KeyedReducingStateFactory.from_context_auto_codec(self, store_name, namespace, key_group, reduce_func, value_type)
-
 
 __all__ = ['WitContext', 'convert_config_to_dict']
 
