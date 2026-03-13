@@ -23,11 +23,18 @@
 
 本文档介绍 Python SDK 的**高级状态 API**：基于底层 KvStore 的带类型状态抽象（ValueState、ListState、MapState 等），通过 **codec** 序列化，并支持按主键的 **keyed state**。设计与 [Go SDK 高级状态 API](../Go-SDK/go-sdk-guide.md#7-advanced-state-api) 对齐。
 
+**两个独立库：** 高级状态 API 由 **functionstream-api-advanced** 提供，依赖低阶 **functionstream-api**。安装：`pip install functionstream-api functionstream-api-advanced`。使用时从 `fs_api_advanced` 导入 Codec、ValueState、ListState、MapState 等。
+
+| 库 | 包名 | 内容 |
+|----|------|------|
+| **functionstream-api**（低阶） | `fs_api` | Context（仅 getOrCreateKVStore、getConfig、emit）、KvStore、KvIterator、ComplexKey、错误类。 |
+| **functionstream-api-advanced**（高阶） | `fs_api_advanced` | Codec、ValueState、ListState、MapState、PriorityQueueState、AggregatingState、ReducingState、Keyed\* 工厂与状态类型。 |
+
 ---
 
 ## 1. 概述
 
-当需要结构化状态（单值、列表、Map、优先队列、聚合、归约）而不想手写字节编码或 key 布局时，可使用高级状态 API。创建方式有两种：通过 **Context**（如 `ctx.getOrCreateValueState(...)`）或通过状态类型上的**类型级构造方法**（推荐，便于复用，与 Go SDK 用法一致）。
+当需要结构化状态（单值、列表、Map、优先队列、聚合、归约）而不想手写字节编码或 key 布局时，可使用高级状态 API。创建方式有两种：通过**运行时的 Context**（如使用 functionstream-runtime 时 `ctx.getOrCreateValueState(...)`）或通过状态类型上的**类型级构造方法**（推荐，便于复用，与 Go SDK 用法一致）。
 
 ---
 
@@ -35,7 +42,7 @@
 
 ### 2.1 通过 Context（getOrCreate\*）
 
-`Context` 提供 `getOrCreateValueState(store_name, codec)`、`getOrCreateValueStateAutoCodec(store_name)` 等方法，以及 ListState、MapState、PriorityQueueState、AggregatingState、ReducingState 与所有 Keyed\* 工厂的对应方法。运行时实现会委托给下面所述的类型级 `from_context` / `from_context_auto_codec`。
+使用 **functionstream-api-advanced** 时，运行时的 Context 实现（如 functionstream-runtime 的 WitContext）会提供 `getOrCreateValueState(store_name, codec)`、`getOrCreateValueStateAutoCodec(store_name)` 以及 ListState、MapState、PriorityQueueState、AggregatingState、ReducingState 与所有 Keyed\* 工厂的对应方法，内部委托给下面所述的类型级 `from_context` / `from_context_auto_codec`。
 
 ### 2.2 通过状态类型（推荐，与 Go SDK 一致）
 
@@ -92,9 +99,11 @@
 
 ## 5. 示例：使用 from_context_auto_codec 的 ValueState
 
+从 **fs_api_advanced** 导入 ValueState（Codec、ListState、MapState 等同此包）：
+
 ```python
 from fs_api import FSProcessorDriver, Context
-from fs_api.store import ValueState
+from fs_api_advanced import ValueState
 
 class CounterProcessor(FSProcessorDriver):
     def process(self, ctx: Context, source_id: int, data: bytes):

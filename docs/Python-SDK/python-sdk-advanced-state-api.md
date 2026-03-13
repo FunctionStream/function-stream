@@ -23,11 +23,18 @@
 
 This document describes the **high-level state API** for the Python SDK: typed state abstractions (ValueState, ListState, MapState, etc.) built on top of the low-level KvStore, with serialization via **codecs** and optional **keyed state** per primary key. The design aligns with the [Go SDK Advanced State API](../Go-SDK/go-sdk-guide.md#7-advanced-state-api).
 
+**Two separate libraries:** The advanced state API is provided by **functionstream-api-advanced**, which depends on the low-level **functionstream-api**. Install with: `pip install functionstream-api functionstream-api-advanced`. Import Codec, ValueState, ListState, MapState, etc. from `fs_api_advanced`.
+
+| Library | Package | Contents |
+|---------|---------|----------|
+| **functionstream-api** (low-level) | `fs_api` | Context (getOrCreateKVStore, getConfig, emit only), KvStore, KvIterator, ComplexKey, error types. |
+| **functionstream-api-advanced** (high-level) | `fs_api_advanced` | Codec, ValueState, ListState, MapState, PriorityQueueState, AggregatingState, ReducingState, Keyed\* factories and state types. |
+
 ---
 
 ## 1. Overview
 
-Use the advanced state API when you need structured state (single value, list, map, priority queue, aggregation, reduction) without manual byte encoding or key layout. You can create state either from **Context** (e.g. `ctx.getOrCreateValueState(...)`) or via **type-level constructors** on the state class (recommended for clarity and reuse, same pattern as the Go SDK).
+Use the advanced state API when you need structured state (single value, list, map, priority queue, aggregation, reduction) without manual byte encoding or key layout. You can create state either from the **runtime Context** (e.g. `ctx.getOrCreateValueState(...)` when using functionstream-runtime) or via **type-level constructors** on the state class (recommended for clarity and reuse, same pattern as the Go SDK).
 
 ---
 
@@ -35,7 +42,7 @@ Use the advanced state API when you need structured state (single value, list, m
 
 ### 2.1 From Context (getOrCreate\*)
 
-`Context` defines methods such as `getOrCreateValueState(store_name, codec)`, `getOrCreateValueStateAutoCodec(store_name)`, and the same pattern for ListState, MapState, PriorityQueueState, AggregatingState, ReducingState, and all Keyed\* factories. The runtime implementation delegates to the type-level `from_context` / `from_context_auto_codec` methods below.
+When using **functionstream-api-advanced**, the runtime Context implementation (e.g. WitContext in functionstream-runtime) provides `getOrCreateValueState(store_name, codec)`, `getOrCreateValueStateAutoCodec(store_name)`, and the same pattern for ListState, MapState, PriorityQueueState, AggregatingState, ReducingState, and all Keyed\* factories; these delegate to the type-level `from_context` / `from_context_auto_codec` methods below.
 
 ### 2.2 From the state type (recommended, same as Go SDK)
 
@@ -92,9 +99,11 @@ You can also use the corresponding `ctx.getOrCreateKeyed*Factory(...)` methods, 
 
 ## 5. Example: ValueState with from_context_auto_codec
 
+Import ValueState from **fs_api_advanced** (Codec, ListState, MapState, etc. are in the same package):
+
 ```python
 from fs_api import FSProcessorDriver, Context
-from fs_api.store import ValueState
+from fs_api_advanced import ValueState
 
 class CounterProcessor(FSProcessorDriver):
     def process(self, ctx: Context, source_id: int, data: bytes):

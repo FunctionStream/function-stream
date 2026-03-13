@@ -63,6 +63,8 @@ Function Stream 的强大之处在于其内建的本地状态管理。
 - 支持基础的 `put_state` / `get_state`。
 - 进阶支持 ComplexKey（复杂键）操作，适用于多维索引或前缀扫描场景。
 
+**低阶与高阶库：** 上述 Context、KvStore 属于低阶 **functionstream-api**。若需带类型的 Codec、ValueState、ListState、MapState、Keyed\* 等高级状态 API，请使用独立库 **functionstream-api-advanced**（依赖 functionstream-api），并从 `fs_api_advanced` 导入，详见 [Python SDK — 高级状态 API](python-sdk-advanced-state-api-zh.md)。
+
 ### 2.3 生产级代码示例
 
 ```python
@@ -148,11 +150,3 @@ with FsClient(host="10.0.0.1", port=8080) as client:
 | BadRequestError (400) | YAML 配置不满足规范或 Kafka 参数错误   | 检查 WasmTaskBuilder 中的配置项。      |
 | ServerError (500)     | Server 侧运行时环境（如 RocksDB）异常 | 检查服务端 conf/config.yaml 存储路径权限。 |
 | NotFoundError (404)   | 操作了不存在的函数或无效的 Checkpoint   | 确认函数名是否输入正确。                   |
-
----
-
-## 五、Advanced State API（高级状态 API）
-
-带类型状态（ValueState、ListState、MapState、Keyed\* 工厂等）及 `from_context` / `from_context_auto_codec` 用法请参见独立文档：
-
-- **[Python SDK — 高级状态 API](python-sdk-advanced-state-api-zh.md)**
