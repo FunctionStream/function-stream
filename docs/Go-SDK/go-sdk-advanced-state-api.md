@@ -41,16 +41,16 @@ This document describes the **typed, high-level state API** for the Function Str
 
 The advanced state API offers typed views over a single logical store. Pick the abstraction that matches your access pattern:
 
-| Use case | Recommended API | Notes |
-|----------|-----------------|--------|
-| Single logical value (counter, config blob, last value) | **ValueState[T]** | One value per store; replace on update. |
-| Append-only sequence (event log, history) | **ListState[T]** | Batch add, full read/replace; no key iteration. |
-| Key-value map with range/iteration | **MapState[K,V]** | Key type **must** have an ordered codec (e.g. primitives). |
-| Priority queue (min/max, top-K) | **PriorityQueueState[T]** | Element type **must** have an ordered codec. |
-| Running aggregate (sum, count, custom accumulator) | **AggregatingState[T,ACC,R]** | Uses `AggregateFunc`; mergeable accumulators. |
-| Running reduce (binary combine) | **ReducingState[V]** | Uses `ReduceFunc`; associative combine. |
-| **Per-key** state (per user, per partition) | **Keyed\*** factories | For **keyed operators**; factory + primaryKey per record. |
-| Custom key layout, bulk scan, non-typed storage | Low-level **Store** | `Put`/`Get`/`ScanComplex`/`ComplexKey`; full control. |
+| Use case                                                | Recommended API               | Notes                                                      |
+|---------------------------------------------------------|-------------------------------|------------------------------------------------------------|
+| Single logical value (counter, config blob, last value) | **ValueState[T]**             | One value per store; replace on update.                    |
+| Append-only sequence (event log, history)               | **ListState[T]**              | Batch add, full read/replace; no key iteration.            |
+| Key-value map with range/iteration                      | **MapState[K,V]**             | Key type **must** have an ordered codec (e.g. primitives). |
+| Priority queue (min/max, top-K)                         | **PriorityQueueState[T]**     | Element type **must** have an ordered codec.               |
+| Running aggregate (sum, count, custom accumulator)      | **AggregatingState[T,ACC,R]** | Uses `AggregateFunc`; mergeable accumulators.              |
+| Running reduce (binary combine)                         | **ReducingState[V]**          | Uses `ReduceFunc`; associative combine.                    |
+| **Per-key** state (per user, per partition)             | **Keyed\*** factories         | For **keyed operators**; factory + primaryKey per record.  |
+| Custom key layout, bulk scan, non-typed storage         | Low-level **Store**           | `Put`/`Get`/`ScanComplex`/`ComplexKey`; full control.      |
 
 **Keyed vs non-keyed**
 
@@ -61,11 +61,11 @@ The advanced state API offers typed views over a single logical store. Pick the 
 
 ## 2. Packages and Imports
 
-| Package | Import path | Responsibility |
-|---------|-------------|-----------------|
-| **structures** | `github.com/functionstream/function-stream/go-sdk/state/structures` | Non-keyed state types: ValueState, ListState, MapState, PriorityQueueState, AggregatingState, ReducingState. |
-| **keyed** | `github.com/functionstream/function-stream/go-sdk/state/keyed` | Keyed state **factories** and per-key state types (e.g. KeyedListStateFactory, KeyedListState). Use in keyed operators. |
-| **codec** | `github.com/functionstream/function-stream/go-sdk/state/codec` | `Codec[T]` interface, `DefaultCodecFor[T]()`, and built-in codecs (primitives, JSONCodec). |
+| Package        | Import path                                                         | Responsibility                                                                                                          |
+|----------------|---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| **structures** | `github.com/functionstream/function-stream/go-sdk/state/structures` | Non-keyed state types: ValueState, ListState, MapState, PriorityQueueState, AggregatingState, ReducingState.            |
+| **keyed**      | `github.com/functionstream/function-stream/go-sdk/state/keyed`      | Keyed state **factories** and per-key state types (e.g. KeyedListStateFactory, KeyedListState). Use in keyed operators. |
+| **codec**      | `github.com/functionstream/function-stream/go-sdk/state/codec`      | `Codec[T]` interface, `DefaultCodecFor[T]()`, and built-in codecs (primitives, JSONCodec).                              |
 
 All state constructors take `api.Context` (i.e. `fssdk.Context`) and a **store name**. The store is obtained internally via `ctx.GetOrCreateStore(storeName)`. The same store name always refers to the same backing store (RocksDB in the default implementation).
 
@@ -77,12 +77,12 @@ All state constructors take `api.Context` (i.e. `fssdk.Context`) and a **store n
 
 `codec.Codec[T]`:
 
-| Method | Description |
-|--------|-------------|
-| `Encode(value T) ([]byte, error)` | Serialize a value to bytes. |
-| `Decode(data []byte) (T, error)` | Deserialize from bytes. |
-| `EncodedSize() int` | Fixed size if `> 0`; variable size if `<= 0` (used for list optimizations). |
-| `IsOrderedKeyCodec() bool` | If `true`, the byte encoding is **totally ordered**: lexicographic order of bytes corresponds to a well-defined order of values. **Required** for MapState key and PriorityQueueState element. |
+| Method                            | Description                                                                                                                                                                                    |
+|-----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Encode(value T) ([]byte, error)` | Serialize a value to bytes.                                                                                                                                                                    |
+| `Decode(data []byte) (T, error)`  | Deserialize from bytes.                                                                                                                                                                        |
+| `EncodedSize() int`               | Fixed size if `> 0`; variable size if `<= 0` (used for list optimizations).                                                                                                                    |
+| `IsOrderedKeyCodec() bool`        | If `true`, the byte encoding is **totally ordered**: lexicographic order of bytes corresponds to a well-defined order of values. **Required** for MapState key and PriorityQueueState element. |
 
 ### 3.2 DefaultCodecFor[T]()
 
@@ -116,25 +116,25 @@ State instances are **lightweight**. You can create them per call (e.g. inside `
 
 ### 5.1 Semantics and methods
 
-| State | Semantics | Main methods | Ordered codec? |
-|-------|-----------|---------------|----------------|
-| **ValueState[T]** | Single replaceable value. | `Update(value T) error`; `Value() (T, bool, error)`; `Clear() error` | No |
-| **ListState[T]** | Append-only list; batch add and full replace. | `Add(value T) error`; `AddAll(values []T) error`; `Get() ([]T, error)`; `Update(values []T) error`; `Clear() error` | No |
-| **MapState[K,V]** | Key-value map; iteration via `All()`. | `Put(key K, value V) error`; `Get(key K) (V, bool, error)`; `Delete(key K) error`; `Clear() error`; `All() iter.Seq2[K,V]` | **Key K: yes** |
-| **PriorityQueueState[T]** | Priority queue (min-first by encoded order). | `Add(value T) error`; `Peek() (T, bool, error)`; `Poll() (T, bool, error)`; `Clear() error`; `All() iter.Seq[T]` | **Item T: yes** |
-| **AggregatingState[T,ACC,R]** | Running aggregation with mergeable accumulator. | `Add(value T) error`; `Get() (R, bool, error)`; `Clear() error` | No (ACC codec any) |
-| **ReducingState[V]** | Running reduce with binary combine. | `Add(value V) error`; `Get() (V, bool, error)`; `Clear() error` | No |
+| State                         | Semantics                                       | Main methods                                                                                                               | Ordered codec?     |
+|-------------------------------|-------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|--------------------|
+| **ValueState[T]**             | Single replaceable value.                       | `Update(value T) error`; `Value() (T, bool, error)`; `Clear() error`                                                       | No                 |
+| **ListState[T]**              | Append-only list; batch add and full replace.   | `Add(value T) error`; `AddAll(values []T) error`; `Get() ([]T, error)`; `Update(values []T) error`; `Clear() error`        | No                 |
+| **MapState[K,V]**             | Key-value map; iteration via `All()`.           | `Put(key K, value V) error`; `Get(key K) (V, bool, error)`; `Delete(key K) error`; `Clear() error`; `All() iter.Seq2[K,V]` | **Key K: yes**     |
+| **PriorityQueueState[T]**     | Priority queue (min-first by encoded order).    | `Add(value T) error`; `Peek() (T, bool, error)`; `Poll() (T, bool, error)`; `Clear() error`; `All() iter.Seq[T]`           | **Item T: yes**    |
+| **AggregatingState[T,ACC,R]** | Running aggregation with mergeable accumulator. | `Add(value T) error`; `Get() (R, bool, error)`; `Clear() error`                                                            | No (ACC codec any) |
+| **ReducingState[V]**          | Running reduce with binary combine.             | `Add(value V) error`; `Get() (V, bool, error)`; `Clear() error`                                                            | No                 |
 
 ### 5.2 Constructor summary (non-keyed)
 
-| State | With codec | AutoCodec |
-|-------|------------|-----------|
-| ValueState[T] | `NewValueStateFromContext(ctx, storeName, valueCodec)` | `NewValueStateFromContextAutoCodec[T](ctx, storeName)` |
-| ListState[T] | `NewListStateFromContext(ctx, storeName, itemCodec)` | `NewListStateFromContextAutoCodec[T](ctx, storeName)` |
-| MapState[K,V] | `NewMapStateFromContext(ctx, storeName, keyCodec, valueCodec)` or `NewMapStateAutoKeyCodecFromContext(ctx, storeName, valueCodec)` | `NewMapStateFromContextAutoCodec[K,V](ctx, storeName)` |
-| PriorityQueueState[T] | `NewPriorityQueueStateFromContext(ctx, storeName, itemCodec)` | `NewPriorityQueueStateFromContextAutoCodec[T](ctx, storeName)` |
-| AggregatingState[T,ACC,R] | `NewAggregatingStateFromContext(ctx, storeName, accCodec, aggFunc)` | `NewAggregatingStateFromContextAutoCodec(ctx, storeName, aggFunc)` |
-| ReducingState[V] | `NewReducingStateFromContext(ctx, storeName, valueCodec, reduceFunc)` | `NewReducingStateFromContextAutoCodec[V](ctx, storeName, reduceFunc)` |
+| State                     | With codec                                                                                                                         | AutoCodec                                                             |
+|---------------------------|------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| ValueState[T]             | `NewValueStateFromContext(ctx, storeName, valueCodec)`                                                                             | `NewValueStateFromContextAutoCodec[T](ctx, storeName)`                |
+| ListState[T]              | `NewListStateFromContext(ctx, storeName, itemCodec)`                                                                               | `NewListStateFromContextAutoCodec[T](ctx, storeName)`                 |
+| MapState[K,V]             | `NewMapStateFromContext(ctx, storeName, keyCodec, valueCodec)` or `NewMapStateAutoKeyCodecFromContext(ctx, storeName, valueCodec)` | `NewMapStateFromContextAutoCodec[K,V](ctx, storeName)`                |
+| PriorityQueueState[T]     | `NewPriorityQueueStateFromContext(ctx, storeName, itemCodec)`                                                                      | `NewPriorityQueueStateFromContextAutoCodec[T](ctx, storeName)`        |
+| AggregatingState[T,ACC,R] | `NewAggregatingStateFromContext(ctx, storeName, accCodec, aggFunc)`                                                                | `NewAggregatingStateFromContextAutoCodec(ctx, storeName, aggFunc)`    |
+| ReducingState[V]          | `NewReducingStateFromContext(ctx, storeName, valueCodec, reduceFunc)`                                                              | `NewReducingStateFromContextAutoCodec[V](ctx, storeName, reduceFunc)` |
 
 ---
 
@@ -144,12 +144,12 @@ State instances are **lightweight**. You can create them per call (e.g. inside `
 
 **AggregatingState** requires an **AggregateFunc[T, ACC, R]** (in package `structures`):
 
-| Method | Description |
-|--------|-------------|
-| `CreateAccumulator() ACC` | Initial accumulator for empty state. |
-| `Add(value T, accumulator ACC) ACC` | Fold one input value into the accumulator. |
-| `GetResult(accumulator ACC) R` | Produce the final result from the accumulator. |
-| `Merge(a, b ACC) ACC` | Combine two accumulators (e.g. for merge in distributed or checkpointed execution). |
+| Method                              | Description                                                                         |
+|-------------------------------------|-------------------------------------------------------------------------------------|
+| `CreateAccumulator() ACC`           | Initial accumulator for empty state.                                                |
+| `Add(value T, accumulator ACC) ACC` | Fold one input value into the accumulator.                                          |
+| `GetResult(accumulator ACC) R`      | Produce the final result from the accumulator.                                      |
+| `Merge(a, b ACC) ACC`               | Combine two accumulators (e.g. for merge in distributed or checkpointed execution). |
 
 ### 6.2 ReduceFunc[V]
 
@@ -167,35 +167,35 @@ State is organized by **keyGroup** ([]byte) and **primary key** ([]byte). Create
 
 The Keyed API maps onto the store’s **ComplexKey** with three dimensions:
 
-| Term | Where it appears | Meaning |
-|------|------------------|---------|
-| **keyGroup** | Argument when creating the factory | The **keyed group**: identifies which keyed partition/group this state belongs to. Use one keyGroup per logical “keyed group” or state kind (e.g. `[]byte("counters")`, `[]byte("sessions")`). Same keyed group ⇒ same keyGroup bytes. |
-| **key** | `primaryKey` in factory methods (e.g. `NewKeyedValue(primaryKey, ...)`, `NewKeyedList(primaryKey, namespace)`) | The **value of the stream key**: the key that partitioned the stream, serialized as bytes (e.g. user ID, partition key). Each distinct primaryKey gets isolated state. |
-| **namespace** | `namespace` ([]byte) in factory methods that take it | **With window functions**: use the **window identifier as bytes** (e.g. serialized window bounds or window ID) so state is scoped per key *and* per window. **Without windows**: pass **empty bytes** (`nil` or `[]byte{}`). |
+| Term          | Where it appears                                                                                               | Meaning                                                                                                                                                                                                                                |
+|---------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **keyGroup**  | Argument when creating the factory                                                                             | The **keyed group**: identifies which keyed partition/group this state belongs to. Use one keyGroup per logical “keyed group” or state kind (e.g. `[]byte("counters")`, `[]byte("sessions")`). Same keyed group ⇒ same keyGroup bytes. |
+| **key**       | `primaryKey` in factory methods (e.g. `NewKeyedValue(primaryKey, ...)`, `NewKeyedList(primaryKey, namespace)`) | The **value of the stream key**: the key that partitioned the stream, serialized as bytes (e.g. user ID, partition key). Each distinct primaryKey gets isolated state.                                                                 |
+| **namespace** | `namespace` ([]byte) in factory methods that take it                                                           | **With window functions**: use the **window identifier as bytes** (e.g. serialized window bounds or window ID) so state is scoped per key *and* per window. **Without windows**: pass **empty bytes** (`nil` or `[]byte{}`).           |
 
 **Summary:** **keyGroup** = keyed group identifier; **key** (primaryKey) = stream key value; **namespace** = window bytes when using windows, otherwise empty.
 
 ### 7.2 Factory constructor summary (keyed)
 
-| Factory | With codec | AutoCodec |
-|---------|------------|-----------|
-| KeyedValueStateFactory[V] | `NewKeyedValueStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec)` | `NewKeyedValueStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup)` |
-| KeyedListStateFactory[V] | `NewKeyedListStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec)` | `NewKeyedListStateFactoryAutoCodecFromContext[V](ctx, storeName, keyGroup)` |
-| KeyedMapStateFactory[MK,MV] | `NewKeyedMapStateFactoryFromContext(ctx, storeName, keyGroup, keyCodec, valueCodec)` | `NewKeyedMapStateFactoryFromContextAutoCodec[MK,MV](ctx, storeName, keyGroup)` |
-| KeyedPriorityQueueStateFactory[V] | `NewKeyedPriorityQueueStateFactoryFromContext(ctx, storeName, keyGroup, itemCodec)` | `NewKeyedPriorityQueueStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup)` |
-| KeyedAggregatingStateFactory[T,ACC,R] | `NewKeyedAggregatingStateFactoryFromContext(ctx, storeName, keyGroup, accCodec, aggFunc)` | `NewKeyedAggregatingStateFactoryFromContextAutoCodec(ctx, storeName, keyGroup, aggFunc)` |
-| KeyedReducingStateFactory[V] | `NewKeyedReducingStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec, reduceFunc)` | `NewKeyedReducingStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup, reduceFunc)` |
+| Factory                               | With codec                                                                                  | AutoCodec                                                                                   |
+|---------------------------------------|---------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| KeyedValueStateFactory[V]             | `NewKeyedValueStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec)`                | `NewKeyedValueStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup)`                |
+| KeyedListStateFactory[V]              | `NewKeyedListStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec)`                 | `NewKeyedListStateFactoryAutoCodecFromContext[V](ctx, storeName, keyGroup)`                 |
+| KeyedMapStateFactory[MK,MV]           | `NewKeyedMapStateFactoryFromContext(ctx, storeName, keyGroup, keyCodec, valueCodec)`        | `NewKeyedMapStateFactoryFromContextAutoCodec[MK,MV](ctx, storeName, keyGroup)`              |
+| KeyedPriorityQueueStateFactory[V]     | `NewKeyedPriorityQueueStateFactoryFromContext(ctx, storeName, keyGroup, itemCodec)`         | `NewKeyedPriorityQueueStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup)`        |
+| KeyedAggregatingStateFactory[T,ACC,R] | `NewKeyedAggregatingStateFactoryFromContext(ctx, storeName, keyGroup, accCodec, aggFunc)`   | `NewKeyedAggregatingStateFactoryFromContextAutoCodec(ctx, storeName, keyGroup, aggFunc)`    |
+| KeyedReducingStateFactory[V]          | `NewKeyedReducingStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec, reduceFunc)` | `NewKeyedReducingStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup, reduceFunc)` |
 
 ### 7.3 Obtaining per-key state from a factory
 
-| Factory | Method | Returns |
-|---------|--------|---------|
-| KeyedValueStateFactory[V] | `NewKeyedValue(primaryKey []byte, stateName string) (*KeyedValueState[V], error)` | One value state per (primaryKey, stateName). |
-| KeyedListStateFactory[V] | `NewKeyedList(primaryKey []byte, namespace []byte) (*KeyedListState[V], error)` | List state per (primaryKey, namespace). |
-| KeyedMapStateFactory[MK,MV] | `NewKeyedMap(primaryKey []byte, mapName string) (*KeyedMapState[MK,MV], error)` | Map state per (primaryKey, mapName). |
-| KeyedPriorityQueueStateFactory[V] | `NewKeyedPriorityQueue(primaryKey []byte, namespace []byte) (*KeyedPriorityQueueState[V], error)` | PQ state per (primaryKey, namespace). |
-| KeyedAggregatingStateFactory | `NewAggregatingState(primaryKey []byte, stateName string) (*KeyedAggregatingState[T,ACC,R], error)` | Aggregating state per (primaryKey, stateName). |
-| KeyedReducingStateFactory[V] | `NewReducingState(primaryKey []byte, namespace []byte) (*KeyedReducingState[V], error)` | Reducing state per (primaryKey, namespace). |
+| Factory                           | Method                                                                                              | Returns                                        |
+|-----------------------------------|-----------------------------------------------------------------------------------------------------|------------------------------------------------|
+| KeyedValueStateFactory[V]         | `NewKeyedValue(primaryKey []byte, stateName string) (*KeyedValueState[V], error)`                   | One value state per (primaryKey, stateName).   |
+| KeyedListStateFactory[V]          | `NewKeyedList(primaryKey []byte, namespace []byte) (*KeyedListState[V], error)`                     | List state per (primaryKey, namespace).        |
+| KeyedMapStateFactory[MK,MV]       | `NewKeyedMap(primaryKey []byte, mapName string) (*KeyedMapState[MK,MV], error)`                     | Map state per (primaryKey, mapName).           |
+| KeyedPriorityQueueStateFactory[V] | `NewKeyedPriorityQueue(primaryKey []byte, namespace []byte) (*KeyedPriorityQueueState[V], error)`   | PQ state per (primaryKey, namespace).          |
+| KeyedAggregatingStateFactory      | `NewAggregatingState(primaryKey []byte, stateName string) (*KeyedAggregatingState[T,ACC,R], error)` | Aggregating state per (primaryKey, stateName). |
+| KeyedReducingStateFactory[V]      | `NewReducingState(primaryKey []byte, namespace []byte) (*KeyedReducingState[V], error)`             | Reducing state per (primaryKey, namespace).    |
 
 Here **primaryKey** is the stream key value; **namespace** is the window bytes when using window functions, or empty when not.
 
@@ -310,5 +310,6 @@ total, _, _ := agg.Get()
 ## 10. See Also
 
 - [Go SDK Guide](go-sdk-guide.md) — main guide: Driver, Context, Store, build, and deployment.
+- [Go SDK — 高级状态 API（中文）](go-sdk-advanced-state-api-zh.md) — 本文档的中文版。
 - [Python SDK — Advanced State API](../Python-SDK/python-sdk-advanced-state-api.md) — equivalent typed state API for the Python SDK.
 - [examples/go-processor/README.md](../../examples/go-processor/README.md) — example operator and build instructions.

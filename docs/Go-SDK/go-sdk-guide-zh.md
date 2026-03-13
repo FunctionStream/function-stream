@@ -303,30 +303,30 @@ if err != nil {
 
 ## 七、高级状态 API
 
-本节说明**高级状态 API**：在底层 `Store` 之上构建的**类型化状态抽象**，通过 **Codec** 序列化，并支持按主键的 **Keyed 状态**。适用于需要结构化状态（单值、列表、Map、优先队列、聚合、归约）且不希望手写字节编码与键布局的场景。
+本节说明**高级状态 API**：在底层 `Store` 之上构建的**类型化状态抽象**，通过 **Codec** 序列化，并支持按主键的 **Keyed 状态**。适用于需要结构化状态（单值、列表、Map、优先队列、聚合、归约）且不希望手写字节编码与键布局的场景。完整说明见 [Go SDK — 高级状态 API](go-sdk-advanced-state-api-zh.md)。
 
 ### 7.1 何时使用哪种 API
 
-| 使用场景 | 推荐 API |
-|----------|-----------|
-| 单一逻辑值（如计数器、配置 blob） | **ValueState[T]** 或单键的裸 `Store`。 |
-| 仅追加序列（如事件日志） | **ListState[T]** 或自定义编码的 `Store.Merge`。 |
-| 需按范围迭代的键值 Map | **MapState[K,V]**（键类型须为有序 Codec）。 |
-| 优先队列（最小/最大、Top-K） | **PriorityQueueState[T]**（元素 Codec 须有序）。 |
-| 运行中聚合（sum、count、自定义累加器） | 带 `AggregateFunc` 的 **AggregatingState[T,ACC,R]**。 |
-| 运行中归约（二元合并） | 带 `ReduceFunc` 的 **ReducingState[V]**。 |
+| 使用场景                       | 推荐 API                                                                                                                     |
+|----------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| 单一逻辑值（如计数器、配置 blob）        | **ValueState[T]** 或单键的裸 `Store`。                                                                                           |
+| 仅追加序列（如事件日志）               | **ListState[T]** 或自定义编码的 `Store.Merge`。                                                                                    |
+| 需按范围迭代的键值 Map              | **MapState[K,V]**（键类型须为有序 Codec）。                                                                                          |
+| 优先队列（最小/最大、Top-K）          | **PriorityQueueState[T]**（元素 Codec 须有序）。                                                                                   |
+| 运行中聚合（sum、count、自定义累加器）    | 带 `AggregateFunc` 的 **AggregatingState[T,ACC,R]**。                                                                         |
+| 运行中归约（二元合并）                | 带 `ReduceFunc` 的 **ReducingState[V]**。                                                                                     |
 | **按 key 维度的状态**（如按用户、按分区键） | **Keyed*** 工厂：先获取工厂，再按 key 调用 `NewKeyedValue(primaryKey, ...)` 等。**供 Keyed 算子使用** — 当流按 key 分区（如经 keyBy 后）时，每个 key 拥有独立状态。 |
-| 自定义键布局、批量扫描或非类型化存储 | 底层 **Store**（`Put`/`Get`/`ScanComplex`/`ComplexKey`）。 |
+| 自定义键布局、批量扫描或非类型化存储         | 底层 **Store**（`Put`/`Get`/`ScanComplex`/`ComplexKey`）。                                                                      |
 
 **Keyed 与非 Keyed：** **Keyed 状态面向 Keyed 算子**：即流已按 key 分区（例如在 DAG 中经 keyBy 后）。此时运行时按 key 投递记录，每个 key 应有独立状态 — 通过 **工厂** 和 **keyGroup** 创建状态，再按 **主键**（即流上的 key）调用 `factory.NewKeyedValue(primaryKey, stateName)` 等。非 Keyed 状态（如 `ValueState`、`ListState`）在每个 store 下存一份逻辑实体，用于无 key 分区或单一全局状态的场景。
 
 ### 7.2 包与模块路径
 
-| 包名 | 导入路径 | 职责 |
-|------|----------|------|
-| **structures** | `github.com/functionstream/function-stream/go-sdk/state/structures` | 非 Keyed 状态类型：`ValueState`、`ListState`、`MapState`、`PriorityQueueState`、`AggregatingState`、`ReducingState`。 |
-| **keyed** | `github.com/functionstream/function-stream/go-sdk/state/keyed` | Keyed 状态**工厂**及其按 key 的状态类型（如 `KeyedListStateFactory`、`KeyedListState`）。**供 Keyed 算子使用** — 当流按 key 分区时，按流 key 创建状态。 |
-| **codec** | `github.com/functionstream/function-stream/go-sdk/state/codec` | `Codec[T]` 接口、`DefaultCodecFor[T]()` 及内置 Codec（基本类型、`JSONCodec`）。 |
+| 包名             | 导入路径                                                                | 职责                                                                                                                  |
+|----------------|---------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
+| **structures** | `github.com/functionstream/function-stream/go-sdk/state/structures` | 非 Keyed 状态类型：`ValueState`、`ListState`、`MapState`、`PriorityQueueState`、`AggregatingState`、`ReducingState`。           |
+| **keyed**      | `github.com/functionstream/function-stream/go-sdk/state/keyed`      | Keyed 状态**工厂**及其按 key 的状态类型（如 `KeyedListStateFactory`、`KeyedListState`）。**供 Keyed 算子使用** — 当流按 key 分区时，按流 key 创建状态。 |
+| **codec**      | `github.com/functionstream/function-stream/go-sdk/state/codec`      | `Codec[T]` 接口、`DefaultCodecFor[T]()` 及内置 Codec（基本类型、`JSONCodec`）。                                                   |
 
 所有状态构造函数均接收 `api.Context`（即 `fssdk.Context`）和 **store 名称**；内部通过 `ctx.GetOrCreateStore(storeName)` 获取 Store。同一 store 名称始终对应同一底层存储（默认实现为 RocksDB）。
 
@@ -361,25 +361,25 @@ if err != nil {
 
 ### 7.5 非 Keyed 状态（structures）— 参考
 
-| 状态 | 语义 | 方法（签名概要） | 是否要求有序 Codec |
-|------|------|------------------|---------------------|
-| **ValueState[T]** | 单一可替换值。 | `Update(value T) error`；`Value() (T, bool, error)`；`Clear() error` | 否 |
-| **ListState[T]** | 仅追加列表；支持批量追加与整体替换。 | `Add(value T) error`；`AddAll(values []T) error`；`Get() ([]T, error)`；`Update(values []T) error`；`Clear() error` | 否 |
-| **MapState[K,V]** | 键值 Map；通过 `All()` 按键范围迭代。 | `Put(key K, value V) error`；`Get(key K) (V, bool, error)`；`Delete(key K) error`；`Clear() error`；`All() iter.Seq2[K,V]` | **键 K：是** |
-| **PriorityQueueState[T]** | 优先队列（按编码键顺序最小优先）。 | `Add(value T) error`；`Peek() (T, bool, error)`；`Poll() (T, bool, error)`；`Clear() error`；`All() iter.Seq[T]` | **元素 T：是** |
-| **AggregatingState[T,ACC,R]** | 可合并累加器的运行中聚合。 | `Add(value T) error`；`Get() (R, bool, error)`；`Clear() error` | 否（ACC 任意） |
-| **ReducingState[V]** | 二元合并的运行中归约。 | `Add(value V) error`；`Get() (V, bool, error)`；`Clear() error` | 否 |
+| 状态                            | 语义                        | 方法（签名概要）                                                                                                               | 是否要求有序 Codec |
+|-------------------------------|---------------------------|------------------------------------------------------------------------------------------------------------------------|--------------|
+| **ValueState[T]**             | 单一可替换值。                   | `Update(value T) error`；`Value() (T, bool, error)`；`Clear() error`                                                     | 否            |
+| **ListState[T]**              | 仅追加列表；支持批量追加与整体替换。        | `Add(value T) error`；`AddAll(values []T) error`；`Get() ([]T, error)`；`Update(values []T) error`；`Clear() error`        | 否            |
+| **MapState[K,V]**             | 键值 Map；通过 `All()` 按键范围迭代。 | `Put(key K, value V) error`；`Get(key K) (V, bool, error)`；`Delete(key K) error`；`Clear() error`；`All() iter.Seq2[K,V]` | **键 K：是**    |
+| **PriorityQueueState[T]**     | 优先队列（按编码键顺序最小优先）。         | `Add(value T) error`；`Peek() (T, bool, error)`；`Poll() (T, bool, error)`；`Clear() error`；`All() iter.Seq[T]`           | **元素 T：是**   |
+| **AggregatingState[T,ACC,R]** | 可合并累加器的运行中聚合。             | `Add(value T) error`；`Get() (R, bool, error)`；`Clear() error`                                                          | 否（ACC 任意）    |
+| **ReducingState[V]**          | 二元合并的运行中归约。               | `Add(value V) error`；`Get() (V, bool, error)`；`Clear() error`                                                          | 否            |
 
 **构造函数概要（非 Keyed）：**
 
-| 状态 | 带 Codec | AutoCodec |
-|------|-----------|-----------|
-| ValueState[T] | `NewValueStateFromContext(ctx, storeName, valueCodec)` | `NewValueStateFromContextAutoCodec[T](ctx, storeName)` |
-| ListState[T] | `NewListStateFromContext(ctx, storeName, itemCodec)` | `NewListStateFromContextAutoCodec[T](ctx, storeName)` |
-| MapState[K,V] | `NewMapStateFromContext(ctx, storeName, keyCodec, valueCodec)` 或 `NewMapStateAutoKeyCodecFromContext(ctx, storeName, valueCodec)` | `NewMapStateFromContextAutoCodec[K,V](ctx, storeName)` |
-| PriorityQueueState[T] | `NewPriorityQueueStateFromContext(ctx, storeName, itemCodec)` | `NewPriorityQueueStateFromContextAutoCodec[T](ctx, storeName)` |
-| AggregatingState[T,ACC,R] | `NewAggregatingStateFromContext(ctx, storeName, accCodec, aggFunc)` | `NewAggregatingStateFromContextAutoCodec(ctx, storeName, aggFunc)` |
-| ReducingState[V] | `NewReducingStateFromContext(ctx, storeName, valueCodec, reduceFunc)` | `NewReducingStateFromContextAutoCodec[V](ctx, storeName, reduceFunc)` |
+| 状态                        | 带 Codec                                                                                                                           | AutoCodec                                                             |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| ValueState[T]             | `NewValueStateFromContext(ctx, storeName, valueCodec)`                                                                            | `NewValueStateFromContextAutoCodec[T](ctx, storeName)`                |
+| ListState[T]              | `NewListStateFromContext(ctx, storeName, itemCodec)`                                                                              | `NewListStateFromContextAutoCodec[T](ctx, storeName)`                 |
+| MapState[K,V]             | `NewMapStateFromContext(ctx, storeName, keyCodec, valueCodec)` 或 `NewMapStateAutoKeyCodecFromContext(ctx, storeName, valueCodec)` | `NewMapStateFromContextAutoCodec[K,V](ctx, storeName)`                |
+| PriorityQueueState[T]     | `NewPriorityQueueStateFromContext(ctx, storeName, itemCodec)`                                                                     | `NewPriorityQueueStateFromContextAutoCodec[T](ctx, storeName)`        |
+| AggregatingState[T,ACC,R] | `NewAggregatingStateFromContext(ctx, storeName, accCodec, aggFunc)`                                                               | `NewAggregatingStateFromContextAutoCodec(ctx, storeName, aggFunc)`    |
+| ReducingState[V]          | `NewReducingStateFromContext(ctx, storeName, valueCodec, reduceFunc)`                                                             | `NewReducingStateFromContextAutoCodec[V](ctx, storeName, reduceFunc)` |
 
 ### 7.6 AggregateFunc 与 ReduceFunc
 
@@ -402,24 +402,24 @@ Keyed 状态由 **keyGroup**（[]byte）和 **primary key**（[]byte）组织。
 
 Keyed 状态 API 对应底层 Store 的 **ComplexKey** 三个维度，含义如下：
 
-| 概念 | API 参数 | 含义 |
-|------|----------|------|
-| **keyGroup** | 创建工厂时的 `keyGroup` | **Keyed 的组**：标识该状态属于哪一个 keyed 分区/组。每个逻辑上的“keyed 组”或状态种类对应一个 keyGroup（例如一组用于 “counters”，另一组用于 “sessions”）。同一 keyed 组使用相同 keyGroup 字节；不同组使用不同 keyGroup。 |
-| **key** | 工厂方法中的 `primaryKey`（如 `NewKeyedValue(primaryKey, ...)`、`NewKeyedList(primaryKey, namespace)`） | **对应 Key 的值**：当前记录在流上的 key，以字节形式序列化。即对流进行分区时使用的 key（如用户 ID、分区键）。每个不同的 key 值拥有独立状态。 |
-| **namespace** | 工厂方法中的 `namespace`（[]byte） | **若存在窗口函数**，则传入**该窗口对应的 bytes**（例如序列化后的窗口边界或窗口 ID），使状态按 key *且* 按窗口隔离。**无窗口时**传入**空 bytes**（如 `nil` 或 `[]byte{}`）。 |
+| 概念            | API 参数                                                                                        | 含义                                                                                                                                                    |
+|---------------|-----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **keyGroup**  | 创建工厂时的 `keyGroup`                                                                             | **Keyed 的组**：标识该状态属于哪一个 keyed 分区/组。每个逻辑上的“keyed 组”或状态种类对应一个 keyGroup（例如一组用于 “counters”，另一组用于 “sessions”）。同一 keyed 组使用相同 keyGroup 字节；不同组使用不同 keyGroup。 |
+| **key**       | 工厂方法中的 `primaryKey`（如 `NewKeyedValue(primaryKey, ...)`、`NewKeyedList(primaryKey, namespace)`） | **对应 Key 的值**：当前记录在流上的 key，以字节形式序列化。即对流进行分区时使用的 key（如用户 ID、分区键）。每个不同的 key 值拥有独立状态。                                                                    |
+| **namespace** | 工厂方法中的 `namespace`（[]byte）                                                                    | **若存在窗口函数**，则传入**该窗口对应的 bytes**（例如序列化后的窗口边界或窗口 ID），使状态按 key *且* 按窗口隔离。**无窗口时**传入**空 bytes**（如 `nil` 或 `[]byte{}`）。                                    |
 
 **小结：** **keyGroup** = keyed 的组；**key**（primaryKey）= Key 的值（流 key）；**namespace** = 有窗口函数时为窗口的 bytes，否则为**空 bytes**。
 
 **工厂构造函数概要（Keyed）：**
 
-| 工厂 | 带 Codec | AutoCodec |
-|------|-----------|-----------|
-| KeyedValueStateFactory[V] | `NewKeyedValueStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec)` | `NewKeyedValueStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup)` |
-| KeyedListStateFactory[V] | `NewKeyedListStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec)` | `NewKeyedListStateFactoryAutoCodecFromContext[V](ctx, storeName, keyGroup)` |
-| KeyedMapStateFactory[MK,MV] | `NewKeyedMapStateFactoryFromContext(ctx, storeName, keyGroup, keyCodec, valueCodec)` | `NewKeyedMapStateFactoryFromContextAutoCodec[MK,MV](ctx, storeName, keyGroup)` |
-| KeyedPriorityQueueStateFactory[V] | `NewKeyedPriorityQueueStateFactoryFromContext(ctx, storeName, keyGroup, itemCodec)` | `NewKeyedPriorityQueueStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup)` |
-| KeyedAggregatingStateFactory[T,ACC,R] | `NewKeyedAggregatingStateFactoryFromContext(ctx, storeName, keyGroup, accCodec, aggFunc)` | `NewKeyedAggregatingStateFactoryFromContextAutoCodec(ctx, storeName, keyGroup, aggFunc)` |
-| KeyedReducingStateFactory[V] | `NewKeyedReducingStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec, reduceFunc)` | `NewKeyedReducingStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup, reduceFunc)` |
+| 工厂                                    | 带 Codec                                                                                     | AutoCodec                                                                                   |
+|---------------------------------------|---------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| KeyedValueStateFactory[V]             | `NewKeyedValueStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec)`                | `NewKeyedValueStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup)`                |
+| KeyedListStateFactory[V]              | `NewKeyedListStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec)`                 | `NewKeyedListStateFactoryAutoCodecFromContext[V](ctx, storeName, keyGroup)`                 |
+| KeyedMapStateFactory[MK,MV]           | `NewKeyedMapStateFactoryFromContext(ctx, storeName, keyGroup, keyCodec, valueCodec)`        | `NewKeyedMapStateFactoryFromContextAutoCodec[MK,MV](ctx, storeName, keyGroup)`              |
+| KeyedPriorityQueueStateFactory[V]     | `NewKeyedPriorityQueueStateFactoryFromContext(ctx, storeName, keyGroup, itemCodec)`         | `NewKeyedPriorityQueueStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup)`        |
+| KeyedAggregatingStateFactory[T,ACC,R] | `NewKeyedAggregatingStateFactoryFromContext(ctx, storeName, keyGroup, accCodec, aggFunc)`   | `NewKeyedAggregatingStateFactoryFromContextAutoCodec(ctx, storeName, keyGroup, aggFunc)`    |
+| KeyedReducingStateFactory[V]          | `NewKeyedReducingStateFactoryFromContext(ctx, storeName, keyGroup, valueCodec, reduceFunc)` | `NewKeyedReducingStateFactoryFromContextAutoCodec[V](ctx, storeName, keyGroup, reduceFunc)` |
 
 **从工厂获取按 key 的状态：**
 

@@ -50,14 +50,14 @@ State instances are lightweight; you may create them per message in `process` or
 
 ## 3. Non-Keyed State — Constructor Summary
 
-| State | With codec | AutoCodec |
-|-------|------------|-----------|
-| ValueState | `ValueState.from_context(ctx, store_name, codec)` | `ValueState.from_context_auto_codec(ctx, store_name)` |
-| ListState | `ListState.from_context(ctx, store_name, codec)` | `ListState.from_context_auto_codec(ctx, store_name)` |
-| MapState | `MapState.from_context(ctx, store_name, key_codec, value_codec)` or `MapState.from_context_auto_key_codec(ctx, store_name, value_codec)` | — |
-| PriorityQueueState | `PriorityQueueState.from_context(ctx, store_name, codec)` | `PriorityQueueState.from_context_auto_codec(ctx, store_name)` |
-| AggregatingState | `AggregatingState.from_context(ctx, store_name, acc_codec, agg_func)` | `AggregatingState.from_context_auto_codec(ctx, store_name, agg_func)` |
-| ReducingState | `ReducingState.from_context(ctx, store_name, value_codec, reduce_func)` | `ReducingState.from_context_auto_codec(ctx, store_name, reduce_func)` |
+| State              | With codec                                                                                                                               | AutoCodec                                                             |
+|--------------------|------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| ValueState         | `ValueState.from_context(ctx, store_name, codec)`                                                                                        | `ValueState.from_context_auto_codec(ctx, store_name)`                 |
+| ListState          | `ListState.from_context(ctx, store_name, codec)`                                                                                         | `ListState.from_context_auto_codec(ctx, store_name)`                  |
+| MapState           | `MapState.from_context(ctx, store_name, key_codec, value_codec)` or `MapState.from_context_auto_key_codec(ctx, store_name, value_codec)` | —                                                                     |
+| PriorityQueueState | `PriorityQueueState.from_context(ctx, store_name, codec)`                                                                                | `PriorityQueueState.from_context_auto_codec(ctx, store_name)`         |
+| AggregatingState   | `AggregatingState.from_context(ctx, store_name, acc_codec, agg_func)`                                                                    | `AggregatingState.from_context_auto_codec(ctx, store_name, agg_func)` |
+| ReducingState      | `ReducingState.from_context(ctx, store_name, value_codec, reduce_func)`                                                                  | `ReducingState.from_context_auto_codec(ctx, store_name, reduce_func)` |
 
 All of the above can also be obtained via the corresponding `ctx.getOrCreate*` methods (e.g. `ctx.getOrCreateValueState(store_name, codec)`), which delegate to these constructors.
 
@@ -69,22 +69,22 @@ All of the above can also be obtained via the corresponding `ctx.getOrCreate*` m
 
 ### 4.1 keyGroup, key (primaryKey), and namespace
 
-| Term | API parameter | Meaning |
-|------|----------------|---------|
-| **key_group** | `key_group` when creating the factory | The **keyed group**: identifies which keyed partition/group this state belongs to (e.g. one group for "counters", another for "sessions"). |
-| **key** | The argument to factory methods (e.g. `new_keyed_value(primary_key)`) | The **value of the stream key** for the current record (e.g. user ID, partition key). Each distinct key value gets isolated state. |
-| **namespace** | `namespace` (bytes) when creating the factory | **If a window function is present**, use the **window identifier as bytes**. **Without windows**, pass **empty bytes** (e.g. `b""`). |
+| Term          | API parameter                                                         | Meaning                                                                                                                                    |
+|---------------|-----------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| **key_group** | `key_group` when creating the factory                                 | The **keyed group**: identifies which keyed partition/group this state belongs to (e.g. one group for "counters", another for "sessions"). |
+| **key**       | The argument to factory methods (e.g. `new_keyed_value(primary_key)`) | The **value of the stream key** for the current record (e.g. user ID, partition key). Each distinct key value gets isolated state.         |
+| **namespace** | `namespace` (bytes) when creating the factory                         | **If a window function is present**, use the **window identifier as bytes**. **Without windows**, pass **empty bytes** (e.g. `b""`).       |
 
 ### 4.2 Factory constructor summary (keyed)
 
-| Factory | With codec | AutoCodec |
-|---------|------------|-----------|
-| KeyedValueStateFactory | `KeyedValueStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)` | `KeyedValueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)` |
-| KeyedListStateFactory | `KeyedListStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)` | `KeyedListStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)` |
-| KeyedMapStateFactory | `KeyedMapStateFactory.from_context(ctx, store_name, namespace, key_group, key_codec, value_codec)` | `KeyedMapStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_codec)` |
-| KeyedPriorityQueueStateFactory | `KeyedPriorityQueueStateFactory.from_context(ctx, store_name, namespace, key_group, item_codec)` | `KeyedPriorityQueueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, item_type=None)` |
-| KeyedAggregatingStateFactory | `KeyedAggregatingStateFactory.from_context(ctx, store_name, namespace, key_group, acc_codec, agg_func)` | `KeyedAggregatingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, agg_func, acc_type=None)` |
-| KeyedReducingStateFactory | `KeyedReducingStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec, reduce_func)` | `KeyedReducingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, reduce_func, value_type=None)` |
+| Factory                        | With codec                                                                                                | AutoCodec                                                                                                                |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| KeyedValueStateFactory         | `KeyedValueStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)`                 | `KeyedValueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)`                 |
+| KeyedListStateFactory          | `KeyedListStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)`                  | `KeyedListStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)`                  |
+| KeyedMapStateFactory           | `KeyedMapStateFactory.from_context(ctx, store_name, namespace, key_group, key_codec, value_codec)`        | `KeyedMapStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_codec)`                       |
+| KeyedPriorityQueueStateFactory | `KeyedPriorityQueueStateFactory.from_context(ctx, store_name, namespace, key_group, item_codec)`          | `KeyedPriorityQueueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, item_type=None)`          |
+| KeyedAggregatingStateFactory   | `KeyedAggregatingStateFactory.from_context(ctx, store_name, namespace, key_group, acc_codec, agg_func)`   | `KeyedAggregatingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, agg_func, acc_type=None)`   |
+| KeyedReducingStateFactory      | `KeyedReducingStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec, reduce_func)` | `KeyedReducingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, reduce_func, value_type=None)` |
 
 You can also use the corresponding `ctx.getOrCreateKeyed*Factory(...)` methods, which delegate to these constructors.
 
@@ -98,9 +98,10 @@ from fs_api.store import ValueState
 
 class CounterProcessor(FSProcessorDriver):
     def process(self, ctx: Context, source_id: int, data: bytes):
-        # Create state per message (or cache in init)
         state = ValueState.from_context_auto_codec(ctx, "my-store")
-        cur, _ = state.value() or (0, False)
+        cur, found = state.value()
+        if not found or cur is None:
+            cur = 0
         state.update(cur + 1)
         ctx.emit(str(cur + 1).encode(), 0)
 ```

@@ -50,14 +50,14 @@
 
 ## 3. 非 Keyed 状态 — 构造方法一览
 
-| 状态类型 | 带 codec | AutoCodec |
-|----------|----------|-----------|
-| ValueState | `ValueState.from_context(ctx, store_name, codec)` | `ValueState.from_context_auto_codec(ctx, store_name)` |
-| ListState | `ListState.from_context(ctx, store_name, codec)` | `ListState.from_context_auto_codec(ctx, store_name)` |
-| MapState | `MapState.from_context(ctx, store_name, key_codec, value_codec)` 或 `MapState.from_context_auto_key_codec(ctx, store_name, value_codec)` | — |
-| PriorityQueueState | `PriorityQueueState.from_context(ctx, store_name, codec)` | `PriorityQueueState.from_context_auto_codec(ctx, store_name)` |
-| AggregatingState | `AggregatingState.from_context(ctx, store_name, acc_codec, agg_func)` | `AggregatingState.from_context_auto_codec(ctx, store_name, agg_func)` |
-| ReducingState | `ReducingState.from_context(ctx, store_name, value_codec, reduce_func)` | `ReducingState.from_context_auto_codec(ctx, store_name, reduce_func)` |
+| 状态类型               | 带 codec                                                                                                                                 | AutoCodec                                                             |
+|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| ValueState         | `ValueState.from_context(ctx, store_name, codec)`                                                                                       | `ValueState.from_context_auto_codec(ctx, store_name)`                 |
+| ListState          | `ListState.from_context(ctx, store_name, codec)`                                                                                        | `ListState.from_context_auto_codec(ctx, store_name)`                  |
+| MapState           | `MapState.from_context(ctx, store_name, key_codec, value_codec)` 或 `MapState.from_context_auto_key_codec(ctx, store_name, value_codec)` | —                                                                     |
+| PriorityQueueState | `PriorityQueueState.from_context(ctx, store_name, codec)`                                                                               | `PriorityQueueState.from_context_auto_codec(ctx, store_name)`         |
+| AggregatingState   | `AggregatingState.from_context(ctx, store_name, acc_codec, agg_func)`                                                                   | `AggregatingState.from_context_auto_codec(ctx, store_name, agg_func)` |
+| ReducingState      | `ReducingState.from_context(ctx, store_name, value_codec, reduce_func)`                                                                 | `ReducingState.from_context_auto_codec(ctx, store_name, reduce_func)` |
 
 以上均可通过 Context 的 `ctx.getOrCreate*` 方法获得（如 `ctx.getOrCreateValueState(store_name, codec)`），其内部会委托给上述构造方法。
 
@@ -69,22 +69,22 @@
 
 ### 4.1 key_group、key（主键）与 namespace
 
-| 概念 | API 参数 | 含义 |
-|------|----------|------|
-| **key_group** | 创建工厂时的 `key_group` | **keyed 组**：标识该状态所属分区/组（如一组 “counters”，另一组 “sessions”）。 |
-| **key** | 工厂方法参数（如 `new_keyed_value(primary_key)`） | 当前记录的**流 key 的值**（如用户 ID、分区 key）。不同 key 对应不同状态。 |
-| **namespace** | 创建工厂时的 `namespace`（bytes） | **有窗口时**为**窗口标识的 bytes**；**无窗口时**传**空 bytes**（如 `b""`）。 |
+| 概念            | API 参数                                   | 含义                                                      |
+|---------------|------------------------------------------|---------------------------------------------------------|
+| **key_group** | 创建工厂时的 `key_group`                       | **keyed 组**：标识该状态所属分区/组（如一组 “counters”，另一组 “sessions”）。 |
+| **key**       | 工厂方法参数（如 `new_keyed_value(primary_key)`） | 当前记录的**流 key 的值**（如用户 ID、分区 key）。不同 key 对应不同状态。         |
+| **namespace** | 创建工厂时的 `namespace`（bytes）                | **有窗口时**为**窗口标识的 bytes**；**无窗口时**传**空 bytes**（如 `b""`）。 |
 
 ### 4.2 Keyed 工厂构造方法一览
 
-| 工厂 | 带 codec | AutoCodec |
-|------|----------|-----------|
-| KeyedValueStateFactory | `KeyedValueStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)` | `KeyedValueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)` |
-| KeyedListStateFactory | `KeyedListStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)` | `KeyedListStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)` |
-| KeyedMapStateFactory | `KeyedMapStateFactory.from_context(ctx, store_name, namespace, key_group, key_codec, value_codec)` | `KeyedMapStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_codec)` |
-| KeyedPriorityQueueStateFactory | `KeyedPriorityQueueStateFactory.from_context(ctx, store_name, namespace, key_group, item_codec)` | `KeyedPriorityQueueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, item_type=None)` |
-| KeyedAggregatingStateFactory | `KeyedAggregatingStateFactory.from_context(ctx, store_name, namespace, key_group, acc_codec, agg_func)` | `KeyedAggregatingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, agg_func, acc_type=None)` |
-| KeyedReducingStateFactory | `KeyedReducingStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec, reduce_func)` | `KeyedReducingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, reduce_func, value_type=None)` |
+| 工厂                             | 带 codec                                                                                                   | AutoCodec                                                                                                                |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| KeyedValueStateFactory         | `KeyedValueStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)`                 | `KeyedValueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)`                 |
+| KeyedListStateFactory          | `KeyedListStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)`                  | `KeyedListStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)`                  |
+| KeyedMapStateFactory           | `KeyedMapStateFactory.from_context(ctx, store_name, namespace, key_group, key_codec, value_codec)`        | `KeyedMapStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_codec)`                       |
+| KeyedPriorityQueueStateFactory | `KeyedPriorityQueueStateFactory.from_context(ctx, store_name, namespace, key_group, item_codec)`          | `KeyedPriorityQueueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, item_type=None)`          |
+| KeyedAggregatingStateFactory   | `KeyedAggregatingStateFactory.from_context(ctx, store_name, namespace, key_group, acc_codec, agg_func)`   | `KeyedAggregatingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, agg_func, acc_type=None)`   |
+| KeyedReducingStateFactory      | `KeyedReducingStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec, reduce_func)` | `KeyedReducingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, reduce_func, value_type=None)` |
 
 也可使用 Context 的 `ctx.getOrCreateKeyed*Factory(...)` 方法，其内部会委托给上述构造方法。
 
@@ -98,9 +98,10 @@ from fs_api.store import ValueState
 
 class CounterProcessor(FSProcessorDriver):
     def process(self, ctx: Context, source_id: int, data: bytes):
-        # 每条消息创建一次状态（或在 init 中缓存）
         state = ValueState.from_context_auto_codec(ctx, "my-store")
-        cur, _ = state.value() or (0, False)
+        cur, found = state.value()
+        if not found or cur is None:
+            cur = 0
         state.update(cur + 1)
         ctx.emit(str(cur + 1).encode(), 0)
 ```

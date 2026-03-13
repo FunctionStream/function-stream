@@ -13,9 +13,10 @@
 package impl
 
 import (
+	"strings"
+
 	"github.com/functionstream/function-stream/go-sdk/api"
 	"github.com/functionstream/function-stream/go-sdk/bindings/functionstream/core/collector"
-	"strings"
 )
 
 type runtimeContext struct {
