@@ -21,21 +21,7 @@ from fs_api.driver import FSProcessorDriver
 logger = logging.getLogger(__name__)
 
 from .store.fs_context import WitContext, convert_config_to_dict
-from fs_api_advanced import (
-    Codec,
-    ValueState,
-    MapState,
-    ListState,
-    PriorityQueueState,
-    AggregatingState,
-    ReducingState,
-    KeyedListStateFactory,
-    KeyedValueStateFactory,
-    KeyedMapStateFactory,
-    KeyedPriorityQueueStateFactory,
-    KeyedAggregatingStateFactory,
-    KeyedReducingStateFactory,
-)
+import fs_api_advanced
 
 
 _DRIVER: Optional[FSProcessorDriver] = None
