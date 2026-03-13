@@ -61,11 +61,13 @@
 
 ## 2. 包与导入
 
-| 包              | 导入路径                                                                | 职责                                                                                            |
-|----------------|---------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| **structures** | `github.com/functionstream/function-stream/go-sdk/state/structures` | 非 Keyed 状态类型：ValueState、ListState、MapState、PriorityQueueState、AggregatingState、ReducingState。 |
-| **keyed**      | `github.com/functionstream/function-stream/go-sdk/state/keyed`      | Keyed 状态**工厂**及按 key 的状态类型（如 KeyedListStateFactory、KeyedListState）。在 keyed 算子中使用。             |
-| **codec**      | `github.com/functionstream/function-stream/go-sdk/state/codec`      | `Codec[T]` 接口、`DefaultCodecFor[T]()` 及内置 codec（基本类型、JSONCodec）。                               |
+**两个独立库：** 低阶 **go-sdk**，高阶 **go-sdk-advanced**（依赖 go-sdk）。
+
+| 包                     | 导入路径                                                                      | 职责                                                                                            |
+|------------------------|---------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| **codec**（高阶）      | `github.com/functionstream/function-stream/go-sdk-advanced/codec`          | `Codec[T]` 接口及内置 codec。                                                                       |
+| **structures**（高阶） | `github.com/functionstream/function-stream/go-sdk-advanced/structures`     | ValueState、ListState、MapState、PriorityQueueState、AggregatingState、ReducingState。           |
+| **keyed**（高阶）      | `github.com/functionstream/function-stream/go-sdk-advanced/keyed`         | Keyed 状态工厂及按 key 的类型（KeyedListStateFactory、KeyedListState 等）。在 keyed 算子中使用。           |
 
 所有状态构造方法均接收 `api.Context`（即 `fssdk.Context`）和 **store 名称**。Store 内部通过 `ctx.GetOrCreateStore(storeName)` 获取。同一 store 名称始终对应同一底层 store（默认实现为 RocksDB）。
 
@@ -220,7 +222,7 @@ Keyed API 对应 store 的 **ComplexKey**，有三个维度：
 ```go
 import (
     fssdk "github.com/functionstream/function-stream/go-sdk"
-    "github.com/functionstream/function-stream/go-sdk/state/structures"
+    "github.com/functionstream/function-stream/go-sdk-advanced/structures"
 )
 
 func (p *MyProcessor) Process(ctx fssdk.Context, sourceID uint32, data []byte) error {
@@ -244,7 +246,7 @@ func (p *MyProcessor) Process(ctx fssdk.Context, sourceID uint32, data []byte) e
 ```go
 import (
     fssdk "github.com/functionstream/function-stream/go-sdk"
-    "github.com/functionstream/function-stream/go-sdk/state/keyed"
+    "github.com/functionstream/function-stream/go-sdk-advanced/keyed"
 )
 
 type Order struct { Id string; Amount int64 }
@@ -279,8 +281,13 @@ func (p *MyProcessor) Process(ctx fssdk.Context, sourceID uint32, data []byte) e
 
 ### 9.3 MapState 与 AggregatingState（求和）
 
+使用 **go-sdk-advanced** 的 `structures` 包；`ctx` 来自低阶 go-sdk 的 `fssdk.Context`。
+
 ```go
-import "github.com/functionstream/function-stream/go-sdk/state/structures"
+import (
+    fssdk "github.com/functionstream/function-stream/go-sdk"
+    "github.com/functionstream/function-stream/go-sdk-advanced/structures"
+)
 
 // MapState: string -> int64（两者均有有序默认 codec）
 m, err := structures.NewMapStateFromContextAutoCodec[string, int64](ctx, "counts")

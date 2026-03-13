@@ -13,9 +13,9 @@
 from typing import Dict, List, Tuple
 
 from fs_api.context import Context
-from fs_api.store import (
+from fs_api.store import KvStore
+from fs_api_advanced import (
     Codec,
-    KvStore,
     ValueState,
     MapState,
     ListState,

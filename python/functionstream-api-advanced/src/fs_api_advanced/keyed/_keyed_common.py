@@ -5,34 +5,20 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on "AS IS" BASIS,
+# distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any
 
-__version__ = "0.0.1"
+from fs_api.store import KvError
 
-from .context import Context
-from .driver import FSProcessorDriver
-from .store import (
-    KvError,
-    KvNotFoundError,
-    KvIOError,
-    KvOtherError,
-    ComplexKey,
-    KvIterator,
-    KvStore,
-)
+def ensure_ordered_key_codec(codec: Any, label: str) -> None:
+    if not getattr(codec, "supports_ordered_keys", False):
+        raise KvError(f"{label} key codec must support ordered key encoding")
+
 
 __all__ = [
-    "Context",
-    "FSProcessorDriver",
-    "KvError",
-    "KvNotFoundError",
-    "KvIOError",
-    "KvOtherError",
-    "ComplexKey",
-    "KvIterator",
-    "KvStore",
+    "ensure_ordered_key_codec",
 ]

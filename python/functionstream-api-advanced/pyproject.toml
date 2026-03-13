@@ -10,23 +10,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Low-level store API: KvStore, errors, ComplexKey, KvIterator only.
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-For Codec, ValueState, ListState, MapState, Keyed* states use functionstream-api-advanced.
-"""
-
-from .error import KvError, KvNotFoundError, KvIOError, KvOtherError
-from .complexkey import ComplexKey
-from .iterator import KvIterator
-from .store import KvStore
-
-__all__ = [
-    "KvError",
-    "KvNotFoundError",
-    "KvIOError",
-    "KvOtherError",
-    "ComplexKey",
-    "KvIterator",
-    "KvStore",
+[project]
+name = "functionstream-api-advanced"
+version = "0.1.0"
+description = "Function Stream Advanced State API - high-level state types (experimental), depends on functionstream-api"
+requires-python = ">=3.7"
+license = "Apache-2.0"
+authors = [
+    {name = "Function Stream Team"}
 ]
+dependencies = [
+    "functionstream-api>=0.6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"

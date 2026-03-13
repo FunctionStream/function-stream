@@ -61,11 +61,13 @@ The advanced state API offers typed views over a single logical store. Pick the 
 
 ## 2. Packages and Imports
 
-| Package        | Import path                                                         | Responsibility                                                                                                          |
-|----------------|---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| **structures** | `github.com/functionstream/function-stream/go-sdk/state/structures` | Non-keyed state types: ValueState, ListState, MapState, PriorityQueueState, AggregatingState, ReducingState.            |
-| **keyed**      | `github.com/functionstream/function-stream/go-sdk/state/keyed`      | Keyed state **factories** and per-key state types (e.g. KeyedListStateFactory, KeyedListState). Use in keyed operators. |
-| **codec**      | `github.com/functionstream/function-stream/go-sdk/state/codec`      | `Codec[T]` interface, `DefaultCodecFor[T]()`, and built-in codecs (primitives, JSONCodec).                              |
+**Two separate libraries:** low-level **go-sdk**, high-level **go-sdk-advanced** (depends on go-sdk).
+
+| Package           | Import path                                                                  | Responsibility                                                                                                          |
+|-------------------|------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| **codec** (advanced) | `github.com/functionstream/function-stream/go-sdk-advanced/codec`               | `Codec[T]` interface and built-in codecs.                                                                               |
+| **structures** (advanced) | `github.com/functionstream/function-stream/go-sdk-advanced/structures` | ValueState, ListState, MapState, PriorityQueueState, AggregatingState, ReducingState.                                |
+| **keyed** (advanced) | `github.com/functionstream/function-stream/go-sdk-advanced/keyed`       | Keyed state factories and per-key types. Use in keyed operators.                                                          |
 
 All state constructors take `api.Context` (i.e. `fssdk.Context`) and a **store name**. The store is obtained internally via `ctx.GetOrCreateStore(storeName)`. The same store name always refers to the same backing store (RocksDB in the default implementation).
 
@@ -220,7 +222,7 @@ Here **primaryKey** is the stream key value; **namespace** is the window bytes w
 ```go
 import (
     fssdk "github.com/functionstream/function-stream/go-sdk"
-    "github.com/functionstream/function-stream/go-sdk/state/structures"
+    "github.com/functionstream/function-stream/go-sdk-advanced/structures"
 )
 
 func (p *MyProcessor) Process(ctx fssdk.Context, sourceID uint32, data []byte) error {
@@ -244,7 +246,7 @@ When the operator runs on a **keyed stream**, use a Keyed list factory and pass 
 ```go
 import (
     fssdk "github.com/functionstream/function-stream/go-sdk"
-    "github.com/functionstream/function-stream/go-sdk/state/keyed"
+    "github.com/functionstream/function-stream/go-sdk-advanced/keyed"
 )
 
 type Order struct { Id string; Amount int64 }
@@ -279,8 +281,13 @@ func (p *MyProcessor) Process(ctx fssdk.Context, sourceID uint32, data []byte) e
 
 ### 9.3 MapState and AggregatingState (sum)
 
+Use the **go-sdk-advanced** `structures` package; `ctx` is `fssdk.Context` from the low-level go-sdk.
+
 ```go
-import "github.com/functionstream/function-stream/go-sdk/state/structures"
+import (
+    fssdk "github.com/functionstream/function-stream/go-sdk"
+    "github.com/functionstream/function-stream/go-sdk-advanced/structures"
+)
 
 // MapState: string -> int64 (both have ordered default codecs)
 m, err := structures.NewMapStateFromContextAutoCodec[string, int64](ctx, "counts")
