@@ -263,7 +263,7 @@ create function with (
 );
 ```
 
-config.yaml 中需配置 `name`、`type: processor`、`input-groups`、`outputs`（如 Kafka）。详见 [Function 配置](function-configuration-zh.md) 与 [examples/go-processor/README.md](../examples/go-processor/README.md)。
+config.yaml 中需配置 `name`、`type: processor`、`input-groups`、`outputs`（如 Kafka）。详见 [Function 配置](../function-configuration-zh.md) 与 [examples/go-processor/README.md](../../examples/go-processor/README.md)。
 
 ---
 
@@ -301,7 +301,18 @@ if err != nil {
 
 ---
 
-## 七、目录结构参考
+## 七、高级状态 API（进阶文档）
+
+本指南仅覆盖**低阶 go-sdk**（Driver、Context、Store、目录结构）。**高级状态 API**（Codec、ValueState、ListState、MapState、PriorityQueueState、AggregatingState、ReducingState、Keyed\* 工厂与用法）由独立库 **go-sdk-advanced** 提供，完整说明、Codec 约定、构造函数表与示例均在进阶文档中：
+
+- **[Go SDK — 高级状态 API](go-sdk-advanced-state-api-zh.md)**（中文）
+- [Go SDK — Advanced State API](go-sdk-advanced-state-api.md)（英文）
+
+---
+
+## 八、目录结构参考
+
+**低阶库 go-sdk**：
 
 ```text
 go-sdk/
@@ -317,8 +328,20 @@ go-sdk/
 │   ├── runtime.go
 │   ├── context.go
 │   └── store.go
+├── state/
+│   └── common/       # 公共辅助（Store 类型别名、DupBytes）
 ├── wit/              # processor.wit 及依赖（可由 make wit 生成）
 └── bindings/         # wit-bindgen-go 生成的 Go 代码（make bindings）
 ```
 
-更多示例与 SQL 操作见 [examples/go-processor/README.md](../examples/go-processor/README.md)、[SQL CLI 指南](sql-cli-guide-zh.md)。
+**高阶库 go-sdk-advanced**（依赖 go-sdk，含 Codec 与全部状态类型）：
+
+```text
+go-sdk-advanced/
+├── go.mod            # require go-sdk
+├── codec/            # Codec[T]、DefaultCodecFor、内置与 JSON codec
+├── structures/       # ValueState、ListState、MapState、PriorityQueue、Aggregating、Reducing
+└── keyed/            # Keyed 状态工厂（value、list、map、PQ、aggregating、reducing）
+```
+
+更多示例与 SQL 操作见 [examples/go-processor/README.md](../../examples/go-processor/README.md)、[SQL CLI 指南](../sql-cli-guide-zh.md)。

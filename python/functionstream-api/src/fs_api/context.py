@@ -5,23 +5,19 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on "AS IS" BASIS,
+# distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-fs_api.context
-
-Context: Context object
-"""
 import abc
 from typing import Dict
+
 from .store import KvStore
 
 
 class Context(abc.ABC):
-    """Context object"""
+    """Low-level processor context. For Codec, ValueState and other state types use functionstream-api-advanced."""
 
     @abc.abstractmethod
     def emit(self, data: bytes, channel: int = 0):
@@ -37,11 +33,7 @@ class Context(abc.ABC):
 
     @abc.abstractmethod
     def getConfig(self) -> Dict[str, str]:
-        """
-        Get global configuration Map
+        pass
 
-        Returns:
-            Dict[str, str]: Configuration dictionary
-        """
 
-__all__ = ['Context']
+__all__ = ["Context"]

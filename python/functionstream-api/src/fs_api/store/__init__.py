@@ -5,11 +5,16 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on "AS IS" BASIS,
+# distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Low-level store API: KvStore, errors, ComplexKey, KvIterator only.
+
+For Codec, ValueState, ListState, MapState, Keyed* states use functionstream-api-advanced.
+"""
 
 from .error import KvError, KvNotFoundError, KvIOError, KvOtherError
 from .complexkey import ComplexKey
@@ -17,12 +22,11 @@ from .iterator import KvIterator
 from .store import KvStore
 
 __all__ = [
-    'KvError',
-    'KvNotFoundError',
-    'KvIOError',
-    'KvOtherError',
-    'ComplexKey',
-    'KvIterator',
-    'KvStore',
+    "KvError",
+    "KvNotFoundError",
+    "KvIOError",
+    "KvOtherError",
+    "ComplexKey",
+    "KvIterator",
+    "KvStore",
 ]
-

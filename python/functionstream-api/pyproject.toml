@@ -25,7 +25,9 @@ dependencies = [
     "cloudpickle>=2.0.0",
 ]
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-packages = ["fs_api", "fs_api.store"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
 

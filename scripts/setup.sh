@@ -100,6 +100,7 @@ log_ok
 
 log_step "API_INSTALL"
 "$PIP" install -q -e "$PYTHON_ROOT/functionstream-api"
+"$PIP" install -q -e "$PYTHON_ROOT/functionstream-api-advanced"
 log_ok
 
 log_step "CLIENT_CODEGEN"
@@ -130,7 +131,7 @@ log_ok
 log_step "WASM_BUILD"
 TARGET_DIR="$ROOT_DIR/data/cache/python-runner"
 mkdir -p "$TARGET_DIR"
-(cd "$PYTHON_ROOT/functionstream-runtime" && PYTHONPATH="$PYTHON_ROOT/functionstream-api" "$PYTHON_BIN" build.py > /dev/null)
+(cd "$PYTHON_ROOT/functionstream-runtime" && PYTHONPATH="$PYTHON_ROOT/functionstream-api:$PYTHON_ROOT/functionstream-api-advanced" "$PYTHON_BIN" build.py > /dev/null)
 
 WASM_SRC="$PYTHON_ROOT/functionstream-runtime/target/functionstream-python-runtime.wasm"
 if [ -f "$WASM_SRC" ]; then

@@ -60,6 +60,5 @@ class WitContext(Context):
     def getConfig(self) -> Dict[str, str]:
         return self._CONFIG.copy()
 
-
 __all__ = ['WitContext', 'convert_config_to_dict']
 

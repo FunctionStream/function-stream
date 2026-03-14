@@ -14,14 +14,12 @@ package impl
 
 import (
 	"strings"
-	"sync"
 
 	"github.com/functionstream/function-stream/go-sdk/api"
 	"github.com/functionstream/function-stream/go-sdk/bindings/functionstream/core/collector"
 )
 
 type runtimeContext struct {
-	mu     sync.RWMutex
 	config map[string]string
 	stores map[string]*storeImpl
 	closed bool
@@ -35,9 +33,7 @@ func newRuntimeContext(config map[string]string) *runtimeContext {
 }
 
 func (c *runtimeContext) Emit(targetID uint32, data []byte) error {
-	c.mu.RLock()
 	closed := c.closed
-	c.mu.RUnlock()
 	if closed {
 		return api.NewError(api.ErrRuntimeClosed, "emit on closed context")
 	}
@@ -46,9 +42,7 @@ func (c *runtimeContext) Emit(targetID uint32, data []byte) error {
 }
 
 func (c *runtimeContext) EmitWatermark(targetID uint32, watermark uint64) error {
-	c.mu.RLock()
 	closed := c.closed
-	c.mu.RUnlock()
 	if closed {
 		return api.NewError(api.ErrRuntimeClosed, "emit watermark on closed context")
 	}
@@ -62,8 +56,6 @@ func (c *runtimeContext) GetOrCreateStore(name string) (api.Store, error) {
 		return nil, api.NewError(api.ErrStoreInvalidName, "store name must not be empty")
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
 		return nil, api.NewError(api.ErrRuntimeClosed, "store request on closed context")
 	}
@@ -77,21 +69,16 @@ func (c *runtimeContext) GetOrCreateStore(name string) (api.Store, error) {
 }
 
 func (c *runtimeContext) Config() map[string]string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return cloneStringMap(c.config)
 }
 
 func (c *runtimeContext) Close() error {
-	c.mu.Lock()
 	if c.closed {
-		c.mu.Unlock()
 		return nil
 	}
 	c.closed = true
 	stores := c.stores
 	c.stores = make(map[string]*storeImpl)
-	c.mu.Unlock()
 
 	var firstErr error
 	for _, store := range stores {

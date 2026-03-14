@@ -206,7 +206,8 @@ function-stream-<version>/
 | [Function 任务配置规范](docs/function-configuration-zh.md) | 任务定义规范        |
 | [SQL CLI 交互式管理指南](docs/sql-cli-guide-zh.md)          | 交互式管理指南       |
 | [Function 管理与开发指南](docs/function-development-zh.md)  | 管理与开发指南       |
-| [Python SDK 开发与交互指南](docs/python-sdk-guide-zh.md)    | Python SDK 指南 |
+| [Go SDK 开发与交互指南](docs/Go-SDK/go-sdk-guide-zh.md)     | Go SDK 指南        |
+| [Python SDK 开发与交互指南](docs/Python-SDK/python-sdk-guide-zh.md) | Python SDK 指南 |
 
 ## 配置
 

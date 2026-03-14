@@ -63,6 +63,8 @@ The power of Function Stream lies in its built-in local state management.
 - Supports basic `put_state` / `get_state`.
 - Advanced support for ComplexKey operations, suitable for multi-dimensional indexing or prefix scanning scenarios.
 
+**Low-level vs advanced libraries:** The Context and KvStore above belong to the low-level **functionstream-api**. For typed Codec, ValueState, ListState, MapState, Keyed\* state, etc., use the separate library **functionstream-api-advanced** (depends on functionstream-api) and import from `fs_api_advanced`. See [Python SDK — Advanced State API](python-sdk-advanced-state-api.md).
+
 ### 2.3 Production-Grade Code Example
 
 ```python
@@ -148,3 +150,4 @@ with FsClient(host="10.0.0.1", port=8080) as client:
 | BadRequestError (400) | YAML configuration does not meet specifications or Kafka parameters are incorrect | Check configuration items in WasmTaskBuilder.                 |
 | ServerError (500)     | Server-side runtime environment (e.g., RocksDB) exception                         | Check permissions of storage path in server conf/config.yaml. |
 | NotFoundError (404)   | Operating on a non-existent function or invalid Checkpoint                        | Confirm if the function name is correct.                      |
+

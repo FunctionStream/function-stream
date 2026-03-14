@@ -82,7 +82,7 @@ build-lite: .check-env
 .build-wasm:
 	$(call log,WASM,Building Python Runtime using $(PYTHON_EXEC))
 	@cd $(PYTHON_ROOT)/functionstream-runtime && \
-		PYTHONPATH=../functionstream-api ../../$(PYTHON_EXEC) build.py > /dev/null
+		PYTHONPATH=../functionstream-api:../functionstream-api-advanced ../../$(PYTHON_EXEC) build.py > /dev/null
 	@[ -f "$(WASM_SOURCE)" ] || (printf "$(C_R)[X] WASM Build Failed$(C_0)\n" && exit 1)
 
 dist: build

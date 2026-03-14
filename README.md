@@ -205,7 +205,8 @@ We provide a robust shell script to manage the server process, capable of handli
 | [Function Configuration](docs/function-configuration.md) | Task Definition Specification     |
 | [SQL CLI Guide](docs/sql-cli-guide.md)                   | Interactive Management Guide      |
 | [Function Development](docs/function-development.md)     | Management & Development Guide    |
-| [Python SDK Guide](docs/python-sdk-guide.md)             | Python SDK Guide                  |
+| [Go SDK Guide](docs/Go-SDK/go-sdk-guide.md)              | Go SDK Guide                      |
+| [Python SDK Guide](docs/Python-SDK/python-sdk-guide.md)   | Python SDK Guide                  |
 
 ## Configuration
 

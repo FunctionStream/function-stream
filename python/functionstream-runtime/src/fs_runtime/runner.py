@@ -21,6 +21,7 @@ from fs_api.driver import FSProcessorDriver
 logger = logging.getLogger(__name__)
 
 from .store.fs_context import WitContext, convert_config_to_dict
+import fs_api_advanced
 
 
 _DRIVER: Optional[FSProcessorDriver] = None
