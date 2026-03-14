@@ -73,6 +73,18 @@ func newKeyedValueStateFactory[V any](
 	}, nil
 }
 
+// NewKeyedValue creates a KeyedValueState for the given primary key and namespace.
+func (f *KeyedValueStateFactory[V]) NewKeyedValue(primaryKey []byte, namespace []byte) (*KeyedValueState[V], error) {
+	if primaryKey == nil || namespace == nil {
+		return nil, api.NewError(api.ErrStoreInternal, "primary key and namespace are required")
+	}
+	return &KeyedValueState[V]{
+		factory:    f,
+		primaryKey: common.DupBytes(primaryKey),
+		namespace:  common.DupBytes(namespace),
+	}, nil
+}
+
 type KeyedValueState[V any] struct {
 	factory    *KeyedValueStateFactory[V]
 	primaryKey []byte

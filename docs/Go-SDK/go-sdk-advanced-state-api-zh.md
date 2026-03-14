@@ -192,6 +192,7 @@ Keyed API 对应 store 的 **ComplexKey**，有三个维度：
 
 | 工厂                                | 方法                                                                                                  | 返回                                      |
 |-----------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
+| KeyedValueStateFactory[V]         | `NewKeyedValue(primaryKey []byte, namespace []byte) (*KeyedValueState[V], error)`                   | 每个 (primaryKey, namespace) 一个 value 状态。 |
 | KeyedListStateFactory[V]          | `NewKeyedList(primaryKey []byte, namespace []byte) (*KeyedListState[V], error)`                     | 每个 (primaryKey, namespace) 一个 list 状态。  |
 | KeyedMapStateFactory[MK,MV]       | `NewKeyedMap(primaryKey []byte, mapName string) (*KeyedMapState[MK,MV], error)`                     | 每个 (primaryKey, mapName) 一个 map 状态。     |
 | KeyedPriorityQueueStateFactory[V] | `NewKeyedPriorityQueue(primaryKey []byte, namespace []byte) (*KeyedPriorityQueueState[V], error)`   | 每个 (primaryKey, namespace) 一个 PQ 状态。    |

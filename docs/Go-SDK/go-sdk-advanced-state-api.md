@@ -192,6 +192,7 @@ The Keyed API maps onto the store’s **ComplexKey** with three dimensions:
 
 | Factory                           | Method                                                                                              | Returns                                        |
 |-----------------------------------|-----------------------------------------------------------------------------------------------------|------------------------------------------------|
+| KeyedValueStateFactory[V]         | `NewKeyedValue(primaryKey []byte, namespace []byte) (*KeyedValueState[V], error)`                   | One value state per (primaryKey, namespace).   |
 | KeyedListStateFactory[V]          | `NewKeyedList(primaryKey []byte, namespace []byte) (*KeyedListState[V], error)`                     | List state per (primaryKey, namespace).        |
 | KeyedMapStateFactory[MK,MV]       | `NewKeyedMap(primaryKey []byte, mapName string) (*KeyedMapState[MK,MV], error)`                     | Map state per (primaryKey, mapName).           |
 | KeyedPriorityQueueStateFactory[V] | `NewKeyedPriorityQueue(primaryKey []byte, namespace []byte) (*KeyedPriorityQueueState[V], error)`   | PQ state per (primaryKey, namespace).          |

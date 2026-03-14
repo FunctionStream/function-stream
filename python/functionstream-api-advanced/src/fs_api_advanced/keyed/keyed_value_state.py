@@ -19,7 +19,7 @@ V = TypeVar("V")
 
 
 class KeyedValueStateFactory(Generic[V]):
-    """Factory for keyed value state. Create from context with key_group; construct KeyedValueState(factory, primary_key, namespace) per (primary_key, namespace)."""
+    """Factory for keyed value state. Create from context with key_group; obtain state via new_keyed_value(primary_key, namespace)."""
 
     def __init__(
         self,
@@ -63,6 +63,16 @@ class KeyedValueStateFactory(Generic[V]):
             raise KvError("keyed value state from_context_auto_codec requires value_type")
         codec = default_codec_for(value_type)
         return cls(store, key_group, codec)
+
+    def new_keyed_value(
+        self, primary_key: bytes, namespace: bytes
+    ) -> "KeyedValueState[V]":
+        """Create a KeyedValueState for the given primary key and namespace."""
+        if primary_key is None:
+            raise KvError("keyed value state primary_key must not be None")
+        if namespace is None:
+            raise KvError("keyed value state namespace is required")
+        return KeyedValueState(self, primary_key, namespace)
 
 
 class KeyedValueState(Generic[V]):

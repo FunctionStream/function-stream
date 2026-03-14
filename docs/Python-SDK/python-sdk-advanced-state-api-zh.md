@@ -79,7 +79,7 @@
 | 概念            | API 参数                                   | 含义                                                      |
 |---------------|------------------------------------------|---------------------------------------------------------|
 | **key_group** | 创建工厂时的 `key_group`                       | **keyed 组**：标识该状态所属分区/组（如一组 “counters”，另一组 “sessions”）。 |
-| **key**       | 构造状态时的 `primary_key`（如 `KeyedValueState(factory, primary_key, namespace)`） | 当前记录的**流 key 的值**（如用户 ID、分区 key）。不同 key 对应不同状态。         |
+| **key**       | 工厂方法参数（如 `new_keyed_value(primary_key, namespace)`） | 当前记录的**流 key 的值**（如用户 ID、分区 key）。不同 key 对应不同状态。         |
 | **namespace** | 创建工厂时的 `namespace`（bytes）                | **有窗口时**为**窗口标识的 bytes**；**无窗口时**传**空 bytes**（如 `b""`）。 |
 
 ### 4.2 Keyed 工厂构造方法一览
@@ -97,7 +97,7 @@
 
 ### 4.3 KeyedValueState
 
-KeyedValueState 与 Go SDK 一致：工厂仅需 `key_group`（无 namespace）。工厂：`KeyedValueStateFactory.from_context(ctx, store_name, key_group, value_codec)` 或 `from_context_auto_codec(ctx, store_name, key_group, value_type=None)`。构造状态：`KeyedValueState(factory, primary_key, namespace)`，其中 namespace 可为 `state_name.encode("utf-8")`。状态方法：`update(value)`、`value()`（返回 `(value, found)`）、`clear()`。
+KeyedValueState 与 Go SDK 一致：工厂仅需 `key_group`（无 namespace）。工厂：`KeyedValueStateFactory.from_context(ctx, store_name, key_group, value_codec)` 或 `from_context_auto_codec(ctx, store_name, key_group, value_type=None)`。创建状态：`factory.new_keyed_value(primary_key, namespace)`（namespace 为 bytes，必填）。状态方法：`update(value)`、`value()`（返回 `(value, found)`）、`clear()`。
 
 ### 4.4 KeyedListState
 
@@ -147,7 +147,7 @@ class CounterProcessor(FSProcessorDriver):
 
 ```python
 from fs_api import FSProcessorDriver, Context
-from fs_api_advanced import KeyedValueState, KeyedValueStateFactory
+from fs_api_advanced import KeyedValueStateFactory
 
 class KeyedCounterProcessor(FSProcessorDriver):
     def init(self, ctx: Context, config: dict):
@@ -157,7 +157,7 @@ class KeyedCounterProcessor(FSProcessorDriver):
 
     def process(self, ctx: Context, source_id: int, data: bytes):
         primary_key = data[:8]
-        state = KeyedValueState(self._factory, primary_key, "count".encode("utf-8"))
+        state = self._factory.new_keyed_value(primary_key, b"count")
         cur, found = state.value()
         if not found:
             cur = 0

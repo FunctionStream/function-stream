@@ -79,7 +79,7 @@ All of the above can also be obtained via the corresponding `ctx.getOrCreate*` m
 | Term          | API parameter                                                         | Meaning                                                                                                                                    |
 |---------------|-----------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
 | **key_group** | `key_group` when creating the factory                                 | The **keyed group**: identifies which keyed partition/group this state belongs to (e.g. one group for "counters", another for "sessions"). |
-| **key**       | `primary_key` when constructing state (e.g. `KeyedValueState(factory, primary_key, namespace)`) | The **value of the stream key** for the current record (e.g. user ID, partition key). Each distinct key value gets isolated state.         |
+| **key**       | Argument to factory methods (e.g. `new_keyed_value(primary_key, namespace)`) | The **value of the stream key** for the current record (e.g. user ID, partition key). Each distinct key value gets isolated state.         |
 | **namespace** | `namespace` (bytes) when creating the factory                         | **If a window function is present**, use the **window identifier as bytes**. **Without windows**, pass **empty bytes** (e.g. `b""`).       |
 
 ### 4.2 Factory constructor summary (keyed)
@@ -97,7 +97,7 @@ You can also use the corresponding `ctx.getOrCreateKeyed*Factory(...)` methods, 
 
 ### 4.3 KeyedValueState
 
-KeyedValueState aligns with the Go SDK: the factory takes only `key_group` (no namespace). Factory: `KeyedValueStateFactory.from_context(ctx, store_name, key_group, value_codec)` or `from_context_auto_codec(ctx, store_name, key_group, value_type=None)`. Construct state: `KeyedValueState(factory, primary_key, namespace)` with e.g. `namespace = state_name.encode("utf-8")`. State methods: `update(value)`, `value()` (returns `(value, found)`), `clear()`.
+KeyedValueState aligns with the Go SDK: the factory takes only `key_group` (no namespace). Factory: `KeyedValueStateFactory.from_context(ctx, store_name, key_group, value_codec)` or `from_context_auto_codec(ctx, store_name, key_group, value_type=None)`. Create state: `factory.new_keyed_value(primary_key, namespace)` (namespace is bytes, required). State methods: `update(value)`, `value()` (returns `(value, found)`), `clear()`.
 
 ### 4.4 KeyedListState
 
@@ -147,7 +147,7 @@ When the stream is partitioned by key, create the factory in `init` and obtain s
 
 ```python
 from fs_api import FSProcessorDriver, Context
-from fs_api_advanced import KeyedValueState, KeyedValueStateFactory
+from fs_api_advanced import KeyedValueStateFactory
 
 class KeyedCounterProcessor(FSProcessorDriver):
     def init(self, ctx: Context, config: dict):
@@ -157,7 +157,7 @@ class KeyedCounterProcessor(FSProcessorDriver):
 
     def process(self, ctx: Context, source_id: int, data: bytes):
         primary_key = data[:8]
-        state = KeyedValueState(self._factory, primary_key, "count".encode("utf-8"))
+        state = self._factory.new_keyed_value(primary_key, b"count")
         cur, found = state.value()
         if not found:
             cur = 0
