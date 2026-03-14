@@ -140,7 +140,7 @@ class KeyedPriorityQueueState(Generic[V]):
     def poll(self) -> Tuple[Optional[V], bool]:
         """Remove and return (min element, found). Same as peek then delete if found."""
         val, found = self.peek()
-        if not found or val is None:
+        if not found:
             return (val, found)
         user_key = self._factory._value_codec.encode(val)
         self._factory._store.delete(self._complex_key(user_key))
