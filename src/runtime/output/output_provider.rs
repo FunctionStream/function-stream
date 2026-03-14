@@ -88,6 +88,33 @@ impl OutputProvider {
                 let runtime = output_config.output_runtime_config();
                 Ok(Box::new(OutputRunner::new(protocol, output_idx, runtime)))
             }
+            OutputConfig::Nats {
+                url,
+                subject,
+                extra,
+                runtime: _,
+            } => {
+                use crate::runtime::output::output_runner::OutputRunner;
+                use crate::runtime::output::protocol::nats::{
+                    NatsOutputProtocol, NatsProducerConfig,
+                };
+
+                if url.is_empty() {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid nats url in output config: empty (subject: {})",
+                            subject
+                        ),
+                    )) as Box<dyn std::error::Error + Send>);
+                }
+
+                let nats_config =
+                    NatsProducerConfig::new(url.clone(), subject.clone(), extra.clone());
+                let protocol = NatsOutputProtocol::new(nats_config);
+                let runtime = output_config.output_runtime_config();
+                Ok(Box::new(OutputRunner::new(protocol, output_idx, runtime)))
+            }
         }
     }
 }
