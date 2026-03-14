@@ -13,7 +13,7 @@
 from typing import Any, Generic, Iterator, Optional, Tuple, TypeVar
 
 from fs_api.store import ComplexKey, KvError, KvStore
-from fs_api_advanced.codec import Codec, PickleCodec, BytesCodec, default_codec_for
+from fs_api_advanced.codec import Codec, default_codec_for
 
 from ._keyed_common import ensure_ordered_key_codec
 
@@ -69,14 +69,12 @@ class KeyedMapStateFactory(Generic[MK, MV]):
     ) -> "KeyedMapStateFactory[MK, MV]":
         """Create a KeyedMapStateFactory with default codecs for MK and MV. Map key type must have an ordered default codec."""
         store = ctx.getOrCreateKVStore(store_name)
-        map_key_codec = (
-            default_codec_for(map_key_type) if map_key_type is not None else BytesCodec()
-        )
-        map_value_codec = (
-            default_codec_for(map_value_type)
-            if map_value_type is not None
-            else PickleCodec()
-        )
+        if map_key_type is None:
+            raise KvError("keyed map state from_context_auto_codec requires map_key_type")
+        if map_value_type is None:
+            raise KvError("keyed map state from_context_auto_codec requires map_value_type")
+        map_key_codec = default_codec_for(map_key_type)
+        map_value_codec = default_codec_for(map_value_type)
         return cls(store, key_group, map_key_codec, map_value_codec)
 
     def new_keyed_map(

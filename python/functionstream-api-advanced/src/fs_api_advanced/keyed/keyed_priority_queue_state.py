@@ -13,7 +13,7 @@
 from typing import Any, Generic, Iterator, Optional, Tuple, TypeVar
 
 from fs_api.store import ComplexKey, KvError, KvStore
-from fs_api_advanced.codec import Codec, IntCodec, default_codec_for
+from fs_api_advanced.codec import Codec, default_codec_for
 
 from ._keyed_common import ensure_ordered_key_codec
 
@@ -62,7 +62,9 @@ class KeyedPriorityQueueStateFactory(Generic[V]):
     ) -> "KeyedPriorityQueueStateFactory[V]":
         """Create a KeyedPriorityQueueStateFactory with default value codec. V must have an ordered default codec."""
         store = ctx.getOrCreateKVStore(store_name)
-        codec = default_codec_for(item_type) if item_type is not None else IntCodec()
+        if item_type is None:
+            raise KvError("keyed priority queue state from_context_auto_codec requires item_type")
+        codec = default_codec_for(item_type)
         return cls(store, key_group, codec)
 
     def new_keyed_priority_queue(

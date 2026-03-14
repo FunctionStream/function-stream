@@ -13,7 +13,7 @@
 from typing import Any, Generic, Optional, Tuple, TypeVar
 
 from fs_api.store import ComplexKey, KvError, KvStore
-from fs_api_advanced.codec import Codec, PickleCodec, default_codec_for
+from fs_api_advanced.codec import Codec, default_codec_for
 
 V = TypeVar("V")
 
@@ -59,7 +59,9 @@ class KeyedValueStateFactory(Generic[V]):
     ) -> "KeyedValueStateFactory[V]":
         """Create a KeyedValueStateFactory with default value codec from context and store name."""
         store = ctx.getOrCreateKVStore(store_name)
-        codec = default_codec_for(value_type) if value_type is not None else PickleCodec()
+        if value_type is None:
+            raise KvError("keyed value state from_context_auto_codec requires value_type")
+        codec = default_codec_for(value_type)
         return cls(store, key_group, codec)
 
 
