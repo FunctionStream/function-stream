@@ -19,6 +19,10 @@ class IntCodec(Codec[int]):
     supports_ordered_keys = True
 
     _PACKER = struct.Struct(">Q")
+    _SIZE = 8
+
+    def encoded_size(self) -> int:
+        return self._SIZE
     _MASK_64 = 0xFFFFFFFFFFFFFFFF
     _SIGN_BIT = 1 << 63
     _TWO_TO_64 = 1 << 64

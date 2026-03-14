@@ -154,9 +154,7 @@ func (s *KeyedListState[V]) Get() ([]V, error) {
 
 // Update replaces the list with the given values (one Put with batch payload).
 func (s *KeyedListState[V]) Update(values []V) error {
-	if len(values) == 0 {
-		return s.Clear()
-	}
+	s.Clear()
 	payload, err := s.serializeBatch(values)
 	if err != nil {
 		return err

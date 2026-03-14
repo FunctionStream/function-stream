@@ -79,17 +79,6 @@ type KeyedValueState[V any] struct {
 	namespace  []byte
 }
 
-func (f *KeyedValueStateFactory[V]) NewKeyedValue(primaryKey []byte, stateName string) (*KeyedValueState[V], error) {
-	if primaryKey == nil || stateName == "" {
-		return nil, api.NewError(api.ErrStoreInternal, "primary key and state name are required")
-	}
-	return &KeyedValueState[V]{
-		factory:    f,
-		primaryKey: common.DupBytes(primaryKey),
-		namespace:  []byte(stateName),
-	}, nil
-}
-
 func (s *KeyedValueState[V]) buildCK() api.ComplexKey {
 	return api.ComplexKey{
 		KeyGroup:  s.factory.groupKey,

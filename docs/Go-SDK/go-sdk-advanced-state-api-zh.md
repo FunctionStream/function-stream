@@ -54,7 +54,7 @@
 
 **Keyed 与非 Keyed**
 
-- **Keyed 状态**用于 **keyed 算子**：流按 key 分区（如 keyBy 之后）。运行时按 key 投递记录；每个 key 应有独立状态。可**一次**获取**工厂**（从 context、store 名称、keyGroup），再按**主键**（流 key）通过例如 `factory.NewKeyedValue(primaryKey, stateName)` 创建状态。
+- **Keyed 状态**用于 **keyed 算子**：流按 key 分区（如 keyBy 之后）。运行时按 key 投递记录；每个 key 应有独立状态。可**一次**获取**工厂**（从 context、store 名称、keyGroup），再按**主键**（流 key）与 namespace 构造对应状态类型。
 - **非 Keyed 状态**（ValueState、ListState 等）每个 store 存一个逻辑实体。在无 key 分区或维护单一全局状态时使用。
 
 ---
@@ -161,7 +161,7 @@
 
 ## 7. Keyed 状态 — 工厂与按 Key 实例
 
-Keyed 状态用于 **keyed 算子**：流按 key 分区（如 keyBy）时，每个 key 在独立状态上处理。可**一次**获取**工厂**（从 context、store 名称与 **keyGroup**），再按**主键**（当前记录的流 key）创建状态，例如 `factory.NewKeyedValue(primaryKey, stateName)`。
+Keyed 状态用于 **keyed 算子**：流按 key 分区（如 keyBy）时，每个 key 在独立状态上处理。可**一次**获取**工厂**（从 context、store 名称与 **keyGroup**），再按**主键**（当前记录的流 key）与 namespace 构造对应状态类型。
 
 状态按 **keyGroup**（[]byte）和 **主键**（primaryKey，[]byte）组织。由 context、store 名称、keyGroup 创建工厂；再通过工厂方法按主键获取状态。
 
@@ -172,7 +172,7 @@ Keyed API 对应 store 的 **ComplexKey**，有三个维度：
 | 术语            | 出现位置                                                                                          | 含义                                                                                                |
 |---------------|-----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
 | **keyGroup**  | 创建工厂时的参数                                                                                      | **keyed 组**：标识该状态所属分区/组（如 `[]byte("counters")`、`[]byte("sessions")`）。同一 keyed 组 ⇒ 相同 keyGroup 字节。 |
-| **key**       | 工厂方法中的 `primaryKey`（如 `NewKeyedValue(primaryKey, ...)`、`NewKeyedList(primaryKey, namespace)`） | **流 key 的值**：分区流所用的 key，序列化为字节（如用户 ID、分区 key）。不同 primaryKey 对应不同状态。                               |
+| **key**       | 工厂方法中的 `primaryKey`（如 `NewKeyedList(primaryKey, namespace)` 等） | **流 key 的值**：分区流所用的 key，序列化为字节（如用户 ID、分区 key）。不同 primaryKey 对应不同状态。                               |
 | **namespace** | 工厂方法中的 `namespace`（[]byte）                                                                    | **有窗口时**：**窗口标识的字节**（如序列化的窗口边界或窗口 ID），状态按 key 与窗口隔离。**无窗口时**：传**空字节**（`nil` 或 `[]byte{}`）。        |
 
 **小结**：**keyGroup** = keyed 组标识；**key**（primaryKey）= 流 key 值；**namespace** = 使用窗口时为窗口字节，否则为空。
@@ -192,7 +192,6 @@ Keyed API 对应 store 的 **ComplexKey**，有三个维度：
 
 | 工厂                                | 方法                                                                                                  | 返回                                      |
 |-----------------------------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------|
-| KeyedValueStateFactory[V]         | `NewKeyedValue(primaryKey []byte, stateName string) (*KeyedValueState[V], error)`                   | 每个 (primaryKey, stateName) 一个 value 状态。 |
 | KeyedListStateFactory[V]          | `NewKeyedList(primaryKey []byte, namespace []byte) (*KeyedListState[V], error)`                     | 每个 (primaryKey, namespace) 一个 list 状态。  |
 | KeyedMapStateFactory[MK,MV]       | `NewKeyedMap(primaryKey []byte, mapName string) (*KeyedMapState[MK,MV], error)`                     | 每个 (primaryKey, mapName) 一个 map 状态。     |
 | KeyedPriorityQueueStateFactory[V] | `NewKeyedPriorityQueue(primaryKey []byte, namespace []byte) (*KeyedPriorityQueueState[V], error)`   | 每个 (primaryKey, namespace) 一个 PQ 状态。    |

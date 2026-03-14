@@ -54,7 +54,7 @@ The advanced state API offers typed views over a single logical store. Pick the 
 
 **Keyed vs non-keyed**
 
-- **Keyed state** is for **keyed operators**: streams partitioned by a key (e.g. after keyBy). The runtime delivers records per key; each key should have isolated state. Obtain a **factory** once (from context, store name, and keyGroup), then create state **per primary key** (the stream key) via e.g. `factory.NewKeyedValue(primaryKey, stateName)`.
+- **Keyed state** is for **keyed operators**: streams partitioned by a key (e.g. after keyBy). The runtime delivers records per key; each key should have isolated state. Obtain a **factory** once (from context, store name, and keyGroup), then construct the corresponding state type per **primary key** (stream key) and namespace.
 - **Non-keyed state** (ValueState, ListState, etc.) stores one logical entity per store. Use it when there is no key partitioning or you maintain a single global state.
 
 ---
@@ -172,7 +172,7 @@ The Keyed API maps onto the store’s **ComplexKey** with three dimensions:
 | Term          | Where it appears                                                                                               | Meaning                                                                                                                                                                                                                                |
 |---------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **keyGroup**  | Argument when creating the factory                                                                             | The **keyed group**: identifies which keyed partition/group this state belongs to. Use one keyGroup per logical “keyed group” or state kind (e.g. `[]byte("counters")`, `[]byte("sessions")`). Same keyed group ⇒ same keyGroup bytes. |
-| **key**       | `primaryKey` in factory methods (e.g. `NewKeyedValue(primaryKey, ...)`, `NewKeyedList(primaryKey, namespace)`) | The **value of the stream key**: the key that partitioned the stream, serialized as bytes (e.g. user ID, partition key). Each distinct primaryKey gets isolated state.                                                                 |
+| **key**       | `primaryKey` in factory methods (e.g. `NewKeyedList(primaryKey, namespace)`) | The **value of the stream key**: the key that partitioned the stream, serialized as bytes (e.g. user ID, partition key). Each distinct primaryKey gets isolated state.                                                                 |
 | **namespace** | `namespace` ([]byte) in factory methods that take it                                                           | **With window functions**: use the **window identifier as bytes** (e.g. serialized window bounds or window ID) so state is scoped per key *and* per window. **Without windows**: pass **empty bytes** (`nil` or `[]byte{}`).           |
 
 **Summary:** **keyGroup** = keyed group identifier; **key** (primaryKey) = stream key value; **namespace** = window bytes when using windows, otherwise empty.
@@ -192,7 +192,6 @@ The Keyed API maps onto the store’s **ComplexKey** with three dimensions:
 
 | Factory                           | Method                                                                                              | Returns                                        |
 |-----------------------------------|-----------------------------------------------------------------------------------------------------|------------------------------------------------|
-| KeyedValueStateFactory[V]         | `NewKeyedValue(primaryKey []byte, stateName string) (*KeyedValueState[V], error)`                   | One value state per (primaryKey, stateName).   |
 | KeyedListStateFactory[V]          | `NewKeyedList(primaryKey []byte, namespace []byte) (*KeyedListState[V], error)`                     | List state per (primaryKey, namespace).        |
 | KeyedMapStateFactory[MK,MV]       | `NewKeyedMap(primaryKey []byte, mapName string) (*KeyedMapState[MK,MV], error)`                     | Map state per (primaryKey, mapName).           |
 | KeyedPriorityQueueStateFactory[V] | `NewKeyedPriorityQueue(primaryKey []byte, namespace []byte) (*KeyedPriorityQueueState[V], error)`   | PQ state per (primaryKey, namespace).          |

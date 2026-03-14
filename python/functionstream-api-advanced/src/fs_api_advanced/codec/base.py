@@ -23,3 +23,7 @@ class Codec(Generic[T]):
 
     def decode(self, data: bytes) -> T:
         raise NotImplementedError
+
+    def encoded_size(self) -> int:
+        """Return fixed encoded byte length; >0 means fixed-size, 0 or negative means variable length."""
+        return 0

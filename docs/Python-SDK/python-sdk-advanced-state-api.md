@@ -79,25 +79,45 @@ All of the above can also be obtained via the corresponding `ctx.getOrCreate*` m
 | Term          | API parameter                                                         | Meaning                                                                                                                                    |
 |---------------|-----------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
 | **key_group** | `key_group` when creating the factory                                 | The **keyed group**: identifies which keyed partition/group this state belongs to (e.g. one group for "counters", another for "sessions"). |
-| **key**       | The argument to factory methods (e.g. `new_keyed_value(primary_key)`) | The **value of the stream key** for the current record (e.g. user ID, partition key). Each distinct key value gets isolated state.         |
+| **key**       | `primary_key` when constructing state (e.g. `KeyedValueState(factory, primary_key, namespace)`) | The **value of the stream key** for the current record (e.g. user ID, partition key). Each distinct key value gets isolated state.         |
 | **namespace** | `namespace` (bytes) when creating the factory                         | **If a window function is present**, use the **window identifier as bytes**. **Without windows**, pass **empty bytes** (e.g. `b""`).       |
 
 ### 4.2 Factory constructor summary (keyed)
 
 | Factory                        | With codec                                                                                                | AutoCodec                                                                                                                |
 |--------------------------------|-----------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| KeyedValueStateFactory         | `KeyedValueStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)`                 | `KeyedValueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)`                 |
-| KeyedListStateFactory          | `KeyedListStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec)`                  | `KeyedListStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_type=None)`                  |
-| KeyedMapStateFactory           | `KeyedMapStateFactory.from_context(ctx, store_name, namespace, key_group, key_codec, value_codec)`        | `KeyedMapStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, value_codec)`                       |
-| KeyedPriorityQueueStateFactory | `KeyedPriorityQueueStateFactory.from_context(ctx, store_name, namespace, key_group, item_codec)`          | `KeyedPriorityQueueStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, item_type=None)`          |
-| KeyedAggregatingStateFactory   | `KeyedAggregatingStateFactory.from_context(ctx, store_name, namespace, key_group, acc_codec, agg_func)`   | `KeyedAggregatingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, agg_func, acc_type=None)`   |
-| KeyedReducingStateFactory      | `KeyedReducingStateFactory.from_context(ctx, store_name, namespace, key_group, value_codec, reduce_func)` | `KeyedReducingStateFactory.from_context_auto_codec(ctx, store_name, namespace, key_group, reduce_func, value_type=None)` |
+| KeyedValueStateFactory         | `KeyedValueStateFactory.from_context(ctx, store_name, key_group, value_codec)`                             | `KeyedValueStateFactory.from_context_auto_codec(ctx, store_name, key_group, value_type=None)`                             |
+| KeyedListStateFactory          | `KeyedListStateFactory.from_context(ctx, store_name, key_group, value_codec)`                             | `KeyedListStateFactory.from_context_auto_codec(ctx, store_name, key_group, value_type=None)`                              |
+| KeyedMapStateFactory           | `KeyedMapStateFactory.from_context(ctx, store_name, key_group, map_key_codec, map_value_codec)`         | `KeyedMapStateFactory.from_context_auto_codec(ctx, store_name, key_group, map_key_type=None, map_value_type=None)`       |
+| KeyedPriorityQueueStateFactory | `KeyedPriorityQueueStateFactory.from_context(ctx, store_name, key_group, item_codec)`                     | `KeyedPriorityQueueStateFactory.from_context_auto_codec(ctx, store_name, key_group, item_type=None)`                     |
+| KeyedAggregatingStateFactory   | `KeyedAggregatingStateFactory.from_context(ctx, store_name, key_group, acc_codec, agg_func)`               | `KeyedAggregatingStateFactory.from_context_auto_codec(ctx, store_name, key_group, agg_func, acc_type=None)`              |
+| KeyedReducingStateFactory      | `KeyedReducingStateFactory.from_context(ctx, store_name, key_group, value_codec, reduce_func)`           | `KeyedReducingStateFactory.from_context_auto_codec(ctx, store_name, key_group, reduce_func, value_type=None)`           |
 
 You can also use the corresponding `ctx.getOrCreateKeyed*Factory(...)` methods, which delegate to these constructors.
 
 ### 4.3 KeyedValueState
 
-KeyedValueState requires only a **value codec**; no ordered codec. Create state from the factory with `factory.new_keyed_value(primary_key, state_name="")`, yielding `KeyedValueState[V]`. State methods: `update(value)`, `value()` (returns `Optional[V]`), `clear()`. The primary key is fixed at creation time via `primary_key` (bytes).
+KeyedValueState aligns with the Go SDK: the factory takes only `key_group` (no namespace). Factory: `KeyedValueStateFactory.from_context(ctx, store_name, key_group, value_codec)` or `from_context_auto_codec(ctx, store_name, key_group, value_type=None)`. Construct state: `KeyedValueState(factory, primary_key, namespace)` with e.g. `namespace = state_name.encode("utf-8")`. State methods: `update(value)`, `value()` (returns `(value, found)`), `clear()`.
+
+### 4.4 KeyedListState
+
+KeyedListState aligns with the Go SDK: the factory takes only `key_group` (no namespace); **key** and **namespace** are passed when creating the list. Factory: `KeyedListStateFactory.from_context(ctx, store_name, key_group, value_codec)` or `from_context_auto_codec(ctx, store_name, key_group, value_type=None)`. Create list: `factory.new_keyed_list(key, namespace)`, yielding `KeyedListState[V]`. State methods: `add(value)`, `add_all(values)`, `get()` (returns `List[V]`), `update(values)` (clears then writes the full list), `clear()`.
+
+### 4.5 KeyedAggregatingState
+
+KeyedAggregatingState aligns with the Go SDK: the factory takes only `key_group` (no namespace). Factory: `KeyedAggregatingStateFactory.from_context(ctx, store_name, key_group, acc_codec, agg_func)` or `from_context_auto_codec(ctx, store_name, key_group, agg_func, acc_type=None)`. Create state: `factory.new_aggregating_state(primary_key, state_name="")`, yielding `KeyedAggregatingState[T, ACC, R]` bound to that (primary_key, namespace=state_name). State methods: `add(value)` (merge into this state’s accumulator), `get()` (returns `(result, found)`), `clear()`.
+
+### 4.6 KeyedMapState
+
+KeyedMapState aligns with the Go SDK: the factory takes only `key_group` (no namespace), and the map key codec must be ordered. Factory: `KeyedMapStateFactory.from_context(ctx, store_name, key_group, map_key_codec, map_value_codec)` or `from_context_auto_codec(ctx, store_name, key_group, map_key_type=None, map_value_type=None)`. Create map: `factory.new_keyed_map(primary_key, map_name)` (map_name required, used as namespace), yielding `KeyedMapState[MK, MV]`. State methods: `put(map_key, value)`, `get(map_key)` (returns `(value, found)`), `delete(map_key)`, `clear()` (delete all entries in this map by prefix), `all()` (iterate over `(map_key, value)` pairs).
+
+### 4.7 KeyedPriorityQueueState
+
+KeyedPriorityQueueState aligns with the Go SDK: the factory takes only `key_group` (no namespace), and the element codec must be ordered. Factory: `KeyedPriorityQueueStateFactory.from_context(ctx, store_name, key_group, item_codec)` or `from_context_auto_codec(ctx, store_name, key_group, item_type=None)`. Create queue: `factory.new_keyed_priority_queue(primary_key, namespace)` (both required, bytes), yielding `KeyedPriorityQueueState[V]`. State methods: `add(value)`, `peek()` (returns `(min_element, found)`), `poll()` (remove and return min), `clear()` (delete all by prefix), `all()` (iterate over all elements in order).
+
+### 4.8 KeyedReducingState
+
+KeyedReducingState aligns with the Go SDK: the factory takes only `key_group` (no namespace). Factory: `KeyedReducingStateFactory.from_context(ctx, store_name, key_group, value_codec, reduce_func)` or `from_context_auto_codec(ctx, store_name, key_group, reduce_func, value_type=None)`. Create state: `factory.new_reducing_state(primary_key, namespace)` (both required, bytes), yielding `KeyedReducingState[V]`. State methods: `add(value)` (merge with current value via reduce_func and put), `get()` (returns `(value, found)`), `clear()`.
 
 ---
 
@@ -127,19 +147,19 @@ When the stream is partitioned by key, create the factory in `init` and obtain s
 
 ```python
 from fs_api import FSProcessorDriver, Context
-from fs_api_advanced import KeyedValueStateFactory
+from fs_api_advanced import KeyedValueState, KeyedValueStateFactory
 
 class KeyedCounterProcessor(FSProcessorDriver):
     def init(self, ctx: Context, config: dict):
         self._factory = KeyedValueStateFactory.from_context_auto_codec(
-            ctx, "counters", b"", b"by_key", value_type=int
+            ctx, "counters", b"by_key", value_type=int
         )
 
     def process(self, ctx: Context, source_id: int, data: bytes):
         primary_key = data[:8]
-        state = self._factory.new_keyed_value(primary_key, "count")
-        cur = state.value()
-        if cur is None:
+        state = KeyedValueState(self._factory, primary_key, "count".encode("utf-8"))
+        cur, found = state.value()
+        if not found:
             cur = 0
         state.update(cur + 1)
         ctx.emit(str(cur + 1).encode(), 0)

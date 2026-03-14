@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Generic, Optional, Tuple, TypeVar
 
 from fs_api.store import ComplexKey, KvError, KvStore
 from fs_api_advanced.codec import Codec, PickleCodec, default_codec_for
@@ -19,23 +19,21 @@ V = TypeVar("V")
 
 
 class KeyedValueStateFactory(Generic[V]):
+    """Factory for keyed value state. Create from context with key_group; construct KeyedValueState(factory, primary_key, namespace) per (primary_key, namespace)."""
+
     def __init__(
         self,
         store: KvStore,
-        namespace: bytes,
         key_group: bytes,
         value_codec: Codec[V],
     ):
         if store is None:
             raise KvError("keyed value state factory store must not be None")
-        if namespace is None:
-            raise KvError("keyed value state factory namespace must not be None")
         if key_group is None:
             raise KvError("keyed value state factory key_group must not be None")
         if value_codec is None:
             raise KvError("keyed value state factory value codec must not be None")
         self._store = store
-        self._namespace = namespace
         self._key_group = key_group
         self._value_codec = value_codec
 
@@ -44,85 +42,69 @@ class KeyedValueStateFactory(Generic[V]):
         cls,
         ctx: Any,
         store_name: str,
-        namespace: bytes,
         key_group: bytes,
         value_codec: Codec[V],
     ) -> "KeyedValueStateFactory[V]":
         """Create a KeyedValueStateFactory from a context and store name (for keyed operators)."""
         store = ctx.getOrCreateKVStore(store_name)
-        return cls(store, namespace, key_group, value_codec)
+        return cls(store, key_group, value_codec)
 
     @classmethod
     def from_context_auto_codec(
         cls,
         ctx: Any,
         store_name: str,
-        namespace: bytes,
         key_group: bytes,
         value_type: Optional[type] = None,
     ) -> "KeyedValueStateFactory[V]":
         """Create a KeyedValueStateFactory with default value codec from context and store name."""
         store = ctx.getOrCreateKVStore(store_name)
         codec = default_codec_for(value_type) if value_type is not None else PickleCodec()
-        return cls(store, namespace, key_group, codec)
-
-    def new_keyed_value(self, primary_key: bytes, state_name: str = "") -> "KeyedValueState[V]":
-        return KeyedValueState(
-            self._store,
-            self._namespace,
-            self._key_group,
-            self._value_codec,
-            primary_key,
-            state_name,
-        )
+        return cls(store, key_group, codec)
 
 
 class KeyedValueState(Generic[V]):
+    """Value state for one (primary_key, namespace). update(value), value() -> (value, found), clear()."""
+
     def __init__(
         self,
-        store: KvStore,
-        namespace: bytes,
-        key_group: bytes,
-        value_codec: Codec[V],
+        factory: KeyedValueStateFactory[V],
         primary_key: bytes,
-        state_name: str = "",
+        namespace: bytes,
     ):
-        if namespace is None:
-            raise KvError("keyed value state namespace must not be None")
-        if key_group is None:
-            raise KvError("keyed value state key_group must not be None")
-        if value_codec is None:
-            raise KvError("keyed value state value_codec must not be None")
+        if factory is None:
+            raise KvError("keyed value state factory must not be None")
         if primary_key is None:
             raise KvError("keyed value state primary_key must not be None")
-        self._store = store
-        self._namespace = namespace
-        self._key_group = key_group
-        self._value_codec = value_codec
+        if namespace is None:
+            raise KvError("keyed value state namespace must not be None")
+        self._factory = factory
         self._primary_key = primary_key
-        self._state_name = state_name
+        self._namespace = namespace
 
-    def _build_ck(self) -> ComplexKey:
+    def _complex_key(self) -> ComplexKey:
         return ComplexKey(
-            key_group=self._key_group,
+            key_group=self._factory._key_group,
             key=self._primary_key,
             namespace=self._namespace,
-            user_key=self._state_name.encode("utf-8") if self._state_name else b"",
+            user_key=b"",
         )
 
     def update(self, value: V) -> None:
-        ck = self._build_ck()
-        self._store.put(ck, self._value_codec.encode(value))
+        """Set the value for this state."""
+        ck = self._complex_key()
+        self._factory._store.put(ck, self._factory._value_codec.encode(value))
 
-    def value(self) -> Optional[V]:
-        ck = self._build_ck()
-        raw = self._store.get(ck)
+    def value(self) -> Tuple[Optional[V], bool]:
+        """Return (current value, found). found is False when no value has been set."""
+        raw = self._factory._store.get(self._complex_key())
         if raw is None:
-            return None
-        return self._value_codec.decode(raw)
+            return (None, False)
+        return (self._factory._value_codec.decode(raw), True)
 
     def clear(self) -> None:
-        self._store.delete(self._build_ck())
+        """Remove the stored value for this state."""
+        self._factory._store.delete(self._complex_key())
 
 
 __all__ = ["KeyedValueState", "KeyedValueStateFactory"]
