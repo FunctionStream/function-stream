@@ -18,6 +18,10 @@ from .base import Codec
 class FloatCodec(Codec[float]):
     """Ordered float codec for range scans (lexicographic byte order)."""
     supports_ordered_keys = True
+    _SIZE = 8
+
+    def encoded_size(self) -> int:
+        return self._SIZE
 
     def encode(self, value: float) -> bytes:
         bits = struct.unpack(">Q", struct.pack(">d", value))[0]

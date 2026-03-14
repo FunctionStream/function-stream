@@ -15,6 +15,10 @@ from .base import Codec
 
 class BoolCodec(Codec[bool]):
     supports_ordered_keys = True
+    _SIZE = 1
+
+    def encoded_size(self) -> int:
+        return self._SIZE
 
     def encode(self, value: bool) -> bytes:
         return b"\x01" if value else b"\x00"
