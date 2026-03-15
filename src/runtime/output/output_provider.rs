@@ -88,6 +88,33 @@ impl OutputProvider {
                 let runtime = output_config.output_runtime_config();
                 Ok(Box::new(OutputRunner::new(protocol, output_idx, runtime)))
             }
+            OutputConfig::Pulsar {
+                url,
+                topic,
+                extra,
+                runtime: _,
+            } => {
+                use crate::runtime::output::output_runner::OutputRunner;
+                use crate::runtime::output::protocol::pulsar::{
+                    PulsarOutputProtocol, PulsarProducerConfig,
+                };
+
+                if url.is_empty() {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid pulsar url in output config: empty (topic: {})",
+                            topic
+                        ),
+                    )) as Box<dyn std::error::Error + Send>);
+                }
+
+                let pulsar_config =
+                    PulsarProducerConfig::new(url.clone(), topic.clone(), extra.clone());
+                let protocol = PulsarOutputProtocol::new(pulsar_config);
+                let runtime = output_config.output_runtime_config();
+                Ok(Box::new(OutputRunner::new(protocol, output_idx, runtime)))
+            }
         }
     }
 }

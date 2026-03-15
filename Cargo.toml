@@ -36,6 +36,8 @@ async-trait = "0.1"
 num_cpus = "1.0"
 protocol = { path = "./protocol" }
 rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi"] }
+pulsar = { version = "6", default-features = false, features = ["tokio-runtime"] }
+futures = "0.3"
 crossbeam-channel = "0.5"
 pest = "2.7"
 pest_derive = "2.7"

@@ -10,9 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Output Protocol - Output protocol module
-//
-// Provides implementations of various output protocols
+pub mod producer_config;
+pub mod pulsar_protocol;
 
-pub mod kafka;
-pub mod pulsar;
+pub use producer_config::PulsarProducerConfig;
+pub use pulsar_protocol::PulsarOutputProtocol;

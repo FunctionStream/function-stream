@@ -144,6 +144,17 @@ pub enum InputConfig {
         #[serde(default)]
         runtime: InputRuntimeConfig,
     },
+    Pulsar {
+        url: String,
+        topic: String,
+        subscription: String,
+        #[serde(default)]
+        subscription_type: Option<String>,
+        #[serde(flatten)]
+        extra: HashMap<String, String>,
+        #[serde(default)]
+        runtime: InputRuntimeConfig,
+    },
 }
 
 impl InputConfig {
@@ -172,12 +183,14 @@ impl InputConfig {
     pub fn input_type(&self) -> &'static str {
         match self {
             InputConfig::Kafka { .. } => "kafka",
+            InputConfig::Pulsar { .. } => "pulsar",
         }
     }
 
     pub fn input_runtime_config(&self) -> InputRuntimeConfig {
         match self {
             InputConfig::Kafka { runtime, .. } => runtime.clone(),
+            InputConfig::Pulsar { runtime, .. } => runtime.clone(),
         }
     }
 }
@@ -520,6 +533,14 @@ pub enum OutputConfig {
         #[serde(default)]
         runtime: OutputRuntimeConfig,
     },
+    Pulsar {
+        url: String,
+        topic: String,
+        #[serde(flatten)]
+        extra: HashMap<String, String>,
+        #[serde(default)]
+        runtime: OutputRuntimeConfig,
+    },
 }
 
 impl OutputConfig {
@@ -547,12 +568,14 @@ impl OutputConfig {
     pub fn output_type(&self) -> &'static str {
         match self {
             OutputConfig::Kafka { .. } => "kafka",
+            OutputConfig::Pulsar { .. } => "pulsar",
         }
     }
 
     pub fn output_runtime_config(&self) -> OutputRuntimeConfig {
         match self {
             OutputConfig::Kafka { runtime, .. } => runtime.clone(),
+            OutputConfig::Pulsar { runtime, .. } => runtime.clone(),
         }
     }
 }
