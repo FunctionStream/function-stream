@@ -10,6 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod parser;
+pub mod planner;
 
-pub use parser::SqlParser;
+pub use planner::StreamSchemaProvider;
+pub use planner::parse::parse_sql;
+pub use planner::plan::rewrite_plan;
+pub use planner::sql_to_plan::statement_to_plan;

@@ -12,6 +12,7 @@
 
 use super::{
     CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, StopFunction,
+    StreamingSql,
 };
 use crate::coordinator::plan::PlanNode;
 use crate::coordinator::statement::Statement;
@@ -85,6 +86,12 @@ pub trait StatementVisitor {
     fn visit_create_python_function(
         &self,
         stmt: &CreatePythonFunction,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_streaming_sql(
+        &self,
+        stmt: &StreamingSql,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 }

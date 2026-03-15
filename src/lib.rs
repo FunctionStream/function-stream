@@ -16,6 +16,7 @@
 
 pub mod config;
 pub mod coordinator;
+pub mod datastream;
 pub mod logging;
 pub mod runtime;
 pub mod server;

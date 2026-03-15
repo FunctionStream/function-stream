@@ -14,6 +14,7 @@ use crate::coordinator::dataset::{ExecuteResult, ShowFunctionsResult, empty_reco
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, PlanNode, PlanVisitor,
     PlanVisitorContext, PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
+    StreamingSqlPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::taskexecutor::TaskManager;
@@ -198,6 +199,19 @@ impl PlanVisitor for Executor {
             })
             .map_err(|e| ExecuteError::Task(e.to_string()));
 
+        PlanVisitorResult::Execute(result)
+    }
+
+    fn visit_streaming_sql_plan(
+        &self,
+        plan: &StreamingSqlPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        // TODO: apply rewrite_plan for streaming transformations, then execute
+        let result = Err(ExecuteError::Internal(format!(
+            "Streaming SQL execution not yet implemented. LogicalPlan:\n{}",
+            plan.logical_plan.display_indent()
+        )));
         PlanVisitorResult::Execute(result)
     }
 }

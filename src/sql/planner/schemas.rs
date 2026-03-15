@@ -1,0 +1,59 @@
+use crate::sql::planner::types::{DFField, TIMESTAMP_FIELD};
+use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit};
+use datafusion::common::{DFSchema, DFSchemaRef, Result as DFResult, TableReference};
+use std::{collections::HashMap, sync::Arc};
+
+pub fn window_arrow_struct() -> DataType {
+    DataType::Struct(
+        vec![
+            Arc::new(Field::new(
+                "start",
+                DataType::Timestamp(TimeUnit::Nanosecond, None),
+                false,
+            )),
+            Arc::new(Field::new(
+                "end",
+                DataType::Timestamp(TimeUnit::Nanosecond, None),
+                false,
+            )),
+        ]
+        .into(),
+    )
+}
+
+pub(crate) fn add_timestamp_field(
+    schema: DFSchemaRef,
+    qualifier: Option<TableReference>,
+) -> DFResult<DFSchemaRef> {
+    if has_timestamp_field(&schema) {
+        return Ok(schema);
+    }
+
+    let timestamp_field = DFField::new(
+        qualifier,
+        TIMESTAMP_FIELD,
+        DataType::Timestamp(TimeUnit::Nanosecond, None),
+        false,
+    );
+    Ok(Arc::new(schema.join(&DFSchema::new_with_metadata(
+        vec![timestamp_field.into()],
+        HashMap::new(),
+    )?)?))
+}
+
+pub(crate) fn has_timestamp_field(schema: &DFSchemaRef) -> bool {
+    schema
+        .fields()
+        .iter()
+        .any(|field| field.name() == TIMESTAMP_FIELD)
+}
+
+pub fn add_timestamp_field_arrow(schema: Schema) -> SchemaRef {
+    let mut fields = schema.fields().to_vec();
+    fields.push(Arc::new(Field::new(
+        TIMESTAMP_FIELD,
+        DataType::Timestamp(TimeUnit::Nanosecond, None),
+        false,
+    )));
+    Arc::new(Schema::new(fields))
+}

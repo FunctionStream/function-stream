@@ -29,7 +29,7 @@ use crate::coordinator::{
     CreateFunction, CreatePythonFunction, DataSet, DropFunction, ShowFunctions,
     ShowFunctionsResult, StartFunction, Statement, StopFunction,
 };
-use crate::sql::SqlParser;
+use crate::sql::planner::parse::parse_sql;
 
 pub struct FunctionStreamServiceImpl {
     coordinator: Arc<Coordinator>,
@@ -70,10 +70,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let req = request.into_inner();
 
         let parse_start = Instant::now();
-        let stmt = match SqlParser::parse(&req.sql) {
-            Ok(stmt) => {
+        let parsed = match parse_sql(&req.sql) {
+            Ok(parsed) => {
                 log::debug!("SQL parsed in {}ms", parse_start.elapsed().as_millis());
-                stmt
+                parsed
             }
             Err(e) => {
                 return Ok(TonicResponse::new(Self::build_response(
@@ -85,7 +85,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         };
 
         let exec_start = Instant::now();
-        let result = self.coordinator.execute(stmt.as_ref());
+        let result = self.coordinator.execute(parsed.as_ref());
         log::debug!(
             "Coordinator execution finished in {}ms",
             exec_start.elapsed().as_millis()

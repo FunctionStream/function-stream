@@ -52,8 +52,36 @@ arrow-array = "52"
 arrow-ipc = "52"
 arrow-schema = "52"
 proctitle = "0.1"
+unicase = "2.7"
+petgraph = "0.7"
+itertools = "0.14"
+strum = { version = "0.26", features = ["derive"] }
+datafusion-functions-aggregate = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+
+typify = { git = 'https://github.com/ArroyoSystems/typify.git', branch = 'arroyo' }
+parquet = {git = 'https://github.com/ArroyoSystems/arrow-rs', branch = '55.2.0/parquet'}
+arrow-json = {git = 'https://github.com/ArroyoSystems/arrow-rs', branch = '55.2.0/json'}
+datafusion = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+datafusion-common = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+datafusion-execution = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+datafusion-expr = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+datafusion-physical-expr = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+datafusion-physical-plan = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+datafusion-proto = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+datafusion-functions = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+datafusion-functions-window = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
+
+sqlparser = { git = "https://github.com/FunctionStream/sqlparser-rs", branch = "0.6.0/function-sql-parser" }
+
+cornucopia_async = { git = "https://github.com/ArroyoSystems/cornucopia", branch = "sqlite" }
+cornucopia = { git = "https://github.com/ArroyoSystems/cornucopia", branch = "sqlite" }
+jiter = {git = "https://github.com/ArroyoSystems/jiter", branch = "disable_python" }
+
 
 [features]
 default = ["incremental-cache", "python"]
 incremental-cache = ["wasmtime/incremental-cache"]
 python = []
+
+[patch."https://github.com/ArroyoSystems/sqlparser-rs"]
+sqlparser = { git = "https://github.com/FunctionStream/sqlparser-rs", branch = "0.6.0/function-sql-parser" }

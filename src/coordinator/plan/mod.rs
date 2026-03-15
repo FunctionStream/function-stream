@@ -18,6 +18,7 @@ mod optimizer;
 mod show_functions_plan;
 mod start_function_plan;
 mod stop_function_plan;
+mod streaming_sql_plan;
 mod visitor;
 
 pub use create_function_plan::CreateFunctionPlan;
@@ -28,6 +29,7 @@ pub use optimizer::LogicalPlanner;
 pub use show_functions_plan::ShowFunctionsPlan;
 pub use start_function_plan::StartFunctionPlan;
 pub use stop_function_plan::StopFunctionPlan;
+pub use streaming_sql_plan::StreamingSqlPlan;
 pub use visitor::{PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
 use std::fmt;

@@ -10,22 +10,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use tracing::debug;
+
 use crate::coordinator::analyze::analysis::Analysis;
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, PlanNode, ShowFunctionsPlan,
-    StartFunctionPlan, StopFunctionPlan,
+    StartFunctionPlan, StopFunctionPlan, StreamingSqlPlan,
 };
 use crate::coordinator::statement::{
     CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction,
-    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
+    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction, StreamingSql,
 };
+use crate::sql::planner::StreamSchemaProvider;
 
-#[derive(Debug, Default)]
-pub struct LogicalPlanVisitor;
+pub struct LogicalPlanVisitor {
+    schema_provider: StreamSchemaProvider,
+}
 
 impl LogicalPlanVisitor {
-    pub fn new() -> Self {
-        Self
+    pub fn new(schema_provider: StreamSchemaProvider) -> Self {
+        Self { schema_provider }
     }
 
     pub fn visit(&self, analysis: &Analysis) -> Box<dyn PlanNode> {
@@ -51,7 +55,6 @@ impl StatementVisitor for LogicalPlanVisitor {
         let config_source = stmt.get_config_source().cloned();
         let extra_props = stmt.get_extra_properties().clone();
 
-        // Name will be read from config file during execution
         StatementVisitorResult::Plan(Box::new(CreateFunctionPlan::new(
             function_source,
             config_source,
@@ -105,5 +108,23 @@ impl StatementVisitor for LogicalPlanVisitor {
             modules,
             config_content,
         )))
+    }
+
+    fn visit_streaming_sql(
+        &self,
+        stmt: &StreamingSql,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        let sql_to_rel = datafusion::sql::planner::SqlToRel::new(&self.schema_provider);
+
+        match sql_to_rel.sql_statement_to_plan(stmt.statement.clone()) {
+            Ok(plan) => {
+                debug!("Logical plan:\n{}", plan.display_graphviz());
+                StatementVisitorResult::Plan(Box::new(StreamingSqlPlan::new(plan)))
+            }
+            Err(e) => {
+                panic!("Failed to convert SQL statement to logical plan: {e}");
+            }
+        }
     }
 }

@@ -12,7 +12,7 @@
 
 use super::{
     CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, ShowFunctionsPlan,
-    StartFunctionPlan, StopFunctionPlan,
+    StartFunctionPlan, StopFunctionPlan, StreamingSqlPlan,
 };
 
 /// Context passed to PlanVisitor methods
@@ -82,6 +82,12 @@ pub trait PlanVisitor {
     fn visit_create_python_function(
         &self,
         plan: &CreatePythonFunctionPlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_streaming_sql_plan(
+        &self,
+        plan: &StreamingSqlPlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 }

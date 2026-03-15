@@ -20,6 +20,7 @@ use crate::coordinator::execution::Executor;
 use crate::coordinator::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
 use crate::coordinator::statement::Statement;
 use crate::runtime::taskexecutor::TaskManager;
+use crate::sql::planner::StreamSchemaProvider;
 
 use super::execution_context::ExecutionContext;
 
@@ -90,7 +91,8 @@ impl Coordinator {
     }
 
     fn step_build_logical_plan(&self, analysis: &Analysis) -> Result<Box<dyn PlanNode>> {
-        let visitor = LogicalPlanVisitor::new();
+        let schema_provider = StreamSchemaProvider::new();
+        let visitor = LogicalPlanVisitor::new(schema_provider);
         let plan = visitor.visit(analysis);
         Ok(plan)
     }

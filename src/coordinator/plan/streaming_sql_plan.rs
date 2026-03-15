@@ -10,33 +10,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod sql_parser;
+use datafusion::logical_expr::LogicalPlan;
 
-pub use sql_parser::SqlParser;
+use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
 #[derive(Debug)]
-pub struct ParseError {
-    pub message: String,
+pub struct StreamingSqlPlan {
+    pub logical_plan: LogicalPlan,
 }
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Parse error: {}", self.message)
+impl StreamingSqlPlan {
+    pub fn new(logical_plan: LogicalPlan) -> Self {
+        Self { logical_plan }
     }
 }
 
-impl std::error::Error for ParseError {}
-
-impl From<String> for ParseError {
-    fn from(message: String) -> Self {
-        ParseError { message }
-    }
-}
-
-impl ParseError {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
+impl PlanNode for StreamingSqlPlan {
+    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
+        visitor.visit_streaming_sql_plan(self, context)
     }
 }

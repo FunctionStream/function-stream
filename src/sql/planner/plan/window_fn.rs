@@ -1,0 +1,178 @@
+use std::sync::Arc;
+
+use datafusion::common::tree_node::Transformed;
+use datafusion::common::{Result as DFResult, plan_err, tree_node::TreeNodeRewriter};
+use datafusion::logical_expr;
+use datafusion::logical_expr::expr::WindowFunctionParams;
+use datafusion::logical_expr::{
+    Expr, Extension, LogicalPlan, Projection, Sort, Window, expr::WindowFunction,
+};
+use tracing::debug;
+
+use crate::sql::planner::extension::key_calculation::{KeyCalculationExtension, KeysOrExprs};
+use crate::sql::planner::extension::window_fn::WindowFunctionExtension;
+use crate::sql::planner::plan::{WindowDetectingVisitor, extract_column};
+use crate::sql::planner::types::{WindowType, fields_with_qualifiers, schema_from_df_fields};
+
+pub(crate) struct WindowFunctionRewriter;
+
+fn get_window_and_name(expr: &Expr) -> DFResult<(WindowFunction, String)> {
+    match expr {
+        Expr::Alias(alias) => {
+            let (window, _) = get_window_and_name(&alias.expr)?;
+            Ok((window, alias.name.clone()))
+        }
+        Expr::WindowFunction(window_function) => {
+            Ok((*window_function.clone(), expr.name_for_alias()?))
+        }
+        _ => plan_err!("Expect a column or alias expression, not {:?}", expr),
+    }
+}
+
+impl TreeNodeRewriter for WindowFunctionRewriter {
+    type Node = LogicalPlan;
+
+    fn f_up(&mut self, node: Self::Node) -> DFResult<Transformed<Self::Node>> {
+        let LogicalPlan::Window(window) = node else {
+            return Ok(Transformed::no(node));
+        };
+
+        debug!(
+            "Rewriting window function: {:?}",
+            LogicalPlan::Window(window.clone())
+        );
+
+        let mut window_detecting_visitor = WindowDetectingVisitor::default();
+        window
+            .input
+            .visit_with_subqueries(&mut window_detecting_visitor)?;
+
+        let Some(input_window) = window_detecting_visitor.window else {
+            return plan_err!("Window functions require already windowed input");
+        };
+        if matches!(input_window, WindowType::Session { .. }) {
+            return plan_err!("Window functions do not support session windows");
+        }
+
+        let input_window_fields = window_detecting_visitor.fields;
+
+        let Window {
+            input, window_expr, ..
+        } = window;
+
+        if window_expr.len() != 1 {
+            return plan_err!("Window functions require exactly one window expression");
+        }
+
+        let (WindowFunction { fun, params }, original_name) = get_window_and_name(&window_expr[0])?;
+
+        let mut window_field: Vec<_> = params
+            .partition_by
+            .iter()
+            .enumerate()
+            .filter_map(|(index, expr)| {
+                if let Some(column) = extract_column(expr) {
+                    let Ok(input_field) = input
+                        .schema()
+                        .field_with_name(column.relation.as_ref(), &column.name)
+                    else {
+                        return Some(plan_err!(
+                            "Column {} not found in input schema",
+                            column.name
+                        ));
+                    };
+                    if input_window_fields.contains(&(column.relation.as_ref(), input_field).into())
+                    {
+                        return Some(Ok((input_field.clone(), index)));
+                    }
+                }
+                None
+            })
+            .collect::<DFResult<_>>()?;
+
+        if window_field.len() != 1 {
+            return plan_err!(
+                "Window function requires exactly one window expression in partition_by"
+            );
+        }
+
+        let (_window_field, index) = window_field.pop().unwrap();
+        let mut additional_keys = params.partition_by.clone();
+        additional_keys.remove(index);
+        let key_count = additional_keys.len();
+
+        let params = WindowFunctionParams {
+            args: params.args,
+            partition_by: additional_keys.clone(),
+            order_by: params.order_by,
+            window_frame: params.window_frame,
+            null_treatment: params.null_treatment,
+        };
+
+        let new_window_func = WindowFunction { fun, params };
+
+        let mut key_projection_expressions: Vec<_> = additional_keys
+            .iter()
+            .enumerate()
+            .map(|(index, expression)| expression.clone().alias(format!("_key_{index}")))
+            .collect();
+
+        key_projection_expressions.extend(
+            fields_with_qualifiers(input.schema())
+                .iter()
+                .map(|field| Expr::Column(field.qualified_column())),
+        );
+
+        let auto_schema =
+            Projection::try_new(key_projection_expressions.clone(), input.clone())?.schema;
+        let mut key_fields = fields_with_qualifiers(&auto_schema)
+            .iter()
+            .take(additional_keys.len())
+            .cloned()
+            .collect::<Vec<_>>();
+        key_fields.extend(fields_with_qualifiers(input.schema()));
+        let key_schema = Arc::new(schema_from_df_fields(&key_fields)?);
+
+        let key_projection = LogicalPlan::Projection(Projection::try_new_with_schema(
+            key_projection_expressions,
+            input.clone(),
+            key_schema,
+        )?);
+
+        let key_plan = LogicalPlan::Extension(Extension {
+            node: Arc::new(KeyCalculationExtension::new(
+                key_projection,
+                KeysOrExprs::Keys((0..key_count).collect()),
+            )),
+        });
+
+        let mut sort_expressions: Vec<_> = additional_keys
+            .iter()
+            .map(|partition| logical_expr::expr::Sort {
+                expr: partition.clone(),
+                asc: true,
+                nulls_first: false,
+            })
+            .collect();
+        sort_expressions.extend(new_window_func.params.order_by.clone());
+
+        let shuffle = LogicalPlan::Sort(Sort {
+            expr: sort_expressions,
+            input: Arc::new(key_plan),
+            fetch: None,
+        });
+
+        let window_expr =
+            Expr::WindowFunction(Box::new(new_window_func)).alias_if_changed(original_name)?;
+
+        let rewritten_window_plan =
+            LogicalPlan::Window(Window::try_new(vec![window_expr], Arc::new(shuffle))?);
+
+        Ok(Transformed::yes(LogicalPlan::Extension(Extension {
+            node: Arc::new(WindowFunctionExtension::new(
+                rewritten_window_plan,
+                (0..key_count).collect(),
+            )),
+        })))
+    }
+}
