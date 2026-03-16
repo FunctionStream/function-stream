@@ -19,8 +19,8 @@ use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
 use datafusion::sql::sqlparser::parser::Parser;
 
 use crate::coordinator::{
-    CreateFunction, DropFunction, ShowFunctions, StartFunction, Statement as CoordinatorStatement,
-    StopFunction, StreamingSql,
+    CreateFunction, CreateTable, DropFunction, InsertStatement, ShowFunctions, StartFunction,
+    Statement as CoordinatorStatement, StopFunction, StreamingSql,
 };
 
 /// Stage 1: String → Box<dyn Statement>
@@ -48,9 +48,11 @@ pub fn parse_sql(query: &str) -> Result<Box<dyn CoordinatorStatement>> {
 
 /// Classify a parsed DataFusion Statement into the coordinator's Statement type.
 ///
-/// FunctionStream DDL (CREATE/DROP/START/STOP FUNCTION, SHOW FUNCTIONS)
-/// is converted to concrete coordinator types; everything else is wrapped
-/// in StreamingSql.
+/// Statement classification mirrors the analysis flow from `parse_and_get_arrow_program`:
+///   - FunctionStream DDL → concrete coordinator types (CreateFunction, DropFunction, etc.)
+///   - CREATE TABLE / CREATE VIEW → CreateTable (catalog registration)
+///   - INSERT INTO / standalone SELECT → InsertStatement (streaming pipeline)
+///   - Everything else → StreamingSql (catch-all)
 fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>> {
     match stmt {
         DFStatement::CreateFunctionWith { options } => {
@@ -69,6 +71,10 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
             Ok(Box::new(DropFunction::new(name)))
         }
         DFStatement::ShowFunctions { .. } => Ok(Box::new(ShowFunctions::new())),
+        s @ DFStatement::CreateTable(_) | s @ DFStatement::CreateView { .. } => {
+            Ok(Box::new(CreateTable::new(s)))
+        }
+        s @ DFStatement::Insert(_) => Ok(Box::new(InsertStatement::new(s))),
         other => Ok(Box::new(StreamingSql::new(other))),
     }
 }

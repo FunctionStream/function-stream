@@ -10,18 +10,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod analyze;
-#[allow(clippy::module_inception)]
-mod coordinator;
-mod dataset;
-mod execution;
-mod execution_context;
-mod plan;
-mod statement;
+use datafusion::logical_expr::LogicalPlan;
 
-pub use coordinator::Coordinator;
-pub use dataset::{DataSet, ShowFunctionsResult};
-pub use statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, InsertStatement, PythonModule,
-    ShowFunctions, StartFunction, Statement, StopFunction, StreamingSql,
-};
+use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+
+#[derive(Debug)]
+pub struct CreateTablePlan {
+    pub logical_plan: LogicalPlan,
+}
+
+impl CreateTablePlan {
+    pub fn new(logical_plan: LogicalPlan) -> Self {
+        Self { logical_plan }
+    }
+}
+
+impl PlanNode for CreateTablePlan {
+    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
+        visitor.visit_create_table_plan(self, context)
+    }
+}

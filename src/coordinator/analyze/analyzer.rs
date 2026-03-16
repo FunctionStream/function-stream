@@ -13,8 +13,9 @@
 use super::Analysis;
 use crate::coordinator::execution_context::ExecutionContext;
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, Statement,
-    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction, StreamingSql,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, InsertStatement,
+    ShowFunctions, StartFunction, Statement, StatementVisitor, StatementVisitorContext,
+    StatementVisitorResult, StopFunction, StreamingSql,
 };
 use std::fmt;
 
@@ -114,6 +115,22 @@ impl StatementVisitor for Analyzer<'_> {
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_create_table(
+        &self,
+        stmt: &CreateTable,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(CreateTable::new(stmt.statement.clone())))
+    }
+
+    fn visit_insert_statement(
+        &self,
+        stmt: &InsertStatement,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(InsertStatement::new(stmt.statement.clone())))
     }
 
     fn visit_streaming_sql(

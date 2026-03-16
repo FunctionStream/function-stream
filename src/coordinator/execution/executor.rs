@@ -12,9 +12,9 @@
 
 use crate::coordinator::dataset::{ExecuteResult, ShowFunctionsResult, empty_record_batch};
 use crate::coordinator::plan::{
-    CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, PlanNode, PlanVisitor,
-    PlanVisitorContext, PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
-    StreamingSqlPlan,
+    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
+    InsertStatementPlan, PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult,
+    ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingSqlPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::taskexecutor::TaskManager;
@@ -199,6 +199,32 @@ impl PlanVisitor for Executor {
             })
             .map_err(|e| ExecuteError::Task(e.to_string()));
 
+        PlanVisitorResult::Execute(result)
+    }
+
+    fn visit_create_table_plan(
+        &self,
+        plan: &CreateTablePlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        // TODO: register table in catalog and execute DDL
+        let result = Err(ExecuteError::Internal(format!(
+            "CREATE TABLE execution not yet implemented. LogicalPlan:\n{}",
+            plan.logical_plan.display_indent()
+        )));
+        PlanVisitorResult::Execute(result)
+    }
+
+    fn visit_insert_statement_plan(
+        &self,
+        plan: &InsertStatementPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        // TODO: start streaming pipeline for INSERT / anonymous query
+        let result = Err(ExecuteError::Internal(format!(
+            "INSERT statement execution not yet implemented. LogicalPlan:\n{}",
+            plan.logical_plan.display_indent()
+        )));
         PlanVisitorResult::Execute(result)
     }
 

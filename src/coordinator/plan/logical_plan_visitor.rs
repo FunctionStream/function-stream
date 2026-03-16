@@ -14,12 +14,14 @@ use tracing::debug;
 
 use crate::coordinator::analyze::analysis::Analysis;
 use crate::coordinator::plan::{
-    CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, PlanNode, ShowFunctionsPlan,
-    StartFunctionPlan, StopFunctionPlan, StreamingSqlPlan,
+    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
+    InsertStatementPlan, PlanNode, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
+    StreamingSqlPlan,
 };
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction,
-    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction, StreamingSql,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, InsertStatement,
+    ShowFunctions, StartFunction, StatementVisitor, StatementVisitorContext,
+    StatementVisitorResult, StopFunction, StreamingSql,
 };
 use crate::sql::planner::StreamSchemaProvider;
 
@@ -108,6 +110,42 @@ impl StatementVisitor for LogicalPlanVisitor {
             modules,
             config_content,
         )))
+    }
+
+    fn visit_create_table(
+        &self,
+        stmt: &CreateTable,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        let sql_to_rel = datafusion::sql::planner::SqlToRel::new(&self.schema_provider);
+
+        match sql_to_rel.sql_statement_to_plan(stmt.statement.clone()) {
+            Ok(plan) => {
+                debug!("Create table plan:\n{}", plan.display_graphviz());
+                StatementVisitorResult::Plan(Box::new(CreateTablePlan::new(plan)))
+            }
+            Err(e) => {
+                panic!("Failed to convert CREATE TABLE to logical plan: {e}");
+            }
+        }
+    }
+
+    fn visit_insert_statement(
+        &self,
+        stmt: &InsertStatement,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        let sql_to_rel = datafusion::sql::planner::SqlToRel::new(&self.schema_provider);
+
+        match sql_to_rel.sql_statement_to_plan(stmt.statement.clone()) {
+            Ok(plan) => {
+                debug!("Insert statement plan:\n{}", plan.display_graphviz());
+                StatementVisitorResult::Plan(Box::new(InsertStatementPlan::new(plan)))
+            }
+            Err(e) => {
+                panic!("Failed to convert INSERT statement to logical plan: {e}");
+            }
+        }
     }
 
     fn visit_streaming_sql(

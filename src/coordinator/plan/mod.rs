@@ -12,7 +12,9 @@
 
 mod create_function_plan;
 mod create_python_function_plan;
+mod create_table_plan;
 mod drop_function_plan;
+mod insert_statement_plan;
 mod logical_plan_visitor;
 mod optimizer;
 mod show_functions_plan;
@@ -23,7 +25,9 @@ mod visitor;
 
 pub use create_function_plan::CreateFunctionPlan;
 pub use create_python_function_plan::CreatePythonFunctionPlan;
+pub use create_table_plan::CreateTablePlan;
 pub use drop_function_plan::DropFunctionPlan;
+pub use insert_statement_plan::InsertStatementPlan;
 pub use logical_plan_visitor::LogicalPlanVisitor;
 pub use optimizer::LogicalPlanner;
 pub use show_functions_plan::ShowFunctionsPlan;
