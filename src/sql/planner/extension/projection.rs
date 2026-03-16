@@ -6,7 +6,7 @@ use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, UserDefinedLogi
 
 use crate::multifield_partial_ord;
 use crate::sql::planner::extension::{NamedNode, StreamExtension};
-use crate::sql::planner::types::{DFField, StreamSchema, schema_from_df_fields};
+use crate::sql::types::{DFField, StreamSchema, schema_from_df_fields};
 
 pub(crate) const PROJECTION_NAME: &str = "ProjectionExtension";
 

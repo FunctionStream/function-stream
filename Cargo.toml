@@ -35,6 +35,7 @@ tonic = { version = "0.12", features = ["default"] }
 async-trait = "0.1"
 num_cpus = "1.0"
 protocol = { path = "./protocol" }
+prost = "0.13"
 rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi"] }
 crossbeam-channel = "0.5"
 pest = "2.7"
@@ -44,13 +45,18 @@ wasmtime = { version = "41.0.3", features = ["component-model", "async"] }
 base64 = "0.22"
 wasmtime-wasi = "41.0.3"
 rocksdb = { version = "0.21", features = ["multi-threaded-cf", "lz4"] }
-bincode = "1.3"
+bincode = { version = "2", features = ["serde"] }
+chrono = "0.4"
 tokio-stream = "0.1.18"
 lru = "0.12"
 parking_lot = "0.12"
-arrow-array = "52"
-arrow-ipc = "52"
-arrow-schema = "52"
+arrow = { version = "55", default-features = false }
+arrow-array = "55"
+arrow-ipc = "55"
+arrow-schema = { version = "55", features = ["serde"] }
+futures = "0.3"
+serde_json_path = "0.7"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 proctitle = "0.1"
 unicase = "2.7"
 petgraph = "0.7"

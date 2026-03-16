@@ -8,7 +8,7 @@ use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use crate::multifield_partial_ord;
 use crate::sql::planner::extension::{NamedNode, StreamExtension};
 use crate::sql::planner::schemas::add_timestamp_field;
-use crate::sql::planner::types::{StreamSchema, TIMESTAMP_FIELD};
+use crate::sql::types::{StreamSchema, TIMESTAMP_FIELD};
 
 pub(crate) const WATERMARK_NODE_NAME: &str = "WatermarkNode";
 

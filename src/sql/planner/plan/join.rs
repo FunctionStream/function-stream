@@ -16,9 +16,7 @@ use crate::sql::planner::StreamSchemaProvider;
 use crate::sql::planner::extension::join::JoinExtension;
 use crate::sql::planner::extension::key_calculation::KeyCalculationExtension;
 use crate::sql::planner::plan::WindowDetectingVisitor;
-use crate::sql::planner::types::{
-    WindowType, fields_with_qualifiers, schema_from_df_fields_with_metadata,
-};
+use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields_with_metadata};
 
 pub(crate) struct JoinRewriter<'a> {
     pub schema_provider: &'a StreamSchemaProvider,

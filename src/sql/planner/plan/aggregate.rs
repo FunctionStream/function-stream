@@ -12,7 +12,7 @@ use crate::sql::planner::StreamSchemaProvider;
 use crate::sql::planner::extension::aggregate::AggregateExtension;
 use crate::sql::planner::extension::key_calculation::{KeyCalculationExtension, KeysOrExprs};
 use crate::sql::planner::plan::WindowDetectingVisitor;
-use crate::sql::planner::types::{
+use crate::sql::types::{
     DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers, find_window,
     schema_from_df_fields_with_metadata,
 };

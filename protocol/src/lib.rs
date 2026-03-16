@@ -10,25 +10,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Protocol Buffers protocol definitions for function stream
-// This module exports the generated Protocol Buffers code
+// ─────────────── FunctionStream Service (original) ───────────────
 
-// CLI module - exports client code
 #[path = "../generated/cli/function_stream.rs"]
 pub mod cli;
 
-// Service module - exports server code
 #[path = "../generated/service/function_stream.rs"]
 pub mod service;
 
-// Re-export commonly used types from both modules
-// Data structures are the same in both, so we can re-export from either
 pub use cli::function_stream_service_client;
-
-// Re-export client-specific types
 pub use cli::function_stream_service_client::FunctionStreamServiceClient;
-
-// Re-export server-specific types
 pub use service::function_stream_service_server::{
     FunctionStreamService, FunctionStreamServiceServer,
 };
+
+// ─────────────── Streaming Pipeline API (fs_api.proto) ───────────────
+
+pub mod grpc {
+    /// Serde-annotated API types for streaming operators, schemas, programs.
+    #[allow(clippy::all)]
+    pub mod api {
+        include!("../generated/api/fs_api.rs");
+    }
+}
+
+/// File descriptor set for fs_api.proto (for gRPC reflection / REST gateway).
+pub const FS_API_FILE_DESCRIPTOR_SET: &[u8] =
+    tonic::include_file_descriptor_set!("fs_api_descriptor");

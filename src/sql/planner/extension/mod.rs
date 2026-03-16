@@ -1,24 +1,53 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use std::time::Duration;
 
+use datafusion::arrow::datatypes::{DataType, TimeUnit};
 use datafusion::common::{DFSchemaRef, DataFusionError, Result, TableReference};
 use datafusion::logical_expr::{
     Expr, LogicalPlan, UserDefinedLogicalNode, UserDefinedLogicalNodeCore,
 };
 
+use crate::datastream::logical::{LogicalEdge, LogicalNode};
 use crate::sql::planner::schemas::{add_timestamp_field, has_timestamp_field};
-use crate::sql::planner::types::StreamSchema;
+use crate::sql::types::{
+    DFField, StreamSchema, TIMESTAMP_FIELD, fields_with_qualifiers, schema_from_df_fields,
+};
+use crate::types::FsSchemaRef;
 
 pub(crate) mod aggregate;
+pub(crate) mod debezium;
 pub(crate) mod join;
 pub(crate) mod key_calculation;
+pub(crate) mod lookup;
 pub(crate) mod projection;
 pub(crate) mod remote_table;
+pub(crate) mod sink;
+pub(crate) mod table_source;
+pub(crate) mod updating_aggregate;
 pub(crate) mod watermark_node;
 pub(crate) mod window_fn;
 
+pub(crate) struct NodeWithIncomingEdges {
+    pub node: LogicalNode,
+    pub edges: Vec<LogicalEdge>,
+}
+
 pub(crate) trait StreamExtension: Debug {
     fn node_name(&self) -> Option<NamedNode>;
+
+    fn plan_node(
+        &self,
+        _planner: &super::physical_planner::Planner,
+        _index: usize,
+        _input_schemas: Vec<FsSchemaRef>,
+    ) -> Result<NodeWithIncomingEdges> {
+        Err(DataFusionError::NotImplemented(format!(
+            "plan_node not yet implemented for {:?}",
+            self
+        )))
+    }
+
     fn output_schema(&self) -> StreamSchema;
     fn transparent(&self) -> bool {
         false
@@ -47,20 +76,34 @@ impl<'a> TryFrom<&'a dyn UserDefinedLogicalNode> for &'a dyn StreamExtension {
 
     fn try_from(node: &'a dyn UserDefinedLogicalNode) -> Result<Self, Self::Error> {
         use aggregate::AggregateExtension;
+        use debezium::{DebeziumUnrollingExtension, ToDebeziumExtension};
         use join::JoinExtension;
         use key_calculation::KeyCalculationExtension;
+        use lookup::{LookupJoin, LookupSource};
         use projection::ProjectionExtension;
         use remote_table::RemoteTableExtension;
+        use sink::SinkExtension;
+        use table_source::TableSourceExtension;
+        use updating_aggregate::UpdatingAggregateExtension;
         use watermark_node::WatermarkNode;
         use window_fn::WindowFunctionExtension;
 
-        try_from_t::<WatermarkNode>(node)
+        try_from_t::<TableSourceExtension>(node)
+            .or_else(|_| try_from_t::<WatermarkNode>(node))
+            .or_else(|_| try_from_t::<SinkExtension>(node))
             .or_else(|_| try_from_t::<KeyCalculationExtension>(node))
             .or_else(|_| try_from_t::<AggregateExtension>(node))
             .or_else(|_| try_from_t::<RemoteTableExtension>(node))
             .or_else(|_| try_from_t::<JoinExtension>(node))
             .or_else(|_| try_from_t::<WindowFunctionExtension>(node))
+            .or_else(|_| try_from_t::<AsyncUDFExtension>(node))
+            .or_else(|_| try_from_t::<ToDebeziumExtension>(node))
+            .or_else(|_| try_from_t::<DebeziumUnrollingExtension>(node))
+            .or_else(|_| try_from_t::<UpdatingAggregateExtension>(node))
+            .or_else(|_| try_from_t::<LookupJoin>(node))
+            .or_else(|_| try_from_t::<LookupSource>(node))
             .or_else(|_| try_from_t::<ProjectionExtension>(node))
+            .or_else(|_| try_from_t::<IsRetractExtension>(node))
             .map_err(|_| DataFusionError::Plan(format!("unexpected node: {}", node.name())))
     }
 }
@@ -149,5 +192,165 @@ impl UserDefinedLogicalNodeCore for TimestampAppendExtension {
 
     fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
         Ok(Self::new(inputs[0].clone(), self.qualifier.clone()))
+    }
+}
+
+/// Appends an `_updating_meta` and properly qualified `_timestamp` field
+/// to the output schema of an updating aggregate.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct IsRetractExtension {
+    pub(crate) input: LogicalPlan,
+    pub(crate) schema: DFSchemaRef,
+    pub(crate) timestamp_qualifier: Option<TableReference>,
+}
+
+multifield_partial_ord!(IsRetractExtension, input, timestamp_qualifier);
+
+impl IsRetractExtension {
+    pub(crate) fn new(input: LogicalPlan, timestamp_qualifier: Option<TableReference>) -> Self {
+        let mut output_fields = fields_with_qualifiers(input.schema());
+
+        let timestamp_index = output_fields.len() - 1;
+        output_fields[timestamp_index] = DFField::new(
+            timestamp_qualifier.clone(),
+            TIMESTAMP_FIELD,
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            false,
+        );
+        let schema = Arc::new(schema_from_df_fields(&output_fields).unwrap());
+        Self {
+            input,
+            schema,
+            timestamp_qualifier,
+        }
+    }
+}
+
+impl UserDefinedLogicalNodeCore for IsRetractExtension {
+    fn name(&self) -> &str {
+        "IsRetractExtension"
+    }
+
+    fn inputs(&self) -> Vec<&LogicalPlan> {
+        vec![&self.input]
+    }
+
+    fn schema(&self) -> &DFSchemaRef {
+        &self.schema
+    }
+
+    fn expressions(&self) -> Vec<Expr> {
+        vec![]
+    }
+
+    fn fmt_for_explain(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "IsRetractExtension")
+    }
+
+    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+        Ok(Self::new(
+            inputs[0].clone(),
+            self.timestamp_qualifier.clone(),
+        ))
+    }
+}
+
+impl StreamExtension for IsRetractExtension {
+    fn node_name(&self) -> Option<NamedNode> {
+        None
+    }
+
+    fn output_schema(&self) -> StreamSchema {
+        StreamSchema::from_schema_unkeyed(Arc::new(self.schema.as_ref().into())).unwrap()
+    }
+}
+
+pub(crate) const ASYNC_RESULT_FIELD: &str = "__async_result";
+
+/// Extension node for async UDF calls in streaming projections.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct AsyncUDFExtension {
+    pub(crate) input: Arc<LogicalPlan>,
+    pub(crate) name: String,
+    pub(crate) arg_exprs: Vec<Expr>,
+    pub(crate) final_exprs: Vec<Expr>,
+    pub(crate) ordered: bool,
+    pub(crate) max_concurrency: usize,
+    pub(crate) timeout: Duration,
+    pub(crate) final_schema: DFSchemaRef,
+}
+
+multifield_partial_ord!(
+    AsyncUDFExtension,
+    input,
+    name,
+    arg_exprs,
+    final_exprs,
+    ordered,
+    max_concurrency,
+    timeout
+);
+
+impl UserDefinedLogicalNodeCore for AsyncUDFExtension {
+    fn name(&self) -> &str {
+        "AsyncUDFNode"
+    }
+
+    fn inputs(&self) -> Vec<&LogicalPlan> {
+        vec![&self.input]
+    }
+
+    fn schema(&self) -> &DFSchemaRef {
+        &self.final_schema
+    }
+
+    fn expressions(&self) -> Vec<Expr> {
+        self.arg_exprs
+            .iter()
+            .chain(self.final_exprs.iter())
+            .cloned()
+            .collect()
+    }
+
+    fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "AsyncUdfExtension<{}>: {}", self.name, self.final_schema)
+    }
+
+    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+        if inputs.len() != 1 {
+            return Err(DataFusionError::Internal("input size inconsistent".into()));
+        }
+        if UserDefinedLogicalNode::expressions(self) != exprs {
+            return Err(DataFusionError::Internal(
+                "Tried to recreate async UDF node with different expressions".into(),
+            ));
+        }
+
+        Ok(Self {
+            input: Arc::new(inputs[0].clone()),
+            name: self.name.clone(),
+            arg_exprs: self.arg_exprs.clone(),
+            final_exprs: self.final_exprs.clone(),
+            ordered: self.ordered,
+            max_concurrency: self.max_concurrency,
+            timeout: self.timeout,
+            final_schema: self.final_schema.clone(),
+        })
+    }
+}
+
+impl StreamExtension for AsyncUDFExtension {
+    fn node_name(&self) -> Option<NamedNode> {
+        None
+    }
+
+    fn output_schema(&self) -> StreamSchema {
+        StreamSchema::from_fields(
+            self.final_schema
+                .fields()
+                .iter()
+                .map(|f| (**f).clone())
+                .collect(),
+        )
     }
 }

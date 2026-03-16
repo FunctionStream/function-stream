@@ -12,7 +12,7 @@ use tracing::debug;
 use crate::sql::planner::extension::key_calculation::{KeyCalculationExtension, KeysOrExprs};
 use crate::sql::planner::extension::window_fn::WindowFunctionExtension;
 use crate::sql::planner::plan::{WindowDetectingVisitor, extract_column};
-use crate::sql::planner::types::{WindowType, fields_with_qualifiers, schema_from_df_fields};
+use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields};
 
 pub(crate) struct WindowFunctionRewriter;
 

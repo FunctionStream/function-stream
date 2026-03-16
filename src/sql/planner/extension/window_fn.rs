@@ -4,7 +4,7 @@ use datafusion::common::{DFSchemaRef, Result};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 
 use crate::sql::planner::extension::{NamedNode, StreamExtension};
-use crate::sql::planner::types::StreamSchema;
+use crate::sql::types::StreamSchema;
 
 pub(crate) const WINDOW_FUNCTION_EXTENSION_NAME: &str = "WindowFunctionExtension";
 

@@ -10,9 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod catalog;
+pub mod functions;
+pub mod physical;
 pub mod planner;
+pub mod types;
 
 pub use planner::StreamSchemaProvider;
 pub use planner::parse::parse_sql;
 pub use planner::plan::rewrite_plan;
 pub use planner::sql_to_plan::statement_to_plan;
+pub use planner::{CompiledSql, parse_and_get_arrow_program, parse_sql_statements};

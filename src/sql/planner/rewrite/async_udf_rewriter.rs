@@ -1,0 +1,118 @@
+use crate::sql::planner::extension::remote_table::RemoteTableExtension;
+use crate::sql::planner::extension::{ASYNC_RESULT_FIELD, AsyncUDFExtension};
+use crate::sql::planner::mod_prelude::StreamSchemaProvider;
+use datafusion::common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
+use datafusion::common::{Column, Result as DFResult, TableReference, plan_err};
+use datafusion::logical_expr::expr::ScalarFunction;
+use datafusion::logical_expr::{Expr, Extension, LogicalPlan};
+use std::sync::Arc;
+use std::time::Duration;
+
+type AsyncSplitResult = (String, AsyncOptions, Vec<Expr>);
+
+#[derive(Debug, Clone, Copy)]
+pub struct AsyncOptions {
+    pub ordered: bool,
+    pub max_concurrency: usize,
+    pub timeout: Duration,
+}
+
+pub struct AsyncUdfRewriter<'a> {
+    provider: &'a StreamSchemaProvider,
+}
+
+impl<'a> AsyncUdfRewriter<'a> {
+    pub fn new(provider: &'a StreamSchemaProvider) -> Self {
+        Self { provider }
+    }
+
+    fn split_async(
+        expr: Expr,
+        provider: &StreamSchemaProvider,
+    ) -> DFResult<(Expr, Option<AsyncSplitResult>)> {
+        let mut found: Option<(String, AsyncOptions, Vec<Expr>)> = None;
+        let expr = expr.transform_up(|e| {
+            if let Expr::ScalarFunction(ScalarFunction { func: udf, args }) = &e {
+                if let Some(opts) = provider.get_async_udf_options(udf.name()) {
+                    if found
+                        .replace((udf.name().to_string(), opts, args.clone()))
+                        .is_some()
+                    {
+                        return plan_err!(
+                            "multiple async calls in the same expression, which is not allowed"
+                        );
+                    }
+                    return Ok(Transformed::yes(Expr::Column(Column::new_unqualified(
+                        ASYNC_RESULT_FIELD,
+                    ))));
+                }
+            }
+            Ok(Transformed::no(e))
+        })?;
+
+        Ok((expr.data, found))
+    }
+}
+
+impl TreeNodeRewriter for AsyncUdfRewriter<'_> {
+    type Node = LogicalPlan;
+
+    fn f_up(&mut self, node: Self::Node) -> DFResult<Transformed<Self::Node>> {
+        let LogicalPlan::Projection(mut projection) = node else {
+            for e in node.expressions() {
+                if let (_, Some((udf, _, _))) = Self::split_async(e.clone(), self.provider)? {
+                    return plan_err!(
+                        "async UDFs are only supported in projections, but {udf} was called in another context"
+                    );
+                }
+            }
+            return Ok(Transformed::no(node));
+        };
+
+        let mut args = None;
+        for e in projection.expr.iter_mut() {
+            let (new_e, Some(udf)) = Self::split_async(e.clone(), self.provider)? else {
+                continue;
+            };
+            if let Some((prev, _, _)) = args.replace(udf) {
+                return plan_err!(
+                    "Projection contains multiple async UDFs, which is not supported \
+                    \n(hint: two async UDF calls, {} and {}, appear in the same SELECT statement)",
+                    prev,
+                    args.unwrap().0
+                );
+            }
+            *e = new_e;
+        }
+
+        let Some((name, opts, arg_exprs)) = args else {
+            return Ok(Transformed::no(LogicalPlan::Projection(projection)));
+        };
+
+        let input = if matches!(*projection.input, LogicalPlan::Projection(..)) {
+            Arc::new(LogicalPlan::Extension(Extension {
+                node: Arc::new(RemoteTableExtension {
+                    input: (*projection.input).clone(),
+                    name: TableReference::bare("subquery_projection"),
+                    schema: projection.input.schema().clone(),
+                    materialize: false,
+                }),
+            }))
+        } else {
+            projection.input
+        };
+
+        Ok(Transformed::yes(LogicalPlan::Extension(Extension {
+            node: Arc::new(AsyncUDFExtension {
+                input,
+                name,
+                arg_exprs,
+                final_exprs: projection.expr,
+                ordered: opts.ordered,
+                max_concurrency: opts.max_concurrency,
+                timeout: opts.timeout,
+                final_schema: projection.schema,
+            }),
+        })))
+    }
+}

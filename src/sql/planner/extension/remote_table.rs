@@ -6,7 +6,7 @@ use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 
 use crate::multifield_partial_ord;
 use crate::sql::planner::extension::{NamedNode, StreamExtension};
-use crate::sql::planner::types::StreamSchema;
+use crate::sql::types::StreamSchema;
 
 pub(crate) const REMOTE_TABLE_NAME: &str = "RemoteTableExtension";
 

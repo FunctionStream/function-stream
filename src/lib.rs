@@ -14,6 +14,7 @@
 
 #![allow(dead_code)]
 
+pub mod api;
 pub mod config;
 pub mod coordinator;
 pub mod datastream;
@@ -22,3 +23,4 @@ pub mod runtime;
 pub mod server;
 pub mod sql;
 pub mod storage;
+pub mod types;

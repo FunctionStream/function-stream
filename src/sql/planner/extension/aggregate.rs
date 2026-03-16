@@ -11,7 +11,7 @@ use datafusion::logical_expr::{
 
 use crate::multifield_partial_ord;
 use crate::sql::planner::extension::{NamedNode, StreamExtension, TimestampAppendExtension};
-use crate::sql::planner::types::{
+use crate::sql::types::{
     DFField, StreamSchema, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers,
     schema_from_df_fields, schema_from_df_fields_with_metadata,
 };

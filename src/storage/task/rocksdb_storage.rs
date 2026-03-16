@@ -103,11 +103,19 @@ impl TaskStorage for RocksDBTaskStorage {
         };
 
         let mut batch = WriteBatch::default();
-        batch.put_cf(&cf_meta, key, bincode::serialize(&meta)?);
+        batch.put_cf(
+            &cf_meta,
+            key,
+            bincode::serde::encode_to_vec(&meta, bincode::config::standard())?,
+        );
         batch.put_cf(&cf_conf, key, &task_info.config_bytes);
 
         if let Some(ref module) = task_info.module_bytes {
-            batch.put_cf(&cf_payl, key, bincode::serialize(module)?);
+            batch.put_cf(
+                &cf_payl,
+                key,
+                bincode::serde::encode_to_vec(module, bincode::config::standard())?,
+            );
         }
 
         self.db
@@ -124,10 +132,15 @@ impl TaskStorage for RocksDBTaskStorage {
             .get_cf(&cf, key)?
             .ok_or_else(|| anyhow!("Task {} not found", task_name))?;
 
-        let mut meta: TaskMetadata = bincode::deserialize(&raw)?;
+        let (mut meta, _): (TaskMetadata, _) =
+            bincode::serde::decode_from_slice(&raw, bincode::config::standard())?;
         meta.state = new_state;
 
-        self.db.put_cf(&cf, key, bincode::serialize(&meta)?)?;
+        self.db.put_cf(
+            &cf,
+            key,
+            bincode::serde::encode_to_vec(&meta, bincode::config::standard())?,
+        )?;
         Ok(())
     }
 
@@ -140,10 +153,15 @@ impl TaskStorage for RocksDBTaskStorage {
             .get_cf(&cf, key)?
             .ok_or_else(|| anyhow!("Task {} not found", task_name))?;
 
-        let mut meta: TaskMetadata = bincode::deserialize(&raw)?;
+        let (mut meta, _): (TaskMetadata, _) =
+            bincode::serde::decode_from_slice(&raw, bincode::config::standard())?;
         meta.checkpoint_id = checkpoint_id;
 
-        self.db.put_cf(&cf, key, bincode::serialize(&meta)?)?;
+        self.db.put_cf(
+            &cf,
+            key,
+            bincode::serde::encode_to_vec(&meta, bincode::config::standard())?,
+        )?;
         Ok(())
     }
 
@@ -174,9 +192,17 @@ impl TaskStorage for RocksDBTaskStorage {
         let module_bytes = self
             .db
             .get_cf(&self.get_cf(CF_PAYLOAD)?, key)?
-            .and_then(|b| bincode::deserialize::<TaskModuleBytes>(&b).ok());
+            .and_then(|b| {
+                bincode::serde::decode_from_slice::<TaskModuleBytes, _>(
+                    &b,
+                    bincode::config::standard(),
+                )
+                .ok()
+                .map(|(v, _)| v)
+            });
 
-        let meta: TaskMetadata = bincode::deserialize(&meta_raw)?;
+        let (meta, _): (TaskMetadata, _) =
+            bincode::serde::decode_from_slice(&meta_raw, bincode::config::standard())?;
 
         Ok(StoredTaskInfo {
             name: task_name.to_string(),

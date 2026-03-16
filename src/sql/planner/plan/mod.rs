@@ -15,7 +15,7 @@ use crate::sql::planner::extension::aggregate::{AGGREGATE_EXTENSION_NAME, Aggreg
 use crate::sql::planner::extension::join::JOIN_NODE_NAME;
 use crate::sql::planner::extension::remote_table::RemoteTableExtension;
 use crate::sql::planner::schemas::{add_timestamp_field, has_timestamp_field};
-use crate::sql::planner::types::{
+use crate::sql::types::{
     DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers, find_window,
 };
 

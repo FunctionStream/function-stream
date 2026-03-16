@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::datastream::optimizers::Optimizer;
-use crate::sql::planner::types::StreamSchema;
+use crate::sql::types::StreamSchema;
 use datafusion::arrow::datatypes::DataType;
 use petgraph::Direction;
 use petgraph::dot::Dot;

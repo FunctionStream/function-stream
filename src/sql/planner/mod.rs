@@ -2,354 +2,360 @@
 
 pub(crate) mod extension;
 pub mod parse;
+pub(crate) mod physical_planner;
 pub mod plan;
+pub mod rewrite;
+pub mod schema_provider;
 pub mod schemas;
 pub mod sql_to_plan;
-pub mod types;
+
+pub(crate) mod mod_prelude {
+    pub use super::StreamSchemaProvider;
+}
+
+pub use schema_provider::{LogicalBatchInput, StreamSchemaProvider, StreamTable};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::{self as datatypes, DataType, Field, Schema};
+use datafusion::common::tree_node::TreeNode;
 use datafusion::common::{Result, plan_err};
-use datafusion::datasource::DefaultTableSource;
 use datafusion::error::DataFusionError;
-use datafusion::execution::{FunctionRegistry, SessionStateDefaults};
-use datafusion::logical_expr::expr_rewriter::FunctionRewrite;
-use datafusion::logical_expr::planner::ExprPlanner;
-use datafusion::logical_expr::{
-    AggregateUDF, Expr, LogicalPlan, ScalarUDF, TableSource, WindowUDF,
-};
-use datafusion::optimizer::Analyzer;
+use datafusion::execution::SessionStateBuilder;
+use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore};
+use datafusion::prelude::SessionConfig;
 use datafusion::sql::TableReference;
-use datafusion::sql::planner::ContextProvider;
-use unicase::UniCase;
+use datafusion::sql::sqlparser::ast::{OneOrManyWithParens, Statement};
+use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
+use datafusion::sql::sqlparser::parser::Parser;
+use tracing::debug;
 
-use crate::sql::planner::schemas::window_arrow_struct;
-use crate::sql::planner::types::{PlaceholderUdf, PlanningOptions};
+use crate::datastream::logical::{LogicalProgram, ProgramConfig};
+use crate::datastream::optimizers::ChainingOptimizer;
+use crate::sql::catalog::insert::Insert;
+use crate::sql::catalog::table::Table as CatalogTable;
+use crate::sql::functions::{is_json_union, serialize_outgoing_json};
+use crate::sql::planner::extension::key_calculation::{KeyCalculationExtension, KeysOrExprs};
+use crate::sql::planner::extension::projection::ProjectionExtension;
+use crate::sql::planner::extension::sink::SinkExtension;
+use crate::sql::planner::extension::{NamedNode, StreamExtension};
+use crate::sql::planner::plan::rewrite_plan;
+use crate::sql::planner::rewrite::{SinkInputRewriter, SourceMetadataVisitor};
+use crate::sql::types::SqlConfig;
 
-/// Catalog provider for streaming SQL queries.
-/// Manages tables, UDFs, and configuration for streaming SQL planning.
-#[derive(Clone, Default)]
-pub struct StreamSchemaProvider {
-    pub source_defs: HashMap<String, String>,
-    tables: HashMap<UniCase<String>, StreamTable>,
-    pub functions: HashMap<String, Arc<ScalarUDF>>,
-    pub aggregate_functions: HashMap<String, Arc<AggregateUDF>>,
-    pub window_functions: HashMap<String, Arc<WindowUDF>>,
-    config_options: datafusion::config::ConfigOptions,
-    pub expr_planners: Vec<Arc<dyn ExprPlanner>>,
-    pub planning_options: PlanningOptions,
-    pub analyzer: Analyzer,
-}
+// ── Compilation pipeline ──────────────────────────────────────────────
 
-/// Represents a table registered in the streaming SQL context
 #[derive(Clone, Debug)]
-pub enum StreamTable {
-    Source {
-        name: String,
-        schema: Arc<Schema>,
-        event_time_field: Option<String>,
-        watermark_field: Option<String>,
-    },
-    Sink {
-        name: String,
-        schema: Arc<Schema>,
-    },
-    Memory {
-        name: String,
-        logical_plan: Option<LogicalPlan>,
-    },
+pub struct CompiledSql {
+    pub program: LogicalProgram,
+    pub connection_ids: Vec<i64>,
 }
 
-impl StreamTable {
-    pub fn name(&self) -> &str {
-        match self {
-            StreamTable::Source { name, .. } => name,
-            StreamTable::Sink { name, .. } => name,
-            StreamTable::Memory { name, .. } => name,
-        }
-    }
-
-    pub fn get_fields(&self) -> Vec<Arc<Field>> {
-        match self {
-            StreamTable::Source { schema, .. } => schema.fields().to_vec(),
-            StreamTable::Sink { schema, .. } => schema.fields().to_vec(),
-            StreamTable::Memory { .. } => vec![],
-        }
-    }
+pub fn parse_sql_statements(
+    sql: &str,
+) -> std::result::Result<Vec<Statement>, datafusion::sql::sqlparser::parser::ParserError> {
+    Parser::parse_sql(&FunctionStreamDialect {}, sql)
 }
 
-#[derive(Debug)]
-struct LogicalBatchInput {
-    table_name: String,
-    schema: Arc<Schema>,
-}
-
-impl datafusion::datasource::TableProvider for LogicalBatchInput {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn schema(&self) -> Arc<Schema> {
-        self.schema.clone()
-    }
-
-    fn table_type(&self) -> datafusion::datasource::TableType {
-        datafusion::datasource::TableType::Base
-    }
-
-    fn scan<'life0, 'life1, 'life2, 'life3, 'async_trait>(
-        &'life0 self,
-        _state: &'life1 dyn datafusion::catalog::Session,
-        _projection: Option<&'life2 Vec<usize>>,
-        _filters: &'life3 [Expr],
-        _limit: Option<usize>,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = Result<Arc<dyn datafusion::physical_plan::ExecutionPlan>>,
-                > + Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        'life2: 'async_trait,
-        'life3: 'async_trait,
-        Self: 'async_trait,
+fn try_handle_set_variable(
+    statement: &Statement,
+    schema_provider: &mut StreamSchemaProvider,
+) -> Result<bool> {
+    if let Statement::SetVariable {
+        variables, value, ..
+    } = statement
     {
-        unimplemented!("LogicalBatchInput is for planning only")
-    }
-}
-
-fn create_table(table_name: String, schema: Arc<Schema>) -> Arc<dyn TableSource> {
-    let table_provider = LogicalBatchInput { table_name, schema };
-    let wrapped = Arc::new(table_provider);
-    let provider = DefaultTableSource::new(wrapped);
-    Arc::new(provider)
-}
-
-impl StreamSchemaProvider {
-    pub fn new() -> Self {
-        let mut registry = Self {
-            ..Default::default()
+        let OneOrManyWithParens::One(opt) = variables else {
+            return plan_err!("invalid syntax for `SET` call");
         };
 
-        registry
-            .register_udf(PlaceholderUdf::with_return(
-                "hop",
-                vec![
-                    DataType::Interval(datatypes::IntervalUnit::MonthDayNano),
-                    DataType::Interval(datatypes::IntervalUnit::MonthDayNano),
-                ],
-                window_arrow_struct(),
-            ))
-            .unwrap();
-
-        registry
-            .register_udf(PlaceholderUdf::with_return(
-                "tumble",
-                vec![DataType::Interval(datatypes::IntervalUnit::MonthDayNano)],
-                window_arrow_struct(),
-            ))
-            .unwrap();
-
-        registry
-            .register_udf(PlaceholderUdf::with_return(
-                "session",
-                vec![DataType::Interval(datatypes::IntervalUnit::MonthDayNano)],
-                window_arrow_struct(),
-            ))
-            .unwrap();
-
-        registry
-            .register_udf(PlaceholderUdf::with_return(
-                "unnest",
-                vec![DataType::List(Arc::new(Field::new(
-                    "field",
-                    DataType::Utf8,
-                    true,
-                )))],
-                DataType::Utf8,
-            ))
-            .unwrap();
-
-        registry
-            .register_udf(PlaceholderUdf::with_return(
-                "row_time",
-                vec![],
-                DataType::Timestamp(datatypes::TimeUnit::Nanosecond, None),
-            ))
-            .unwrap();
-
-        for p in SessionStateDefaults::default_scalar_functions() {
-            registry.register_udf(p).unwrap();
-        }
-        for p in SessionStateDefaults::default_aggregate_functions() {
-            registry.register_udaf(p).unwrap();
-        }
-        for p in SessionStateDefaults::default_window_functions() {
-            registry.register_udwf(p).unwrap();
-        }
-        for p in SessionStateDefaults::default_expr_planners() {
-            registry.register_expr_planner(p).unwrap();
+        if opt.to_string() != "updating_ttl" {
+            return plan_err!(
+                "invalid option '{}'; supported options are 'updating_ttl'",
+                opt
+            );
         }
 
-        registry
+        if value.len() != 1 {
+            return plan_err!("invalid `SET updating_ttl` call; expected exactly one expression");
+        }
+
+        let duration = duration_from_sql_expr(&value[0])?;
+        schema_provider.planning_options.ttl = duration;
+
+        return Ok(true);
     }
 
-    pub fn add_source_table(
-        &mut self,
-        name: String,
-        schema: Arc<Schema>,
-        event_time_field: Option<String>,
-        watermark_field: Option<String>,
-    ) {
-        self.tables.insert(
-            UniCase::new(name.clone()),
-            StreamTable::Source {
-                name,
-                schema,
-                event_time_field,
-                watermark_field,
-            },
-        );
-    }
+    Ok(false)
+}
 
-    pub fn add_sink_table(&mut self, name: String, schema: Arc<Schema>) {
-        self.tables.insert(
-            UniCase::new(name.clone()),
-            StreamTable::Sink { name, schema },
-        );
-    }
+fn duration_from_sql_expr(
+    expr: &datafusion::sql::sqlparser::ast::Expr,
+) -> Result<std::time::Duration> {
+    use datafusion::sql::sqlparser::ast::Expr as SqlExpr;
+    use datafusion::sql::sqlparser::ast::Value as SqlValue;
+    use datafusion::sql::sqlparser::ast::ValueWithSpan;
 
-    fn insert_table(&mut self, table: StreamTable) {
-        self.tables
-            .insert(UniCase::new(table.name().to_string()), table);
-    }
+    match expr {
+        SqlExpr::Interval(interval) => {
+            let value_str = match interval.value.as_ref() {
+                SqlExpr::Value(ValueWithSpan {
+                    value: SqlValue::SingleQuotedString(s),
+                    ..
+                }) => s.clone(),
+                other => return plan_err!("expected interval string literal, found {other}"),
+            };
 
-    pub fn get_table(&self, table_name: impl Into<String>) -> Option<&StreamTable> {
-        self.tables.get(&UniCase::new(table_name.into()))
-    }
-
-    pub fn get_table_mut(&mut self, table_name: impl Into<String>) -> Option<&mut StreamTable> {
-        self.tables.get_mut(&UniCase::new(table_name.into()))
+            parse_interval_to_duration(&value_str)
+        }
+        SqlExpr::Value(ValueWithSpan {
+            value: SqlValue::SingleQuotedString(s),
+            ..
+        }) => parse_interval_to_duration(s),
+        other => plan_err!("expected an interval expression, found {other}"),
     }
 }
 
-impl ContextProvider for StreamSchemaProvider {
-    fn get_table_source(&self, name: TableReference) -> Result<Arc<dyn TableSource>> {
-        let table = self
-            .get_table(name.to_string())
-            .ok_or_else(|| DataFusionError::Plan(format!("Table {name} not found")))?;
-
-        let fields = table.get_fields();
-        let schema = Arc::new(Schema::new_with_metadata(
-            fields
-                .iter()
-                .map(|f| f.as_ref().clone())
-                .collect::<Vec<Field>>(),
-            HashMap::new(),
-        ));
-        Ok(create_table(name.to_string(), schema))
+fn parse_interval_to_duration(s: &str) -> Result<std::time::Duration> {
+    let parts: Vec<&str> = s.trim().split_whitespace().collect();
+    if parts.len() != 2 {
+        return plan_err!("invalid interval string '{s}'; expected '<value> <unit>'");
     }
-
-    fn get_function_meta(&self, name: &str) -> Option<Arc<ScalarUDF>> {
-        self.functions.get(name).cloned()
-    }
-
-    fn get_aggregate_meta(&self, name: &str) -> Option<Arc<AggregateUDF>> {
-        self.aggregate_functions.get(name).cloned()
-    }
-
-    fn get_variable_type(&self, _variable_names: &[String]) -> Option<DataType> {
-        None
-    }
-
-    fn options(&self) -> &datafusion::config::ConfigOptions {
-        &self.config_options
-    }
-
-    fn get_window_meta(&self, name: &str) -> Option<Arc<WindowUDF>> {
-        self.window_functions.get(name).cloned()
-    }
-
-    fn udf_names(&self) -> Vec<String> {
-        self.functions.keys().cloned().collect()
-    }
-
-    fn udaf_names(&self) -> Vec<String> {
-        self.aggregate_functions.keys().cloned().collect()
-    }
-
-    fn udwf_names(&self) -> Vec<String> {
-        self.window_functions.keys().cloned().collect()
-    }
-
-    fn get_expr_planners(&self) -> &[Arc<dyn ExprPlanner>] {
-        &self.expr_planners
+    let value: u64 = parts[0]
+        .parse()
+        .map_err(|_| DataFusionError::Plan(format!("invalid interval number: {}", parts[0])))?;
+    match parts[1].to_lowercase().as_str() {
+        "second" | "seconds" | "s" => Ok(std::time::Duration::from_secs(value)),
+        "minute" | "minutes" | "min" => Ok(std::time::Duration::from_secs(value * 60)),
+        "hour" | "hours" | "h" => Ok(std::time::Duration::from_secs(value * 3600)),
+        "day" | "days" | "d" => Ok(std::time::Duration::from_secs(value * 86400)),
+        unit => plan_err!("unsupported interval unit '{unit}'"),
     }
 }
 
-impl FunctionRegistry for StreamSchemaProvider {
-    fn udfs(&self) -> HashSet<String> {
-        self.functions.keys().cloned().collect()
+fn build_sink_inputs(extensions: &[LogicalPlan]) -> HashMap<NamedNode, Vec<LogicalPlan>> {
+    let mut sink_inputs = HashMap::<NamedNode, Vec<LogicalPlan>>::new();
+    for extension in extensions.iter() {
+        if let LogicalPlan::Extension(ext) = extension {
+            if let Some(sink_node) = ext.node.as_any().downcast_ref::<SinkExtension>() {
+                if let Some(named_node) = sink_node.node_name() {
+                    let inputs = sink_node
+                        .inputs()
+                        .into_iter()
+                        .cloned()
+                        .collect::<Vec<LogicalPlan>>();
+                    sink_inputs.entry(named_node).or_default().extend(inputs);
+                }
+            }
+        }
+    }
+    sink_inputs
+}
+
+fn maybe_add_key_extension_to_sink(plan: LogicalPlan) -> Result<LogicalPlan> {
+    let LogicalPlan::Extension(ref ext) = plan else {
+        return Ok(plan);
+    };
+
+    let Some(sink) = ext.node.as_any().downcast_ref::<SinkExtension>() else {
+        return Ok(plan);
+    };
+
+    let Some(partition_exprs) = sink.table.partition_exprs() else {
+        return Ok(plan);
+    };
+
+    if partition_exprs.is_empty() {
+        return Ok(plan);
     }
 
-    fn udf(&self, name: &str) -> Result<Arc<ScalarUDF>> {
-        if let Some(f) = self.functions.get(name) {
-            Ok(Arc::clone(f))
-        } else {
-            plan_err!("No UDF with name {name}")
+    let inputs = plan
+        .inputs()
+        .into_iter()
+        .map(|input| {
+            Ok(LogicalPlan::Extension(Extension {
+                node: Arc::new(KeyCalculationExtension {
+                    name: Some("key-calc-partition".to_string()),
+                    schema: input.schema().clone(),
+                    input: input.clone(),
+                    keys: KeysOrExprs::Exprs(partition_exprs.clone()),
+                }),
+            }))
+        })
+        .collect::<Result<_>>()?;
+
+    use datafusion::prelude::col;
+    let unkey = LogicalPlan::Extension(Extension {
+        node: Arc::new(
+            ProjectionExtension::new(
+                inputs,
+                Some("unkey".to_string()),
+                sink.schema().iter().map(|(_, f)| col(f.name())).collect(),
+            )
+            .shuffled(),
+        ),
+    });
+
+    let node = sink.with_exprs_and_inputs(vec![], vec![unkey])?;
+    Ok(LogicalPlan::Extension(Extension {
+        node: Arc::new(node),
+    }))
+}
+
+fn rewrite_sinks(extensions: Vec<LogicalPlan>) -> Result<Vec<LogicalPlan>> {
+    let mut sink_inputs = build_sink_inputs(&extensions);
+    let mut new_extensions = vec![];
+    for extension in extensions {
+        let mut rewriter = SinkInputRewriter::new(&mut sink_inputs);
+        let result = extension.rewrite(&mut rewriter)?;
+        if !rewriter.was_removed {
+            new_extensions.push(result.data);
         }
     }
 
-    fn udaf(&self, name: &str) -> Result<Arc<AggregateUDF>> {
-        if let Some(f) = self.aggregate_functions.get(name) {
-            Ok(Arc::clone(f))
-        } else {
-            plan_err!("No UDAF with name {name}")
+    new_extensions
+        .into_iter()
+        .map(maybe_add_key_extension_to_sink)
+        .collect()
+}
+
+pub async fn parse_and_get_arrow_program(
+    query: String,
+    mut schema_provider: StreamSchemaProvider,
+    _config: SqlConfig,
+) -> Result<CompiledSql> {
+    let mut config = SessionConfig::new();
+    config
+        .options_mut()
+        .optimizer
+        .enable_round_robin_repartition = false;
+    config.options_mut().optimizer.repartition_aggregations = false;
+    config.options_mut().optimizer.repartition_windows = false;
+    config.options_mut().optimizer.repartition_sorts = false;
+    config.options_mut().optimizer.repartition_joins = false;
+    config.options_mut().execution.target_partitions = 1;
+
+    let session_state = SessionStateBuilder::new()
+        .with_config(config)
+        .with_default_features()
+        .with_physical_optimizer_rules(vec![])
+        .build();
+
+    let mut inserts = vec![];
+    for statement in parse_sql_statements(&query)? {
+        if try_handle_set_variable(&statement, &mut schema_provider)? {
+            continue;
         }
-    }
 
-    fn udwf(&self, name: &str) -> Result<Arc<WindowUDF>> {
-        if let Some(f) = self.window_functions.get(name) {
-            Ok(Arc::clone(f))
+        if let Some(table) = CatalogTable::try_from_statement(&statement, &schema_provider)? {
+            schema_provider.insert_catalog_table(table);
         } else {
-            plan_err!("No UDWF with name {name}")
+            inserts.push(Insert::try_from_statement(&statement, &schema_provider)?);
+        };
+    }
+
+    if inserts.is_empty() {
+        return plan_err!("The provided SQL does not contain a query");
+    }
+
+    let mut used_connections = HashSet::new();
+    let mut extensions = vec![];
+
+    for insert in inserts {
+        let (plan, sink_name) = match insert {
+            Insert::InsertQuery {
+                sink_name,
+                logical_plan,
+            } => (logical_plan, Some(sink_name)),
+            Insert::Anonymous { logical_plan } => (logical_plan, None),
+        };
+
+        let mut plan_rewrite = rewrite_plan(plan, &schema_provider)?;
+
+        if plan_rewrite
+            .schema()
+            .fields()
+            .iter()
+            .any(|f| is_json_union(f.data_type()))
+        {
+            plan_rewrite = serialize_outgoing_json(&schema_provider, Arc::new(plan_rewrite));
         }
+
+        debug!("Plan = {}", plan_rewrite.display_graphviz());
+
+        let mut metadata = SourceMetadataVisitor::new(&schema_provider);
+        plan_rewrite.visit_with_subqueries(&mut metadata)?;
+        used_connections.extend(metadata.connection_ids.iter());
+
+        let sink = match sink_name {
+            Some(sink_name) => {
+                let table = schema_provider
+                    .get_catalog_table_mut(&sink_name)
+                    .ok_or_else(|| {
+                        DataFusionError::Plan(format!("Connection {sink_name} not found"))
+                    })?;
+                match table {
+                    CatalogTable::ConnectorTable(c) => {
+                        if let Some(id) = c.id {
+                            used_connections.insert(id);
+                        }
+
+                        SinkExtension::new(
+                            TableReference::bare(sink_name),
+                            table.clone(),
+                            plan_rewrite.schema().clone(),
+                            Arc::new(plan_rewrite),
+                        )
+                    }
+                    CatalogTable::MemoryTable { logical_plan, .. } => {
+                        if logical_plan.is_some() {
+                            return plan_err!("Can only insert into a memory table once");
+                        }
+                        logical_plan.replace(plan_rewrite);
+                        continue;
+                    }
+                    CatalogTable::LookupTable(_) => {
+                        plan_err!("lookup (temporary) tables cannot be inserted into")
+                    }
+                    CatalogTable::TableFromQuery { .. } => {
+                        plan_err!(
+                            "shouldn't be inserting more data into a table made with CREATE TABLE AS"
+                        )
+                    }
+                    CatalogTable::PreviewSink { .. } => {
+                        plan_err!("queries shouldn't be able insert into preview sink.")
+                    }
+                }
+            }
+            None => SinkExtension::new(
+                TableReference::parse_str("preview"),
+                CatalogTable::PreviewSink {
+                    logical_plan: plan_rewrite.clone(),
+                },
+                plan_rewrite.schema().clone(),
+                Arc::new(plan_rewrite),
+            ),
+        };
+        extensions.push(LogicalPlan::Extension(Extension {
+            node: Arc::new(sink?),
+        }));
     }
 
-    fn register_function_rewrite(
-        &mut self,
-        rewrite: Arc<dyn FunctionRewrite + Send + Sync>,
-    ) -> Result<()> {
-        self.analyzer.add_function_rewrite(rewrite);
-        Ok(())
-    }
+    let extensions = rewrite_sinks(extensions)?;
 
-    fn register_udf(&mut self, udf: Arc<ScalarUDF>) -> Result<Option<Arc<ScalarUDF>>> {
-        Ok(self.functions.insert(udf.name().to_string(), udf))
+    let mut plan_to_graph_visitor =
+        physical_planner::PlanToGraphVisitor::new(&schema_provider, &session_state);
+    for extension in extensions {
+        plan_to_graph_visitor.add_plan(extension)?;
     }
+    let graph = plan_to_graph_visitor.into_graph();
 
-    fn register_udaf(&mut self, udaf: Arc<AggregateUDF>) -> Result<Option<Arc<AggregateUDF>>> {
-        Ok(self
-            .aggregate_functions
-            .insert(udaf.name().to_string(), udaf))
-    }
+    let mut program = LogicalProgram::new(graph, ProgramConfig::default());
 
-    fn register_udwf(&mut self, udwf: Arc<WindowUDF>) -> Result<Option<Arc<WindowUDF>>> {
-        Ok(self.window_functions.insert(udwf.name().to_string(), udwf))
-    }
+    program.optimize(&ChainingOptimizer {});
 
-    fn register_expr_planner(&mut self, expr_planner: Arc<dyn ExprPlanner>) -> Result<()> {
-        self.expr_planners.push(expr_planner);
-        Ok(())
-    }
-
-    fn expr_planners(&self) -> Vec<Arc<dyn ExprPlanner>> {
-        self.expr_planners.clone()
-    }
+    Ok(CompiledSql {
+        program,
+        connection_ids: used_connections.into_iter().collect(),
+    })
 }

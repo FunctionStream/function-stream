@@ -7,7 +7,7 @@ use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, UserDefinedLogi
 
 use crate::multifield_partial_ord;
 use crate::sql::planner::extension::{NamedNode, StreamExtension};
-use crate::sql::planner::types::{
+use crate::sql::types::{
     StreamSchema, fields_with_qualifiers, schema_from_df_fields_with_metadata,
 };
 
