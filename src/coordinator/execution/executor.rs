@@ -14,7 +14,7 @@ use crate::coordinator::dataset::{ExecuteResult, ShowFunctionsResult, empty_reco
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
     InsertStatementPlan, PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult,
-    ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingSqlPlan,
+    ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::taskexecutor::TaskManager;
@@ -222,21 +222,9 @@ impl PlanVisitor for Executor {
     ) -> PlanVisitorResult {
         // TODO: start streaming pipeline for INSERT / anonymous query
         let result = Err(ExecuteError::Internal(format!(
-            "INSERT statement execution not yet implemented. LogicalPlan:\n{}",
-            plan.logical_plan.display_indent()
-        )));
-        PlanVisitorResult::Execute(result)
-    }
-
-    fn visit_streaming_sql_plan(
-        &self,
-        plan: &StreamingSqlPlan,
-        _context: &PlanVisitorContext,
-    ) -> PlanVisitorResult {
-        // TODO: apply rewrite_plan for streaming transformations, then execute
-        let result = Err(ExecuteError::Internal(format!(
-            "Streaming SQL execution not yet implemented. LogicalPlan:\n{}",
-            plan.logical_plan.display_indent()
+            "INSERT statement execution not yet implemented. Program graph has {} node(s), {} connection(s)",
+            plan.program.graph.node_count(),
+            plan.connection_ids.len(),
         )));
         PlanVisitorResult::Execute(result)
     }

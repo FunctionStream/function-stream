@@ -18,7 +18,6 @@ mod insert_statement;
 mod show_functions;
 mod start_function;
 mod stop_function;
-mod streaming_sql;
 mod visitor;
 
 pub use create_function::{ConfigSource, CreateFunction, FunctionSource};
@@ -29,7 +28,6 @@ pub use insert_statement::InsertStatement;
 pub use show_functions::ShowFunctions;
 pub use start_function::StartFunction;
 pub use stop_function::StopFunction;
-pub use streaming_sql::StreamingSql;
 pub use visitor::{StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
 use std::fmt;

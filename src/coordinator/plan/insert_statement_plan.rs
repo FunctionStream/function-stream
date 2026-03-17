@@ -10,18 +10,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use datafusion::logical_expr::LogicalPlan;
+use std::collections::HashSet;
+
+use crate::datastream::logical::LogicalProgram;
 
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
 #[derive(Debug)]
 pub struct InsertStatementPlan {
-    pub logical_plan: LogicalPlan,
+    pub program: LogicalProgram,
+    pub connection_ids: HashSet<i64>,
 }
 
 impl InsertStatementPlan {
-    pub fn new(logical_plan: LogicalPlan) -> Self {
-        Self { logical_plan }
+    pub fn new(program: LogicalProgram, connection_ids: HashSet<i64>) -> Self {
+        Self {
+            program,
+            connection_ids,
+        }
     }
 }
 

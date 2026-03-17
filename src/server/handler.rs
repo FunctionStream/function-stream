@@ -70,10 +70,14 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let req = request.into_inner();
 
         let parse_start = Instant::now();
-        let parsed = match parse_sql(&req.sql) {
-            Ok(parsed) => {
-                log::debug!("SQL parsed in {}ms", parse_start.elapsed().as_millis());
-                parsed
+        let statements = match parse_sql(&req.sql) {
+            Ok(stmts) => {
+                log::debug!(
+                    "SQL parsed {} statement(s) in {}ms",
+                    stmts.len(),
+                    parse_start.elapsed().as_millis()
+                );
+                stmts
             }
             Err(e) => {
                 return Ok(TonicResponse::new(Self::build_response(
@@ -85,7 +89,14 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         };
 
         let exec_start = Instant::now();
-        let result = self.coordinator.execute(parsed.as_ref());
+        let mut last_result = self.coordinator.execute(statements[0].as_ref());
+        for stmt in &statements[1..] {
+            if !last_result.success {
+                break;
+            }
+            last_result = self.coordinator.execute(stmt.as_ref());
+        }
+        let result = last_result;
         log::debug!(
             "Coordinator execution finished in {}ms",
             exec_start.elapsed().as_millis()

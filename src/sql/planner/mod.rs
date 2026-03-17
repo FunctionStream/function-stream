@@ -202,7 +202,7 @@ fn maybe_add_key_extension_to_sink(plan: LogicalPlan) -> Result<LogicalPlan> {
     }))
 }
 
-fn rewrite_sinks(extensions: Vec<LogicalPlan>) -> Result<Vec<LogicalPlan>> {
+pub fn rewrite_sinks(extensions: Vec<LogicalPlan>) -> Result<Vec<LogicalPlan>> {
     let mut sink_inputs = build_sink_inputs(&extensions);
     let mut new_extensions = vec![];
     for extension in extensions {

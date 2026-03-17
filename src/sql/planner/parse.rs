@@ -20,30 +20,29 @@ use datafusion::sql::sqlparser::parser::Parser;
 
 use crate::coordinator::{
     CreateFunction, CreateTable, DropFunction, InsertStatement, ShowFunctions, StartFunction,
-    Statement as CoordinatorStatement, StopFunction, StreamingSql,
+    Statement as CoordinatorStatement, StopFunction,
 };
 
-/// Stage 1: String → Box<dyn Statement>
+/// Stage 1: String → Vec<Box<dyn Statement>>
 ///
 /// Parses SQL using FunctionStreamDialect (from sqlparser-rs), then classifies
-/// the result into either a FunctionStream DDL statement or a StreamingSql,
-/// both unified under the coordinator's Statement trait.
-pub fn parse_sql(query: &str) -> Result<Box<dyn CoordinatorStatement>> {
+/// each statement into a concrete coordinator Statement type.
+/// A single SQL input may contain multiple statements (separated by `;`).
+pub fn parse_sql(query: &str) -> Result<Vec<Box<dyn CoordinatorStatement>>> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
         return plan_err!("Query is empty");
     }
 
     let dialect = FunctionStreamDialect {};
-    let mut statements = Parser::parse_sql(&dialect, trimmed)
+    let statements = Parser::parse_sql(&dialect, trimmed)
         .map_err(|e| DataFusionError::Plan(format!("SQL parse error: {e}")))?;
 
     if statements.is_empty() {
         return plan_err!("No SQL statements found");
     }
 
-    let stmt = statements.remove(0);
-    classify_statement(stmt)
+    statements.into_iter().map(classify_statement).collect()
 }
 
 /// Classify a parsed DataFusion Statement into the coordinator's Statement type.
@@ -51,8 +50,8 @@ pub fn parse_sql(query: &str) -> Result<Box<dyn CoordinatorStatement>> {
 /// Statement classification mirrors the analysis flow from `parse_and_get_arrow_program`:
 ///   - FunctionStream DDL → concrete coordinator types (CreateFunction, DropFunction, etc.)
 ///   - CREATE TABLE / CREATE VIEW → CreateTable (catalog registration)
-///   - INSERT INTO / standalone SELECT → InsertStatement (streaming pipeline)
-///   - Everything else → StreamingSql (catch-all)
+///   - INSERT INTO → InsertStatement (streaming pipeline)
+///   - Everything else → error (unsupported)
 fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>> {
     match stmt {
         DFStatement::CreateFunctionWith { options } => {
@@ -75,7 +74,7 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
             Ok(Box::new(CreateTable::new(s)))
         }
         s @ DFStatement::Insert(_) => Ok(Box::new(InsertStatement::new(s))),
-        other => Ok(Box::new(StreamingSql::new(other))),
+        other => plan_err!("Unsupported SQL statement: {other}"),
     }
 }
 
@@ -97,82 +96,102 @@ fn sql_options_to_map(options: &[SqlOption]) -> HashMap<String, String> {
 mod tests {
     use super::*;
 
-    fn is_streaming_sql(stmt: &dyn CoordinatorStatement) -> bool {
-        let debug = format!("{:?}", stmt);
-        debug.starts_with("StreamingSql")
+    fn first_stmt(sql: &str) -> Box<dyn CoordinatorStatement> {
+        let mut stmts = parse_sql(sql).unwrap();
+        assert!(!stmts.is_empty());
+        stmts.remove(0)
     }
 
-    fn is_ddl(stmt: &dyn CoordinatorStatement) -> bool {
-        !is_streaming_sql(stmt)
+    fn is_type(stmt: &dyn CoordinatorStatement, prefix: &str) -> bool {
+        format!("{:?}", stmt).starts_with(prefix)
     }
 
     #[test]
     fn test_parse_create_function() {
         let sql =
             "CREATE FUNCTION WITH ('function_path'='./test.wasm', 'config_path'='./config.yml')";
-        let stmt = parse_sql(sql).unwrap();
-        assert!(is_ddl(stmt.as_ref()));
+        let stmt = first_stmt(sql);
+        assert!(is_type(stmt.as_ref(), "CreateFunction"));
     }
 
     #[test]
     fn test_parse_create_function_minimal() {
         let sql = "CREATE FUNCTION WITH ('function_path'='./processor.wasm')";
-        let stmt = parse_sql(sql).unwrap();
-        assert!(is_ddl(stmt.as_ref()));
+        let stmt = first_stmt(sql);
+        assert!(is_type(stmt.as_ref(), "CreateFunction"));
     }
 
     #[test]
     fn test_parse_drop_function() {
-        let sql = "DROP FUNCTION my_task";
-        let stmt = parse_sql(sql).unwrap();
-        assert!(is_ddl(stmt.as_ref()));
+        let stmt = first_stmt("DROP FUNCTION my_task");
+        assert!(is_type(stmt.as_ref(), "DropFunction"));
     }
 
     #[test]
     fn test_parse_start_function() {
-        let sql = "START FUNCTION my_task";
-        let stmt = parse_sql(sql).unwrap();
-        assert!(is_ddl(stmt.as_ref()));
+        let stmt = first_stmt("START FUNCTION my_task");
+        assert!(is_type(stmt.as_ref(), "StartFunction"));
     }
 
     #[test]
     fn test_parse_stop_function() {
-        let sql = "STOP FUNCTION my_task";
-        let stmt = parse_sql(sql).unwrap();
-        assert!(is_ddl(stmt.as_ref()));
+        let stmt = first_stmt("STOP FUNCTION my_task");
+        assert!(is_type(stmt.as_ref(), "StopFunction"));
     }
 
     #[test]
     fn test_parse_show_functions() {
-        let sql = "SHOW FUNCTIONS";
-        let stmt = parse_sql(sql).unwrap();
-        assert!(is_ddl(stmt.as_ref()));
+        let stmt = first_stmt("SHOW FUNCTIONS");
+        assert!(is_type(stmt.as_ref(), "ShowFunctions"));
+    }
+
+    #[test]
+    fn test_parse_create_table() {
+        let stmt = first_stmt("CREATE TABLE foo (id INT, name VARCHAR)");
+        assert!(is_type(stmt.as_ref(), "CreateTable"));
+    }
+
+    #[test]
+    fn test_parse_insert_statement() {
+        let stmt = first_stmt("INSERT INTO sink SELECT * FROM source");
+        assert!(is_type(stmt.as_ref(), "InsertStatement"));
     }
 
     #[test]
     fn test_parse_case_insensitive() {
-        let sql1 = "create function with ('function_path'='./test.wasm')";
-        assert!(is_ddl(parse_sql(sql1).unwrap().as_ref()));
-
-        let sql2 = "show functions";
-        assert!(is_ddl(parse_sql(sql2).unwrap().as_ref()));
-
-        let sql3 = "start function my_task";
-        assert!(is_ddl(parse_sql(sql3).unwrap().as_ref()));
+        assert!(is_type(
+            first_stmt("create function with ('function_path'='./test.wasm')").as_ref(),
+            "CreateFunction"
+        ));
+        assert!(is_type(
+            first_stmt("show functions").as_ref(),
+            "ShowFunctions"
+        ));
+        assert!(is_type(
+            first_stmt("start function my_task").as_ref(),
+            "StartFunction"
+        ));
     }
 
     #[test]
-    fn test_parse_streaming_sql() {
-        let sql =
-            "SELECT count(*), tumble(interval '1 minute') as window FROM events GROUP BY window";
-        let stmt = parse_sql(sql).unwrap();
-        assert!(is_streaming_sql(stmt.as_ref()));
+    fn test_parse_multiple_statements() {
+        let sql = "CREATE TABLE t1 (id INT); INSERT INTO sink SELECT * FROM t1";
+        let stmts = parse_sql(sql).unwrap();
+        assert_eq!(stmts.len(), 2);
+        assert!(is_type(stmts[0].as_ref(), "CreateTable"));
+        assert!(is_type(stmts[1].as_ref(), "InsertStatement"));
     }
 
     #[test]
     fn test_parse_empty() {
         assert!(parse_sql("").is_err());
         assert!(parse_sql("  ").is_err());
+    }
+
+    #[test]
+    fn test_parse_unsupported_statement() {
+        let result = parse_sql("SELECT 1");
+        assert!(result.is_err());
     }
 
     #[test]
@@ -183,7 +202,7 @@ mod tests {
             'parallelism'='4',
             'memory-limit'='256mb'
         )"#;
-        let stmt = parse_sql(sql).unwrap();
-        assert!(is_ddl(stmt.as_ref()));
+        let stmt = first_stmt(sql);
+        assert!(is_type(stmt.as_ref(), "CreateFunction"));
     }
 }

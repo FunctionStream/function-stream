@@ -23,5 +23,5 @@ pub use coordinator::Coordinator;
 pub use dataset::{DataSet, ShowFunctionsResult};
 pub use statement::{
     CreateFunction, CreatePythonFunction, CreateTable, DropFunction, InsertStatement, PythonModule,
-    ShowFunctions, StartFunction, Statement, StopFunction, StreamingSql,
+    ShowFunctions, StartFunction, Statement, StopFunction,
 };

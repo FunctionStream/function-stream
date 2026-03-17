@@ -15,7 +15,7 @@ use crate::coordinator::execution_context::ExecutionContext;
 use crate::coordinator::statement::{
     CreateFunction, CreatePythonFunction, CreateTable, DropFunction, InsertStatement,
     ShowFunctions, StartFunction, Statement, StatementVisitor, StatementVisitorContext,
-    StatementVisitorResult, StopFunction, StreamingSql,
+    StatementVisitorResult, StopFunction,
 };
 use std::fmt;
 
@@ -131,14 +131,5 @@ impl StatementVisitor for Analyzer<'_> {
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(InsertStatement::new(stmt.statement.clone())))
-    }
-
-    fn visit_streaming_sql(
-        &self,
-        stmt: &StreamingSql,
-        _context: &StatementVisitorContext,
-    ) -> StatementVisitorResult {
-        // TODO: add semantic analysis for streaming SQL (schema validation, etc.)
-        StatementVisitorResult::Analyze(Box::new(StreamingSql::new(stmt.statement.clone())))
     }
 }

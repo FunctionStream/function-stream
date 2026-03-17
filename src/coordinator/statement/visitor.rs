@@ -12,7 +12,7 @@
 
 use super::{
     CreateFunction, CreatePythonFunction, CreateTable, DropFunction, InsertStatement,
-    ShowFunctions, StartFunction, StopFunction, StreamingSql,
+    ShowFunctions, StartFunction, StopFunction,
 };
 use crate::coordinator::plan::PlanNode;
 use crate::coordinator::statement::Statement;
@@ -98,12 +98,6 @@ pub trait StatementVisitor {
     fn visit_insert_statement(
         &self,
         stmt: &InsertStatement,
-        context: &StatementVisitorContext,
-    ) -> StatementVisitorResult;
-
-    fn visit_streaming_sql(
-        &self,
-        stmt: &StreamingSql,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 }
