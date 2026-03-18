@@ -11,7 +11,6 @@
 // limitations under the License.
 
 pub mod async_udf_rewriter;
-pub mod row_time;
 pub mod sink_input_rewriter;
 pub mod source_metadata_visitor;
 pub mod source_rewriter;
@@ -19,7 +18,6 @@ pub mod time_window;
 pub mod unnest_rewriter;
 
 pub use async_udf_rewriter::{AsyncOptions, AsyncUdfRewriter};
-pub use row_time::RowTimeRewriter;
 pub use sink_input_rewriter::SinkInputRewriter;
 pub use source_metadata_visitor::SourceMetadataVisitor;
 pub use source_rewriter::SourceRewriter;

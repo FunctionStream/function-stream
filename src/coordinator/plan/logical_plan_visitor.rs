@@ -37,7 +37,7 @@ use crate::sql::catalog::field_spec::FieldSpec;
 use crate::sql::catalog::optimizer::produce_optimized_plan;
 use crate::sql::functions::{is_json_union, serialize_outgoing_json};
 use crate::sql::planner::extension::sink::SinkExtension;
-use crate::sql::planner::{StreamSchemaProvider, maybe_add_key_extension_to_sink};
+use crate::sql::planner::{StreamSchemaProvider, maybe_add_key_extension_to_sink, rewrite_sinks};
 use crate::sql::rewrite_plan;
 
 const CONNECTOR: &str = "connector";
@@ -78,98 +78,121 @@ impl LogicalPlanVisitor {
             _ => panic!("LogicalPlanVisitor should return Plan"),
         }
     }
+    /// Builds the logical plan for 'CREATE STREAMING TABLE'.
+    /// This orchestrates the transformation from a SQL Query to a stateful Sink.
     fn build_create_streaming_table_plan(
         &self,
         stmt: &StreamingTableStatement,
     ) -> Result<Box<dyn PlanNode>> {
-        let statement = &stmt.statement;
-        match statement {
-            DFStatement::CreateStreamingTable {
-                name,
-                with_options,
-                comment,
-                query,
-            } => {
-                let name_str = name.to_string();
+        let DFStatement::CreateStreamingTable {
+            name,
+            with_options,
+            comment,
+            query,
+        } = &stmt.statement
+        else {
+            return plan_err!("Only CREATE STREAMING TABLE is supported in this context");
+        };
 
-                let mut connector_opts = ConnectorOptions::new(with_options, &None)?;
-                let connector_type = connector_opts.pull_opt_str(CONNECTOR)?.ok_or_else(|| {
-                    plan_datafusion_err!(
-                        "Streaming Table '{}' must specify '{}' option",
-                        name_str,
-                        CONNECTOR
-                    )
-                })?;
+        let table_name = name.to_string();
+        debug!("Compiling Streaming Table Sink for: {}", table_name);
 
-                let synthetic_statement = Statement::Query(query.clone());
-                let base_plan =
-                    produce_optimized_plan(&synthetic_statement, &self.schema_provider)?;
+        // 1. Connector Options Extraction
+        // Extract 'connector' (Kafka, Postgres, etc.) and other physical properties.
+        let mut opts = ConnectorOptions::new(with_options, &None)?;
+        let connector = opts.pull_opt_str(CONNECTOR)?.ok_or_else(|| {
+            plan_datafusion_err!(
+                "Streaming Table '{}' must specify the '{}' option",
+                table_name,
+                CONNECTOR
+            )
+        })?;
 
-                let mut plan_rewrite = rewrite_plan(base_plan, &self.schema_provider)?;
+        // 2. Query Optimization & Streaming Rewrite
+        // Convert the standard SQL query into a streaming-aware logical plan.
+        let base_plan =
+            produce_optimized_plan(&Statement::Query(query.clone()), &self.schema_provider)?;
+        let mut plan = rewrite_plan(base_plan, &self.schema_provider)?;
 
-                if plan_rewrite
-                    .schema()
-                    .fields()
-                    .iter()
-                    .any(|f| is_json_union(f.data_type()))
-                {
-                    plan_rewrite =
-                        serialize_outgoing_json(&self.schema_provider, Arc::new(plan_rewrite));
-                }
-
-                let fields: Vec<FieldSpec> = plan_rewrite
-                    .schema()
-                    .fields()
-                    .iter()
-                    .map(|f| FieldSpec::Struct((**f).clone()))
-                    .collect();
-
-                let partition_exprs =
-                    if let Some(partition_cols) = connector_opts.pull_opt_str(PARTITION_BY)? {
-                        let cols: Vec<Expr> =
-                            partition_cols.split(',').map(|c| col(c.trim())).collect();
-                        Some(cols)
-                    } else {
-                        None
-                    };
-
-                let connector_table = ConnectorTable {
-                    id: None,
-                    connector: connector_type,
-                    name: name_str.clone(),
-                    connection_type: ConnectionType::Sink,
-                    fields,
-                    config: "".to_string(),
-                    description: comment.clone().unwrap_or_default(),
-                    event_time_field: None,
-                    watermark_field: None,
-                    idle_time: connector_opts.pull_opt_duration(IDLE_MICROS)?,
-                    primary_keys: Arc::new(vec![]),
-                    inferred_fields: None,
-                    partition_exprs: Arc::new(partition_exprs),
-                };
-
-                let sink_extension = SinkExtension::new(
-                    TableReference::bare(name_str.clone()),
-                    Table::ConnectorTable(connector_table.clone()),
-                    plan_rewrite.schema().clone(),
-                    Arc::new(plan_rewrite),
-                )?;
-
-                let final_plan =
-                    maybe_add_key_extension_to_sink(LogicalPlan::Extension(Extension {
-                        node: Arc::new(sink_extension),
-                    }))?;
-
-                Ok(Box::new(StreamingTable {
-                    name: name_str,
-                    comment: comment.clone(),
-                    connector_table,
-                    logical_plan: final_plan,
-                }))
-            }
-            _ => plan_err!("Only CREATE STREAMING TABLE supported"),
+        // 3. Outgoing Data Serialization
+        // If the query produces internal types (like JSON Union), inject a serialization layer.
+        if plan
+            .schema()
+            .fields()
+            .iter()
+            .any(|f| is_json_union(f.data_type()))
+        {
+            plan = serialize_outgoing_json(&self.schema_provider, Arc::new(plan));
         }
+
+        // 4. Sink Metadata & Partitioning Logic
+        // Determine how data should be partitioned before hitting the external system.
+        let partition_exprs = self.resolve_partition_expressions(&mut opts)?;
+
+        // Map DataFusion fields to Arroyo FieldSpecs for the connector.
+        let fields: Vec<FieldSpec> = plan
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| FieldSpec::Struct((**f).clone()))
+            .collect();
+
+        // 5. Connector Table Construction
+        // This object acts as the 'Identity Card' for the Sink in the physical cluster.
+        let connector_table = ConnectorTable {
+            id: None,
+            connector,
+            name: table_name.clone(),
+            connection_type: ConnectionType::Sink,
+            fields,
+            config: "".to_string(), // Filled by the coordinator later
+            description: comment.clone().unwrap_or_default(),
+            event_time_field: None,
+            watermark_field: None,
+            idle_time: opts.pull_opt_duration(IDLE_MICROS)?,
+            primary_keys: Arc::new(vec![]), // PKs are inferred or explicitly set here
+            inferred_fields: None,
+            partition_exprs: Arc::new(partition_exprs),
+        };
+
+        // 6. Sink Extension & Final Rewrites
+        // Wrap the plan in a SinkExtension and ensure Key/Partition alignment.
+        let sink_extension = SinkExtension::new(
+            TableReference::bare(table_name.clone()),
+            Table::ConnectorTable(connector_table.clone()),
+            plan.schema().clone(),
+            Arc::new(plan),
+        )?;
+
+        // Ensure the data distribution matches the Sink's requirements (e.g., Shuffle by Partition Key)
+        let plan_with_keys = maybe_add_key_extension_to_sink(LogicalPlan::Extension(Extension {
+            node: Arc::new(sink_extension),
+        }))?;
+
+        // Global pass to wire inputs and handle shared sub-plans
+        let final_extensions = rewrite_sinks(vec![plan_with_keys])?;
+        let final_plan = final_extensions.into_iter().next().unwrap();
+
+        Ok(Box::new(StreamingTable {
+            name: table_name,
+            comment: comment.clone(),
+            connector_table,
+            logical_plan: final_plan,
+        }))
+    }
+
+    fn resolve_partition_expressions(
+        &self,
+        opts: &mut ConnectorOptions,
+    ) -> Result<Option<Vec<Expr>>> {
+        opts.pull_opt_str(PARTITION_BY)?
+            .map(|cols| {
+                cols.split(',')
+                    .map(|c| col(c.trim()))
+                    .collect::<Vec<Expr>>()
+            })
+            .map(Ok)
+            .transpose()
     }
 }
 

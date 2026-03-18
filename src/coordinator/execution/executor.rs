@@ -22,6 +22,10 @@ use crate::runtime::taskexecutor::TaskManager;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, info};
+use crate::datastream::logical::{LogicalProgram, ProgramConfig};
+use crate::datastream::optimizers::ChainingOptimizer;
+use crate::sql::CompiledSql;
+use crate::sql::planner::{physical_planner, rewrite_sinks};
 
 #[derive(Error, Debug)]
 pub enum ExecuteError {
