@@ -4964,7 +4964,7 @@ dependencies = [
 [[package]]
 name = "sqlparser"
 version = "0.55.0"
-source = "git+https://github.com/FunctionStream/sqlparser-rs?branch=0.6.0%2Ffunction-sql-parser#7e7cfb6145a426a26a7db12ae5874fed8b9c6b95"
+source = "git+https://github.com/FunctionStream/sqlparser-rs?branch=0.6.0%2Ffunction-sql-parser#9783cf9e3e6b61c763f78bcdd460e85edec22250"
 dependencies = [
  "log",
  "recursive",
@@ -4974,7 +4974,7 @@ dependencies = [
 [[package]]
 name = "sqlparser_derive"
 version = "0.3.0"
-source = "git+https://github.com/FunctionStream/sqlparser-rs?branch=0.6.0%2Ffunction-sql-parser#7e7cfb6145a426a26a7db12ae5874fed8b9c6b95"
+source = "git+https://github.com/FunctionStream/sqlparser-rs?branch=0.6.0%2Ffunction-sql-parser#9783cf9e3e6b61c763f78bcdd460e85edec22250"
 dependencies = [
  "proc-macro2",
  "quote",

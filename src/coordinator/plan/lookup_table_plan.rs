@@ -10,19 +10,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod analyze;
-#[allow(clippy::module_inception)]
-mod coordinator;
-mod dataset;
-mod execution;
-mod execution_context;
-mod plan;
-mod statement;
-mod tool;
+use crate::sql::catalog::connector_table::ConnectorTable;
 
-pub use coordinator::Coordinator;
-pub use dataset::{DataSet, ShowFunctionsResult};
-pub use statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, PythonModule, ShowFunctions,
-    StartFunction, Statement, StopFunction, StreamingTableStatement,
-};
+use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+
+/// Plan node that exposes a lookup table config as a logical plan input.
+#[derive(Debug)]
+pub struct LookupTablePlan {
+    pub table: ConnectorTable,
+}
+
+impl PlanNode for LookupTablePlan {
+    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
+        visitor.visit_lookup_table(self, context)
+    }
+}

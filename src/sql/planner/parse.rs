@@ -19,8 +19,8 @@ use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
 use datafusion::sql::sqlparser::parser::Parser;
 
 use crate::coordinator::{
-    CreateFunction, CreateTable, DropFunction, InsertStatement, ShowFunctions, StartFunction,
-    Statement as CoordinatorStatement, StopFunction,
+    CreateFunction, CreateTable, DropFunction, ShowFunctions, StartFunction,
+    Statement as CoordinatorStatement, StopFunction, StreamingTableStatement,
 };
 
 /// Stage 1: String → Vec<Box<dyn Statement>>
@@ -45,13 +45,6 @@ pub fn parse_sql(query: &str) -> Result<Vec<Box<dyn CoordinatorStatement>>> {
     statements.into_iter().map(classify_statement).collect()
 }
 
-/// Classify a parsed DataFusion Statement into the coordinator's Statement type.
-///
-/// Statement classification mirrors the analysis flow from `parse_and_get_arrow_program`:
-///   - FunctionStream DDL → concrete coordinator types (CreateFunction, DropFunction, etc.)
-///   - CREATE TABLE / CREATE VIEW → CreateTable (catalog registration)
-///   - INSERT INTO → InsertStatement (streaming pipeline)
-///   - Everything else → error (unsupported)
 fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>> {
     match stmt {
         DFStatement::CreateFunctionWith { options } => {
@@ -70,10 +63,10 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
             Ok(Box::new(DropFunction::new(name)))
         }
         DFStatement::ShowFunctions { .. } => Ok(Box::new(ShowFunctions::new())),
-        s @ DFStatement::CreateTable(_) | s @ DFStatement::CreateView { .. } => {
-            Ok(Box::new(CreateTable::new(s)))
+        s @ DFStatement::CreateTable(_) => Ok(Box::new(CreateTable::new(s))),
+        s @ DFStatement::CreateStreamingTable { .. } => {
+            Ok(Box::new(StreamingTableStatement::new(s)))
         }
-        s @ DFStatement::Insert(_) => Ok(Box::new(InsertStatement::new(s))),
         other => plan_err!("Unsupported SQL statement: {other}"),
     }
 }
@@ -154,7 +147,7 @@ mod tests {
     #[test]
     fn test_parse_insert_statement() {
         let stmt = first_stmt("INSERT INTO sink SELECT * FROM source");
-        assert!(is_type(stmt.as_ref(), "InsertStatement"));
+        assert!(is_type(stmt.as_ref(), "CreateStreamingTableStatement"));
     }
 
     #[test]
@@ -179,7 +172,7 @@ mod tests {
         let stmts = parse_sql(sql).unwrap();
         assert_eq!(stmts.len(), 2);
         assert!(is_type(stmts[0].as_ref(), "CreateTable"));
-        assert!(is_type(stmts[1].as_ref(), "InsertStatement"));
+        assert!(is_type(stmts[1].as_ref(), "CreateStreamingTableStatement"));
     }
 
     #[test]

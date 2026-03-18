@@ -32,19 +32,11 @@ pub enum Table {
     LookupTable(ConnectorTable),
     /// A source/sink table backed by an external connector.
     ConnectorTable(ConnectorTable),
-    /// An in-memory table with an optional logical plan (for views).
-    MemoryTable {
-        name: String,
-        fields: Vec<FieldRef>,
-        logical_plan: Option<LogicalPlan>,
-    },
     /// A table defined by a query (CREATE VIEW / CREATE TABLE AS SELECT).
     TableFromQuery {
         name: String,
         logical_plan: LogicalPlan,
     },
-    /// A preview sink for debugging/inspection.
-    PreviewSink { logical_plan: LogicalPlan },
 }
 
 impl Table {
@@ -56,44 +48,10 @@ impl Table {
         use datafusion::logical_expr::{CreateMemoryTable, CreateView, DdlStatement};
         use datafusion::sql::sqlparser::ast::CreateTable;
 
-        if let Statement::CreateTable(CreateTable {
-            name,
-            columns,
-            query: None,
-            ..
-        }) = statement
-        {
-            let name = name.to_string();
-
-            if columns.is_empty() {
-                return plan_err!("CREATE TABLE requires at least one column");
-            }
-
-            let fields: Vec<FieldRef> = columns
-                .iter()
-                .map(|col| {
-                    let data_type = crate::sql::types::convert_data_type(&col.data_type)
-                        .map(|(dt, _)| dt)
-                        .unwrap_or(datafusion::arrow::datatypes::DataType::Utf8);
-                    let nullable = !col.options.iter().any(|opt| {
-                        matches!(
-                            opt.option,
-                            datafusion::sql::sqlparser::ast::ColumnOption::NotNull
-                        )
-                    });
-                    Arc::new(datafusion::arrow::datatypes::Field::new(
-                        col.name.value.clone(),
-                        data_type,
-                        nullable,
-                    ))
-                })
-                .collect();
-
-            return Ok(Some(Table::MemoryTable {
-                name,
-                fields,
-                logical_plan: None,
-            }));
+        if let Statement::CreateTable(CreateTable { query: None, .. }) = statement {
+            return plan_err!(
+                "CREATE TABLE without AS SELECT is not supported; use CREATE TABLE ... AS SELECT or a connector table"
+            );
         }
 
         match produce_optimized_plan(statement, schema_provider) {
@@ -124,15 +82,13 @@ impl Table {
 
     pub fn name(&self) -> &str {
         match self {
-            Table::MemoryTable { name, .. } | Table::TableFromQuery { name, .. } => name.as_str(),
+            Table::TableFromQuery { name, .. } => name.as_str(),
             Table::ConnectorTable(c) | Table::LookupTable(c) => c.name.as_str(),
-            Table::PreviewSink { .. } => "preview",
         }
     }
 
     pub fn get_fields(&self) -> Vec<FieldRef> {
         match self {
-            Table::MemoryTable { fields, .. } => fields.clone(),
             Table::ConnectorTable(ConnectorTable {
                 fields,
                 inferred_fields,
@@ -149,9 +105,6 @@ impl Table {
                     .collect()
             }),
             Table::TableFromQuery { logical_plan, .. } => {
-                logical_plan.schema().fields().iter().cloned().collect()
-            }
-            Table::PreviewSink { logical_plan } => {
                 logical_plan.schema().fields().iter().cloned().collect()
             }
         }
@@ -187,9 +140,7 @@ impl Table {
     pub fn connector_op(&self) -> Result<super::connector::ConnectorOp> {
         match self {
             Table::ConnectorTable(c) | Table::LookupTable(c) => Ok(c.connector_op()),
-            Table::MemoryTable { .. } => plan_err!("can't write to a memory table"),
             Table::TableFromQuery { .. } => plan_err!("can't write to a query-defined table"),
-            Table::PreviewSink { .. } => Ok(super::connector::ConnectorOp::new("preview", "")),
         }
     }
 

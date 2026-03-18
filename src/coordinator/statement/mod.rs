@@ -14,20 +14,20 @@ mod create_function;
 mod create_python_function;
 mod create_table;
 mod drop_function;
-mod insert_statement;
 mod show_functions;
 mod start_function;
 mod stop_function;
+mod streaming_table;
 mod visitor;
 
 pub use create_function::{ConfigSource, CreateFunction, FunctionSource};
 pub use create_python_function::{CreatePythonFunction, PythonModule};
 pub use create_table::CreateTable;
 pub use drop_function::DropFunction;
-pub use insert_statement::InsertStatement;
 pub use show_functions::ShowFunctions;
 pub use start_function::StartFunction;
 pub use stop_function::StopFunction;
+pub use streaming_table::StreamingTableStatement;
 pub use visitor::{StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
 use std::fmt;

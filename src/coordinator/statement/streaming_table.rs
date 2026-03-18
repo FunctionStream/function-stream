@@ -14,28 +14,28 @@ use datafusion::sql::sqlparser::ast::Statement as DFStatement;
 
 use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
-/// Represents an INSERT INTO or standalone SELECT/query statement.
+/// Represents an INSERT INTO or standalone SELECT/query that creates a streaming table/pipeline.
 ///
 /// In the streaming SQL context, both INSERT INTO (writing to a sink)
 /// and standalone SELECT (anonymous computation) are treated as
-/// data-producing operations that feed into the streaming pipeline.
+/// data-producing operations that create/feed into the streaming pipeline.
 #[derive(Debug)]
-pub struct InsertStatement {
+pub struct StreamingTableStatement {
     pub statement: DFStatement,
 }
 
-impl InsertStatement {
+impl StreamingTableStatement {
     pub fn new(statement: DFStatement) -> Self {
         Self { statement }
     }
 }
 
-impl Statement for InsertStatement {
+impl Statement for StreamingTableStatement {
     fn accept(
         &self,
         visitor: &dyn StatementVisitor,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        visitor.visit_insert_statement(self, context)
+        visitor.visit_streaming_table_statement(self, context)
     }
 }

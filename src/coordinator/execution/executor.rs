@@ -13,8 +13,9 @@
 use crate::coordinator::dataset::{ExecuteResult, ShowFunctionsResult, empty_record_batch};
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
-    InsertStatementPlan, PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult,
-    ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
+    LookupTablePlan, PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult,
+    ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
+    StreamingTableConnectorPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::taskexecutor::TaskManager;
@@ -215,17 +216,36 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
-    fn visit_insert_statement_plan(
+    fn visit_streaming_table(
         &self,
-        plan: &InsertStatementPlan,
+        _plan: &StreamingTable,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        // TODO: start streaming pipeline for INSERT / anonymous query
-        let result = Err(ExecuteError::Internal(format!(
-            "INSERT statement execution not yet implemented. Program graph has {} node(s), {} connection(s)",
-            plan.program.graph.node_count(),
-            plan.connection_ids.len(),
-        )));
+        let result = Err(ExecuteError::Internal(
+            "StreamingTable execution not yet implemented".to_string(),
+        ));
+        PlanVisitorResult::Execute(result)
+    }
+
+    fn visit_lookup_table(
+        &self,
+        _plan: &LookupTablePlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let result = Err(ExecuteError::Internal(
+            "LookupTable execution not yet implemented".to_string(),
+        ));
+        PlanVisitorResult::Execute(result)
+    }
+
+    fn visit_streaming_connector_table(
+        &self,
+        _plan: &StreamingTableConnectorPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let result = Err(ExecuteError::Internal(
+            "StreamingTableConnector execution not yet implemented".to_string(),
+        ));
         PlanVisitorResult::Execute(result)
     }
 }

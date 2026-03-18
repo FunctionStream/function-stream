@@ -12,7 +12,8 @@
 
 use super::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
-    InsertStatementPlan, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
+    LookupTablePlan, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
+    StreamingTableConnectorPlan,
 };
 
 /// Context passed to PlanVisitor methods
@@ -91,9 +92,21 @@ pub trait PlanVisitor {
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 
-    fn visit_insert_statement_plan(
+    fn visit_streaming_table(
         &self,
-        plan: &InsertStatementPlan,
+        plan: &StreamingTable,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_lookup_table(
+        &self,
+        plan: &LookupTablePlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_streaming_connector_table(
+        &self,
+        plan: &StreamingTableConnectorPlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 }

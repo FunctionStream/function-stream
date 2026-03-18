@@ -152,7 +152,7 @@ fn build_sink_inputs(extensions: &[LogicalPlan]) -> HashMap<NamedNode, Vec<Logic
     sink_inputs
 }
 
-fn maybe_add_key_extension_to_sink(plan: LogicalPlan) -> Result<LogicalPlan> {
+pub(crate) fn maybe_add_key_extension_to_sink(plan: LogicalPlan) -> Result<LogicalPlan> {
     let LogicalPlan::Extension(ref ext) = plan else {
         return Ok(plan);
     };
@@ -307,13 +307,6 @@ pub async fn parse_and_get_arrow_program(
                             Arc::new(plan_rewrite),
                         )
                     }
-                    CatalogTable::MemoryTable { logical_plan, .. } => {
-                        if logical_plan.is_some() {
-                            return plan_err!("Can only insert into a memory table once");
-                        }
-                        logical_plan.replace(plan_rewrite);
-                        continue;
-                    }
                     CatalogTable::LookupTable(_) => {
                         plan_err!("lookup (temporary) tables cannot be inserted into")
                     }
@@ -322,19 +315,13 @@ pub async fn parse_and_get_arrow_program(
                             "shouldn't be inserting more data into a table made with CREATE TABLE AS"
                         )
                     }
-                    CatalogTable::PreviewSink { .. } => {
-                        plan_err!("queries shouldn't be able insert into preview sink.")
-                    }
                 }
             }
-            None => SinkExtension::new(
-                TableReference::parse_str("preview"),
-                CatalogTable::PreviewSink {
-                    logical_plan: plan_rewrite.clone(),
-                },
-                plan_rewrite.schema().clone(),
-                Arc::new(plan_rewrite),
-            ),
+            None => {
+                return plan_err!(
+                    "Anonymous query is not supported; use INSERT INTO <sink> SELECT ..."
+                );
+            }
         };
         extensions.push(LogicalPlan::Extension(Extension {
             node: Arc::new(sink?),

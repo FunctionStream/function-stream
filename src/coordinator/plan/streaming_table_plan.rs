@@ -10,29 +10,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
-
-use crate::datastream::logical::LogicalProgram;
-
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+use crate::sql::catalog::connector_table::ConnectorTable;
+use datafusion::logical_expr::LogicalPlan;
 
+/// Plan node representing a fully resolved streaming table (DDL).
 #[derive(Debug)]
-pub struct InsertStatementPlan {
-    pub program: LogicalProgram,
-    pub connection_ids: HashSet<i64>,
+pub struct StreamingTable {
+    pub name: String,
+    pub comment: Option<String>,
+    pub connector_table: ConnectorTable,
+    pub logical_plan: LogicalPlan,
 }
 
-impl InsertStatementPlan {
-    pub fn new(program: LogicalProgram, connection_ids: HashSet<i64>) -> Self {
-        Self {
-            program,
-            connection_ids,
-        }
-    }
-}
-
-impl PlanNode for InsertStatementPlan {
+impl PlanNode for StreamingTable {
     fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_insert_statement_plan(self, context)
+        visitor.visit_streaming_table(self, context)
     }
 }

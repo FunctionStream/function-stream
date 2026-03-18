@@ -10,38 +10,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
-use datafusion::common::tree_node::TreeNode;
-use datafusion::common::{Result, plan_err};
-use datafusion::error::DataFusionError;
-use datafusion::execution::SessionStateBuilder;
-use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore};
-use datafusion::prelude::SessionConfig;
-use datafusion::sql::TableReference;
+use datafusion::common::{Result, plan_datafusion_err, plan_err};
+use datafusion::sql::sqlparser::ast::{SqlOption, Statement as DFStatement};
+use datafusion_common::TableReference;
+use datafusion_expr::{Expr, Extension, LogicalPlan, col};
+use sqlparser::ast::Statement;
 use tracing::debug;
 
 use crate::coordinator::analyze::analysis::Analysis;
 use crate::coordinator::plan::{
-    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
-    InsertStatementPlan, PlanNode, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan,
+    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan, PlanNode,
+    ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
 };
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, InsertStatement,
-    ShowFunctions, StartFunction, StatementVisitor, StatementVisitorContext,
-    StatementVisitorResult, StopFunction,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, ShowFunctions, StartFunction,
+    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
+    StreamingTableStatement,
 };
-use crate::datastream::logical::{LogicalProgram, ProgramConfig};
-use crate::datastream::optimizers::ChainingOptimizer;
-use crate::sql::catalog::insert::Insert;
-use crate::sql::catalog::table::Table as CatalogTable;
+use crate::coordinator::tool::ConnectorOptions;
+use crate::sql::catalog::Table;
+use crate::sql::catalog::connector::ConnectionType;
+use crate::sql::catalog::connector_table::ConnectorTable;
+use crate::sql::catalog::field_spec::FieldSpec;
+use crate::sql::catalog::optimizer::produce_optimized_plan;
 use crate::sql::functions::{is_json_union, serialize_outgoing_json};
-use crate::sql::planner::StreamSchemaProvider;
 use crate::sql::planner::extension::sink::SinkExtension;
-use crate::sql::planner::plan::rewrite_plan;
-use crate::sql::planner::rewrite::SourceMetadataVisitor;
-use crate::sql::planner::{physical_planner, rewrite_sinks};
+use crate::sql::planner::{StreamSchemaProvider, maybe_add_key_extension_to_sink};
+use crate::sql::rewrite_plan;
+
+const CONNECTOR: &str = "connector";
+const PARTITION_BY: &str = "partition_by";
+const IDLE_MICROS: &str = "idle_time";
+
+/// 将 WITH 选项列表转为 key-value map，便于读取 connector 等配置。
+fn with_options_to_map(options: &[SqlOption]) -> std::collections::HashMap<String, String> {
+    options
+        .iter()
+        .filter_map(|opt| match opt {
+            SqlOption::KeyValue { key, value } => Some((
+                key.value.clone(),
+                value.to_string().trim_matches('\'').to_string(),
+            )),
+            _ => None,
+        })
+        .collect()
+}
 
 pub struct LogicalPlanVisitor {
     schema_provider: StreamSchemaProvider,
@@ -63,121 +78,98 @@ impl LogicalPlanVisitor {
             _ => panic!("LogicalPlanVisitor should return Plan"),
         }
     }
+    fn build_create_streaming_table_plan(
+        &self,
+        stmt: &StreamingTableStatement,
+    ) -> Result<Box<dyn PlanNode>> {
+        let statement = &stmt.statement;
+        match statement {
+            DFStatement::CreateStreamingTable {
+                name,
+                with_options,
+                comment,
+                query,
+            } => {
+                let name_str = name.to_string();
 
-    fn build_insert_plan(&self, stmt: &InsertStatement) -> Result<Box<dyn PlanNode>> {
-        let insert = Insert::try_from_statement(&stmt.statement, &self.schema_provider)?;
+                let mut connector_opts = ConnectorOptions::new(with_options, &None)?;
+                let connector_type = connector_opts.pull_opt_str(CONNECTOR)?.ok_or_else(|| {
+                    plan_datafusion_err!(
+                        "Streaming Table '{}' must specify '{}' option",
+                        name_str,
+                        CONNECTOR
+                    )
+                })?;
 
-        let (plan, sink_name) = match insert {
-            Insert::InsertQuery {
-                sink_name,
-                logical_plan,
-            } => (logical_plan, Some(sink_name)),
-            Insert::Anonymous { logical_plan } => (logical_plan, None),
-        };
+                let synthetic_statement = Statement::Query(query.clone());
+                let base_plan =
+                    produce_optimized_plan(&synthetic_statement, &self.schema_provider)?;
 
-        let mut plan_rewrite = rewrite_plan(plan, &self.schema_provider)?;
+                let mut plan_rewrite = rewrite_plan(base_plan, &self.schema_provider)?;
 
-        if plan_rewrite
-            .schema()
-            .fields()
-            .iter()
-            .any(|f| is_json_union(f.data_type()))
-        {
-            plan_rewrite = serialize_outgoing_json(&self.schema_provider, Arc::new(plan_rewrite));
-        }
-
-        debug!("Plan = {}", plan_rewrite.display_graphviz());
-
-        let mut used_connections = HashSet::new();
-        let mut metadata = SourceMetadataVisitor::new(&self.schema_provider);
-        plan_rewrite.visit_with_subqueries(&mut metadata)?;
-        used_connections.extend(metadata.connection_ids.iter());
-
-        let sink = match sink_name {
-            Some(sink_name) => {
-                let table = self
-                    .schema_provider
-                    .get_catalog_table(&sink_name)
-                    .ok_or_else(|| {
-                        DataFusionError::Plan(format!("Connection {sink_name} not found"))
-                    })?;
-                match &table {
-                    CatalogTable::ConnectorTable(c) => {
-                        if let Some(id) = c.id {
-                            used_connections.insert(id);
-                        }
-                        SinkExtension::new(
-                            TableReference::bare(sink_name),
-                            table.clone(),
-                            plan_rewrite.schema().clone(),
-                            Arc::new(plan_rewrite),
-                        )
-                    }
-                    CatalogTable::MemoryTable { .. } => {
-                        return plan_err!(
-                            "INSERT into memory tables is not supported in single-statement mode"
-                        );
-                    }
-                    CatalogTable::LookupTable(_) => {
-                        plan_err!("lookup (temporary) tables cannot be inserted into")
-                    }
-                    CatalogTable::TableFromQuery { .. } => {
-                        plan_err!(
-                            "shouldn't be inserting more data into a table made with CREATE TABLE AS"
-                        )
-                    }
-                    CatalogTable::PreviewSink { .. } => {
-                        plan_err!("queries shouldn't be able insert into preview sink.")
-                    }
+                if plan_rewrite
+                    .schema()
+                    .fields()
+                    .iter()
+                    .any(|f| is_json_union(f.data_type()))
+                {
+                    plan_rewrite =
+                        serialize_outgoing_json(&self.schema_provider, Arc::new(plan_rewrite));
                 }
+
+                let fields: Vec<FieldSpec> = plan_rewrite
+                    .schema()
+                    .fields()
+                    .iter()
+                    .map(|f| FieldSpec::Struct((**f).clone()))
+                    .collect();
+
+                let partition_exprs =
+                    if let Some(partition_cols) = connector_opts.pull_opt_str(PARTITION_BY)? {
+                        let cols: Vec<Expr> =
+                            partition_cols.split(',').map(|c| col(c.trim())).collect();
+                        Some(cols)
+                    } else {
+                        None
+                    };
+
+                let connector_table = ConnectorTable {
+                    id: None,
+                    connector: connector_type,
+                    name: name_str.clone(),
+                    connection_type: ConnectionType::Sink,
+                    fields,
+                    config: "".to_string(),
+                    description: comment.clone().unwrap_or_default(),
+                    event_time_field: None,
+                    watermark_field: None,
+                    idle_time: connector_opts.pull_opt_duration(IDLE_MICROS)?,
+                    primary_keys: Arc::new(vec![]),
+                    inferred_fields: None,
+                    partition_exprs: Arc::new(partition_exprs),
+                };
+
+                let sink_extension = SinkExtension::new(
+                    TableReference::bare(name_str.clone()),
+                    Table::ConnectorTable(connector_table.clone()),
+                    plan_rewrite.schema().clone(),
+                    Arc::new(plan_rewrite),
+                )?;
+
+                let final_plan =
+                    maybe_add_key_extension_to_sink(LogicalPlan::Extension(Extension {
+                        node: Arc::new(sink_extension),
+                    }))?;
+
+                Ok(Box::new(StreamingTable {
+                    name: name_str,
+                    comment: comment.clone(),
+                    connector_table,
+                    logical_plan: final_plan,
+                }))
             }
-            None => SinkExtension::new(
-                TableReference::parse_str("preview"),
-                CatalogTable::PreviewSink {
-                    logical_plan: plan_rewrite.clone(),
-                },
-                plan_rewrite.schema().clone(),
-                Arc::new(plan_rewrite),
-            ),
-        };
-
-        let extension = LogicalPlan::Extension(Extension {
-            node: Arc::new(sink?),
-        });
-
-        let extensions = rewrite_sinks(vec![extension])?;
-
-        let mut config = SessionConfig::new();
-        config
-            .options_mut()
-            .optimizer
-            .enable_round_robin_repartition = false;
-        config.options_mut().optimizer.repartition_aggregations = false;
-        config.options_mut().optimizer.repartition_windows = false;
-        config.options_mut().optimizer.repartition_sorts = false;
-        config.options_mut().optimizer.repartition_joins = false;
-        config.options_mut().execution.target_partitions = 1;
-
-        let session_state = SessionStateBuilder::new()
-            .with_config(config)
-            .with_default_features()
-            .with_physical_optimizer_rules(vec![])
-            .build();
-
-        let mut plan_to_graph_visitor =
-            physical_planner::PlanToGraphVisitor::new(&self.schema_provider, &session_state);
-        for ext in extensions {
-            plan_to_graph_visitor.add_plan(ext)?;
+            _ => plan_err!("Only CREATE STREAMING TABLE supported"),
         }
-        let graph = plan_to_graph_visitor.into_graph();
-
-        let mut program = LogicalProgram::new(graph, ProgramConfig::default());
-        program.optimize(&ChainingOptimizer {});
-
-        Ok(Box::new(InsertStatementPlan::new(
-            program,
-            used_connections,
-        )))
     }
 }
 
@@ -264,14 +256,14 @@ impl StatementVisitor for LogicalPlanVisitor {
         }
     }
 
-    fn visit_insert_statement(
+    fn visit_streaming_table_statement(
         &self,
-        stmt: &InsertStatement,
+        stmt: &StreamingTableStatement,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        match self.build_insert_plan(stmt) {
+        match self.build_create_streaming_table_plan(stmt) {
             Ok(plan) => StatementVisitorResult::Plan(plan),
-            Err(e) => panic!("Failed to build INSERT plan: {e}"),
+            Err(e) => panic!("Failed to build CreateStreamingTable plan: {e}"),
         }
     }
 }

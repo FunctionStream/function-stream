@@ -23,7 +23,6 @@ use datafusion::logical_expr::{
 use crate::sql::catalog::connector_table::ConnectorTable;
 use crate::sql::catalog::field_spec::FieldSpec;
 use crate::sql::catalog::table::Table;
-use crate::sql::catalog::utils::add_timestamp_field;
 use crate::sql::planner::StreamSchemaProvider;
 use crate::sql::planner::extension::remote_table::RemoteTableExtension;
 use crate::sql::planner::extension::watermark_node::WatermarkNode;
@@ -227,7 +226,7 @@ impl TreeNodeRewriter for SourceRewriter<'_> {
     type Node = LogicalPlan;
 
     fn f_up(&mut self, node: Self::Node) -> DFResult<Transformed<Self::Node>> {
-        let LogicalPlan::TableScan(mut table_scan) = node else {
+        let LogicalPlan::TableScan(table_scan) = node else {
             return Ok(Transformed::no(node));
         };
 
@@ -243,30 +242,10 @@ impl TreeNodeRewriter for SourceRewriter<'_> {
                 // TODO: implement LookupSource extension
                 plan_err!("Lookup tables are not yet supported")
             }
-            Table::MemoryTable {
-                name,
-                fields: _,
-                logical_plan,
-            } => {
-                let Some(logical_plan) = logical_plan else {
-                    return plan_err!(
-                        "Can't query from memory table {} without first inserting into it",
-                        name
-                    );
-                };
-                table_scan.projected_schema = add_timestamp_field(
-                    table_scan.projected_schema.clone(),
-                    Some(table_scan.table_name.clone()),
-                )?;
-                self.mutate_table_from_query(&table_scan, logical_plan)
-            }
             Table::TableFromQuery {
                 name: _,
                 logical_plan,
             } => self.mutate_table_from_query(&table_scan, logical_plan),
-            Table::PreviewSink { .. } => Err(DataFusionError::Plan(
-                "can't select from a preview sink".to_string(),
-            )),
         }
     }
 }

@@ -41,11 +41,7 @@ impl SinkExtension {
                 }
             }
             Table::LookupTable(..) => return plan_err!("cannot use a lookup table as a sink"),
-            Table::MemoryTable { .. } => return plan_err!("memory tables not supported as sinks"),
             Table::TableFromQuery { .. } => {}
-            Table::PreviewSink { .. } => {
-                // preview sinks may also need debezium wrapping for updating inputs
-            }
         }
 
         Self::add_remote_if_necessary(&schema, &mut input);
@@ -123,10 +119,7 @@ impl UserDefinedLogicalNodeCore for SinkExtension {
 
 impl StreamExtension for SinkExtension {
     fn node_name(&self) -> Option<NamedNode> {
-        match &self.table {
-            Table::PreviewSink { .. } => None,
-            _ => Some(NamedNode::Sink(self.name.clone())),
-        }
+        Some(NamedNode::Sink(self.name.clone()))
     }
 
     fn output_schema(&self) -> StreamSchema {

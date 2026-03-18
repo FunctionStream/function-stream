@@ -13,9 +13,9 @@
 use super::Analysis;
 use crate::coordinator::execution_context::ExecutionContext;
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, InsertStatement,
-    ShowFunctions, StartFunction, Statement, StatementVisitor, StatementVisitorContext,
-    StatementVisitorResult, StopFunction,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, ShowFunctions, StartFunction,
+    Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
+    StreamingTableStatement,
 };
 use std::fmt;
 
@@ -125,11 +125,13 @@ impl StatementVisitor for Analyzer<'_> {
         StatementVisitorResult::Analyze(Box::new(CreateTable::new(stmt.statement.clone())))
     }
 
-    fn visit_insert_statement(
+    fn visit_streaming_table_statement(
         &self,
-        stmt: &InsertStatement,
+        stmt: &StreamingTableStatement,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        StatementVisitorResult::Analyze(Box::new(InsertStatement::new(stmt.statement.clone())))
+        StatementVisitorResult::Analyze(Box::new(StreamingTableStatement::new(
+            stmt.statement.clone(),
+        )))
     }
 }
