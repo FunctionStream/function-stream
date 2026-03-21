@@ -20,7 +20,7 @@ use crate::coordinator::execution::Executor;
 use crate::coordinator::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
 use crate::coordinator::statement::Statement;
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::planner::StreamSchemaProvider;
+use crate::sql::schema::StreamSchemaProvider;
 
 use super::execution_context::ExecutionContext;
 

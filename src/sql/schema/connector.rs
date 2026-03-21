@@ -10,16 +10,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Library crate for function-stream
+use std::fmt;
 
-#![allow(dead_code)]
+/// Describes the role of a connection in the streaming pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ConnectionType {
+    Source,
+    Sink,
+    Lookup,
+}
 
-pub mod api;
-pub mod config;
-pub mod coordinator;
-pub mod logging;
-pub mod runtime;
-pub mod server;
-pub mod sql;
-pub mod storage;
-pub mod types;
+impl fmt::Display for ConnectionType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConnectionType::Source => write!(f, "source"),
+            ConnectionType::Sink => write!(f, "sink"),
+            ConnectionType::Lookup => write!(f, "lookup"),
+        }
+    }
+}

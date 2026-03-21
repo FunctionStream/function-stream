@@ -13,8 +13,10 @@
 use std::sync::Arc;
 
 use datafusion::common::{Result, plan_datafusion_err, plan_err};
+use datafusion::execution::SessionStateBuilder;
 use datafusion::sql::sqlparser::ast::{SqlOption, Statement as DFStatement};
 use datafusion_common::TableReference;
+use datafusion_execution::config::SessionConfig;
 use datafusion_expr::{Expr, Extension, LogicalPlan, col};
 use sqlparser::ast::Statement;
 use tracing::debug;
@@ -30,21 +32,24 @@ use crate::coordinator::statement::{
     StreamingTableStatement,
 };
 use crate::coordinator::tool::ConnectorOptions;
-use crate::sql::catalog::Table;
-use crate::sql::catalog::connector::ConnectionType;
-use crate::sql::catalog::connector_table::ConnectorTable;
-use crate::sql::catalog::field_spec::FieldSpec;
-use crate::sql::catalog::optimizer::produce_optimized_plan;
+use crate::sql::logical_node::logical::{LogicalProgram, ProgramConfig};
+use crate::sql::logical_planner::optimizers::ChainingOptimizer;
+use crate::sql::schema::Table;
+use crate::sql::schema::connector::ConnectionType;
+use crate::sql::schema::connector_table::ConnectorTable;
+use crate::sql::schema::field_spec::FieldSpec;
+use crate::sql::schema::optimizer::produce_optimized_plan;
 use crate::sql::functions::{is_json_union, serialize_outgoing_json};
-use crate::sql::planner::extension::sink::SinkExtension;
-use crate::sql::planner::{StreamSchemaProvider, maybe_add_key_extension_to_sink, rewrite_sinks};
+use crate::sql::extensions::sink::SinkExtension;
+use crate::sql::logical_planner::planner;
+use crate::sql::analysis::{StreamSchemaProvider, maybe_add_key_extension_to_sink, rewrite_sinks};
 use crate::sql::rewrite_plan;
 
 const CONNECTOR: &str = "connector";
 const PARTITION_BY: &str = "partition_by";
 const IDLE_MICROS: &str = "idle_time";
 
-/// 将 WITH 选项列表转为 key-value map，便于读取 connector 等配置。
+/// Convert `WITH` option list to a key-value map (e.g. connector settings).
 fn with_options_to_map(options: &[SqlOption]) -> std::collections::HashMap<String, String> {
     options
         .iter()
@@ -153,6 +158,8 @@ impl LogicalPlanVisitor {
             primary_keys: Arc::new(vec![]), // PKs are inferred or explicitly set here
             inferred_fields: None,
             partition_exprs: Arc::new(partition_exprs),
+            lookup_cache_ttl:None,
+            lookup_cache_max_bytes:None,
         };
 
         // 6. Sink Extension & Final Rewrites
@@ -172,6 +179,37 @@ impl LogicalPlanVisitor {
         // Global pass to wire inputs and handle shared sub-plans
         let final_extensions = rewrite_sinks(vec![plan_with_keys])?;
         let final_plan = final_extensions.into_iter().next().unwrap();
+
+
+
+        let mut config = SessionConfig::new();
+        config
+            .options_mut()
+            .optimizer
+            .enable_round_robin_repartition = false;
+        config.options_mut().optimizer.repartition_aggregations = false;
+        config.options_mut().optimizer.repartition_windows = false;
+        config.options_mut().optimizer.repartition_sorts = false;
+        config.options_mut().optimizer.repartition_joins = false;
+        config.options_mut().execution.target_partitions = 1;
+
+        let session_state = SessionStateBuilder::new()
+            .with_config(config)
+            .with_default_features()
+            .with_physical_optimizer_rules(vec![])
+            .build();
+
+        let mut plan_to_graph_visitor =
+            planner::PlanToGraphVisitor::new(&self.schema_provider, &session_state);
+
+        plan_to_graph_visitor.add_plan(final_plan.clone())?;
+
+        let graph = plan_to_graph_visitor.into_graph();
+
+        let mut program = LogicalProgram::new(graph, ProgramConfig::default());
+
+        program.optimize(&ChainingOptimizer {});
+
 
         Ok(Box::new(StreamingTable {
             name: table_name,

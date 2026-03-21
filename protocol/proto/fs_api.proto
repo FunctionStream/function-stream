@@ -12,6 +12,17 @@ message ConnectorOp {
   string description = 3;
 }
 
+message ValuePlanOperator {
+  string name = 1;
+  bytes physical_plan = 2;
+}
+
+message KeyPlanOperator {
+  string name = 1;
+  bytes physical_plan = 2;
+  repeated uint64 key_fields = 3;
+}
+
 message ProjectionOperator {
   string name = 1;
   FsSchema input_schema = 2;

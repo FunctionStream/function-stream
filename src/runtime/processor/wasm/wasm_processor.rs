@@ -679,3 +679,4 @@ impl WasmProcessor for WasmProcessorImpl {
         Ok(())
     }
 }
+

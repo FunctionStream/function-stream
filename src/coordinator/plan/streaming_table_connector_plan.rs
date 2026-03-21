@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::catalog::connector_table::ConnectorTable;
+use crate::sql::schema::connector_table::ConnectorTable;
 
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 

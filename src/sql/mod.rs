@@ -10,14 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod catalog;
+pub mod schema;
 pub mod functions;
-pub mod physical;
-pub mod planner;
+pub mod parse;
+pub mod logical_node;
+pub mod logical_planner;
+pub mod analysis;
+pub(crate) mod extensions;
 pub mod types;
 
-pub use planner::StreamSchemaProvider;
-pub use planner::parse::parse_sql;
-pub use planner::plan::rewrite_plan;
-pub use planner::sql_to_plan::statement_to_plan;
-pub use planner::{CompiledSql, parse_and_get_arrow_program, parse_sql_statements};
+pub use schema::StreamSchemaProvider;
+pub use parse::parse_sql;
+pub use analysis::rewrite_plan;
+pub use analysis::{CompiledSql};

@@ -29,7 +29,7 @@ use crate::coordinator::{
     CreateFunction, CreatePythonFunction, DataSet, DropFunction, ShowFunctions,
     ShowFunctionsResult, StartFunction, Statement, StopFunction,
 };
-use crate::sql::planner::parse::parse_sql;
+use crate::sql::parse::parse_sql;
 
 pub struct FunctionStreamServiceImpl {
     coordinator: Arc<Coordinator>,

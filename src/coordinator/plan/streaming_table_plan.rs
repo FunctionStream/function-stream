@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-use crate::sql::catalog::connector_table::ConnectorTable;
+use crate::sql::schema::connector_table::ConnectorTable;
 use datafusion::logical_expr::LogicalPlan;
 
 /// Plan node representing a fully resolved streaming table (DDL).

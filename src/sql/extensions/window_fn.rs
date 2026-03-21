@@ -1,0 +1,123 @@
+use std::sync::Arc;
+use datafusion::common::{Column, DFSchema, DFSchemaRef, Result, plan_err};
+use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
+use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
+use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
+use datafusion_proto::{physical_plan::AsExecutionPlan, protobuf::PhysicalPlanNode};
+use prost::Message;
+use protocol::grpc::api::WindowFunctionOperator;
+use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use crate::sql::logical_planner::FsPhysicalExtensionCodec;
+use crate::sql::logical_planner::planner::{NamedNode, Planner};
+use crate::sql::types::TIMESTAMP_FIELD;
+use crate::types::{FsSchema, FsSchemaRef};
+use super::{ NodeWithIncomingEdges, StreamExtension};
+
+pub(crate) const WINDOW_FUNCTION_EXTENSION_NAME: &str = "WindowFunctionExtension";
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
+pub(crate) struct WindowFunctionExtension {
+    window_plan: LogicalPlan,
+    key_fields: Vec<usize>,
+}
+
+impl WindowFunctionExtension {
+    pub fn new(window_plan: LogicalPlan, key_fields: Vec<usize>) -> Self {
+        Self {
+            window_plan,
+            key_fields,
+        }
+    }
+}
+
+impl UserDefinedLogicalNodeCore for WindowFunctionExtension {
+    fn name(&self) -> &str {
+        WINDOW_FUNCTION_EXTENSION_NAME
+    }
+
+    fn inputs(&self) -> Vec<&LogicalPlan> {
+        vec![&self.window_plan]
+    }
+
+    fn schema(&self) -> &DFSchemaRef {
+        self.window_plan.schema()
+    }
+
+    fn expressions(&self) -> Vec<datafusion::prelude::Expr> {
+        vec![]
+    }
+
+    fn fmt_for_explain(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "WindowFunction: {}", self.schema())
+    }
+
+    fn with_exprs_and_inputs(
+        &self,
+        _exprs: Vec<datafusion::prelude::Expr>,
+        inputs: Vec<LogicalPlan>,
+    ) -> Result<Self> {
+        Ok(Self::new(inputs[0].clone(), self.key_fields.clone()))
+    }
+}
+
+impl StreamExtension for WindowFunctionExtension {
+    fn node_name(&self) -> Option<NamedNode> {
+        None
+    }
+
+    fn plan_node(
+        &self,
+        planner: &Planner,
+        index: usize,
+        input_schemas: Vec<FsSchemaRef>,
+    ) -> Result<super::NodeWithIncomingEdges> {
+        if input_schemas.len() != 1 {
+            return plan_err!("WindowFunctionExtension requires exactly one input");
+        }
+        let input_schema = input_schemas[0].clone();
+        let input_df_schema =
+            Arc::new(DFSchema::try_from(input_schema.schema.as_ref().clone()).unwrap());
+
+        let binning_function = planner.create_physical_expr(
+            &Expr::Column(Column::new_unqualified(TIMESTAMP_FIELD.to_string())),
+            &input_df_schema,
+        )?;
+        let binning_function_proto =
+            serialize_physical_expr(&binning_function, &DefaultPhysicalExtensionCodec {})?;
+
+        let window_plan = planner.sync_plan(&self.window_plan)?;
+        let codec = FsPhysicalExtensionCodec::default();
+        let window_plan_proto = PhysicalPlanNode::try_from_physical_plan(window_plan, &codec)?;
+
+        let config = WindowFunctionOperator {
+            name: "WindowFunction".to_string(),
+            input_schema: Some(input_schema.as_ref().clone().into()),
+            binning_function: binning_function_proto.encode_to_vec(),
+            window_function_plan: window_plan_proto.encode_to_vec(),
+        };
+
+        let logical_node = LogicalNode::single(
+            index as u32,
+            format!("window_function_{index}"),
+            OperatorName::WindowFunction,
+            config.encode_to_vec(),
+            "window function".to_string(),
+            1,
+        );
+
+        let edge = LogicalEdge::project_all(
+            // TODO: detect when this shuffle is unnecessary
+            LogicalEdgeType::Shuffle,
+            input_schema.as_ref().clone(),
+        );
+
+        Ok(NodeWithIncomingEdges {
+            node: logical_node,
+            edges: vec![edge],
+        })
+    }
+
+    fn output_schema(&self) -> FsSchema {
+        FsSchema::from_schema_unkeyed(Arc::new(self.schema().as_ref().clone().into())).unwrap()
+    }
+}

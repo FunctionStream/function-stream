@@ -10,16 +10,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Library crate for function-stream
+pub mod connector;
+pub mod connector_table;
+pub mod field_spec;
+pub mod insert;
+pub mod optimizer;
+pub mod schema_provider;
+pub mod table;
+pub mod utils;
 
-#![allow(dead_code)]
-
-pub mod api;
-pub mod config;
-pub mod coordinator;
-pub mod logging;
-pub mod runtime;
-pub mod server;
-pub mod sql;
-pub mod storage;
-pub mod types;
+pub use connector::{ConnectionType};
+pub use connector_table::{ConnectorTable, SourceOperator};
+pub use field_spec::FieldSpec;
+pub use insert::Insert;
+pub use schema_provider::{LogicalBatchInput, StreamSchemaProvider, StreamTable};
+pub use table::Table;

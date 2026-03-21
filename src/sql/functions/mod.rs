@@ -1,4 +1,4 @@
-use crate::sql::planner::StreamSchemaProvider;
+use crate::sql::schema::StreamSchemaProvider;
 use datafusion::arrow::array::{
     Array, ArrayRef, StringArray, UnionArray,
     builder::{FixedSizeBinaryBuilder, ListBuilder, StringBuilder},

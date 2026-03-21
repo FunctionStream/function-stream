@@ -15,7 +15,6 @@
 mod api;
 mod config;
 mod coordinator;
-mod datastream;
 mod logging;
 mod runtime;
 mod server;

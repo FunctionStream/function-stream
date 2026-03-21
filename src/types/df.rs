@@ -4,20 +4,87 @@ use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaBuil
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::{DataFusionError, Result as DFResult};
 use std::sync::Arc;
-
-use super::TIMESTAMP_FIELD;
-use crate::sql::types::StreamSchema;
+use std::time::SystemTime;
+use arrow::compute::{filter_record_batch, lexsort_to_indices, partition, take, SortColumn};
+use arrow::compute::kernels::cmp::gt_eq;
+use arrow::compute::kernels::numeric::div;
+use arrow::row::SortField;
+use arrow_array::{PrimitiveArray, UInt64Array};
+use arrow_array::types::UInt64Type;
+use protocol::grpc::api;
+use super::{to_nanos, TIMESTAMP_FIELD};
+use std::ops::Range;
+use crate::types::converter::Converter;
 
 pub type FsSchemaRef = Arc<FsSchema>;
 
-/// Core streaming schema with timestamp and key tracking.
-/// Analogous to Arroyo's `ArroyoSchema`.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct FsSchema {
     pub schema: Arc<Schema>,
     pub timestamp_index: usize,
     key_indices: Option<Vec<usize>>,
+    /// If defined, these indices are used for routing (i.e., which subtask gets which piece of data)
     routing_key_indices: Option<Vec<usize>>,
+}
+
+impl TryFrom<api::FsSchema> for FsSchema {
+    type Error = DataFusionError;
+    fn try_from(schema_proto: api::FsSchema) -> Result<Self, DataFusionError> {
+        let schema: Schema = serde_json::from_str(&schema_proto.arrow_schema)
+            .map_err(|e| DataFusionError::Plan(format!("Invalid arrow schema: {e}")))?;
+        let timestamp_index = schema_proto.timestamp_index as usize;
+
+        let key_indices = schema_proto.has_keys.then(|| {
+            schema_proto
+                .key_indices
+                .into_iter()
+                .map(|index| index as usize)
+                .collect()
+        });
+
+        let routing_key_indices = schema_proto.has_routing_keys.then(|| {
+            schema_proto
+                .routing_key_indices
+                .into_iter()
+                .map(|index| index as usize)
+                .collect()
+        });
+
+        Ok(Self {
+            schema: Arc::new(schema),
+            timestamp_index,
+            key_indices,
+            routing_key_indices,
+        })
+    }
+}
+
+impl From<FsSchema> for api::FsSchema {
+    fn from(schema: FsSchema) -> Self {
+        let arrow_schema = serde_json::to_string(schema.schema.as_ref()).unwrap();
+        let timestamp_index = schema.timestamp_index as u32;
+
+        let has_keys = schema.key_indices.is_some();
+        let key_indices = schema
+            .key_indices
+            .map(|ks| ks.into_iter().map(|index| index as u32).collect())
+            .unwrap_or_default();
+
+        let has_routing_keys = schema.routing_key_indices.is_some();
+        let routing_key_indices = schema
+            .routing_key_indices
+            .map(|ks| ks.into_iter().map(|index| index as u32).collect())
+            .unwrap_or_default();
+
+        Self {
+            arrow_schema,
+            timestamp_index,
+            key_indices,
+            has_keys,
+            routing_key_indices,
+            has_routing_keys,
+        }
+    }
 }
 
 impl FsSchema {
@@ -34,7 +101,6 @@ impl FsSchema {
             routing_key_indices,
         }
     }
-
     pub fn new_unkeyed(schema: Arc<Schema>, timestamp_index: usize) -> Self {
         Self {
             schema,
@@ -43,7 +109,6 @@ impl FsSchema {
             routing_key_indices: None,
         }
     }
-
     pub fn new_keyed(schema: Arc<Schema>, timestamp_index: usize, key_indices: Vec<usize>) -> Self {
         Self {
             schema,
@@ -141,22 +206,100 @@ impl FsSchema {
         self.key_indices.as_ref()
     }
 
-    pub fn sort_field_indices(&self, with_timestamp: bool) -> Vec<usize> {
-        let mut indices = vec![];
+    pub fn filter_by_time(
+        &self,
+        batch: RecordBatch,
+        cutoff: Option<SystemTime>,
+    ) -> Result<RecordBatch, ArrowError> {
+        let Some(cutoff) = cutoff else {
+            // no watermark, so we just return the same batch.
+            return Ok(batch);
+        };
+        // filter out late data
+        let timestamp_column = batch
+            .column(self.timestamp_index)
+            .as_any()
+            .downcast_ref::<TimestampNanosecondArray>()
+            .ok_or_else(|| ArrowError::CastError(
+                format!("failed to downcast column {} of {:?} to timestamp. Schema is supposed to be {:?}",
+                        self.timestamp_index, batch, self.schema)))?;
+        let cutoff_scalar = TimestampNanosecondArray::new_scalar(to_nanos(cutoff) as i64);
+        let on_time = gt_eq(timestamp_column, &cutoff_scalar)?;
+        filter_record_batch(&batch, &on_time)
+    }
+
+    pub fn sort_columns(&self, batch: &RecordBatch, with_timestamp: bool) -> Vec<SortColumn> {
+        let mut columns = vec![];
         if let Some(keys) = &self.key_indices {
-            indices.extend(keys.iter().copied());
+            columns.extend(keys.iter().map(|index| SortColumn {
+                values: batch.column(*index).clone(),
+                options: None,
+            }));
         }
         if with_timestamp {
-            indices.push(self.timestamp_index);
+            columns.push(SortColumn {
+                values: batch.column(self.timestamp_index).clone(),
+                options: None,
+            });
         }
+        columns
+    }
+
+    pub fn sort_fields(&self, with_timestamp: bool) -> Vec<SortField> {
+        let mut sort_fields = vec![];
+        if let Some(keys) = &self.key_indices {
+            sort_fields.extend(keys.iter());
+        }
+        if with_timestamp {
+            sort_fields.push(self.timestamp_index);
+        }
+        self.sort_fields_by_indices(&sort_fields)
+    }
+
+    fn sort_fields_by_indices(&self, indices: &[usize]) -> Vec<SortField> {
         indices
+            .iter()
+            .map(|index| SortField::new(self.schema.field(*index).data_type().clone()))
+            .collect()
+    }
+
+    pub fn converter(&self, with_timestamp: bool) -> Result<Converter, ArrowError> {
+        Converter::new(self.sort_fields(with_timestamp))
+    }
+
+    pub fn value_converter(
+        &self,
+        with_timestamp: bool,
+        generation_index: usize,
+    ) -> Result<Converter, ArrowError> {
+        match &self.key_indices {
+            None => {
+                let mut indices = (0..self.schema.fields().len()).collect::<Vec<_>>();
+                indices.remove(generation_index);
+                if !with_timestamp {
+                    indices.remove(self.timestamp_index);
+                }
+                Converter::new(self.sort_fields_by_indices(&indices))
+            }
+            Some(keys) => {
+                let indices = (0..self.schema.fields().len())
+                    .filter(|index| {
+                        !keys.contains(index)
+                            && (with_timestamp || *index != self.timestamp_index)
+                            && *index != generation_index
+                    })
+                    .collect::<Vec<_>>();
+                Converter::new(self.sort_fields_by_indices(&indices))
+            }
+        }
     }
 
     pub fn value_indices(&self, with_timestamp: bool) -> Vec<usize> {
         let field_count = self.schema.fields().len();
         match &self.key_indices {
             None => {
-                let mut indices: Vec<usize> = (0..field_count).collect();
+                let mut indices = (0..field_count).collect::<Vec<_>>();
+
                 if !with_timestamp {
                     indices.remove(self.timestamp_index);
                 }
@@ -166,8 +309,49 @@ impl FsSchema {
                 .filter(|index| {
                     !keys.contains(index) && (with_timestamp || *index != self.timestamp_index)
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
         }
+    }
+
+    pub fn sort(
+        &self,
+        batch: RecordBatch,
+        with_timestamp: bool,
+    ) -> Result<RecordBatch, ArrowError> {
+        if self.key_indices.is_none() && !with_timestamp {
+            return Ok(batch);
+        }
+        let sort_columns = self.sort_columns(&batch, with_timestamp);
+        let sort_indices = lexsort_to_indices(&sort_columns, None).expect("should be able to sort");
+        let columns = batch
+            .columns()
+            .iter()
+            .map(|c| take(c, &sort_indices, None).unwrap())
+            .collect();
+
+        RecordBatch::try_new(batch.schema(), columns)
+    }
+
+    pub fn partition(
+        &self,
+        batch: &RecordBatch,
+        with_timestamp: bool,
+    ) -> Result<Vec<Range<usize>>, ArrowError> {
+        if self.key_indices.is_none() && !with_timestamp {
+            #[allow(clippy::single_range_in_vec_init)]
+            return Ok(vec![0..batch.num_rows()]);
+        }
+
+        let mut partition_columns = vec![];
+
+        if let Some(keys) = &self.routing_keys() {
+            partition_columns.extend(keys.iter().map(|index| batch.column(*index).clone()));
+        }
+        if with_timestamp {
+            partition_columns.push(batch.column(self.timestamp_index).clone());
+        }
+
+        Ok(partition(&partition_columns)?.ranges())
     }
 
     pub fn unkeyed_batch(&self, batch: &RecordBatch) -> Result<RecordBatch, ArrowError> {
@@ -190,7 +374,7 @@ impl FsSchema {
                 .fields()
                 .iter()
                 .enumerate()
-                .filter(|(index, _)| !key_indices.contains(index))
+                .filter(|(index, _field)| !key_indices.contains(index))
                 .map(|(_, field)| field.as_ref().clone())
                 .collect::<Vec<_>>(),
         );
@@ -239,156 +423,18 @@ impl FsSchema {
     ) -> Result<Self, ArrowError> {
         let mut fields = self.schema.fields.to_vec();
         fields.extend(new_fields.map(Arc::new));
+
         self.with_fields(fields)
     }
 }
 
-/// Proto serialization: convert between FsSchema and the proto `FsSchema` message.
-///
-/// Schema is encoded as JSON using Arrow's `SchemaRef` JSON representation.
-/// This approach avoids depending on serde for `arrow_schema::Schema` directly.
-impl FsSchema {
-    pub fn to_proto(&self) -> protocol::grpc::api::FsSchema {
-        let arrow_schema = schema_to_json_string(&self.schema);
-        let timestamp_index = self.timestamp_index as u32;
-
-        let has_keys = self.key_indices.is_some();
-        let key_indices = self
-            .key_indices
-            .as_ref()
-            .map(|ks| ks.iter().map(|i| *i as u32).collect())
-            .unwrap_or_default();
-
-        let has_routing_keys = self.routing_key_indices.is_some();
-        let routing_key_indices = self
-            .routing_key_indices
-            .as_ref()
-            .map(|ks| ks.iter().map(|i| *i as u32).collect())
-            .unwrap_or_default();
-
-        protocol::grpc::api::FsSchema {
-            arrow_schema,
-            timestamp_index,
-            key_indices,
-            has_keys,
-            routing_key_indices,
-            has_routing_keys,
-        }
-    }
-
-    pub fn from_proto(proto: protocol::grpc::api::FsSchema) -> Result<Self, DataFusionError> {
-        let schema = schema_from_json_string(&proto.arrow_schema)?;
-        let timestamp_index = proto.timestamp_index as usize;
-
-        let key_indices = proto
-            .has_keys
-            .then(|| proto.key_indices.into_iter().map(|i| i as usize).collect());
-
-        let routing_key_indices = proto.has_routing_keys.then(|| {
-            proto
-                .routing_key_indices
-                .into_iter()
-                .map(|i| i as usize)
-                .collect()
-        });
-
-        Ok(Self {
-            schema: Arc::new(schema),
-            timestamp_index,
-            key_indices,
-            routing_key_indices,
-        })
-    }
-}
-
-fn schema_to_json_string(schema: &Schema) -> String {
-    let json_fields: Vec<serde_json::Value> = schema
-        .fields()
-        .iter()
-        .map(|f| {
-            serde_json::json!({
-                "name": f.name(),
-                "data_type": format!("{:?}", f.data_type()),
-                "nullable": f.is_nullable(),
-            })
-        })
-        .collect();
-    serde_json::to_string(&json_fields).unwrap()
-}
-
-fn schema_from_json_string(s: &str) -> Result<Schema, DataFusionError> {
-    let json_fields: Vec<serde_json::Value> = serde_json::from_str(s)
-        .map_err(|e| DataFusionError::Plan(format!("Invalid schema JSON: {e}")))?;
-
-    let fields: Vec<Field> = json_fields
-        .into_iter()
-        .map(|v| {
-            let name = v["name"]
-                .as_str()
-                .ok_or_else(|| DataFusionError::Plan("missing field name".into()))?
-                .to_string();
-            let nullable = v["nullable"].as_bool().unwrap_or(true);
-            let dt_str = v["data_type"]
-                .as_str()
-                .ok_or_else(|| DataFusionError::Plan("missing data_type".into()))?;
-            let data_type = parse_debug_data_type(dt_str)?;
-            Ok(Field::new(name, data_type, nullable))
-        })
-        .collect::<Result<_, DataFusionError>>()?;
-
-    Ok(Schema::new(fields))
-}
-
-fn parse_debug_data_type(s: &str) -> Result<DataType, DataFusionError> {
-    match s {
-        "Boolean" => Ok(DataType::Boolean),
-        "Int8" => Ok(DataType::Int8),
-        "Int16" => Ok(DataType::Int16),
-        "Int32" => Ok(DataType::Int32),
-        "Int64" => Ok(DataType::Int64),
-        "UInt8" => Ok(DataType::UInt8),
-        "UInt16" => Ok(DataType::UInt16),
-        "UInt32" => Ok(DataType::UInt32),
-        "UInt64" => Ok(DataType::UInt64),
-        "Float16" => Ok(DataType::Float16),
-        "Float32" => Ok(DataType::Float32),
-        "Float64" => Ok(DataType::Float64),
-        "Utf8" => Ok(DataType::Utf8),
-        "LargeUtf8" => Ok(DataType::LargeUtf8),
-        "Binary" => Ok(DataType::Binary),
-        "LargeBinary" => Ok(DataType::LargeBinary),
-        "Date32" => Ok(DataType::Date32),
-        "Date64" => Ok(DataType::Date64),
-        "Null" => Ok(DataType::Null),
-        s if s.starts_with("Timestamp(Nanosecond") => {
-            Ok(DataType::Timestamp(TimeUnit::Nanosecond, None))
-        }
-        s if s.starts_with("Timestamp(Microsecond") => {
-            Ok(DataType::Timestamp(TimeUnit::Microsecond, None))
-        }
-        s if s.starts_with("Timestamp(Millisecond") => {
-            Ok(DataType::Timestamp(TimeUnit::Millisecond, None))
-        }
-        s if s.starts_with("Timestamp(Second") => Ok(DataType::Timestamp(TimeUnit::Second, None)),
-        _ => Err(DataFusionError::Plan(format!(
-            "Unsupported data type in schema JSON: {s}"
-        ))),
-    }
-}
-
-impl From<StreamSchema> for FsSchema {
-    fn from(s: StreamSchema) -> Self {
-        FsSchema {
-            schema: s.schema,
-            timestamp_index: s.timestamp_index,
-            key_indices: s.key_indices,
-            routing_key_indices: None,
-        }
-    }
-}
-
-impl From<StreamSchema> for Arc<FsSchema> {
-    fn from(s: StreamSchema) -> Self {
-        Arc::new(FsSchema::from(s))
-    }
+pub fn server_for_hash_array(
+    hash: &PrimitiveArray<UInt64Type>,
+    n: usize,
+) -> Result<PrimitiveArray<UInt64Type>, ArrowError> {
+    let range_size = u64::MAX / (n as u64) + 1;
+    let range_scalar = UInt64Array::new_scalar(range_size);
+    let division = div(hash, &range_scalar)?;
+    let result: &PrimitiveArray<UInt64Type> = division.as_any().downcast_ref().unwrap();
+    Ok(result.clone())
 }

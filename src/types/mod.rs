@@ -28,12 +28,13 @@ pub mod operator_config;
 pub mod task_info;
 pub mod time_utils;
 pub mod worker;
+mod converter;
 
 // ── Re-exports from existing modules ──
 pub use arrow_ext::{DisplayAsSql, FsExtensionType, GetArrowSchema, GetArrowType};
 pub use date::{DatePart, DateTruncPrecision};
 pub use debezium::{Debezium, DebeziumOp, UpdatingData};
-pub use hash::{HASH_SEEDS, range_for_server, server_for_hash};
+pub use hash::{range_for_server, server_for_hash, HASH_SEEDS};
 pub use message::{ArrowMessage, CheckpointBarrier, SignalMessage, Watermark};
 pub use task_info::{ChainInfo, TaskInfo};
 pub use time_utils::{from_micros, from_millis, from_nanos, to_micros, to_millis, to_nanos};
