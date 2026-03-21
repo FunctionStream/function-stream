@@ -9,7 +9,7 @@ use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNod
 use crate::multifield_partial_ord;
 use crate::sql::schema::Table;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::types::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
+use crate::sql::common::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
 use super::{
     StreamExtension, NodeWithIncomingEdges, debezium::ToDebeziumExtension,
     remote_table::RemoteTableExtension,

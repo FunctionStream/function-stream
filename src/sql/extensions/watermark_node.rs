@@ -12,7 +12,7 @@ use crate::multifield_partial_ord;
 use crate::sql::schema::utils::add_timestamp_field;
 use crate::sql::extensions::{NodeWithIncomingEdges, StreamExtension};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 
 pub(crate) const WATERMARK_NODE_NAME: &str = "WatermarkNode";
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -13,7 +13,7 @@ use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNod
 use crate::multifield_partial_ord;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{schema_from_df_fields, DFField};
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 
 pub(crate) const PROJECTION_NAME: &str = "ProjectionExtension";
 

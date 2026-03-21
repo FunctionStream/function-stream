@@ -5,7 +5,7 @@ use datafusion::arrow::datatypes::{
 };
 use datafusion::common::{Result, plan_datafusion_err, plan_err};
 
-use crate::types::FsExtensionType;
+use crate::sql::common::FsExtensionType;
 
 pub fn convert_data_type(
     sql_type: &datafusion::sql::sqlparser::ast::DataType,

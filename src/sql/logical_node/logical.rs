@@ -11,7 +11,7 @@ use datafusion_proto::protobuf::ArrowType;
 use prost::Message;
 use strum::{Display, EnumString};
 use protocol::grpc::api;
-use crate::types::FsSchema;
+use crate::sql::common::FsSchema;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, Display)]
 pub enum OperatorName {

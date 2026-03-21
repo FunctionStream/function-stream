@@ -42,7 +42,7 @@ impl From<datafusion::error::DataFusionError> for DataflowError {
 #[macro_export]
 macro_rules! connector_err {
     ($($arg:tt)*) => {
-        $crate::types::errors::DataflowError::Connector(format!($($arg)*))
+        $crate::sql::common::errors::DataflowError::Connector(format!($($arg)*))
     };
 }
 

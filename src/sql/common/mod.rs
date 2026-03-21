@@ -10,16 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Core types shared across the FunctionStream system.
+//! Shared core types and constants for FunctionStream (`crate::sql::common`).
 //!
-//! This module provides fundamental types used by the runtime, SQL planner,
-//! coordinator, and other subsystems — analogous to `arroyo-types` + `arroyo-rpc` in Arroyo.
+//! Used by the runtime, SQL planner, coordinator, and other subsystems —
+//! analogous to `arroyo-types` + `arroyo-rpc` in Arroyo.
 
 pub mod arrow_ext;
 pub mod control;
 pub mod date;
 pub mod debezium;
-pub mod df;
+pub mod fs_schema;
 pub mod errors;
 pub mod formats;
 pub mod hash;
@@ -45,7 +45,7 @@ pub use control::{
     CheckpointCompleted, CheckpointEvent, CompactionResult, ControlMessage, ControlResp,
     ErrorDomain, RetryHint, StopMode, TaskCheckpointEventType, TaskError,
 };
-pub use df::{FsSchema, FsSchemaRef};
+pub use fs_schema::{FsSchema, FsSchemaRef};
 pub use errors::DataflowError;
 pub use formats::{BadData, Format, Framing, JsonFormat};
 pub use operator_config::{MetadataField, OperatorConfig, RateLimit};

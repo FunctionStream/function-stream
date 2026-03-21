@@ -16,7 +16,7 @@ use crate::sql::functions::multi_hash;
 use crate::sql::logical_planner::FsPhysicalExtensionCodec;
 use crate::sql::extensions::{IsRetractExtension, NodeWithIncomingEdges, StreamExtension};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 
 pub(crate) const UPDATING_AGGREGATE_EXTENSION_NAME: &str = "UpdatingAggregateExtension";
 

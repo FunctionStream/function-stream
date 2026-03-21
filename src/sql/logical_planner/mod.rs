@@ -31,7 +31,7 @@ use crate::make_udf_function;
 use crate::sql::functions::MultiHashFunction;
 use crate::sql::analysis::UNNESTED_COL;
 use crate::sql::schema::utils::window_arrow_struct;
-use crate::types::{TIMESTAMP_FIELD, UPDATING_META_FIELD};
+use crate::sql::common::{TIMESTAMP_FIELD, UPDATING_META_FIELD};
 use datafusion::arrow::datatypes::{TimestampNanosecondType, UInt64Type};
 use datafusion::catalog::memory::MemorySourceConfig;
 use datafusion::datasource::memory::DataSourceExec;
@@ -56,8 +56,11 @@ use std::fmt::Debug;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
+pub mod compiled_sql;
 pub(crate) mod planner;
 pub mod optimizers;
+
+pub use compiled_sql::CompiledSql;
 
 // ─────────────────── Updating Meta Helpers ───────────────────
 

@@ -1,3 +1,7 @@
+//! FunctionStream table/stream schema: Arrow [`Schema`] plus timestamp index and optional key columns.
+//!
+//! [`Schema`]: datafusion::arrow::datatypes::Schema
+
 use datafusion::arrow::array::builder::{ArrayBuilder, make_builder};
 use datafusion::arrow::array::{RecordBatch, TimestampNanosecondArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaBuilder, TimeUnit};
@@ -14,7 +18,7 @@ use arrow_array::types::UInt64Type;
 use protocol::grpc::api;
 use super::{to_nanos, TIMESTAMP_FIELD};
 use std::ops::Range;
-use crate::types::converter::Converter;
+use crate::sql::common::converter::Converter;
 
 pub type FsSchemaRef = Arc<FsSchema>;
 

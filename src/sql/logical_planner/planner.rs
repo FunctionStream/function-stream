@@ -41,7 +41,7 @@ use crate::sql::extensions::key_calculation::KeyCalculationExtension;
 use crate::sql::extensions::{NodeWithIncomingEdges, StreamExtension};
 use crate::sql::schema::utils::add_timestamp_field_arrow;
 use crate::sql::schema::StreamSchemaProvider;
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 
 #[derive(Eq, Hash, PartialEq)]
 #[derive(Debug)]

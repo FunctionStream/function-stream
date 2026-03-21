@@ -3,7 +3,7 @@ use crate::sql::extensions::join::JoinExtension;
 use crate::sql::extensions::key_calculation::KeyCalculationExtension;
 use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
 use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields_with_metadata};
-use crate::types::TIMESTAMP_FIELD;
+use crate::sql::common::TIMESTAMP_FIELD;
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
 use datafusion::common::{
     Column, DataFusionError, JoinConstraint, JoinType, Result, ScalarValue, Spans, TableReference,

@@ -10,19 +10,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod common;
-pub mod api;
-
-pub mod schema;
-pub mod functions;
-pub mod parse;
-pub mod logical_node;
-pub mod logical_planner;
-pub mod analysis;
-pub(crate) mod extensions;
-pub mod types;
-
-pub use schema::StreamSchemaProvider;
-pub use parse::parse_sql;
-pub use analysis::rewrite_plan;
-pub use logical_planner::CompiledSql;
+#[macro_export]
+macro_rules! multifield_partial_ord {
+    ($ty:ty, $($field:tt), *) => {
+        impl PartialOrd for $ty {
+            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                $(
+                    let cmp = self.$field.partial_cmp(&other.$field)?;
+                    if cmp != std::cmp::Ordering::Equal {
+                        return Some(cmp);
+                    }
+                )*
+                Some(std::cmp::Ordering::Equal)
+            }
+        }
+    };
+}

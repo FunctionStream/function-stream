@@ -1,4 +1,4 @@
-use crate::types::to_micros;
+use crate::sql::common::to_micros;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 

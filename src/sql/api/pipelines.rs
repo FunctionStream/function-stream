@@ -1,5 +1,5 @@
 use super::udfs::Udf;
-use crate::types::control::ErrorDomain;
+use crate::sql::common::control::ErrorDomain;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

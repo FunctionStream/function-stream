@@ -23,7 +23,7 @@ use crate::sql::types::{
     DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers,
     schema_from_df_fields, schema_from_df_fields_with_metadata,
 };
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 
 pub(crate) const AGGREGATE_EXTENSION_NAME: &str = "AggregateExtension";
 

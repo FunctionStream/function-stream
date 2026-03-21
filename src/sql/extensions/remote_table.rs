@@ -10,7 +10,7 @@ use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNod
 use crate::multifield_partial_ord;
 use crate::sql::logical_planner::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 use super::{StreamExtension, NodeWithIncomingEdges};
 
 pub(crate) const REMOTE_TABLE_NAME: &str = "RemoteTableExtension";

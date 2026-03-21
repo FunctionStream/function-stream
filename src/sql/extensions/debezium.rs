@@ -14,7 +14,7 @@ use super::{NodeWithIncomingEdges};
 use crate::multifield_partial_ord;
 use crate::sql::logical_planner::updating_meta_field;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::types::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
+use crate::sql::common::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
 
 pub(crate) const DEBEZIUM_UNROLLING_EXTENSION_NAME: &str = "DebeziumUnrollingExtension";
 pub(crate) const TO_DEBEZIUM_EXTENSION_NAME: &str = "ToDebeziumExtension";

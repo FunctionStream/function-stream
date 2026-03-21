@@ -16,7 +16,7 @@ use protocol::grpc::api::JoinOperator;
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 
 pub(crate) const JOIN_NODE_NAME: &str = "JoinNode";
 

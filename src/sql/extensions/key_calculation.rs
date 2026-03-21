@@ -20,7 +20,7 @@ use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{
     StreamSchema, fields_with_qualifiers, schema_from_df_fields_with_metadata,
 };
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 
 pub(crate) const KEY_CALCULATION_NAME: &str = "KeyCalculationExtension";
 

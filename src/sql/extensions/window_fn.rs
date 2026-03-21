@@ -10,7 +10,7 @@ use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNod
 use crate::sql::logical_planner::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::TIMESTAMP_FIELD;
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 use super::{ NodeWithIncomingEdges, StreamExtension};
 
 pub(crate) const WINDOW_FUNCTION_EXTENSION_NAME: &str = "WindowFunctionExtension";

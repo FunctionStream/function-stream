@@ -12,7 +12,6 @@
 
 #![allow(dead_code)]
 
-mod api;
 mod config;
 mod coordinator;
 mod logging;
@@ -20,7 +19,6 @@ mod runtime;
 mod server;
 mod sql;
 mod storage;
-mod types;
 
 use anyhow::{Context, Result};
 use std::thread;

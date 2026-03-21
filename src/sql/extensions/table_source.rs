@@ -12,7 +12,7 @@ use crate::sql::schema::utils::add_timestamp_field;
 use crate::sql::extensions::debezium::DebeziumUnrollingExtension;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::schema_from_df_fields;
-use crate::types::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
+use crate::sql::common::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
 use super::{
     StreamExtension, NodeWithIncomingEdges, debezium::ToDebeziumExtension,
     remote_table::RemoteTableExtension,

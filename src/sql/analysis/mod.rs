@@ -25,10 +25,6 @@ pub use crate::sql::schema::schema_provider::{
     LogicalBatchInput, StreamSchemaProvider, StreamTable,
 };
 
-pub(crate) mod mod_prelude {
-    pub use super::StreamSchemaProvider;
-}
-
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -44,7 +40,6 @@ use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
 use datafusion::sql::sqlparser::parser::Parser;
 use tracing::{debug, info, instrument};
 
-use crate::sql::logical_node::logical::{LogicalProgram, ProgramConfig};
 use crate::sql::logical_planner::optimizers::ChainingOptimizer;
 use crate::sql::schema::insert::Insert;
 use crate::sql::schema::table::Table as CatalogTable;
@@ -55,14 +50,6 @@ use crate::sql::extensions::sink::SinkExtension;
 use crate::sql::extensions::{ StreamExtension};
 use crate::sql::logical_planner::planner::NamedNode;
 use crate::sql::types::SqlConfig;
-
-// ── Compilation pipeline ──────────────────────────────────────────────
-
-#[derive(Clone, Debug)]
-pub struct CompiledSql {
-    pub program: LogicalProgram,
-    pub connection_ids: Vec<i64>,
-}
 
 fn duration_from_sql_expr(
     expr: &datafusion::sql::sqlparser::ast::Expr,

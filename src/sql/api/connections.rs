@@ -1,5 +1,5 @@
-use crate::types::formats::{BadData, Format, Framing};
-use crate::types::{FsExtensionType, FsSchema};
+use crate::sql::common::formats::{BadData, Format, Framing};
+use crate::sql::common::{FsExtensionType, FsSchema};
 use datafusion::arrow::datatypes::{DataType, Field, Fields, TimeUnit};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};

@@ -23,11 +23,6 @@ use crate::coordinator::{
     Statement as CoordinatorStatement, StopFunction, StreamingTableStatement,
 };
 
-/// Stage 1: String → Vec<Box<dyn Statement>>
-///
-/// Parses SQL using FunctionStreamDialect (from sqlparser-rs), then classifies
-/// each statement into a concrete coordinator Statement type.
-/// A single SQL input may contain multiple statements (separated by `;`).
 pub fn parse_sql(query: &str) -> Result<Vec<Box<dyn CoordinatorStatement>>> {
     let trimmed = query.trim();
     if trimmed.is_empty() {

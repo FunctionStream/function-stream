@@ -14,7 +14,7 @@ use crate::sql::schema::ConnectorTable;
 use crate::sql::schema::utils::add_timestamp_field_arrow;
 use crate::sql::extensions::{NodeWithIncomingEdges, StreamExtension};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::types::{FsSchema, FsSchemaRef};
+use crate::sql::common::{FsSchema, FsSchemaRef};
 
 pub const SOURCE_EXTENSION_NAME: &str = "LookupSource";
 pub const JOIN_EXTENSION_NAME: &str = "LookupJoin";
