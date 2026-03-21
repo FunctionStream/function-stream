@@ -96,7 +96,6 @@ impl<'a> Planner<'a> {
         let fut = self.planner.create_physical_plan(plan, self.session_state);
         let (tx, mut rx) = oneshot::channel();
         thread::scope(|s| {
-            let _handle = tokio::runtime::Handle::current();
             let builder = thread::Builder::new();
             let builder = if cfg!(debug_assertions) {
                 builder.stack_size(10_000_000)

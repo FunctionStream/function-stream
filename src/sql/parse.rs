@@ -10,6 +10,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Coordinator-facing SQL parsing (`parse_sql`).
+//!
+//! **Data-definition / pipeline shape (this entry point)**  
+//! Only these table-related forms are supported:
+//! - **`CREATE TABLE ...`** (including `CREATE TABLE ... AS SELECT` where the planner accepts it)
+//! - **`CREATE STREAMING TABLE ... WITH (...) AS SELECT ...`** (streaming sink DDL)
+//!
+//! **`INSERT` is not supported** here — use `CREATE TABLE ... AS SELECT` or
+//! `CREATE STREAMING TABLE ... AS SELECT` to define the query shape instead.
+//!
+//! Other supported statements include function lifecycle (`CREATE FUNCTION WITH`, `START FUNCTION`, …).
+
 use std::collections::HashMap;
 
 use datafusion::common::{Result, plan_err};
@@ -62,7 +74,14 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
         s @ DFStatement::CreateStreamingTable { .. } => {
             Ok(Box::new(StreamingTableStatement::new(s)))
         }
-        other => plan_err!("Unsupported SQL statement: {other}"),
+        DFStatement::Insert { .. } => plan_err!(
+            "INSERT is not supported; only CREATE TABLE and CREATE STREAMING TABLE (with AS SELECT) \
+             are supported for defining table/query pipelines in this SQL frontend"
+        ),
+        other => plan_err!(
+            "Unsupported SQL statement: {other}. \
+             For tables/pipelines use CREATE TABLE or CREATE STREAMING TABLE ... AS SELECT; INSERT is not supported."
+        ),
     }
 }
 
@@ -139,10 +158,31 @@ mod tests {
         assert!(is_type(stmt.as_ref(), "CreateTable"));
     }
 
+    /// `CREATE STREAMING TABLE` is the sink DDL supported by FunctionStream (not `CREATE STREAM TABLE`).
     #[test]
-    fn test_parse_insert_statement() {
-        let stmt = first_stmt("INSERT INTO sink SELECT * FROM source");
-        assert!(is_type(stmt.as_ref(), "CreateStreamingTableStatement"));
+    fn test_parse_create_streaming_table() {
+        let sql = concat!(
+            "CREATE STREAMING TABLE my_sink ",
+            "WITH ('connector' = 'kafka') ",
+            "AS SELECT id FROM src",
+        );
+        let stmt = first_stmt(sql);
+        assert!(
+            is_type(stmt.as_ref(), "StreamingTableStatement"),
+            "expected StreamingTableStatement, got {:?}",
+            stmt
+        );
+    }
+
+    #[test]
+    fn test_parse_create_streaming_table_case_insensitive() {
+        let sql = concat!(
+            "create streaming table out_q ",
+            "with ('connector' = 'memory') ",
+            "as select 1 as x",
+        );
+        let stmt = first_stmt(sql);
+        assert!(is_type(stmt.as_ref(), "StreamingTableStatement"));
     }
 
     #[test]
@@ -163,11 +203,14 @@ mod tests {
 
     #[test]
     fn test_parse_multiple_statements() {
-        let sql = "CREATE TABLE t1 (id INT); INSERT INTO sink SELECT * FROM t1";
+        let sql = concat!(
+            "CREATE TABLE t1 (id INT); ",
+            "CREATE STREAMING TABLE sk WITH ('connector' = 'kafka') AS SELECT id FROM t1",
+        );
         let stmts = parse_sql(sql).unwrap();
         assert_eq!(stmts.len(), 2);
         assert!(is_type(stmts[0].as_ref(), "CreateTable"));
-        assert!(is_type(stmts[1].as_ref(), "CreateStreamingTableStatement"));
+        assert!(is_type(stmts[1].as_ref(), "StreamingTableStatement"));
     }
 
     #[test]
@@ -180,6 +223,20 @@ mod tests {
     fn test_parse_unsupported_statement() {
         let result = parse_sql("SELECT 1");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_insert_not_supported() {
+        let err = parse_sql("INSERT INTO sink SELECT * FROM src").unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("INSERT") && msg.contains("not supported"),
+            "expected explicit INSERT rejection, got: {msg}"
+        );
+        assert!(
+            msg.contains("CREATE TABLE") || msg.contains("CREATE STREAMING TABLE"),
+            "error should mention supported alternatives, got: {msg}"
+        );
     }
 
     #[test]

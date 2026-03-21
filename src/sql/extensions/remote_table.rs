@@ -28,6 +28,67 @@ pub(crate) struct RemoteTableExtension {
 
 multifield_partial_ord!(RemoteTableExtension, input, name, materialize);
 
+impl RemoteTableExtension {
+    fn plan_node_inlined(
+        planner: &Planner,
+        index: usize,
+        this: &RemoteTableExtension,
+    ) -> Result<NodeWithIncomingEdges> {
+        let physical_plan = planner.sync_plan(&this.input)?;
+        let physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
+            physical_plan,
+            &FsPhysicalExtensionCodec::default(),
+        )?;
+        let config = ValuePlanOperator {
+            name: format!("value_calculation({})", this.name),
+            physical_plan: physical_plan_node.encode_to_vec(),
+        };
+        let node = LogicalNode::single(
+            index as u32,
+            format!("value_{index}"),
+            OperatorName::ArrowValue,
+            config.encode_to_vec(),
+            this.name.to_string(),
+            1,
+        );
+        Ok(NodeWithIncomingEdges {
+            node,
+            edges: vec![],
+        })
+    }
+
+    fn plan_node_with_edges(
+        planner: &Planner,
+        index: usize,
+        this: &RemoteTableExtension,
+        input_schemas: Vec<FsSchemaRef>,
+    ) -> Result<NodeWithIncomingEdges> {
+        let physical_plan = planner.sync_plan(&this.input)?;
+        let physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
+            physical_plan,
+            &FsPhysicalExtensionCodec::default(),
+        )?;
+        let config = ValuePlanOperator {
+            name: format!("value_calculation({})", this.name),
+            physical_plan: physical_plan_node.encode_to_vec(),
+        };
+        let node = LogicalNode::single(
+            index as u32,
+            format!("value_{index}"),
+            OperatorName::ArrowValue,
+            config.encode_to_vec(),
+            this.name.to_string(),
+            1,
+        );
+
+        let edges = input_schemas
+            .into_iter()
+            .map(|schema| LogicalEdge::project_all(LogicalEdgeType::Forward, (*schema).clone()))
+            .collect();
+        Ok(NodeWithIncomingEdges { node, edges })
+    }
+}
+
 impl StreamExtension for RemoteTableExtension {
     fn node_name(&self) -> Option<NamedNode> {
         if self.materialize {
@@ -44,10 +105,11 @@ impl StreamExtension for RemoteTableExtension {
         input_schemas: Vec<FsSchemaRef>,
     ) -> Result<NodeWithIncomingEdges> {
         match input_schemas.len() {
-            0 => return plan_err!("RemoteTableExtension should have exactly one input"),
+            0 => {
+                return Self::plan_node_inlined(planner, index, self);
+            }
             1 => {}
             _multiple_inputs => {
-                // check they are all the same
                 let first = input_schemas[0].clone();
                 for schema in input_schemas.iter().skip(1) {
                     if *schema != first {
@@ -58,29 +120,7 @@ impl StreamExtension for RemoteTableExtension {
                 }
             }
         }
-        let physical_plan = planner.sync_plan(&self.input)?;
-        let physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
-            physical_plan,
-            &FsPhysicalExtensionCodec::default(),
-        )?;
-        let config = ValuePlanOperator {
-            name: format!("value_calculation({})", self.name),
-            physical_plan: physical_plan_node.encode_to_vec(),
-        };
-        let node = LogicalNode::single(
-            index as u32,
-            format!("value_{index}"),
-            OperatorName::ArrowValue,
-            config.encode_to_vec(),
-            self.name.to_string(),
-            1,
-        );
-
-        let edges = input_schemas
-            .into_iter()
-            .map(|schema| LogicalEdge::project_all(LogicalEdgeType::Forward, (*schema).clone()))
-            .collect();
-        Ok(NodeWithIncomingEdges { node, edges })
+        Self::plan_node_with_edges(planner, index, self, input_schemas)
     }
 
     fn output_schema(&self) -> FsSchema {

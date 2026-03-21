@@ -49,7 +49,6 @@ const CONNECTOR: &str = "connector";
 const PARTITION_BY: &str = "partition_by";
 const IDLE_MICROS: &str = "idle_time";
 
-/// Convert `WITH` option list to a key-value map (e.g. connector settings).
 fn with_options_to_map(options: &[SqlOption]) -> std::collections::HashMap<String, String> {
     options
         .iter()
@@ -83,8 +82,6 @@ impl LogicalPlanVisitor {
             _ => panic!("LogicalPlanVisitor should return Plan"),
         }
     }
-    /// Builds the logical plan for 'CREATE STREAMING TABLE'.
-    /// This orchestrates the transformation from a SQL Query to a stateful Sink.
     fn build_create_streaming_table_plan(
         &self,
         stmt: &StreamingTableStatement,
@@ -102,8 +99,6 @@ impl LogicalPlanVisitor {
         let table_name = name.to_string();
         debug!("Compiling Streaming Table Sink for: {}", table_name);
 
-        // 1. Connector Options Extraction
-        // Extract 'connector' (Kafka, Postgres, etc.) and other physical properties.
         let mut opts = ConnectorOptions::new(with_options, &None)?;
         let connector = opts.pull_opt_str(CONNECTOR)?.ok_or_else(|| {
             plan_datafusion_err!(
@@ -113,14 +108,10 @@ impl LogicalPlanVisitor {
             )
         })?;
 
-        // 2. Query Optimization & Streaming Rewrite
-        // Convert the standard SQL query into a streaming-aware logical plan.
         let base_plan =
             produce_optimized_plan(&Statement::Query(query.clone()), &self.schema_provider)?;
         let mut plan = rewrite_plan(base_plan, &self.schema_provider)?;
 
-        // 3. Outgoing Data Serialization
-        // If the query produces internal types (like JSON Union), inject a serialization layer.
         if plan
             .schema()
             .fields()
@@ -130,11 +121,8 @@ impl LogicalPlanVisitor {
             plan = serialize_outgoing_json(&self.schema_provider, Arc::new(plan));
         }
 
-        // 4. Sink Metadata & Partitioning Logic
-        // Determine how data should be partitioned before hitting the external system.
         let partition_exprs = self.resolve_partition_expressions(&mut opts)?;
 
-        // Map DataFusion fields to Arroyo FieldSpecs for the connector.
         let fields: Vec<FieldSpec> = plan
             .schema()
             .fields()
@@ -142,28 +130,24 @@ impl LogicalPlanVisitor {
             .map(|f| FieldSpec::Struct((**f).clone()))
             .collect();
 
-        // 5. Connector Table Construction
-        // This object acts as the 'Identity Card' for the Sink in the physical cluster.
         let connector_table = ConnectorTable {
             id: None,
             connector,
             name: table_name.clone(),
             connection_type: ConnectionType::Sink,
             fields,
-            config: "".to_string(), // Filled by the coordinator later
+            config: "".to_string(),
             description: comment.clone().unwrap_or_default(),
             event_time_field: None,
             watermark_field: None,
             idle_time: opts.pull_opt_duration(IDLE_MICROS)?,
-            primary_keys: Arc::new(vec![]), // PKs are inferred or explicitly set here
+            primary_keys: Arc::new(vec![]),
             inferred_fields: None,
             partition_exprs: Arc::new(partition_exprs),
             lookup_cache_ttl:None,
             lookup_cache_max_bytes:None,
         };
 
-        // 6. Sink Extension & Final Rewrites
-        // Wrap the plan in a SinkExtension and ensure Key/Partition alignment.
         let sink_extension = SinkExtension::new(
             TableReference::bare(table_name.clone()),
             Table::ConnectorTable(connector_table.clone()),
@@ -171,12 +155,10 @@ impl LogicalPlanVisitor {
             Arc::new(plan),
         )?;
 
-        // Ensure the data distribution matches the Sink's requirements (e.g., Shuffle by Partition Key)
         let plan_with_keys = maybe_add_key_extension_to_sink(LogicalPlan::Extension(Extension {
             node: Arc::new(sink_extension),
         }))?;
 
-        // Global pass to wire inputs and handle shared sub-plans
         let final_extensions = rewrite_sinks(vec![plan_with_keys])?;
         let final_plan = final_extensions.into_iter().next().unwrap();
 
@@ -326,5 +308,59 @@ impl StatementVisitor for LogicalPlanVisitor {
             Ok(plan) => StatementVisitorResult::Plan(plan),
             Err(e) => panic!("Failed to build CreateStreamingTable plan: {e}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod create_streaming_table_tests {
+    use std::sync::Arc;
+
+    use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+    use datafusion::sql::sqlparser::ast::Statement as DFStatement;
+    use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
+    use datafusion::sql::sqlparser::parser::Parser;
+
+    use crate::sql::common::TIMESTAMP_FIELD;
+    use crate::sql::rewrite_plan;
+    use crate::sql::schema::optimizer::produce_optimized_plan;
+    use crate::sql::schema::StreamSchemaProvider;
+
+    fn schema_provider_with_src() -> StreamSchemaProvider {
+        let mut provider = StreamSchemaProvider::new();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new(
+                TIMESTAMP_FIELD,
+                DataType::Timestamp(TimeUnit::Nanosecond, None),
+                false,
+            ),
+        ]));
+        provider.add_source_table(
+            "src".to_string(),
+            schema,
+            Some(TIMESTAMP_FIELD.to_string()),
+            None,
+        );
+        provider
+    }
+
+    #[test]
+    fn create_streaming_table_query_plans_and_rewrites() {
+        let sql =
+            "CREATE STREAMING TABLE my_sink WITH ('connector' = 'kafka') AS SELECT * FROM src";
+        let dialect = FunctionStreamDialect {};
+        let ast = Parser::parse_sql(&dialect, sql).expect("parse CREATE STREAMING TABLE");
+        let DFStatement::CreateStreamingTable { query, .. } = &ast[0] else {
+            panic!("expected CreateStreamingTable, got {:?}", ast[0]);
+        };
+        let provider = schema_provider_with_src();
+        let base = produce_optimized_plan(&DFStatement::Query(query.clone()), &provider)
+            .expect("produce optimized logical plan for sink query");
+        let rewritten = rewrite_plan(base, &provider).expect("streaming rewrite_plan");
+        let dot = format!("{}", rewritten.display_graphviz());
+        assert!(
+            dot.contains("src") || dot.contains("Src"),
+            "rewritten plan should reference source; got subgraph:\n{dot}"
+        );
     }
 }

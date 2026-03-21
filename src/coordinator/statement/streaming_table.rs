@@ -14,11 +14,10 @@ use datafusion::sql::sqlparser::ast::Statement as DFStatement;
 
 use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
-/// Represents an INSERT INTO or standalone SELECT/query that creates a streaming table/pipeline.
+/// Wrapper for **`CREATE STREAMING TABLE ... WITH (...) AS SELECT ...`** (parsed AST).
 ///
-/// In the streaming SQL context, both INSERT INTO (writing to a sink)
-/// and standalone SELECT (anonymous computation) are treated as
-/// data-producing operations that create/feed into the streaming pipeline.
+/// The coordinator `parse_sql` frontend does **not** support `INSERT`; streaming sinks are
+/// defined only via **`CREATE STREAMING TABLE`** (and regular tables via **`CREATE TABLE`**).
 #[derive(Debug)]
 pub struct StreamingTableStatement {
     pub statement: DFStatement,
