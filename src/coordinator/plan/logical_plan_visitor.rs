@@ -33,21 +33,19 @@ use crate::coordinator::statement::{
 };
 use crate::coordinator::tool::ConnectorOptions;
 use crate::sql::logical_node::logical::{LogicalProgram, ProgramConfig};
-use crate::sql::logical_planner::optimizers::ChainingOptimizer;
+use crate::sql::logical_planner::optimizers::{ChainingOptimizer, produce_optimized_plan};
 use crate::sql::schema::Table;
-use crate::sql::schema::connector::ConnectionType;
-use crate::sql::schema::connector_table::ConnectorTable;
-use crate::sql::schema::field_spec::FieldSpec;
-use crate::sql::schema::optimizer::produce_optimized_plan;
+use crate::sql::schema::ConnectionType;
+use crate::sql::schema::source_table::SourceTable;
+use crate::sql::schema::ColumnDescriptor;
 use crate::sql::functions::{is_json_union, serialize_outgoing_json};
-use crate::sql::extensions::sink::SinkExtension;
+use crate::sql::extensions::sink::StreamEgressNode;
 use crate::sql::logical_planner::planner;
 use crate::sql::analysis::{StreamSchemaProvider, maybe_add_key_extension_to_sink, rewrite_sinks};
 use crate::sql::rewrite_plan;
 
 const CONNECTOR: &str = "connector";
 const PARTITION_BY: &str = "partition_by";
-const IDLE_MICROS: &str = "idle_time";
 
 fn with_options_to_map(options: &[SqlOption]) -> std::collections::HashMap<String, String> {
     options
@@ -108,6 +106,8 @@ impl LogicalPlanVisitor {
             )
         })?;
 
+        let partition_exprs = self.resolve_partition_expressions(&mut opts)?;
+
         let base_plan =
             produce_optimized_plan(&Statement::Query(query.clone()), &self.schema_provider)?;
         let mut plan = rewrite_plan(base_plan, &self.schema_provider)?;
@@ -121,38 +121,33 @@ impl LogicalPlanVisitor {
             plan = serialize_outgoing_json(&self.schema_provider, Arc::new(plan));
         }
 
-        let partition_exprs = self.resolve_partition_expressions(&mut opts)?;
-
-        let fields: Vec<FieldSpec> = plan
+        let fields: Vec<ColumnDescriptor> = plan
             .schema()
             .fields()
             .iter()
-            .map(|f| FieldSpec::Struct((**f).clone()))
+            .map(|f| ColumnDescriptor::from((**f).clone()))
             .collect();
 
-        let connector_table = ConnectorTable {
-            id: None,
-            connector,
-            name: table_name.clone(),
-            connection_type: ConnectionType::Sink,
+        let mut source_table = SourceTable::from_options(
+            &table_name,
+            &connector,
+            false,
             fields,
-            config: "".to_string(),
-            description: comment.clone().unwrap_or_default(),
-            event_time_field: None,
-            watermark_field: None,
-            idle_time: opts.pull_opt_duration(IDLE_MICROS)?,
-            primary_keys: Arc::new(vec![]),
-            inferred_fields: None,
-            partition_exprs: Arc::new(partition_exprs),
-            lookup_cache_ttl:None,
-            lookup_cache_max_bytes:None,
-        };
+            vec![],
+            None,
+            &mut opts,
+            None,
+            &self.schema_provider,
+            Some(ConnectionType::Sink),
+            comment.clone().unwrap_or_default(),
+        )?;
+        source_table.partition_exprs = Arc::new(partition_exprs);
 
-        let sink_extension = SinkExtension::new(
+        let sink_extension = StreamEgressNode::try_new(
             TableReference::bare(table_name.clone()),
-            Table::ConnectorTable(connector_table.clone()),
+            Table::ConnectorTable(source_table.clone()),
             plan.schema().clone(),
-            Arc::new(plan),
+            plan,
         )?;
 
         let plan_with_keys = maybe_add_key_extension_to_sink(LogicalPlan::Extension(Extension {
@@ -196,7 +191,7 @@ impl LogicalPlanVisitor {
         Ok(Box::new(StreamingTable {
             name: table_name,
             comment: comment.clone(),
-            connector_table,
+            source_table,
             logical_plan: final_plan,
         }))
     }
@@ -322,7 +317,7 @@ mod create_streaming_table_tests {
 
     use crate::sql::common::TIMESTAMP_FIELD;
     use crate::sql::rewrite_plan;
-    use crate::sql::schema::optimizer::produce_optimized_plan;
+    use crate::sql::logical_planner::optimizers::produce_optimized_plan;
     use crate::sql::schema::StreamSchemaProvider;
 
     fn schema_provider_with_src() -> StreamSchemaProvider {

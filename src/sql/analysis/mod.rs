@@ -41,13 +41,12 @@ use datafusion::sql::sqlparser::parser::Parser;
 use tracing::{debug, info, instrument};
 
 use crate::sql::logical_planner::optimizers::ChainingOptimizer;
-use crate::sql::schema::insert::Insert;
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::sql::functions::{is_json_union, serialize_outgoing_json};
-use crate::sql::extensions::key_calculation::{KeyCalculationExtension, KeysOrExprs};
-use crate::sql::extensions::projection::ProjectionExtension;
-use crate::sql::extensions::sink::SinkExtension;
-use crate::sql::extensions::{ StreamExtension};
+use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
+use crate::sql::extensions::projection::StreamProjectionNode;
+use crate::sql::extensions::sink::StreamEgressNode;
+use crate::sql::extensions::StreamingOperatorBlueprint;
 use crate::sql::logical_planner::planner::NamedNode;
 use crate::sql::types::SqlConfig;
 
@@ -99,8 +98,8 @@ fn build_sink_inputs(extensions: &[LogicalPlan]) -> HashMap<NamedNode, Vec<Logic
     let mut sink_inputs = HashMap::<NamedNode, Vec<LogicalPlan>>::new();
     for extension in extensions.iter() {
         if let LogicalPlan::Extension(ext) = extension {
-            if let Some(sink_node) = ext.node.as_any().downcast_ref::<SinkExtension>() {
-                if let Some(named_node) = sink_node.node_name() {
+            if let Some(sink_node) = ext.node.as_any().downcast_ref::<StreamEgressNode>() {
+                if let Some(named_node) = sink_node.operator_identity() {
                     let inputs = sink_node
                         .inputs()
                         .into_iter()
@@ -119,11 +118,11 @@ pub(crate) fn maybe_add_key_extension_to_sink(plan: LogicalPlan) -> Result<Logic
         return Ok(plan);
     };
 
-    let Some(sink) = ext.node.as_any().downcast_ref::<SinkExtension>() else {
+    let Some(sink) = ext.node.as_any().downcast_ref::<StreamEgressNode>() else {
         return Ok(plan);
     };
 
-    let Some(partition_exprs) = sink.table.partition_exprs() else {
+    let Some(partition_exprs) = sink.destination_table.partition_exprs() else {
         return Ok(plan);
     };
 
@@ -136,11 +135,13 @@ pub(crate) fn maybe_add_key_extension_to_sink(plan: LogicalPlan) -> Result<Logic
         .into_iter()
         .map(|input| {
             Ok(LogicalPlan::Extension(Extension {
-                node: Arc::new(KeyCalculationExtension {
-                    name: Some("key-calc-partition".to_string()),
-                    schema: input.schema().clone(),
-                    input: input.clone(),
-                    keys: KeysOrExprs::Exprs(partition_exprs.clone()),
+                node: Arc::new(KeyExtractionNode {
+                    operator_label: Some("key-calc-partition".to_string()),
+                    resolved_schema: input.schema().clone(),
+                    upstream_plan: input.clone(),
+                    extraction_strategy: KeyExtractionStrategy::CalculatedExpressions(
+                        partition_exprs.clone(),
+                    ),
                 }),
             }))
         })
@@ -149,12 +150,12 @@ pub(crate) fn maybe_add_key_extension_to_sink(plan: LogicalPlan) -> Result<Logic
     use datafusion::prelude::col;
     let unkey = LogicalPlan::Extension(Extension {
         node: Arc::new(
-            ProjectionExtension::new(
+            StreamProjectionNode::try_new(
                 inputs,
                 Some("unkey".to_string()),
                 sink.schema().iter().map(|(_, f)| col(f.name())).collect(),
-            )
-            .shuffled(),
+            )?
+            .with_shuffle_routing(),
         ),
     });
 

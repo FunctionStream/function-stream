@@ -1,188 +1,250 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-use super::{ StreamExtension};
-use crate::sql::types::{StreamSchema, TIMESTAMP_FIELD};
 use std::sync::Arc;
 
-use arrow_schema::{DataType, Schema};
-
-use datafusion::common::{DFSchema, DFSchemaRef, Result, TableReference, internal_err, plan_err};
-use datafusion::error::DataFusionError;
+use arrow_schema::{DataType, Field, Schema};
+use datafusion::common::{
+    internal_err, plan_err, DFSchema, DFSchemaRef, DataFusionError, Result, TableReference,
+};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use datafusion::physical_plan::DisplayAs;
 
-use super::{NodeWithIncomingEdges};
 use crate::multifield_partial_ord;
-use crate::sql::logical_planner::updating_meta_field;
-use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::common::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
+use crate::sql::logical_planner::planner::{NamedNode, Planner};
+use crate::sql::logical_planner::updating_meta_field;
+use crate::sql::types::TIMESTAMP_FIELD;
 
-pub(crate) const DEBEZIUM_UNROLLING_EXTENSION_NAME: &str = "DebeziumUnrollingExtension";
-pub(crate) const TO_DEBEZIUM_EXTENSION_NAME: &str = "ToDebeziumExtension";
+use super::{CompiledTopologyNode, StreamingOperatorBlueprint};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DebeziumUnrollingExtension {
-    input: LogicalPlan,
-    schema: DFSchemaRef,
-    pub primary_keys: Vec<usize>,
-    primary_key_names: Arc<Vec<String>>,
-}
+// -----------------------------------------------------------------------------
+// Constants & Identifiers
+// -----------------------------------------------------------------------------
 
-multifield_partial_ord!(
-    DebeziumUnrollingExtension,
-    input,
-    primary_keys,
-    primary_key_names
-);
+pub(crate) const UNROLL_NODE_NAME: &str = "UnrollDebeziumPayloadNode";
+pub(crate) const PACK_NODE_NAME: &str = "PackDebeziumEnvelopeNode";
 
-impl DebeziumUnrollingExtension {
-    pub(crate) fn as_debezium_schema(
-        input_schema: &DFSchemaRef,
-        qualifier: Option<TableReference>,
+const CDC_FIELD_BEFORE: &str = "before";
+const CDC_FIELD_AFTER: &str = "after";
+const CDC_FIELD_OP: &str = "op";
+
+// -----------------------------------------------------------------------------
+// Core Schema Codec
+// -----------------------------------------------------------------------------
+
+/// Transforms between flat schemas and Debezium CDC envelopes.
+pub(crate) struct DebeziumSchemaCodec;
+
+impl DebeziumSchemaCodec {
+    /// Wraps a flat physical schema into a Debezium CDC envelope structure.
+    pub(crate) fn wrap_into_envelope(
+        flat_schema: &DFSchemaRef,
+        qualifier_override: Option<TableReference>,
     ) -> Result<DFSchemaRef> {
-        let timestamp_field = if input_schema.has_column_with_unqualified_name(TIMESTAMP_FIELD) {
-            Some(
-                input_schema
-                    .field_with_unqualified_name(TIMESTAMP_FIELD)?
-                    .clone(),
-            )
+        let ts_field = if flat_schema.has_column_with_unqualified_name(TIMESTAMP_FIELD) {
+            Some(flat_schema.field_with_unqualified_name(TIMESTAMP_FIELD)?.clone())
         } else {
             None
         };
-        let struct_schema: Vec<_> = input_schema
+
+        let payload_fields: Vec<_> = flat_schema
             .fields()
             .iter()
-            .filter(|field| field.name() != TIMESTAMP_FIELD && field.name() != UPDATING_META_FIELD)
+            .filter(|f| f.name() != TIMESTAMP_FIELD && f.name() != UPDATING_META_FIELD)
             .cloned()
             .collect();
 
-        let struct_type = DataType::Struct(struct_schema.into());
+        let payload_struct_type = DataType::Struct(payload_fields.into());
 
-        let before = Arc::new(arrow::datatypes::Field::new(
-            "before",
-            struct_type.clone(),
-            true,
-        ));
-        let after = Arc::new(arrow::datatypes::Field::new(
-            "after",
-            struct_type.clone(),
-            true,
-        ));
+        let mut envelope_fields = vec![
+            Arc::new(Field::new(
+                CDC_FIELD_BEFORE,
+                payload_struct_type.clone(),
+                true,
+            )),
+            Arc::new(Field::new(CDC_FIELD_AFTER, payload_struct_type, true)),
+            Arc::new(Field::new(CDC_FIELD_OP, DataType::Utf8, true)),
+        ];
 
-        let op = Arc::new(arrow::datatypes::Field::new("op", DataType::Utf8, true));
-        let mut fields = vec![before, after, op];
-
-        if let Some(timestamp_field) = timestamp_field {
-            fields.push(Arc::new(timestamp_field));
+        if let Some(ts) = ts_field {
+            envelope_fields.push(Arc::new(ts));
         }
 
-        let schema = match qualifier {
-            Some(qualifier) => {
-                DFSchema::try_from_qualified_schema(qualifier, &Schema::new(fields))?
-            }
-            None => DFSchema::try_from(Schema::new(fields))?,
-        };
-        Ok(Arc::new(schema))
-    }
-
-    pub fn try_new(input: LogicalPlan, primary_keys: Arc<Vec<String>>) -> Result<Self> {
-        let input_schema = input.schema();
-
-        // confirm that the input schema has before, after and op columns, and before and after match
-        let Some(before_index) = input_schema.index_of_column_by_name(None, "before") else {
-            return plan_err!("DebeziumUnrollingExtension requires a before column");
-        };
-        let Some(after_index) = input_schema.index_of_column_by_name(None, "after") else {
-            return plan_err!("DebeziumUnrollingExtension requires an after column");
-        };
-        let Some(op_index) = input_schema.index_of_column_by_name(None, "op") else {
-            return plan_err!("DebeziumUnrollingExtension requires an op column");
-        };
-
-        let before_type = input_schema.field(before_index).data_type();
-        let after_type = input_schema.field(after_index).data_type();
-        if before_type != after_type {
-            return plan_err!(
-                "before and after columns must have the same type, not {} and {}",
-                before_type,
-                after_type
-            );
-        }
-
-        // check that op is a string
-        let op_type = input_schema.field(op_index).data_type();
-        if *op_type != DataType::Utf8 {
-            return plan_err!("op column must be a string, not {}", op_type);
-        }
-
-        // create the output schema
-        let DataType::Struct(fields) = before_type else {
-            return plan_err!(
-                "before and after columns must be structs, not {}",
-                before_type
-            );
-        };
-
-        // get the primary keys
-        let primary_key_idx = primary_keys
-            .iter()
-            .map(|pk| fields.find(pk).map(|(i, _)| i))
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(|| {
-                DataFusionError::Plan("primary key field not found in Debezium schema".to_string())
-            })?;
-
-        // determine the qualifier from the before and after columns
-        let qualifier = match (
-            input_schema.qualified_field(before_index).0,
-            input_schema.qualified_field(after_index).0,
-        ) {
-            (Some(before_qualifier), Some(after_qualifier)) => {
-                if before_qualifier != after_qualifier {
-                    return plan_err!("before and after columns must have the same alias");
-                }
-                Some(before_qualifier.clone())
-            }
-            (None, None) => None,
-            _ => return plan_err!("before and after columns must both have an alias or neither"),
-        };
-
-        let mut fields = fields.to_vec();
-        fields.push(updating_meta_field());
-
-        let Some(input_timestamp_field) =
-            input_schema.index_of_column_by_name(None, TIMESTAMP_FIELD)
-        else {
-            return plan_err!("DebeziumUnrollingExtension requires a timestamp field");
-        };
-
-        fields.push(Arc::new(input_schema.field(input_timestamp_field).clone()));
-        let arrow_schema = Schema::new(fields);
-
-        let schema = match qualifier {
+        let arrow_schema = Schema::new(envelope_fields);
+        let final_schema = match qualifier_override {
             Some(qualifier) => DFSchema::try_from_qualified_schema(qualifier, &arrow_schema)?,
             None => DFSchema::try_from(arrow_schema)?,
         };
 
-        Ok(Self {
-            input,
-            schema: Arc::new(schema),
-            primary_keys: primary_key_idx,
-            primary_key_names: primary_keys,
-        })
+        Ok(Arc::new(final_schema))
     }
 }
 
-impl UserDefinedLogicalNodeCore for DebeziumUnrollingExtension {
+// -----------------------------------------------------------------------------
+// Logical Node: Unroll Debezium Payload
+// -----------------------------------------------------------------------------
+
+/// Decodes an incoming Debezium envelope into a flat, updating stream representation.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UnrollDebeziumPayloadNode {
+    upstream_plan: LogicalPlan,
+    resolved_schema: DFSchemaRef,
+    pub pk_indices: Vec<usize>,
+    pk_names: Arc<Vec<String>>,
+}
+
+multifield_partial_ord!(
+    UnrollDebeziumPayloadNode,
+    upstream_plan,
+    pk_indices,
+    pk_names
+);
+
+impl UnrollDebeziumPayloadNode {
+    pub fn try_new(upstream_plan: LogicalPlan, pk_names: Arc<Vec<String>>) -> Result<Self> {
+        let input_schema = upstream_plan.schema();
+
+        let (before_idx, after_idx) = Self::validate_envelope_structure(input_schema)?;
+
+        let payload_fields = Self::extract_payload_fields(input_schema, before_idx)?;
+
+        let pk_indices = Self::map_primary_keys(payload_fields, &pk_names)?;
+
+        let qualifier = Self::resolve_schema_qualifier(input_schema, before_idx, after_idx)?;
+
+        let resolved_schema =
+            Self::compile_unrolled_schema(input_schema, payload_fields, qualifier)?;
+
+        Ok(Self {
+            upstream_plan,
+            resolved_schema,
+            pk_indices,
+            pk_names,
+        })
+    }
+
+    fn validate_envelope_structure(schema: &DFSchemaRef) -> Result<(usize, usize)> {
+        let before_idx = schema.index_of_column_by_name(None, CDC_FIELD_BEFORE).ok_or_else(
+            || DataFusionError::Plan("Missing 'before' state column in CDC stream".into()),
+        )?;
+
+        let after_idx = schema.index_of_column_by_name(None, CDC_FIELD_AFTER).ok_or_else(
+            || DataFusionError::Plan("Missing 'after' state column in CDC stream".into()),
+        )?;
+
+        let op_idx = schema.index_of_column_by_name(None, CDC_FIELD_OP).ok_or_else(|| {
+            DataFusionError::Plan("Missing 'op' operation column in CDC stream".into())
+        })?;
+
+        let before_type = schema.field(before_idx).data_type();
+        let after_type = schema.field(after_idx).data_type();
+
+        if before_type != after_type {
+            return plan_err!(
+                "State column type mismatch: 'before' is {before_type}, but 'after' is {after_type}"
+            );
+        }
+
+        if *schema.field(op_idx).data_type() != DataType::Utf8 {
+            return plan_err!(
+                "The '{}' column must be of type Utf8",
+                CDC_FIELD_OP
+            );
+        }
+
+        Ok((before_idx, after_idx))
+    }
+
+    fn extract_payload_fields<'a>(
+        schema: &'a DFSchemaRef,
+        state_idx: usize,
+    ) -> Result<&'a arrow_schema::Fields> {
+        match schema.field(state_idx).data_type() {
+            DataType::Struct(fields) => Ok(fields),
+            other => plan_err!("State columns must be of type Struct, found {other}"),
+        }
+    }
+
+    fn map_primary_keys(
+        fields: &arrow_schema::Fields,
+        pk_names: &[String],
+    ) -> Result<Vec<usize>> {
+        pk_names
+            .iter()
+            .map(|pk| fields.find(pk).map(|(idx, _)| idx))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                DataFusionError::Plan("Specified primary key not found in payload schema".into())
+            })
+    }
+
+    fn resolve_schema_qualifier(
+        schema: &DFSchemaRef,
+        before_idx: usize,
+        after_idx: usize,
+    ) -> Result<Option<TableReference>> {
+        let before_qualifier = schema.qualified_field(before_idx).0;
+        let after_qualifier = schema.qualified_field(after_idx).0;
+
+        match (before_qualifier, after_qualifier) {
+            (Some(bq), Some(aq)) if bq == aq => Ok(Some(bq.clone())),
+            (None, None) => Ok(None),
+            _ => plan_err!(
+                "'before' and 'after' columns must share the same namespace/qualifier"
+            ),
+        }
+    }
+
+    fn compile_unrolled_schema(
+        original_schema: &DFSchemaRef,
+        payload_fields: &arrow_schema::Fields,
+        qualifier: Option<TableReference>,
+    ) -> Result<DFSchemaRef> {
+        let mut flat_fields = payload_fields.to_vec();
+
+        flat_fields.push(updating_meta_field());
+
+        let ts_idx = original_schema
+            .index_of_column_by_name(None, TIMESTAMP_FIELD)
+            .ok_or_else(|| {
+                DataFusionError::Plan(format!(
+                    "Required event time field '{TIMESTAMP_FIELD}' is missing"
+                ))
+            })?;
+
+        flat_fields.push(Arc::new(original_schema.field(ts_idx).clone()));
+
+        let arrow_schema = Schema::new(flat_fields);
+        let compiled_schema = match qualifier {
+            Some(q) => DFSchema::try_from_qualified_schema(q, &arrow_schema)?,
+            None => DFSchema::try_from(arrow_schema)?,
+        };
+
+        Ok(Arc::new(compiled_schema))
+    }
+}
+
+impl UserDefinedLogicalNodeCore for UnrollDebeziumPayloadNode {
     fn name(&self) -> &str {
-        DEBEZIUM_UNROLLING_EXTENSION_NAME
+        UNROLL_NODE_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.input]
+        vec![&self.upstream_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.resolved_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
@@ -190,116 +252,136 @@ impl UserDefinedLogicalNodeCore for DebeziumUnrollingExtension {
     }
 
     fn fmt_for_explain(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "DebeziumUnrollingExtension")
+        write!(f, "UnrollDebeziumPayload")
     }
 
-    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
-        Self::try_new(inputs[0].clone(), self.primary_key_names.clone())
+    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+        if inputs.len() != 1 {
+            return internal_err!(
+                "UnrollDebeziumPayloadNode expects exactly 1 input, got {}",
+                inputs.len()
+            );
+        }
+        Self::try_new(inputs.remove(0), self.pk_names.clone())
     }
 }
 
-impl StreamExtension for DebeziumUnrollingExtension {
-    fn node_name(&self) -> Option<NamedNode> {
+impl StreamingOperatorBlueprint for UnrollDebeziumPayloadNode {
+    fn operator_identity(&self) -> Option<NamedNode> {
         None
     }
 
-    fn plan_node(
-        &self,
-        _planner: &Planner,
-        _index: usize,
-        _input_schemas: Vec<FsSchemaRef>,
-    ) -> Result<NodeWithIncomingEdges> {
-        plan_err!("DebeziumUnrollingExtension should not be planned")
-    }
-
-    fn output_schema(&self) -> FsSchema {
-        FsSchema::from_schema_unkeyed(Arc::new(self.schema.as_ref().into())).unwrap()
-    }
-
-    fn transparent(&self) -> bool {
+    fn is_passthrough_boundary(&self) -> bool {
         true
     }
+
+    fn compile_to_graph_node(
+        &self,
+        _: &Planner,
+        _: usize,
+        _: Vec<FsSchemaRef>,
+    ) -> Result<CompiledTopologyNode> {
+        plan_err!("UnrollDebeziumPayloadNode is a logical boundary and should not be physically planned")
+    }
+
+    fn yielded_schema(&self) -> FsSchema {
+        FsSchema::from_schema_unkeyed(Arc::new(self.resolved_schema.as_ref().into())).unwrap_or_else(
+            |_| panic!("Failed to extract physical schema for {}", UNROLL_NODE_NAME),
+        )
+    }
 }
 
+// -----------------------------------------------------------------------------
+// Logical Node: Pack Debezium Envelope
+// -----------------------------------------------------------------------------
+
+/// Encodes a flat updating stream back into a Debezium CDC envelope representation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct ToDebeziumExtension {
-    input: Arc<LogicalPlan>,
-    schema: DFSchemaRef,
+pub(crate) struct PackDebeziumEnvelopeNode {
+    upstream_plan: Arc<LogicalPlan>,
+    envelope_schema: DFSchemaRef,
 }
 
-multifield_partial_ord!(ToDebeziumExtension, input);
+multifield_partial_ord!(PackDebeziumEnvelopeNode, upstream_plan);
 
-impl ToDebeziumExtension {
-    pub(crate) fn try_new(input: LogicalPlan) -> Result<Self> {
-        let input_schema = input.schema();
-        let schema = DebeziumUnrollingExtension::as_debezium_schema(input_schema, None)
-            .expect("should be able to create ToDebeziumExtenison");
+impl PackDebeziumEnvelopeNode {
+    pub(crate) fn try_new(upstream_plan: LogicalPlan) -> Result<Self> {
+        let envelope_schema = DebeziumSchemaCodec::wrap_into_envelope(upstream_plan.schema(), None)
+            .map_err(|e| {
+                DataFusionError::Plan(format!("Failed to compile Debezium envelope schema: {e}"))
+            })?;
+
         Ok(Self {
-            input: Arc::new(input),
-            schema,
+            upstream_plan: Arc::new(upstream_plan),
+            envelope_schema,
         })
     }
 }
 
-impl DisplayAs for ToDebeziumExtension {
+impl DisplayAs for PackDebeziumEnvelopeNode {
     fn fmt_as(
         &self,
         _t: datafusion::physical_plan::DisplayFormatType,
         f: &mut std::fmt::Formatter,
     ) -> std::fmt::Result {
-        write!(f, "ToDebeziumExtension")
+        write!(f, "PackDebeziumEnvelope")
     }
 }
 
-impl UserDefinedLogicalNodeCore for ToDebeziumExtension {
+impl UserDefinedLogicalNodeCore for PackDebeziumEnvelopeNode {
     fn name(&self) -> &str {
-        TO_DEBEZIUM_EXTENSION_NAME
+        PACK_NODE_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.input]
+        vec![&self.upstream_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.envelope_schema
     }
 
-    fn expressions(&self) -> Vec<datafusion::prelude::Expr> {
+    fn expressions(&self) -> Vec<Expr> {
         vec![]
     }
 
     fn fmt_for_explain(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "ToDebeziumExtension")
+        write!(f, "PackDebeziumEnvelope")
     }
 
-    fn with_exprs_and_inputs(
-        &self,
-        _exprs: Vec<datafusion::prelude::Expr>,
-        inputs: Vec<LogicalPlan>,
-    ) -> Result<Self> {
-        Self::try_new(inputs[0].clone())
+    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+        if inputs.len() != 1 {
+            return internal_err!(
+                "PackDebeziumEnvelopeNode expects exactly 1 input, got {}",
+                inputs.len()
+            );
+        }
+        Self::try_new(inputs.remove(0))
     }
 }
 
-impl StreamExtension for ToDebeziumExtension {
-    fn node_name(&self) -> Option<NamedNode> {
+impl StreamingOperatorBlueprint for PackDebeziumEnvelopeNode {
+    fn operator_identity(&self) -> Option<NamedNode> {
         None
     }
 
-    fn plan_node(
-        &self,
-        _planner: &Planner,
-        _index: usize,
-        _input_schemas: Vec<FsSchemaRef>,
-    ) -> Result<NodeWithIncomingEdges> {
-        internal_err!("ToDebeziumExtension should not be planned")
-    }
-
-    fn output_schema(&self) -> FsSchema {
-        FsSchema::from_schema_unkeyed(Arc::new(self.schema.as_ref().into())).unwrap()
-    }
-
-    fn transparent(&self) -> bool {
+    fn is_passthrough_boundary(&self) -> bool {
         true
+    }
+
+    fn compile_to_graph_node(
+        &self,
+        _: &Planner,
+        _: usize,
+        _: Vec<FsSchemaRef>,
+    ) -> Result<CompiledTopologyNode> {
+        internal_err!("PackDebeziumEnvelopeNode is a logical boundary and should not be physically planned")
+    }
+
+    fn yielded_schema(&self) -> FsSchema {
+        FsSchema::from_schema_unkeyed(Arc::new(self.envelope_schema.as_ref().into()))
+            .unwrap_or_else(|_| {
+                panic!("Failed to extract physical schema for {}", PACK_NODE_NAME)
+            })
     }
 }

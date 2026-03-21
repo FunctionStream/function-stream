@@ -1,5 +1,5 @@
-use crate::sql::extensions::sink::SinkExtension;
-use crate::sql::extensions::table_source::TableSourceExtension;
+use crate::sql::extensions::sink::{StreamEgressNode, STREAM_EGRESS_NODE_NAME};
+use crate::sql::extensions::table_source::{StreamIngestionNode, STREAM_INGESTION_NODE_NAME};
 use crate::sql::schema::StreamSchemaProvider;
 use datafusion::common::Result as DFResult;
 use datafusion::common::tree_node::{TreeNodeRecursion, TreeNodeVisitor};
@@ -26,20 +26,20 @@ impl<'a> SourceMetadataVisitor<'a> {
         };
 
         let table_name = match node.name() {
-            "TableSourceExtension" => {
-                let ext = node.as_any().downcast_ref::<TableSourceExtension>()?;
-                ext.name.to_string()
+            name if name == STREAM_INGESTION_NODE_NAME => {
+                let ext = node.as_any().downcast_ref::<StreamIngestionNode>()?;
+                ext.source_identifier.to_string()
             }
-            "SinkExtension" => {
-                let ext = node.as_any().downcast_ref::<SinkExtension>()?;
-                ext.name.to_string()
+            name if name == STREAM_EGRESS_NODE_NAME => {
+                let ext = node.as_any().downcast_ref::<StreamEgressNode>()?;
+                ext.target_identifier.to_string()
             }
             _ => return None,
         };
 
         let table = self.schema_provider.get_catalog_table(&table_name)?;
         match table {
-            crate::sql::schema::table::Table::ConnectorTable(t) => t.id,
+            crate::sql::schema::table::Table::ConnectorTable(t) => t.registry_id,
             _ => None,
         }
     }

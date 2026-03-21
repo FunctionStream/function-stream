@@ -34,11 +34,9 @@ use crate::sql::logical_node::logical::{LogicalEdge, LogicalGraph, LogicalNode};
 use crate::sql::logical_planner::{
     DebeziumUnrollingExec, DecodingContext, FsMemExec, FsPhysicalExtensionCodec, ToDebeziumExec,
 };
-use crate::sql::extensions::debezium::{
-    DEBEZIUM_UNROLLING_EXTENSION_NAME, DebeziumUnrollingExtension, TO_DEBEZIUM_EXTENSION_NAME,
-};
-use crate::sql::extensions::key_calculation::KeyCalculationExtension;
-use crate::sql::extensions::{NodeWithIncomingEdges, StreamExtension};
+use crate::sql::extensions::debezium::{PACK_NODE_NAME, UNROLL_NODE_NAME, UnrollDebeziumPayloadNode};
+use crate::sql::extensions::key_calculation::KeyExtractionNode;
+use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::schema::utils::add_timestamp_field_arrow;
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::common::{FsSchema, FsSchemaRef};
@@ -238,21 +236,21 @@ impl ExtensionPlanner for FsExtensionPlanner {
         _session_state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>> {
         let schema = node.schema().as_ref().into();
-        if let Ok::<&dyn StreamExtension, _>(stream_extension) = node.try_into() {
-            if stream_extension.transparent() {
+        if let Ok::<&dyn StreamingOperatorBlueprint, _>(stream_extension) = node.try_into() {
+            if stream_extension.is_passthrough_boundary() {
                 match node.name() {
-                    DEBEZIUM_UNROLLING_EXTENSION_NAME => {
+                    UNROLL_NODE_NAME => {
                         let node = node
                             .as_any()
-                            .downcast_ref::<DebeziumUnrollingExtension>()
+                            .downcast_ref::<UnrollDebeziumPayloadNode>()
                             .unwrap();
                         let input = physical_inputs[0].clone();
                         return Ok(Some(Arc::new(DebeziumUnrollingExec::try_new(
                             input,
-                            node.primary_keys.clone(),
+                            node.pk_indices.clone(),
                         )?)));
                     }
-                    TO_DEBEZIUM_EXTENSION_NAME => {
+                    PACK_NODE_NAME => {
                         let input = physical_inputs[0].clone();
                         return Ok(Some(Arc::new(ToDebeziumExec::try_new(input)?)));
                     }
@@ -261,8 +259,8 @@ impl ExtensionPlanner for FsExtensionPlanner {
             }
         };
         let name =
-            if let Some(key_extension) = node.as_any().downcast_ref::<KeyCalculationExtension>() {
-                key_extension.name.clone()
+            if let Some(key_extension) = node.as_any().downcast_ref::<KeyExtractionNode>() {
+                key_extension.operator_label.clone()
             } else {
                 None
             };
@@ -293,9 +291,9 @@ impl PlanToGraphVisitor<'_> {
     pub fn build_extension(
         &mut self,
         input_nodes: Vec<NodeIndex>,
-        extension: &dyn StreamExtension,
+        extension: &dyn StreamingOperatorBlueprint,
     ) -> Result<()> {
-        if let Some(node_name) = extension.node_name() {
+        if let Some(node_name) = extension.operator_identity() {
             if self.named_nodes.contains_key(&node_name) {
                 return plan_err!(
                     "extension {:?} has already been planned, shouldn't try again.",
@@ -315,21 +313,24 @@ impl PlanToGraphVisitor<'_> {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let NodeWithIncomingEdges { node, edges } = extension
-            .plan_node(&self.planner, self.graph.node_count(), input_schemas)
+        let CompiledTopologyNode {
+            execution_unit,
+            routing_edges,
+        } = extension
+            .compile_to_graph_node(&self.planner, self.graph.node_count(), input_schemas)
             .map_err(|e| e.context(format!("planning operator {extension:?}")))?;
 
-        let node_index = self.graph.add_node(node);
+        let node_index = self.graph.add_node(execution_unit);
         self.add_index_to_traversal(node_index);
 
-        for (source, edge) in input_nodes.into_iter().zip(edges.into_iter()) {
+        for (source, edge) in input_nodes.into_iter().zip(routing_edges.into_iter()) {
             self.graph.add_edge(source, node_index, edge);
         }
 
         self.output_schemas
-            .insert(node_index, extension.output_schema().into());
+            .insert(node_index, extension.yielded_schema().into());
 
-        if let Some(node_name) = extension.node_name() {
+        if let Some(node_name) = extension.operator_identity() {
             self.named_nodes.insert(node_name, node_index);
         }
         Ok(())
@@ -344,14 +345,14 @@ impl TreeNodeVisitor<'_> for PlanToGraphVisitor<'_> {
             return Ok(TreeNodeRecursion::Continue);
         };
 
-        let stream_extension: &dyn StreamExtension = node
+        let stream_extension: &dyn StreamingOperatorBlueprint = node
             .try_into()
             .map_err(|e: DataFusionError| e.context("converting extension"))?;
-        if stream_extension.transparent() {
+        if stream_extension.is_passthrough_boundary() {
             return Ok(TreeNodeRecursion::Continue);
         }
 
-        if let Some(name) = stream_extension.node_name() {
+        if let Some(name) = stream_extension.operator_identity() {
             if let Some(node_index) = self.named_nodes.get(&name) {
                 self.add_index_to_traversal(*node_index);
                 return Ok(TreeNodeRecursion::Jump);
@@ -370,15 +371,15 @@ impl TreeNodeVisitor<'_> for PlanToGraphVisitor<'_> {
             return Ok(TreeNodeRecursion::Continue);
         };
 
-        let stream_extension: &dyn StreamExtension = node
+        let stream_extension: &dyn StreamingOperatorBlueprint = node
             .try_into()
             .map_err(|e: DataFusionError| e.context("planning extension"))?;
 
-        if stream_extension.transparent() {
+        if stream_extension.is_passthrough_boundary() {
             return Ok(TreeNodeRecursion::Continue);
         }
 
-        if let Some(name) = stream_extension.node_name() {
+        if let Some(name) = stream_extension.operator_identity() {
             if self.named_nodes.contains_key(&name) {
                 return Ok(TreeNodeRecursion::Continue);
             }
@@ -389,7 +390,7 @@ impl TreeNodeVisitor<'_> for PlanToGraphVisitor<'_> {
         } else {
             vec![]
         };
-        let stream_extension: &dyn StreamExtension = node
+        let stream_extension: &dyn StreamingOperatorBlueprint = node
             .try_into()
             .map_err(|e: DataFusionError| e.context("converting extension"))?;
         self.build_extension(input_nodes, stream_extension)?;

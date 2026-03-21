@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use super::StreamSchemaProvider;
-use crate::sql::extensions::StreamExtension;
-use crate::sql::extensions::remote_table::RemoteTableExtension;
+use crate::sql::extensions::StreamingOperatorBlueprint;
+use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
 use crate::sql::analysis::row_time_rewriter::RowTimeRewriter;
 use crate::sql::analysis::{
     aggregate_rewriter::AggregateRewriter, join_rewriter::JoinRewriter,
@@ -137,7 +137,7 @@ impl<'a> StreamRewriter<'a> {
         Ok(Transformed::yes(LogicalPlan::Projection(projection)))
     }
 
-    /// Harmonizes schemas across Union branches and wraps them in RemoteTableExtensions.
+    /// Harmonizes schemas across Union branches and wraps them in RemoteTableBoundaryNodes.
     ///
     /// This ensures that all inputs to a UNION operation share the exact same schema metadata,
     /// preventing "Schema Drift" where different branches have different field qualifiers.
@@ -151,23 +151,23 @@ impl<'a> StreamRewriter<'a> {
             // Optimization: If the node is already a non-transparent Extension,
             // we skip wrapping to avoid unnecessary nesting of logical nodes.
             if let LogicalPlan::Extension(Extension { node }) = input.as_ref() {
-                let stream_ext: &dyn StreamExtension = node.try_into().map_err(|e| {
-                    DataFusionError::Internal(format!("Failed to resolve StreamExtension: {}", e))
+                let stream_ext: &dyn StreamingOperatorBlueprint = node.try_into().map_err(|e| {
+                    DataFusionError::Internal(format!("Failed to resolve StreamingOperatorBlueprint: {}", e))
                 })?;
 
-                if !stream_ext.transparent() {
+                if !stream_ext.is_passthrough_boundary() {
                     continue;
                 }
             }
 
-            // Wrap each branch in a RemoteTableExtension.
+            // Wrap each branch in a RemoteTableBoundaryNode.
             // This acts as a logical "bridge" that forces the input to adopt the master_schema,
             // effectively stripping away branch-specific qualifiers (e.g., table aliases).
-            let remote_ext = Arc::new(RemoteTableExtension {
-                input: input.as_ref().clone(),
-                name: TableReference::bare("union_input"),
-                schema: master_schema.clone(),
-                materialize: false, // Internal logical boundary only; does not require physical sink.
+            let remote_ext = Arc::new(RemoteTableBoundaryNode {
+                upstream_plan: input.as_ref().clone(),
+                table_identifier: TableReference::bare("union_input"),
+                resolved_schema: master_schema.clone(),
+                requires_materialization: false, // Internal logical boundary only; does not require physical sink.
             });
 
             // Atomically replace the input with the wrapped version.

@@ -1,144 +1,158 @@
-use std::{fmt::Formatter, sync::Arc};
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::fmt::Formatter;
+use std::sync::Arc;
 
 use datafusion::common::{DFSchemaRef, Result, TableReference, internal_err, plan_err};
-
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
-use datafusion_proto::{physical_plan::AsExecutionPlan, protobuf::PhysicalPlanNode};
+use datafusion_proto::physical_plan::AsExecutionPlan;
+use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
+
 use protocol::grpc::api::ValuePlanOperator;
-use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+
 use crate::multifield_partial_ord;
+use crate::sql::common::{FsSchema, FsSchemaRef};
+use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
+use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::common::{FsSchema, FsSchemaRef};
-use super::{StreamExtension, NodeWithIncomingEdges};
 
-pub(crate) const REMOTE_TABLE_NAME: &str = "RemoteTableExtension";
+// -----------------------------------------------------------------------------
+// Constants & Identifiers
+// -----------------------------------------------------------------------------
 
-/* Lightweight extension that allows us to segment the graph and merge nodes with the same name.
-  An Extension Planner will be used to isolate computation to individual nodes.
-*/
+pub(crate) const REMOTE_TABLE_NODE_NAME: &str = "RemoteTableBoundaryNode";
+
+// -----------------------------------------------------------------------------
+// Logical Node Definition
+// -----------------------------------------------------------------------------
+
+/// Segments the execution graph and merges nodes sharing the same identifier; acts as a boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct RemoteTableExtension {
-    pub(crate) input: LogicalPlan,
-    pub(crate) name: TableReference,
-    pub(crate) schema: DFSchemaRef,
-    pub(crate) materialize: bool,
+pub(crate) struct RemoteTableBoundaryNode {
+    pub(crate) upstream_plan: LogicalPlan,
+    pub(crate) table_identifier: TableReference,
+    pub(crate) resolved_schema: DFSchemaRef,
+    pub(crate) requires_materialization: bool,
 }
 
-multifield_partial_ord!(RemoteTableExtension, input, name, materialize);
+multifield_partial_ord!(
+    RemoteTableBoundaryNode,
+    upstream_plan,
+    table_identifier,
+    requires_materialization
+);
 
-impl RemoteTableExtension {
-    fn plan_node_inlined(
-        planner: &Planner,
-        index: usize,
-        this: &RemoteTableExtension,
-    ) -> Result<NodeWithIncomingEdges> {
-        let physical_plan = planner.sync_plan(&this.input)?;
-        let physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
+impl RemoteTableBoundaryNode {
+    fn compile_engine_operator(&self, planner: &Planner) -> Result<Vec<u8>> {
+        let physical_plan = planner.sync_plan(&self.upstream_plan)?;
+
+        let physical_plan_proto = PhysicalPlanNode::try_from_physical_plan(
             physical_plan,
             &FsPhysicalExtensionCodec::default(),
         )?;
-        let config = ValuePlanOperator {
-            name: format!("value_calculation({})", this.name),
-            physical_plan: physical_plan_node.encode_to_vec(),
+
+        let operator_config = ValuePlanOperator {
+            name: format!("value_calculation({})", self.table_identifier),
+            physical_plan: physical_plan_proto.encode_to_vec(),
         };
-        let node = LogicalNode::single(
-            index as u32,
-            format!("value_{index}"),
-            OperatorName::ArrowValue,
-            config.encode_to_vec(),
-            this.name.to_string(),
-            1,
-        );
-        Ok(NodeWithIncomingEdges {
-            node,
-            edges: vec![],
-        })
+
+        Ok(operator_config.encode_to_vec())
     }
 
-    fn plan_node_with_edges(
-        planner: &Planner,
-        index: usize,
-        this: &RemoteTableExtension,
-        input_schemas: Vec<FsSchemaRef>,
-    ) -> Result<NodeWithIncomingEdges> {
-        let physical_plan = planner.sync_plan(&this.input)?;
-        let physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
-            physical_plan,
-            &FsPhysicalExtensionCodec::default(),
-        )?;
-        let config = ValuePlanOperator {
-            name: format!("value_calculation({})", this.name),
-            physical_plan: physical_plan_node.encode_to_vec(),
-        };
-        let node = LogicalNode::single(
-            index as u32,
-            format!("value_{index}"),
-            OperatorName::ArrowValue,
-            config.encode_to_vec(),
-            this.name.to_string(),
-            1,
-        );
+    fn validate_uniform_schemas(input_schemas: &[FsSchemaRef]) -> Result<()> {
+        if input_schemas.len() <= 1 {
+            return Ok(());
+        }
 
-        let edges = input_schemas
-            .into_iter()
-            .map(|schema| LogicalEdge::project_all(LogicalEdgeType::Forward, (*schema).clone()))
-            .collect();
-        Ok(NodeWithIncomingEdges { node, edges })
+        let primary_schema = &input_schemas[0];
+        for schema in input_schemas.iter().skip(1) {
+            if *schema != *primary_schema {
+                return plan_err!(
+                    "Topology error: Multiple input streams routed to the same remote table must share an identical schema structure."
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 
-impl StreamExtension for RemoteTableExtension {
-    fn node_name(&self) -> Option<NamedNode> {
-        if self.materialize {
-            Some(NamedNode::RemoteTable(self.name.to_owned()))
+// -----------------------------------------------------------------------------
+// Stream Extension Trait Implementation
+// -----------------------------------------------------------------------------
+
+impl StreamingOperatorBlueprint for RemoteTableBoundaryNode {
+    fn operator_identity(&self) -> Option<NamedNode> {
+        if self.requires_materialization {
+            Some(NamedNode::RemoteTable(self.table_identifier.clone()))
         } else {
             None
         }
     }
 
-    fn plan_node(
+    fn compile_to_graph_node(
         &self,
         planner: &Planner,
-        index: usize,
+        node_index: usize,
         input_schemas: Vec<FsSchemaRef>,
-    ) -> Result<NodeWithIncomingEdges> {
-        match input_schemas.len() {
-            0 => {
-                return Self::plan_node_inlined(planner, index, self);
-            }
-            1 => {}
-            _multiple_inputs => {
-                let first = input_schemas[0].clone();
-                for schema in input_schemas.iter().skip(1) {
-                    if *schema != first {
-                        return plan_err!(
-                            "If a node has multiple inputs, they must all have the same schema"
-                        );
-                    }
-                }
-            }
-        }
-        Self::plan_node_with_edges(planner, index, self, input_schemas)
+    ) -> Result<CompiledTopologyNode> {
+        Self::validate_uniform_schemas(&input_schemas)?;
+
+        let operator_payload = self.compile_engine_operator(planner)?;
+
+        let logical_node = LogicalNode::single(
+            node_index as u32,
+            format!("value_{node_index}"),
+            OperatorName::ArrowValue,
+            operator_payload,
+            self.table_identifier.to_string(),
+            1,
+        );
+
+        let routing_edges: Vec<LogicalEdge> = input_schemas
+            .into_iter()
+            .map(|schema| LogicalEdge::project_all(LogicalEdgeType::Forward, (*schema).clone()))
+            .collect();
+
+        Ok(CompiledTopologyNode {
+            execution_unit: logical_node,
+            routing_edges: routing_edges,
+        })
     }
 
-    fn output_schema(&self) -> FsSchema {
-        FsSchema::from_schema_keys(Arc::new(self.schema.as_ref().into()), vec![]).unwrap()
+    fn yielded_schema(&self) -> FsSchema {
+        FsSchema::from_schema_keys(Arc::new(self.resolved_schema.as_ref().into()), vec![])
+            .expect("Fatal: Failed to generate output schema for remote table boundary")
     }
 }
 
-impl UserDefinedLogicalNodeCore for RemoteTableExtension {
+// -----------------------------------------------------------------------------
+// DataFusion Logical Node Hooks
+// -----------------------------------------------------------------------------
+
+impl UserDefinedLogicalNodeCore for RemoteTableBoundaryNode {
     fn name(&self) -> &str {
-        REMOTE_TABLE_NAME
+        REMOTE_TABLE_NODE_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.input]
+        vec![&self.upstream_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.resolved_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
@@ -146,19 +160,28 @@ impl UserDefinedLogicalNodeCore for RemoteTableExtension {
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "RemoteTableExtension: {}", self.schema)
+        write!(
+            f,
+            "RemoteTableBoundaryNode: Identifier={}, Materialized={}, Schema={}",
+            self.table_identifier,
+            self.requires_materialization,
+            self.resolved_schema
+        )
     }
 
-    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
         if inputs.len() != 1 {
-            return internal_err!("input size inconsistent");
+            return internal_err!(
+                "RemoteTableBoundaryNode expects exactly 1 upstream logical plan, but received {}",
+                inputs.len()
+            );
         }
 
         Ok(Self {
-            input: inputs[0].clone(),
-            name: self.name.clone(),
-            schema: self.schema.clone(),
-            materialize: self.materialize,
+            upstream_plan: inputs.remove(0),
+            table_identifier: self.table_identifier.clone(),
+            resolved_schema: self.resolved_schema.clone(),
+            requires_materialization: self.requires_materialization,
         })
     }
 }

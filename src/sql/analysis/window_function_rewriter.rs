@@ -8,8 +8,8 @@ use datafusion_common::DataFusionError;
 use std::sync::Arc;
 use tracing::debug;
 
-use crate::sql::extensions::key_calculation::{KeyCalculationExtension, KeysOrExprs};
-use crate::sql::extensions::window_fn::WindowFunctionExtension;
+use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
+use crate::sql::extensions::windows_function::StreamingWindowFunctionNode;
 use crate::sql::analysis::streaming_window_analzer::{StreamingWindowAnalzer, extract_column};
 use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields};
 
@@ -66,7 +66,7 @@ impl WindowFunctionRewriter {
         Ok(matched[0])
     }
 
-    /// Wraps the input in a Projection and KeyCalculationExtension to handle data distribution.
+    /// Wraps the input in a Projection and KeyExtractionNode to handle data distribution.
     fn build_keyed_input(
         &self,
         input: Arc<LogicalPlan>,
@@ -101,11 +101,11 @@ impl WindowFunctionRewriter {
         let projection =
             LogicalPlan::Projection(Projection::try_new_with_schema(exprs, input, keyed_schema)?);
 
-        // 3. Wrap in KeyCalculationExtension for the physical planner
+        // 3. Wrap in KeyExtractionNode for the physical planner
         Ok(LogicalPlan::Extension(Extension {
-            node: Arc::new(KeyCalculationExtension::new(
+            node: Arc::new(KeyExtractionNode::new(
                 projection,
-                KeysOrExprs::Keys((0..key_count).collect()),
+                KeyExtractionStrategy::ColumnIndices((0..key_count).collect()),
             )),
         }))
     }
@@ -182,7 +182,7 @@ impl TreeNodeRewriter for WindowFunctionRewriter {
             LogicalPlan::Window(Window::try_new(vec![final_wf_expr], Arc::new(sorted_plan))?);
 
         Ok(Transformed::yes(LogicalPlan::Extension(Extension {
-            node: Arc::new(WindowFunctionExtension::new(
+            node: Arc::new(StreamingWindowFunctionNode::new(
                 rewritten_window,
                 (0..key_count).collect(),
             )),

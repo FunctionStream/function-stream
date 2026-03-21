@@ -10,18 +10,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::schema::source_table::SourceTable;
+use petgraph::graph::DiGraph;
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+use super::logical_edge::LogicalEdge;
+use super::logical_node::LogicalNode;
 
-/// Plan node that exposes a connector table config as a logical plan input.
-#[derive(Debug)]
-pub struct StreamingTableConnectorPlan {
-    pub table: SourceTable,
-}
+pub type LogicalGraph = DiGraph<LogicalNode, LogicalEdge>;
 
-impl PlanNode for StreamingTableConnectorPlan {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_connector_table(self, context)
+pub trait Optimizer {
+    fn optimize_once(&self, plan: &mut LogicalGraph) -> bool;
+
+    fn optimize(&self, plan: &mut LogicalGraph) {
+        loop {
+            if !self.optimize_once(plan) {
+                break;
+            }
+        }
     }
 }

@@ -10,18 +10,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::schema::source_table::SourceTable;
+use std::collections::HashMap;
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+use super::dylib_udf_config::DylibUdfConfig;
+use super::python_udf_config::PythonUdfConfig;
 
-/// Plan node that exposes a connector table config as a logical plan input.
-#[derive(Debug)]
-pub struct StreamingTableConnectorPlan {
-    pub table: SourceTable,
-}
-
-impl PlanNode for StreamingTableConnectorPlan {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_connector_table(self, context)
-    }
+#[derive(Clone, Debug, Default)]
+pub struct ProgramConfig {
+    pub udf_dylibs: HashMap<String, DylibUdfConfig>,
+    pub python_udfs: HashMap<String, PythonUdfConfig>,
 }

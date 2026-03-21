@@ -10,71 +10,107 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use datafusion::common::{DFSchemaRef, Result, TableReference};
+use std::fmt::Formatter;
+
+use datafusion::common::{DFSchemaRef, Result, TableReference, internal_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 
 use crate::multifield_partial_ord;
 use crate::sql::schema::utils::{add_timestamp_field, has_timestamp_field};
 
+// -----------------------------------------------------------------------------
+// Constants & Identifiers
+// -----------------------------------------------------------------------------
+
+pub(crate) const TIMESTAMP_INJECTOR_NODE_NAME: &str = "SystemTimestampInjectorNode";
+
+// -----------------------------------------------------------------------------
+// Logical Node Definition
+// -----------------------------------------------------------------------------
+
+/// Injects the mandatory system `_timestamp` field into the upstream streaming schema.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct TimestampAppendExtension {
-    pub(crate) input: LogicalPlan,
-    pub(crate) qualifier: Option<TableReference>,
-    pub(crate) schema: DFSchemaRef,
+pub(crate) struct SystemTimestampInjectorNode {
+    pub(crate) upstream_plan: LogicalPlan,
+    pub(crate) target_qualifier: Option<TableReference>,
+    pub(crate) resolved_schema: DFSchemaRef,
 }
 
-impl TimestampAppendExtension {
-    pub(crate) fn new(input: LogicalPlan, qualifier: Option<TableReference>) -> Self {
-        if has_timestamp_field(input.schema()) {
-            unreachable!(
-                "shouldn't be adding timestamp to a plan that already has it: plan :\n {:?}\n schema: {:?}",
-                input,
-                input.schema()
+multifield_partial_ord!(SystemTimestampInjectorNode, upstream_plan, target_qualifier);
+
+impl SystemTimestampInjectorNode {
+    pub(crate) fn try_new(
+        upstream_plan: LogicalPlan,
+        target_qualifier: Option<TableReference>,
+    ) -> Result<Self> {
+        let upstream_schema = upstream_plan.schema();
+
+        if has_timestamp_field(upstream_schema) {
+            return internal_err!(
+                "Topology Violation: Attempted to inject a system timestamp into an upstream plan \
+                 that already contains one. \
+                 \nPlan:\n {:?} \nSchema:\n {:?}",
+                upstream_plan,
+                upstream_schema
             );
         }
-        let schema = add_timestamp_field(input.schema().clone(), qualifier.clone()).unwrap();
-        Self {
-            input,
-            qualifier,
-            schema,
-        }
+
+        let resolved_schema =
+            add_timestamp_field(upstream_schema.clone(), target_qualifier.clone())?;
+
+        Ok(Self {
+            upstream_plan,
+            target_qualifier,
+            resolved_schema,
+        })
     }
 }
 
-multifield_partial_ord!(TimestampAppendExtension, input, qualifier);
+// -----------------------------------------------------------------------------
+// DataFusion Logical Node Hooks
+// -----------------------------------------------------------------------------
 
-impl UserDefinedLogicalNodeCore for TimestampAppendExtension {
+impl UserDefinedLogicalNodeCore for SystemTimestampInjectorNode {
     fn name(&self) -> &str {
-        "TimestampAppendExtension"
+        TIMESTAMP_INJECTOR_NODE_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.input]
+        vec![&self.upstream_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.resolved_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
         vec![]
     }
 
-    fn fmt_for_explain(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
+        let field_names = self
+            .resolved_schema
+            .fields()
+            .iter()
+            .map(|field| field.name().to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
         write!(
             f,
-            "TimestampAppendExtension({:?}): {}",
-            self.qualifier,
-            self.schema
-                .fields()
-                .iter()
-                .map(|f| f.name().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
+            "SystemTimestampInjector(Qualifier={:?}): [{}]",
+            self.target_qualifier, field_names
         )
     }
 
-    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
-        Ok(Self::new(inputs[0].clone(), self.qualifier.clone()))
+    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+        if inputs.len() != 1 {
+            return internal_err!(
+                "SystemTimestampInjectorNode requires exactly 1 upstream logical plan, but received {}",
+                inputs.len()
+            );
+        }
+
+        Self::try_new(inputs.remove(0), self.target_qualifier.clone())
     }
 }

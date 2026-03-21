@@ -20,12 +20,12 @@ use datafusion::logical_expr::{
     self, BinaryExpr, Expr, Extension, LogicalPlan, Projection, TableScan,
 };
 
-use crate::sql::schema::connector_table::ConnectorTable;
-use crate::sql::schema::field_spec::FieldSpec;
+use crate::sql::schema::source_table::SourceTable;
+use crate::sql::schema::ColumnDescriptor;
 use crate::sql::schema::table::Table;
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::extensions::remote_table::RemoteTableExtension;
-use crate::sql::extensions::watermark_node::WatermarkNode;
+use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::extensions::watermark_node::EventTimeWatermarkNode;
 use crate::sql::types::TIMESTAMP_FIELD;
 
 /// Rewrites table scans into proper source nodes with projections and watermarks.
@@ -34,22 +34,35 @@ pub struct SourceRewriter<'a> {
 }
 
 impl SourceRewriter<'_> {
-    fn watermark_expression(table: &ConnectorTable) -> DFResult<Expr> {
-        match table.watermark_field.clone() {
+    fn projection_expr_for_column(col: &ColumnDescriptor, qualifier: &TableReference) -> Expr {
+        if let Some(logic) = col.computation_logic() {
+            logic
+                .clone()
+                .alias_qualified(Some(qualifier.clone()), col.arrow_field().name().to_string())
+        } else {
+            Expr::Column(Column {
+                relation: Some(qualifier.clone()),
+                name: col.arrow_field().name().to_string(),
+                spans: Default::default(),
+            })
+        }
+    }
+
+    fn watermark_expression(table: &SourceTable) -> DFResult<Expr> {
+        match table.temporal_config.watermark_strategy_column.clone() {
             Some(watermark_field) => table
-                .fields
+                .schema_specs
                 .iter()
-                .find_map(|f| {
-                    if f.field().name() == &watermark_field {
-                        return match f {
-                            FieldSpec::Struct(field) | FieldSpec::Metadata { field, .. } => {
-                                Some(Expr::Column(Column {
-                                    relation: None,
-                                    name: field.name().to_string(),
-                                    spans: Default::default(),
-                                }))
-                            }
-                            FieldSpec::Virtual { expression, .. } => Some(*expression.clone()),
+                .find_map(|c| {
+                    if c.arrow_field().name() == watermark_field.as_str() {
+                        return if let Some(expr) = c.computation_logic() {
+                            Some(expr.clone())
+                        } else {
+                            Some(Expr::Column(Column {
+                                relation: None,
+                                name: c.arrow_field().name().to_string(),
+                                spans: Default::default(),
+                            }))
                         };
                     }
                     None
@@ -73,47 +86,27 @@ impl SourceRewriter<'_> {
     }
 
     fn projection_expressions(
-        table: &ConnectorTable,
+        table: &SourceTable,
         qualifier: &TableReference,
         projection: &Option<Vec<usize>>,
     ) -> DFResult<Vec<Expr>> {
         let mut expressions: Vec<Expr> = table
-            .fields
+            .schema_specs
             .iter()
-            .map(|field| match field {
-                FieldSpec::Struct(field) | FieldSpec::Metadata { field, .. } => {
-                    Expr::Column(Column {
-                        relation: Some(qualifier.clone()),
-                        name: field.name().to_string(),
-                        spans: Default::default(),
-                    })
-                }
-                FieldSpec::Virtual { field, expression } => expression
-                    .clone()
-                    .alias_qualified(Some(qualifier.clone()), field.name().to_string()),
-            })
+            .map(|col| Self::projection_expr_for_column(col, qualifier))
             .collect();
 
         if let Some(proj) = projection {
             expressions = proj.iter().map(|i| expressions[*i].clone()).collect();
         }
 
-        if let Some(event_time_field) = table.event_time_field.clone() {
+        if let Some(event_time_field) = table.temporal_config.event_column.clone() {
             let expr = table
-                .fields
+                .schema_specs
                 .iter()
-                .find_map(|f| {
-                    if f.field().name() == &event_time_field {
-                        return match f {
-                            FieldSpec::Struct(field) | FieldSpec::Metadata { field, .. } => {
-                                Some(Expr::Column(Column {
-                                    relation: Some(qualifier.clone()),
-                                    name: field.name().to_string(),
-                                    spans: Default::default(),
-                                }))
-                            }
-                            FieldSpec::Virtual { expression, .. } => Some(*expression.clone()),
-                        };
+                .find_map(|c| {
+                    if c.arrow_field().name() == event_time_field.as_str() {
+                        return Some(Self::projection_expr_for_column(c, qualifier));
                     }
                     None
                 })
@@ -133,10 +126,10 @@ impl SourceRewriter<'_> {
         Ok(expressions)
     }
 
-    fn projection(&self, table_scan: &TableScan, table: &ConnectorTable) -> DFResult<LogicalPlan> {
+    fn projection(&self, table_scan: &TableScan, table: &SourceTable) -> DFResult<LogicalPlan> {
         let qualifier = table_scan.table_name.clone();
 
-        // TODO: replace with TableSourceExtension when available
+        // TODO: replace with StreamIngestionNode when available
         let source_input = LogicalPlan::TableScan(table_scan.clone());
 
         Ok(LogicalPlan::Projection(Projection::try_new(
@@ -148,27 +141,27 @@ impl SourceRewriter<'_> {
     fn mutate_connector_table(
         &self,
         table_scan: &TableScan,
-        table: &ConnectorTable,
+        table: &SourceTable,
     ) -> DFResult<Transformed<LogicalPlan>> {
         let input = self.projection(table_scan, table)?;
 
         let schema = input.schema().clone();
         let remote = LogicalPlan::Extension(Extension {
-            node: Arc::new(RemoteTableExtension {
-                input,
-                name: table_scan.table_name.to_owned(),
-                schema,
-                materialize: true,
+            node: Arc::new(RemoteTableBoundaryNode {
+                upstream_plan: input,
+                table_identifier: table_scan.table_name.to_owned(),
+                resolved_schema: schema,
+                requires_materialization: true,
             }),
         });
 
-        let watermark_node = WatermarkNode::new(
+        let watermark_node = EventTimeWatermarkNode::try_new(
             remote,
             table_scan.table_name.clone(),
             Self::watermark_expression(table)?,
         )
         .map_err(|err| {
-            DataFusionError::Internal(format!("failed to create watermark expression: {err}"))
+            DataFusionError::Internal(format!("failed to create watermark node: {err}"))
         })?;
 
         Ok(Transformed::yes(LogicalPlan::Extension(Extension {

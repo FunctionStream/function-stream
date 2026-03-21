@@ -1,13 +1,13 @@
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
 use datafusion::common::{DFSchema, DataFusionError, Result, not_impl_err, plan_err};
 use datafusion::functions_aggregate::expr_fn::max;
-use datafusion::logical_expr::{self, Aggregate, Expr, Extension, LogicalPlan, Projection};
+use datafusion::logical_expr::{Aggregate, Expr, Extension, LogicalPlan, Projection};
 use datafusion::prelude::col;
 use std::sync::Arc;
 
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::extensions::aggregate::AggregateExtension;
-use crate::sql::extensions::key_calculation::{KeyCalculationExtension, KeysOrExprs};
+use crate::sql::extensions::aggregate::StreamWindowAggregateNode;
+use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
 use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
 use crate::sql::types::{
     DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers, find_window,
@@ -83,7 +83,7 @@ impl TreeNodeRewriter for AggregateRewriter<'_> {
         let keyed_input =
             self.build_keyed_input(agg.input.clone(), &agg.group_expr, &key_fields)?;
 
-        // 5. Build the final AggregateExtension for the physical planner.
+        // 5. Build the final StreamWindowAggregateNode for the physical planner.
         let mut internal_fields = fields_with_qualifiers(&agg.schema);
         if let WindowBehavior::FromOperator { window_index, .. } = &behavior {
             internal_fields.remove(*window_index);
@@ -100,11 +100,11 @@ impl TreeNodeRewriter for AggregateRewriter<'_> {
             internal_schema,
         )?;
 
-        let extension = AggregateExtension::new(
+        let extension = StreamWindowAggregateNode::try_new(
             behavior,
             LogicalPlan::Aggregate(rewritten_agg),
             (0..key_count).collect(),
-        );
+        )?;
 
         Ok(Transformed::yes(LogicalPlan::Extension(Extension {
             node: Arc::new(extension),
@@ -118,7 +118,7 @@ impl<'a> AggregateRewriter<'a> {
     }
 
     /// [Internal] Builds the physical Key Calculation layer required for distributed Shuffling.
-    /// This wraps the input in a Projection and a KeyCalculationExtension.
+    /// This wraps the input in a Projection and a KeyExtractionNode.
     fn build_keyed_input(
         &self,
         input: Arc<LogicalPlan>,
@@ -151,9 +151,9 @@ impl<'a> AggregateRewriter<'a> {
             LogicalPlan::Projection(Projection::try_new_with_schema(exprs, input, key_schema)?);
 
         Ok(LogicalPlan::Extension(Extension {
-            node: Arc::new(KeyCalculationExtension::new(
+            node: Arc::new(KeyExtractionNode::new(
                 projection,
-                KeysOrExprs::Keys((0..key_count).collect()),
+                KeyExtractionStrategy::ColumnIndices((0..key_count).collect()),
             )),
         }))
     }

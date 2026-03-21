@@ -10,18 +10,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::schema::source_table::SourceTable;
+mod dylib_udf_config;
+mod logical_edge;
+mod logical_graph;
+mod logical_node;
+mod logical_program;
+mod operator_chain;
+mod operator_name;
+mod program_config;
+mod python_udf_config;
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-
-/// Plan node that exposes a connector table config as a logical plan input.
-#[derive(Debug)]
-pub struct StreamingTableConnectorPlan {
-    pub table: SourceTable,
-}
-
-impl PlanNode for StreamingTableConnectorPlan {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_connector_table(self, context)
-    }
-}
+pub use dylib_udf_config::DylibUdfConfig;
+pub use logical_edge::{LogicalEdge, LogicalEdgeType};
+pub use logical_graph::{LogicalGraph, Optimizer};
+pub use logical_node::LogicalNode;
+pub use logical_program::LogicalProgram;
+pub use operator_name::OperatorName;
+pub use program_config::ProgramConfig;
+pub use python_udf_config::PythonUdfConfig;

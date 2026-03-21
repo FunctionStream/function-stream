@@ -10,18 +10,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::schema::source_table::SourceTable;
+use super::temporal_pipeline_config::TemporalPipelineConfig;
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-
-/// Plan node that exposes a connector table config as a logical plan input.
-#[derive(Debug)]
-pub struct StreamingTableConnectorPlan {
-    pub table: SourceTable,
+#[derive(Debug, Clone)]
+pub struct EngineDescriptor {
+    pub engine_type: String,
+    pub raw_payload: String,
 }
 
-impl PlanNode for StreamingTableConnectorPlan {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_connector_table(self, context)
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SyncMode {
+    AppendOnly,
+    Incremental,
+}
+
+#[derive(Debug, Clone)]
+pub struct TableExecutionUnit {
+    pub label: String,
+    pub engine_meta: EngineDescriptor,
+    pub sync_mode: SyncMode,
+    pub temporal_offset: TemporalPipelineConfig,
 }

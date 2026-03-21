@@ -307,6 +307,16 @@ impl ConnectorOptions {
     pub fn contains_key(&self, key: &str) -> bool {
         self.options.contains_key(key)
     }
+
+    /// Drain all remaining options into string values (for connector runtime config).
+    pub fn drain_remaining_string_values(&mut self) -> DFResult<HashMap<String, String>> {
+        let taken = std::mem::take(&mut self.options);
+        let mut out = HashMap::with_capacity(taken.len());
+        for (k, v) in taken {
+            out.insert(k, format!("{v}"));
+        }
+        Ok(out)
+    }
 }
 
 fn duration_from_sql_expr(expr: &Expr) -> Result<Duration, DataFusionError> {

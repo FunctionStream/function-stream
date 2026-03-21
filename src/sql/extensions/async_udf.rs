@@ -18,170 +18,225 @@ use datafusion::common::{DFSchemaRef, Result};
 use datafusion::logical_expr::{
     Expr, LogicalPlan, UserDefinedLogicalNode, UserDefinedLogicalNodeCore,
 };
-use datafusion_common::internal_err;
+use datafusion_common::{internal_err, plan_err};
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use prost::Message;
 use protocol::grpc::api::{AsyncUdfOperator, AsyncUdfOrdering};
 
 use crate::multifield_partial_ord;
-use crate::sql::extensions::constants::ASYNC_RESULT_FIELD;
-use crate::sql::extensions::stream_extension::{NodeWithIncomingEdges, StreamExtension};
+use crate::sql::common::{FsSchema, FsSchemaRef};
+use crate::sql::extensions::streaming_operator_blueprint::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{
     DylibUdfConfig, LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName,
 };
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{DFField, fields_with_qualifiers, schema_from_df_fields};
-use crate::sql::common::{FsSchema, FsSchemaRef};
 
+pub(crate) const NODE_TYPE_NAME: &str = "AsyncFunctionExecutionNode";
+pub const ASYNC_RESULT_FIELD: &str = "__async_result";
+
+/// Represents a logical node that executes an external asynchronous function (UDF)
+/// and projects the final results into the streaming pipeline.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct AsyncUDFExtension {
-    pub(crate) input: Arc<LogicalPlan>,
-    pub(crate) name: String,
-    pub(crate) udf: DylibUdfConfig,
-    pub(crate) arg_exprs: Vec<Expr>,
-    pub(crate) final_exprs: Vec<Expr>,
-    pub(crate) ordered: bool,
-    pub(crate) max_concurrency: usize,
-    pub(crate) timeout: Duration,
-    pub(crate) final_schema: DFSchemaRef,
+pub(crate) struct AsyncFunctionExecutionNode {
+    pub(crate) upstream_plan: Arc<LogicalPlan>,
+    pub(crate) operator_name: String,
+    pub(crate) function_config: DylibUdfConfig,
+    pub(crate) invocation_args: Vec<Expr>,
+    pub(crate) result_projections: Vec<Expr>,
+    pub(crate) preserve_ordering: bool,
+    pub(crate) concurrency_limit: usize,
+    pub(crate) execution_timeout: Duration,
+    pub(crate) resolved_schema: DFSchemaRef,
 }
 
 multifield_partial_ord!(
-    AsyncUDFExtension,
-    input,
-    name,
-    udf,
-    arg_exprs,
-    final_exprs,
-    ordered,
-    max_concurrency,
-    timeout
+    AsyncFunctionExecutionNode,
+    upstream_plan,
+    operator_name,
+    function_config,
+    invocation_args,
+    result_projections,
+    preserve_ordering,
+    concurrency_limit,
+    execution_timeout
 );
 
-impl StreamExtension for AsyncUDFExtension {
-    fn node_name(&self) -> Option<NamedNode> {
-        None
-    }
-
-    fn plan_node(
+impl AsyncFunctionExecutionNode {
+    /// Compiles logical expressions into serialized physical protobuf bytes.
+    fn compile_physical_expressions(
         &self,
         planner: &Planner,
-        index: usize,
-        input_schemas: Vec<FsSchemaRef>,
-    ) -> Result<NodeWithIncomingEdges> {
-        let arg_exprs = self
-            .arg_exprs
+        expressions: &[Expr],
+        schema_context: &DFSchemaRef,
+    ) -> Result<Vec<Vec<u8>>> {
+        expressions
             .iter()
-            .map(|e| {
-                let p = planner.create_physical_expr(e, self.input.schema())?;
-                Ok(serialize_physical_expr(&p, &DefaultPhysicalExtensionCodec {})?.encode_to_vec())
+            .map(|logical_expr| {
+                let physical_expr = planner.create_physical_expr(logical_expr, schema_context)?;
+                let serialized =
+                    serialize_physical_expr(&physical_expr, &DefaultPhysicalExtensionCodec {})?;
+                Ok(serialized.encode_to_vec())
             })
-            .collect::<Result<Vec<_>>>()?;
-
-        let mut final_fields = fields_with_qualifiers(self.input.schema());
-        final_fields.push(DFField::new(
-            None,
-            ASYNC_RESULT_FIELD,
-            self.udf.return_type.clone(),
-            true,
-        ));
-        let post_udf_schema = schema_from_df_fields(&final_fields)?;
-
-        let final_exprs = self
-            .final_exprs
-            .iter()
-            .map(|e| {
-                let p = planner.create_physical_expr(e, &post_udf_schema)?;
-                Ok(serialize_physical_expr(&p, &DefaultPhysicalExtensionCodec {})?.encode_to_vec())
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let config = AsyncUdfOperator {
-            name: self.name.clone(),
-            udf: Some(self.udf.clone().into()),
-            arg_exprs,
-            final_exprs,
-            ordering: if self.ordered {
-                AsyncUdfOrdering::Ordered as i32
-            } else {
-                AsyncUdfOrdering::Unordered as i32
-            },
-            max_concurrency: self.max_concurrency as u32,
-            timeout_micros: self.timeout.as_micros() as u64,
-        };
-
-        let node = LogicalNode::single(
-            index as u32,
-            format!("async_udf_{index}"),
-            OperatorName::AsyncUdf,
-            config.encode_to_vec(),
-            format!("async_udf<{}>", self.name),
-            1,
-        );
-
-        let incoming_edge =
-            LogicalEdge::project_all(LogicalEdgeType::Forward, input_schemas[0].as_ref().clone());
-        Ok(NodeWithIncomingEdges {
-            node,
-            edges: vec![incoming_edge],
-        })
+            .collect()
     }
 
-    fn output_schema(&self) -> FsSchema {
-        FsSchema::from_fields(
-            self.final_schema
-                .fields()
-                .iter()
-                .map(|f| (**f).clone())
-                .collect(),
-        )
+    /// Computes the intermediate schema which bridges the upstream output
+    /// and the raw asynchronous result injected by the UDF execution.
+    fn compute_intermediate_schema(&self) -> Result<DFSchemaRef> {
+        let mut fields = fields_with_qualifiers(self.upstream_plan.schema());
+
+        let raw_result_field = DFField::new(
+            None,
+            ASYNC_RESULT_FIELD,
+            self.function_config.return_type.clone(),
+            true,
+        );
+        fields.push(raw_result_field);
+
+        Ok(Arc::new(schema_from_df_fields(&fields)?))
+    }
+
+    fn to_protobuf_config(
+        &self,
+        compiled_args: Vec<Vec<u8>>,
+        compiled_projections: Vec<Vec<u8>>,
+    ) -> AsyncUdfOperator {
+        let ordering_strategy = if self.preserve_ordering {
+            AsyncUdfOrdering::Ordered
+        } else {
+            AsyncUdfOrdering::Unordered
+        };
+
+        AsyncUdfOperator {
+            name: self.operator_name.clone(),
+            udf: Some(self.function_config.clone().into()),
+            arg_exprs: compiled_args,
+            final_exprs: compiled_projections,
+            ordering: ordering_strategy as i32,
+            max_concurrency: self.concurrency_limit as u32,
+            timeout_micros: self.execution_timeout.as_micros() as u64,
+        }
     }
 }
 
-impl UserDefinedLogicalNodeCore for AsyncUDFExtension {
+impl StreamingOperatorBlueprint for AsyncFunctionExecutionNode {
+    fn operator_identity(&self) -> Option<NamedNode> {
+        None
+    }
+
+    fn compile_to_graph_node(
+        &self,
+        planner: &Planner,
+        node_index: usize,
+        mut input_schemas: Vec<FsSchemaRef>,
+    ) -> Result<CompiledTopologyNode> {
+        if input_schemas.len() != 1 {
+            return plan_err!("AsyncFunctionExecutionNode requires exactly one input schema");
+        }
+
+        let compiled_args = self.compile_physical_expressions(
+            planner,
+            &self.invocation_args,
+            self.upstream_plan.schema(),
+        )?;
+
+        let intermediate_schema = self.compute_intermediate_schema()?;
+        let compiled_projections = self.compile_physical_expressions(
+            planner,
+            &self.result_projections,
+            &intermediate_schema,
+        )?;
+
+        let operator_config = self.to_protobuf_config(compiled_args, compiled_projections);
+
+        let logical_node = LogicalNode::single(
+            node_index as u32,
+            format!("async_udf_{node_index}"),
+            OperatorName::AsyncUdf,
+            operator_config.encode_to_vec(),
+            format!("AsyncUdf<{}>", self.operator_name),
+            1,
+        );
+
+        let upstream_schema = input_schemas.remove(0);
+        let data_edge =
+            LogicalEdge::project_all(LogicalEdgeType::Forward, (*upstream_schema).clone());
+
+        Ok(CompiledTopologyNode {
+            execution_unit: logical_node,
+            routing_edges: vec![data_edge],
+        })
+    }
+
+    fn yielded_schema(&self) -> FsSchema {
+        let arrow_fields: Vec<_> = self
+            .resolved_schema
+            .fields()
+            .iter()
+            .map(|f| (**f).clone())
+            .collect();
+
+        FsSchema::from_fields(arrow_fields)
+    }
+}
+
+impl UserDefinedLogicalNodeCore for AsyncFunctionExecutionNode {
     fn name(&self) -> &str {
-        "AsyncUDFNode"
+        NODE_TYPE_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.input]
+        vec![&self.upstream_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.final_schema
+        &self.resolved_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
-        self.arg_exprs
+        self.invocation_args
             .iter()
-            .chain(self.final_exprs.iter())
-            .map(|e| e.to_owned())
+            .chain(self.result_projections.iter())
+            .cloned()
             .collect()
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "AsyncUdfExtension<{}>: {}", self.name, self.final_schema)
+        write!(
+            f,
+            "AsyncFunctionExecution<{}>: Concurrency={}, Ordered={}",
+            self.operator_name,
+            self.concurrency_limit,
+            self.preserve_ordering
+        )
     }
 
-    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
         if inputs.len() != 1 {
-            return internal_err!("input size inconsistent");
+            return internal_err!(
+                "AsyncFunctionExecutionNode expects exactly 1 input, but received {}",
+                inputs.len()
+            );
         }
+
         if UserDefinedLogicalNode::expressions(self) != exprs {
-            return internal_err!("Tried to recreate async UDF node with different expressions");
+            return internal_err!(
+                "Attempted to mutate async UDF expressions during logical planning, which is not supported."
+            );
         }
 
         Ok(Self {
-            input: Arc::new(inputs[0].clone()),
-            name: self.name.clone(),
-            udf: self.udf.clone(),
-            arg_exprs: self.arg_exprs.clone(),
-            final_exprs: self.final_exprs.clone(),
-            ordered: self.ordered,
-            max_concurrency: self.max_concurrency,
-            timeout: self.timeout,
-            final_schema: self.final_schema.clone(),
+            upstream_plan: Arc::new(inputs.remove(0)),
+            operator_name: self.operator_name.clone(),
+            function_config: self.function_config.clone(),
+            invocation_args: self.invocation_args.clone(),
+            result_projections: self.result_projections.clone(),
+            preserve_ordering: self.preserve_ordering,
+            concurrency_limit: self.concurrency_limit,
+            execution_timeout: self.execution_timeout,
+            resolved_schema: self.resolved_schema.clone(),
         })
     }
 }

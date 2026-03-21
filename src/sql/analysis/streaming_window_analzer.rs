@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
+use datafusion::common::tree_node::{TreeNodeRecursion, TreeNodeVisitor};
 use datafusion::common::{Column, DFSchema, DataFusionError, Result};
-use datafusion::logical_expr::{Aggregate, Expr, Extension, LogicalPlan, expr::Alias};
+use datafusion::logical_expr::{Expr, Extension, LogicalPlan, expr::Alias};
 
-use crate::sql::extensions::aggregate::{AGGREGATE_EXTENSION_NAME, AggregateExtension};
-use crate::sql::extensions::join::JOIN_NODE_NAME;
+use crate::sql::extensions::aggregate::{STREAM_AGG_EXTENSION_NAME, StreamWindowAggregateNode};
+use crate::sql::extensions::join::STREAM_JOIN_NODE_TYPE;
 use crate::sql::types::{DFField, WindowBehavior, WindowType, fields_with_qualifiers, find_window};
 
 /// WindowDetectingVisitor identifies windowing strategies and tracks window-carrying fields
@@ -89,7 +89,7 @@ impl TreeNodeVisitor<'_> for StreamingWindowAnalzer {
     fn f_down(&mut self, node: &Self::Node) -> Result<TreeNodeRecursion> {
         // Joins require cross-branch validation to ensure left and right sides align on time.
         if let LogicalPlan::Extension(Extension { node }) = node
-            && node.name() == JOIN_NODE_NAME
+            && node.name() == STREAM_JOIN_NODE_TYPE
         {
             let mut branch_windows = HashSet::new();
             for input in node.inputs() {
@@ -159,16 +159,16 @@ impl TreeNodeVisitor<'_> for StreamingWindowAnalzer {
             }
 
             LogicalPlan::Extension(Extension { node })
-                if node.name() == AGGREGATE_EXTENSION_NAME =>
+                if node.name() == STREAM_AGG_EXTENSION_NAME =>
             {
                 let ext = node
                     .as_any()
-                    .downcast_ref::<AggregateExtension>()
+                    .downcast_ref::<StreamWindowAggregateNode>()
                     .ok_or_else(|| {
-                        DataFusionError::Internal("AggregateExtension node is malformed".into())
+                        DataFusionError::Internal("StreamWindowAggregateNode is malformed".into())
                     })?;
 
-                match &ext.window_behavior {
+                match &ext.window_spec {
                     WindowBehavior::FromOperator {
                         window,
                         window_field,

@@ -10,18 +10,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::schema::source_table::SourceTable;
+use strum::{Display, EnumString};
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-
-/// Plan node that exposes a connector table config as a logical plan input.
-#[derive(Debug)]
-pub struct StreamingTableConnectorPlan {
-    pub table: SourceTable,
-}
-
-impl PlanNode for StreamingTableConnectorPlan {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_connector_table(self, context)
-    }
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, Display)]
+pub enum OperatorName {
+    ExpressionWatermark,
+    ArrowValue,
+    ArrowKey,
+    Projection,
+    AsyncUdf,
+    Join,
+    InstantJoin,
+    LookupJoin,
+    WindowFunction,
+    TumblingWindowAggregate,
+    SlidingWindowAggregate,
+    SessionWindowAggregate,
+    UpdatingAggregate,
+    ConnectorSource,
+    ConnectorSink,
 }

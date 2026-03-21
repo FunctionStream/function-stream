@@ -1,5 +1,5 @@
-use crate::sql::extensions::remote_table::RemoteTableExtension;
-use crate::sql::extensions::{ASYNC_RESULT_FIELD, AsyncUDFExtension};
+use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::extensions::{ASYNC_RESULT_FIELD, AsyncFunctionExecutionNode};
 use crate::sql::schema::StreamSchemaProvider;
 use datafusion::common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
 use datafusion::common::{Column, Result as DFResult, TableReference, plan_err};
@@ -92,11 +92,11 @@ impl TreeNodeRewriter for AsyncUdfRewriter<'_> {
 
         let input = if matches!(*projection.input, LogicalPlan::Projection(..)) {
             Arc::new(LogicalPlan::Extension(Extension {
-                node: Arc::new(RemoteTableExtension {
-                    input: (*projection.input).clone(),
-                    name: TableReference::bare("subquery_projection"),
-                    schema: projection.input.schema().clone(),
-                    materialize: false,
+                node: Arc::new(RemoteTableBoundaryNode {
+                    upstream_plan: (*projection.input).clone(),
+                    table_identifier: TableReference::bare("subquery_projection"),
+                    resolved_schema: projection.input.schema().clone(),
+                    requires_materialization: false,
                 }),
             }))
         } else {
@@ -104,16 +104,16 @@ impl TreeNodeRewriter for AsyncUdfRewriter<'_> {
         };
 
         Ok(Transformed::yes(LogicalPlan::Extension(Extension {
-            node: Arc::new(AsyncUDFExtension {
-                input,
-                name,
-                udf,
-                arg_exprs,
-                final_exprs: projection.expr,
-                ordered: opts.ordered,
-                max_concurrency: opts.max_concurrency,
-                timeout: opts.timeout,
-                final_schema: projection.schema,
+            node: Arc::new(AsyncFunctionExecutionNode {
+                upstream_plan: input,
+                operator_name: name,
+                function_config: udf,
+                invocation_args: arg_exprs,
+                result_projections: projection.expr,
+                preserve_ordering: opts.ordered,
+                concurrency_limit: opts.max_concurrency,
+                execution_timeout: opts.timeout,
+                resolved_schema: projection.schema,
             }),
         })))
     }

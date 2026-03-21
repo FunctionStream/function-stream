@@ -10,4 +10,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// Column name substituted for an async UDF call after rewrite.
 pub const ASYNC_RESULT_FIELD: &str = "__async_result";

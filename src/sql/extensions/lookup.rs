@@ -1,35 +1,59 @@
-use datafusion::common::{Column, DFSchemaRef, JoinType, internal_err, plan_err};
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::fmt::Formatter;
+use std::sync::Arc;
+
+use datafusion::common::{Column, DFSchemaRef, JoinType, Result, internal_err, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use datafusion::sql::TableReference;
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use prost::Message;
-use std::fmt::Formatter;
-use std::sync::Arc;
+
 use protocol::grpc::api;
 use protocol::grpc::api::{ConnectorOp, LookupJoinCondition, LookupJoinOperator};
-use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+
 use crate::multifield_partial_ord;
-use crate::sql::schema::ConnectorTable;
-use crate::sql::schema::utils::add_timestamp_field_arrow;
-use crate::sql::extensions::{NodeWithIncomingEdges, StreamExtension};
-use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::common::{FsSchema, FsSchemaRef};
+use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
+use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use crate::sql::logical_planner::planner::{NamedNode, Planner};
+use crate::sql::schema::SourceTable;
+use crate::sql::schema::utils::add_timestamp_field_arrow;
 
-pub const SOURCE_EXTENSION_NAME: &str = "LookupSource";
-pub const JOIN_EXTENSION_NAME: &str = "LookupJoin";
+// -----------------------------------------------------------------------------
+// Constants & Identifiers
+// -----------------------------------------------------------------------------
 
+pub const DICTIONARY_SOURCE_NODE_NAME: &str = "ReferenceTableSource";
+pub const STREAM_DICTIONARY_JOIN_NODE_NAME: &str = "StreamReferenceJoin";
+
+// -----------------------------------------------------------------------------
+// Logical Node: Reference Table Source
+// -----------------------------------------------------------------------------
+
+/// Static or periodically updated reference table used for lookups.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct LookupSource {
-    pub(crate) table: ConnectorTable,
-    pub(crate) schema: DFSchemaRef,
+pub struct ReferenceTableSourceNode {
+    pub(crate) source_definition: SourceTable,
+    pub(crate) resolved_schema: DFSchemaRef,
 }
 
-multifield_partial_ord!(LookupSource, table);
+multifield_partial_ord!(ReferenceTableSourceNode, source_definition);
 
-impl UserDefinedLogicalNodeCore for LookupSource {
+impl UserDefinedLogicalNodeCore for ReferenceTableSourceNode {
     fn name(&self) -> &str {
-        SOURCE_EXTENSION_NAME
+        DICTIONARY_SOURCE_NODE_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
@@ -37,7 +61,7 @@ impl UserDefinedLogicalNodeCore for LookupSource {
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.resolved_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
@@ -45,150 +69,206 @@ impl UserDefinedLogicalNodeCore for LookupSource {
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "LookupSource: {}", self.schema)
+        write!(f, "ReferenceTableSource: Schema={}", self.resolved_schema)
     }
 
     fn with_exprs_and_inputs(
         &self,
         _exprs: Vec<Expr>,
         inputs: Vec<LogicalPlan>,
-    ) -> datafusion::common::Result<Self> {
+    ) -> Result<Self> {
         if !inputs.is_empty() {
-            return internal_err!("LookupSource cannot have inputs");
+            return internal_err!(
+                "ReferenceTableSource is a leaf node and cannot accept upstream inputs"
+            );
         }
 
         Ok(Self {
-            table: self.table.clone(),
-            schema: self.schema.clone(),
+            source_definition: self.source_definition.clone(),
+            resolved_schema: self.resolved_schema.clone(),
         })
     }
 }
 
+// -----------------------------------------------------------------------------
+// Logical Node: Stream to Reference Join
+// -----------------------------------------------------------------------------
+
+/// Join between an unbounded stream and a reference (lookup) table.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct LookupJoin {
-    pub(crate) input: LogicalPlan,
-    pub(crate) schema: DFSchemaRef,
-    pub(crate) connector: ConnectorTable,
-    pub(crate) on: Vec<(Expr, Column)>,
-    pub(crate) filter: Option<Expr>,
-    pub(crate) alias: Option<TableReference>,
-    pub(crate) join_type: JoinType,
+pub struct StreamReferenceJoinNode {
+    pub(crate) upstream_stream_plan: LogicalPlan,
+    pub(crate) output_schema: DFSchemaRef,
+    pub(crate) external_dictionary: SourceTable,
+    pub(crate) equijoin_conditions: Vec<(Expr, Column)>,
+    pub(crate) post_join_filter: Option<Expr>,
+    pub(crate) namespace_alias: Option<TableReference>,
+    pub(crate) join_semantics: JoinType,
 }
 
-multifield_partial_ord!(LookupJoin, input, connector, on, filter, alias);
+multifield_partial_ord!(
+    StreamReferenceJoinNode,
+    upstream_stream_plan,
+    external_dictionary,
+    equijoin_conditions,
+    post_join_filter,
+    namespace_alias
+);
 
-impl StreamExtension for LookupJoin {
-    fn node_name(&self) -> Option<NamedNode> {
+impl StreamReferenceJoinNode {
+    fn compile_join_conditions(&self, planner: &Planner) -> Result<Vec<LookupJoinCondition>> {
+        self.equijoin_conditions
+            .iter()
+            .map(|(logical_left_expr, right_column)| {
+                let physical_expr =
+                    planner.create_physical_expr(logical_left_expr, &self.output_schema)?;
+                let serialized_expr =
+                    serialize_physical_expr(&physical_expr, &DefaultPhysicalExtensionCodec {})?;
+
+                Ok(LookupJoinCondition {
+                    left_expr: serialized_expr.encode_to_vec(),
+                    right_key: right_column.name.clone(),
+                })
+            })
+            .collect()
+    }
+
+    fn map_api_join_type(&self) -> Result<i32> {
+        match self.join_semantics {
+            JoinType::Inner => Ok(api::JoinType::Inner as i32),
+            JoinType::Left => Ok(api::JoinType::Left as i32),
+            unsupported => plan_err!(
+                "Unsupported join type '{unsupported}' for dictionary lookups. Only INNER and LEFT joins are permitted."
+            ),
+        }
+    }
+
+    fn build_engine_operator(
+        &self,
+        planner: &Planner,
+        _upstream_schema: &FsSchemaRef,
+    ) -> Result<LookupJoinOperator> {
+        let internal_input_schema = FsSchema::from_schema_unkeyed(Arc::new(
+            self.output_schema.as_ref().into(),
+        ))?;
+        let dictionary_physical_schema = self.external_dictionary.produce_physical_schema();
+        let lookup_fs_schema =
+            FsSchema::from_schema_unkeyed(add_timestamp_field_arrow(dictionary_physical_schema))?;
+
+        Ok(LookupJoinOperator {
+            input_schema: Some(internal_input_schema.into()),
+            lookup_schema: Some(lookup_fs_schema.into()),
+            connector: Some(ConnectorOp {
+                connector: self.external_dictionary.adapter_type.clone(),
+                config: self.external_dictionary.opaque_config.clone(),
+                description: self.external_dictionary.description.clone(),
+            }),
+            key_exprs: self.compile_join_conditions(planner)?,
+            join_type: self.map_api_join_type()?,
+            ttl_micros: self
+                .external_dictionary
+                .lookup_cache_ttl
+                .map(|t| t.as_micros() as u64),
+            max_capacity_bytes: self.external_dictionary.lookup_cache_max_bytes,
+        })
+    }
+}
+
+impl StreamingOperatorBlueprint for StreamReferenceJoinNode {
+    fn operator_identity(&self) -> Option<NamedNode> {
         None
     }
 
-    fn plan_node(
+    fn compile_to_graph_node(
         &self,
         planner: &Planner,
-        index: usize,
-        input_schemas: Vec<FsSchemaRef>,
-    ) -> datafusion::common::Result<NodeWithIncomingEdges> {
-        let schema = FsSchema::from_schema_unkeyed(Arc::new(self.schema.as_ref().into()))?;
-        let lookup_schema = FsSchema::from_schema_unkeyed(add_timestamp_field_arrow(
-            self.connector.physical_schema(),
-        ))?;
-        let join_config = LookupJoinOperator {
-            input_schema: Some(schema.into()),
-            lookup_schema: Some(lookup_schema.into()),
-            connector: Some(ConnectorOp {
-                connector: self.connector.connector.clone(),
-                config: self.connector.config.clone(),
-                description: self.connector.description.clone(),
-            }),
-            key_exprs: self
-                .on
-                .iter()
-                .map(|(l, r)| {
-                    let expr = planner.create_physical_expr(l, &self.schema)?;
-                    let expr = serialize_physical_expr(&expr, &DefaultPhysicalExtensionCodec {})?;
-                    Ok(LookupJoinCondition {
-                        left_expr: expr.encode_to_vec(),
-                        right_key: r.name.clone(),
-                    })
-                })
-                .collect::<datafusion::error::Result<Vec<_>>>()?,
-            join_type: match self.join_type {
-                JoinType::Inner => api::JoinType::Inner as i32,
-                JoinType::Left => api::JoinType::Left as i32,
-                j => {
-                    return plan_err!(
-                        "unsupported join type '{j}' for lookup join; only inner and left joins are supported"
-                    );
-                }
-            },
-            ttl_micros: self
-                .connector
-                .lookup_cache_ttl
-                .map(|t| t.as_micros() as u64),
-            max_capacity_bytes: self.connector.lookup_cache_max_bytes,
-        };
+        node_index: usize,
+        mut input_schemas: Vec<FsSchemaRef>,
+    ) -> Result<CompiledTopologyNode> {
+        if input_schemas.len() != 1 {
+            return plan_err!(
+                "StreamReferenceJoinNode requires exactly one upstream stream input"
+            );
+        }
+        let upstream_schema = input_schemas.remove(0);
 
-        let incoming_edge =
-            LogicalEdge::project_all(LogicalEdgeType::Shuffle, (*input_schemas[0]).clone());
+        let operator_config = self.build_engine_operator(planner, &upstream_schema)?;
 
-        Ok(NodeWithIncomingEdges {
-            node: LogicalNode::single(
-                index as u32,
-                format!("lookupjoin_{index}"),
-                OperatorName::LookupJoin,
-                join_config.encode_to_vec(),
-                format!("LookupJoin<{}>", self.connector.name),
-                1,
-            ),
-            edges: vec![incoming_edge],
+        let logical_node = LogicalNode::single(
+            node_index as u32,
+            format!("lookup_join_{node_index}"),
+            OperatorName::LookupJoin,
+            operator_config.encode_to_vec(),
+            format!("DictionaryJoin<{}>", self.external_dictionary.table_identifier),
+            1,
+        );
+
+        let incoming_edge = LogicalEdge::project_all(
+            LogicalEdgeType::Shuffle,
+            (*upstream_schema).clone(),
+        );
+
+        Ok(CompiledTopologyNode {
+            execution_unit: logical_node,
+            routing_edges: vec![incoming_edge],
         })
     }
 
-    fn output_schema(&self) -> FsSchema {
-        FsSchema::from_schema_unkeyed(self.schema.inner().clone()).unwrap()
+    fn yielded_schema(&self) -> FsSchema {
+        FsSchema::from_schema_unkeyed(self.output_schema.inner().clone())
+            .expect("Failed to convert lookup join output schema to FsSchema")
     }
 }
 
-impl UserDefinedLogicalNodeCore for LookupJoin {
+impl UserDefinedLogicalNodeCore for StreamReferenceJoinNode {
     fn name(&self) -> &str {
-        JOIN_EXTENSION_NAME
+        STREAM_DICTIONARY_JOIN_NODE_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.input]
+        vec![&self.upstream_stream_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.output_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
-        let mut e: Vec<_> = self.on.iter().map(|(l, _)| l.clone()).collect();
-
-        if let Some(filter) = &self.filter {
-            e.push(filter.clone());
+        let mut exprs: Vec<_> = self
+            .equijoin_conditions
+            .iter()
+            .map(|(l, _)| l.clone())
+            .collect();
+        if let Some(filter) = &self.post_join_filter {
+            exprs.push(filter.clone());
         }
-
-        e
+        exprs
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "LookupJoinExtension: {}", self.schema)
+        write!(
+            f,
+            "StreamReferenceJoin: join_type={:?} | {}",
+            self.join_semantics,
+            self.output_schema
+        )
     }
 
-    fn with_exprs_and_inputs(
-        &self,
-        _: Vec<Expr>,
-        inputs: Vec<LogicalPlan>,
-    ) -> datafusion::common::Result<Self> {
+    fn with_exprs_and_inputs(&self, _: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+        if inputs.len() != 1 {
+            return internal_err!(
+                "StreamReferenceJoinNode expects exactly 1 upstream plan, got {}",
+                inputs.len()
+            );
+        }
         Ok(Self {
-            input: inputs[0].clone(),
-            schema: self.schema.clone(),
-            connector: self.connector.clone(),
-            on: self.on.clone(),
-            filter: self.filter.clone(),
-            alias: self.alias.clone(),
-            join_type: self.join_type,
+            upstream_stream_plan: inputs[0].clone(),
+            output_schema: self.output_schema.clone(),
+            external_dictionary: self.external_dictionary.clone(),
+            equijoin_conditions: self.equijoin_conditions.clone(),
+            post_join_filter: self.post_join_filter.clone(),
+            namespace_alias: self.namespace_alias.clone(),
+            join_semantics: self.join_semantics,
         })
     }
 }

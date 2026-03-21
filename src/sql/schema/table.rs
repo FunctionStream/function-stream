@@ -17,10 +17,10 @@ use datafusion::common::{Result, plan_err};
 use datafusion::logical_expr::{Extension, LogicalPlan};
 use datafusion::sql::sqlparser::ast::Statement;
 use protocol::grpc::api::ConnectorOp;
-use super::connector_table::ConnectorTable;
-use super::optimizer::produce_optimized_plan;
+use super::source_table::SourceTable;
+use crate::sql::logical_planner::optimizers::produce_optimized_plan;
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::extensions::remote_table::RemoteTableExtension;
+use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
 use crate::sql::analysis::rewrite_plan;
 use crate::sql::types::{DFField, ProcessingMode};
 
@@ -29,9 +29,9 @@ use crate::sql::types::{DFField, ProcessingMode};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Table {
     /// A lookup table backed by an external connector.
-    LookupTable(ConnectorTable),
+    LookupTable(SourceTable),
     /// A source/sink table backed by an external connector.
-    ConnectorTable(ConnectorTable),
+    ConnectorTable(SourceTable),
     /// A table defined by a query (CREATE VIEW / CREATE TABLE AS SELECT).
     TableFromQuery {
         name: String,
@@ -63,11 +63,11 @@ impl Table {
             }))) => {
                 let rewritten = rewrite_plan(input.as_ref().clone(), schema_provider)?;
                 let schema = rewritten.schema().clone();
-                let remote = RemoteTableExtension {
-                    input: rewritten,
-                    name: name.to_owned(),
-                    schema,
-                    materialize: true,
+                let remote = RemoteTableBoundaryNode {
+                    upstream_plan: rewritten,
+                    table_identifier: name.to_owned(),
+                    resolved_schema: schema,
+                    requires_materialization: true,
                 };
                 Ok(Some(Table::TableFromQuery {
                     name: name.to_string(),
@@ -83,25 +83,25 @@ impl Table {
     pub fn name(&self) -> &str {
         match self {
             Table::TableFromQuery { name, .. } => name.as_str(),
-            Table::ConnectorTable(c) | Table::LookupTable(c) => c.name.as_str(),
+            Table::ConnectorTable(c) | Table::LookupTable(c) => c.name(),
         }
     }
 
     pub fn get_fields(&self) -> Vec<FieldRef> {
         match self {
-            Table::ConnectorTable(ConnectorTable {
-                fields,
+            Table::ConnectorTable(SourceTable {
+                schema_specs,
                 inferred_fields,
                 ..
             })
-            | Table::LookupTable(ConnectorTable {
-                fields,
+            | Table::LookupTable(SourceTable {
+                schema_specs,
                 inferred_fields,
                 ..
             }) => inferred_fields.clone().unwrap_or_else(|| {
-                fields
+                schema_specs
                     .iter()
-                    .map(|field| field.field().clone().into())
+                    .map(|c| Arc::new(c.arrow_field().clone()))
                     .collect()
             }),
             Table::TableFromQuery { logical_plan, .. } => {
@@ -115,7 +115,7 @@ impl Table {
             return Ok(());
         };
 
-        if !t.fields.is_empty() {
+        if !t.schema_specs.is_empty() {
             return Ok(());
         }
 

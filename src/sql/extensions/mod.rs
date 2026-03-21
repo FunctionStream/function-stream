@@ -15,8 +15,8 @@ mod macros;
 pub(crate) mod constants;
 pub(crate) use constants::ASYNC_RESULT_FIELD;
 
-pub(crate) mod stream_extension;
-pub(crate) use stream_extension::{NodeWithIncomingEdges, StreamExtension};
+pub(crate) mod streaming_operator_blueprint;
+pub(crate) use streaming_operator_blueprint::{CompiledTopologyNode, StreamingOperatorBlueprint};
 
 pub(crate) mod aggregate;
 pub(crate) mod debezium;
@@ -29,13 +29,13 @@ pub(crate) mod sink;
 pub(crate) mod table_source;
 pub(crate) mod updating_aggregate;
 pub(crate) mod watermark_node;
-pub(crate) mod window_fn;
+pub(crate) mod windows_function;
 
 pub(crate) mod timestamp_append;
-pub(crate) use timestamp_append::TimestampAppendExtension;
+pub(crate) use timestamp_append::SystemTimestampInjectorNode;
 
 pub(crate) mod async_udf;
-pub(crate) use async_udf::AsyncUDFExtension;
+pub(crate) use async_udf::AsyncFunctionExecutionNode;
 
 pub(crate) mod is_retract;
 pub(crate) use is_retract::IsRetractExtension;

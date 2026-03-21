@@ -1,11 +1,24 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use std::fmt::Formatter;
 use std::sync::Arc;
 use std::time::Duration;
+
 use arrow_array::types::IntervalMonthDayNanoType;
 use datafusion::common::{Column, DFSchemaRef, Result, ScalarValue, internal_err};
-use datafusion::logical_expr;
 use datafusion::logical_expr::{
-    BinaryExpr, Expr, Extension, LogicalPlan, UserDefinedLogicalNodeCore, expr::ScalarFunction,
+    self, expr::ScalarFunction, BinaryExpr, Expr, Extension, LogicalPlan,
+    UserDefinedLogicalNodeCore,
 };
 use datafusion_common::{plan_err, DFSchema, DataFusionError};
 use datafusion_expr::Aggregate;
@@ -13,149 +26,164 @@ use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionC
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
-use protocol::grpc::api::{ SessionWindowAggregateOperator, SlidingWindowAggregateOperator, TumblingWindowAggregateOperator};
-use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use protocol::grpc::api::{
+    SessionWindowAggregateOperator, SlidingWindowAggregateOperator, TumblingWindowAggregateOperator,
+};
+
 use crate::multifield_partial_ord;
-use crate::sql::logical_planner::{window, FsPhysicalExtensionCodec};
-use crate::sql::extensions::{ NodeWithIncomingEdges, StreamExtension, TimestampAppendExtension};
+use crate::sql::common::{FsSchema, FsSchemaRef};
+use crate::sql::extensions::{
+    CompiledTopologyNode, StreamingOperatorBlueprint, SystemTimestampInjectorNode,
+};
+use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner, SplitPlanOutput};
+use crate::sql::logical_planner::{window, FsPhysicalExtensionCodec};
 use crate::sql::types::{
     DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers,
     schema_from_df_fields, schema_from_df_fields_with_metadata,
 };
-use crate::sql::common::{FsSchema, FsSchemaRef};
 
-pub(crate) const AGGREGATE_EXTENSION_NAME: &str = "AggregateExtension";
+pub(crate) const STREAM_AGG_EXTENSION_NAME: &str = "StreamWindowAggregateNode";
+const INTERNAL_TIMESTAMP_COL: &str = "_timestamp";
 
+/// Represents a streaming windowed aggregation node in the logical plan.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct AggregateExtension {
-    pub(crate) window_behavior: WindowBehavior,
-    pub(crate) aggregate: LogicalPlan,
-    pub(crate) schema: DFSchemaRef,
-    pub(crate) key_fields: Vec<usize>,
-    pub(crate) final_calculation: LogicalPlan,
+pub(crate) struct StreamWindowAggregateNode {
+    pub(crate) window_spec: WindowBehavior,
+    pub(crate) base_agg_plan: LogicalPlan,
+    pub(crate) output_schema: DFSchemaRef,
+    pub(crate) partition_keys: Vec<usize>,
+    pub(crate) post_aggregation_plan: LogicalPlan,
 }
 
-multifield_partial_ord!(AggregateExtension, aggregate, key_fields, final_calculation);
+multifield_partial_ord!(
+    StreamWindowAggregateNode,
+    base_agg_plan,
+    partition_keys,
+    post_aggregation_plan
+);
 
-impl AggregateExtension {
-    pub fn new(
-        window_behavior: WindowBehavior,
-        aggregate: LogicalPlan,
-        key_fields: Vec<usize>,
-    ) -> Self {
-        let final_calculation =
-            Self::final_projection(&aggregate, window_behavior.clone()).unwrap();
+impl StreamWindowAggregateNode {
+    /// Safely constructs a new node, computing the final projection without panicking.
+    pub fn try_new(
+        window_spec: WindowBehavior,
+        base_agg_plan: LogicalPlan,
+        partition_keys: Vec<usize>,
+    ) -> Result<Self> {
+        let post_aggregation_plan =
+            WindowBoundaryMath::build_post_aggregation(&base_agg_plan, window_spec.clone())?;
 
-        Self {
-            window_behavior,
-            aggregate,
-            schema: final_calculation.schema().clone(),
-            key_fields,
-            final_calculation,
-        }
+        Ok(Self {
+            window_spec,
+            base_agg_plan,
+            output_schema: post_aggregation_plan.schema().clone(),
+            partition_keys,
+            post_aggregation_plan,
+        })
     }
 
-    pub fn tumbling_window_config(
+    fn build_tumbling_operator(
         &self,
         planner: &Planner,
-        index: usize,
+        node_id: usize,
         input_schema: DFSchemaRef,
-        width: Duration,
+        duration: Duration,
     ) -> Result<LogicalNode> {
-        let binning_function_proto = planner.binning_function_proto(width, input_schema.clone())?;
+        let binning_expr = planner.binning_function_proto(duration, input_schema.clone())?;
+
         let SplitPlanOutput {
             partial_aggregation_plan,
             partial_schema,
             finish_plan,
-        } = planner.split_physical_plan(self.key_fields.clone(), &self.aggregate, true)?;
+        } = planner.split_physical_plan(self.partition_keys.clone(), &self.base_agg_plan, true)?;
 
-        let final_physical_plan = planner.sync_plan(&self.final_calculation)?;
-        let final_physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
-            final_physical_plan,
+        let final_physical = planner.sync_plan(&self.post_aggregation_plan)?;
+        let final_physical_proto = PhysicalPlanNode::try_from_physical_plan(
+            final_physical,
             &FsPhysicalExtensionCodec::default(),
         )?;
 
-        let config = TumblingWindowAggregateOperator {
+        let operator_config = TumblingWindowAggregateOperator {
             name: "TumblingWindow".to_string(),
-            width_micros: width.as_micros() as u64,
-            binning_function: binning_function_proto.encode_to_vec(),
+            width_micros: duration.as_micros() as u64,
+            binning_function: binning_expr.encode_to_vec(),
             input_schema: Some(
                 FsSchema::from_schema_keys(
                     Arc::new(input_schema.as_ref().into()),
-                    self.key_fields.clone(),
-                )?.into(),
+                    self.partition_keys.clone(),
+                )?
+                .into(),
             ),
             partial_schema: Some(partial_schema.into()),
             partial_aggregation_plan: partial_aggregation_plan.encode_to_vec(),
             final_aggregation_plan: finish_plan.encode_to_vec(),
-            final_projection: Some(final_physical_plan_node.encode_to_vec()),
+            final_projection: Some(final_physical_proto.encode_to_vec()),
         };
 
         Ok(LogicalNode::single(
-            index as u32,
-            format!("tumbling_{index}"),
+            node_id as u32,
+            format!("tumbling_{node_id}"),
             OperatorName::TumblingWindowAggregate,
-            config.encode_to_vec(),
-            format!("TumblingWindow<{}>", config.name),
+            operator_config.encode_to_vec(),
+            format!("TumblingWindow<{}>", operator_config.name),
             1,
         ))
     }
 
-    pub fn sliding_window_config(
+    fn build_sliding_operator(
         &self,
         planner: &Planner,
-        index: usize,
+        node_id: usize,
         input_schema: DFSchemaRef,
-        width: Duration,
-        slide: Duration,
+        duration: Duration,
+        slide_interval: Duration,
     ) -> Result<LogicalNode> {
-        let binning_function_proto = planner.binning_function_proto(slide, input_schema.clone())?;
+        let binning_expr = planner.binning_function_proto(slide_interval, input_schema.clone())?;
 
         let SplitPlanOutput {
             partial_aggregation_plan,
             partial_schema,
             finish_plan,
-        } = planner.split_physical_plan(self.key_fields.clone(), &self.aggregate, true)?;
+        } = planner.split_physical_plan(self.partition_keys.clone(), &self.base_agg_plan, true)?;
 
-        let final_physical_plan = planner.sync_plan(&self.final_calculation)?;
-        let final_physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
-            final_physical_plan,
+        let final_physical = planner.sync_plan(&self.post_aggregation_plan)?;
+        let final_physical_proto = PhysicalPlanNode::try_from_physical_plan(
+            final_physical,
             &FsPhysicalExtensionCodec::default(),
         )?;
 
-        let config = SlidingWindowAggregateOperator {
-            name: format!("SlidingWindow<{width:?}>"),
-            width_micros: width.as_micros() as u64,
-            slide_micros: slide.as_micros() as u64,
-            binning_function: binning_function_proto.encode_to_vec(),
+        let operator_config = SlidingWindowAggregateOperator {
+            name: format!("SlidingWindow<{duration:?}>"),
+            width_micros: duration.as_micros() as u64,
+            slide_micros: slide_interval.as_micros() as u64,
+            binning_function: binning_expr.encode_to_vec(),
             input_schema: Some(
                 FsSchema::from_schema_keys(
                     Arc::new(input_schema.as_ref().into()),
-                    self.key_fields.clone(),
-                )?.into(),
+                    self.partition_keys.clone(),
+                )?
+                .into(),
             ),
             partial_schema: Some(partial_schema.into()),
             partial_aggregation_plan: partial_aggregation_plan.encode_to_vec(),
             final_aggregation_plan: finish_plan.encode_to_vec(),
-            final_projection: final_physical_plan_node.encode_to_vec(),
-            // TODO add final aggregation.
+            final_projection: final_physical_proto.encode_to_vec(),
         };
 
         Ok(LogicalNode::single(
-            index as u32,
-            format!("sliding_window_{index}"),
+            node_id as u32,
+            format!("sliding_window_{node_id}"),
             OperatorName::SlidingWindowAggregate,
-            config.encode_to_vec(),
+            operator_config.encode_to_vec(),
             "sliding window".to_string(),
             1,
         ))
     }
 
-    pub fn session_window_config(
+    fn build_session_operator(
         &self,
         planner: &Planner,
-        index: usize,
+        node_id: usize,
         input_schema: DFSchemaRef,
     ) -> Result<LogicalNode> {
         let WindowBehavior::FromOperator {
@@ -163,290 +191,191 @@ impl AggregateExtension {
             window_index,
             window_field,
             is_nested: false,
-        } = &self.window_behavior
+        } = &self.window_spec
         else {
-            return plan_err!("expected sliding window");
+            return plan_err!("Expected standard session window configuration");
         };
-        let output_schema = fields_with_qualifiers(self.aggregate.schema());
-        let LogicalPlan::Aggregate(agg) = self.aggregate.clone() else {
-            return plan_err!("expected aggregate");
+
+        let output_fields = fields_with_qualifiers(self.base_agg_plan.schema());
+        let LogicalPlan::Aggregate(base_agg) = self.base_agg_plan.clone() else {
+            return plan_err!("Base plan must be an Aggregate node");
         };
-        let key_count = self.key_fields.len();
-        let unkeyed_aggregate_schema = Arc::new(schema_from_df_fields_with_metadata(
-            &output_schema[key_count..],
-            self.aggregate.schema().metadata().clone(),
+
+        let key_count = self.partition_keys.len();
+        let unkeyed_schema = Arc::new(schema_from_df_fields_with_metadata(
+            &output_fields[key_count..],
+            self.base_agg_plan.schema().metadata().clone(),
         )?);
 
-        let unkeyed_aggregate = Aggregate::try_new_with_schema(
-            agg.input.clone(),
+        let unkeyed_agg_node = Aggregate::try_new_with_schema(
+            base_agg.input.clone(),
             vec![],
-            agg.aggr_expr.clone(),
-            unkeyed_aggregate_schema.clone(),
+            base_agg.aggr_expr.clone(),
+            unkeyed_schema,
         )?;
-        let aggregate_plan = planner.sync_plan(&LogicalPlan::Aggregate(unkeyed_aggregate))?;
 
-        let physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
-            aggregate_plan,
+        let physical_agg = planner.sync_plan(&LogicalPlan::Aggregate(unkeyed_agg_node))?;
+        let physical_agg_proto = PhysicalPlanNode::try_from_physical_plan(
+            physical_agg,
             &FsPhysicalExtensionCodec::default(),
         )?;
-        let input_schema = FsSchema::from_schema_keys(
-            Arc::new(input_schema.as_ref().into()),
-            self.key_fields.clone(),
-        )?;
 
-        let config = SessionWindowAggregateOperator {
-            name: format!("session_window_{index}"),
+        let operator_config = SessionWindowAggregateOperator {
+            name: format!("session_window_{node_id}"),
             gap_micros: gap.as_micros() as u64,
             window_field_name: window_field.name().to_string(),
             window_index: *window_index as u64,
-            input_schema: Some(input_schema.into()),
+            input_schema: Some(
+                FsSchema::from_schema_keys(
+                    Arc::new(input_schema.as_ref().into()),
+                    self.partition_keys.clone(),
+                )?
+                .into(),
+            ),
             unkeyed_aggregate_schema: None,
             partial_aggregation_plan: vec![],
-            final_aggregation_plan: physical_plan_node.encode_to_vec(),
+            final_aggregation_plan: physical_agg_proto.encode_to_vec(),
         };
 
         Ok(LogicalNode::single(
-            index as u32,
+            node_id as u32,
             format!("SessionWindow<{gap:?}>"),
             OperatorName::SessionWindowAggregate,
-            config.encode_to_vec(),
-            config.name.clone(),
+            operator_config.encode_to_vec(),
+            operator_config.name.clone(),
             1,
         ))
     }
 
-    pub fn instant_window_config(
+    fn build_instant_operator(
         &self,
         planner: &Planner,
-        index: usize,
+        node_id: usize,
         input_schema: DFSchemaRef,
-        use_final_projection: bool,
+        apply_final_projection: bool,
     ) -> Result<LogicalNode> {
-        let binning_function = planner.create_physical_expr(
-            &Expr::Column(Column::new_unqualified("_timestamp".to_string())),
-            &input_schema,
-        )?;
-        let binning_function_proto =
-            serialize_physical_expr(&binning_function, &DefaultPhysicalExtensionCodec {})?;
+        let ts_column_expr =
+            Expr::Column(Column::new_unqualified(INTERNAL_TIMESTAMP_COL.to_string()));
+        let binning_expr = planner.create_physical_expr(&ts_column_expr, &input_schema)?;
+        let binning_proto = serialize_physical_expr(&binning_expr, &DefaultPhysicalExtensionCodec {})?;
 
-        let final_projection = use_final_projection
-            .then(|| {
-                let final_physical_plan = planner.sync_plan(&self.final_calculation)?;
-                let final_physical_plan_node = PhysicalPlanNode::try_from_physical_plan(
-                    final_physical_plan,
-                    &FsPhysicalExtensionCodec::default(),
-                )?;
-                Ok::<Vec<u8>, DataFusionError>(final_physical_plan_node.encode_to_vec())
-            })
-            .transpose()?;
+        let final_projection_payload = if apply_final_projection {
+            let physical_plan = planner.sync_plan(&self.post_aggregation_plan)?;
+            let proto_node = PhysicalPlanNode::try_from_physical_plan(
+                physical_plan,
+                &FsPhysicalExtensionCodec::default(),
+            )?;
+            Some(proto_node.encode_to_vec())
+        } else {
+            None
+        };
 
         let SplitPlanOutput {
             partial_aggregation_plan,
             partial_schema,
             finish_plan,
-        } = planner.split_physical_plan(self.key_fields.clone(), &self.aggregate, true)?;
+        } = planner.split_physical_plan(self.partition_keys.clone(), &self.base_agg_plan, true)?;
 
-        let config = TumblingWindowAggregateOperator {
+        let operator_config = TumblingWindowAggregateOperator {
             name: "InstantWindow".to_string(),
             width_micros: 0,
-            binning_function: binning_function_proto.encode_to_vec(),
+            binning_function: binning_proto.encode_to_vec(),
             input_schema: Some(
                 FsSchema::from_schema_keys(
                     Arc::new(input_schema.as_ref().into()),
-                    self.key_fields.clone(),
-                )?.into(),
+                    self.partition_keys.clone(),
+                )?
+                .into(),
             ),
             partial_schema: Some(partial_schema.into()),
             partial_aggregation_plan: partial_aggregation_plan.encode_to_vec(),
             final_aggregation_plan: finish_plan.encode_to_vec(),
-            final_projection,
+            final_projection: final_projection_payload,
         };
 
         Ok(LogicalNode::single(
-            index as u32,
-            format!("instant_window_{index}"),
+            node_id as u32,
+            format!("instant_window_{node_id}"),
             OperatorName::TumblingWindowAggregate,
-            config.encode_to_vec(),
+            operator_config.encode_to_vec(),
             "instant window".to_string(),
             1,
         ))
     }
+}
 
-    // projection assuming that _timestamp has been populated with the start of the bin.
-    pub fn final_projection(
-        aggregate_plan: &LogicalPlan,
-        window_behavior: WindowBehavior,
-    ) -> Result<LogicalPlan> {
-        let timestamp_field: DFField = aggregate_plan.inputs()[0]
-            .schema()
-            .qualified_field_with_unqualified_name(TIMESTAMP_FIELD)?
-            .into();
-        let timestamp_append = LogicalPlan::Extension(Extension {
-            node: Arc::new(TimestampAppendExtension::new(
-                aggregate_plan.clone(),
-                timestamp_field.qualifier().cloned(),
-            )),
-        });
-        let mut aggregate_fields = fields_with_qualifiers(aggregate_plan.schema());
-        let mut aggregate_expressions: Vec<_> = aggregate_fields
-            .iter()
-            .map(|field| Expr::Column(field.qualified_column()))
-            .collect();
-        let (window_field, window_index, width, is_nested) = match window_behavior {
-            WindowBehavior::InData => return Ok(timestamp_append),
-            WindowBehavior::FromOperator {
-                window,
-                window_field,
-                window_index,
-                is_nested,
-            } => match window {
-                WindowType::Tumbling { width, .. } | WindowType::Sliding { width, .. } => {
-                    (window_field, window_index, width, is_nested)
-                }
-                WindowType::Session { .. } => {
-                    return Ok(LogicalPlan::Extension(Extension {
-                        node: Arc::new(WindowAppendExtension::new(
-                            timestamp_append,
-                            window_field,
-                            window_index,
-                        )),
-                    }));
-                }
-                WindowType::Instant => return Ok(timestamp_append),
-            },
-        };
-        if is_nested {
-            return Self::nested_final_projection(
-                timestamp_append,
-                window_field,
-                window_index,
-                width,
-            );
-        }
-        let timestamp_column =
-            Column::new(timestamp_field.qualifier().cloned(), timestamp_field.name());
-        aggregate_fields.insert(window_index, window_field.clone());
-
-        let window_expression = Expr::ScalarFunction(ScalarFunction {
-            func: window(),
-            args: vec![
-                // copy bin_start as first argument
-                Expr::Column(timestamp_column.clone()),
-                // add width interval to _timestamp for bin end
-                Expr::BinaryExpr(BinaryExpr {
-                    left: Box::new(Expr::Column(timestamp_column.clone())),
-                    op: logical_expr::Operator::Plus,
-                    right: Box::new(Expr::Literal(
-                        ScalarValue::IntervalMonthDayNano(Some(
-                            IntervalMonthDayNanoType::make_value(0, 0, width.as_nanos() as i64),
-                        )),
-                        None,
-                    )),
-                }),
-            ],
-        });
-        aggregate_expressions.insert(
-            window_index,
-            window_expression
-                .alias_qualified(window_field.qualifier().cloned(), window_field.name()),
-        );
-        aggregate_fields.push(timestamp_field);
-        let bin_end_calculation = Expr::BinaryExpr(BinaryExpr {
-            left: Box::new(Expr::Column(timestamp_column.clone())),
-            op: logical_expr::Operator::Plus,
-            right: Box::new(Expr::Literal(
-                ScalarValue::IntervalMonthDayNano(Some(IntervalMonthDayNanoType::make_value(
-                    0,
-                    0,
-                    (width.as_nanos() - 1) as i64,
-                ))),
-                None,
-            )),
-        });
-        aggregate_expressions.push(bin_end_calculation);
-        Ok(LogicalPlan::Projection(
-            logical_expr::Projection::try_new_with_schema(
-                aggregate_expressions,
-                Arc::new(timestamp_append),
-                Arc::new(schema_from_df_fields(&aggregate_fields)?),
-            )?,
-        ))
+impl StreamingOperatorBlueprint for StreamWindowAggregateNode {
+    fn operator_identity(&self) -> Option<NamedNode> {
+        None
     }
 
-    fn nested_final_projection(
-        aggregate_plan: LogicalPlan,
-        window_field: DFField,
-        window_index: usize,
-        width: Duration,
-    ) -> Result<LogicalPlan> {
-        let timestamp_field: DFField = aggregate_plan
-            .schema()
-            .qualified_field_with_unqualified_name(TIMESTAMP_FIELD)
-            .unwrap()
-            .into();
-        let timestamp_column =
-            Column::new(timestamp_field.qualifier().cloned(), timestamp_field.name());
+    fn compile_to_graph_node(
+        &self,
+        planner: &Planner,
+        node_id: usize,
+        mut input_schemas: Vec<FsSchemaRef>,
+    ) -> Result<CompiledTopologyNode> {
+        if input_schemas.len() != 1 {
+            return plan_err!("StreamWindowAggregateNode requires exactly one input schema");
+        }
 
-        let mut aggregate_fields = fields_with_qualifiers(aggregate_plan.schema());
-        let mut aggregate_expressions: Vec<_> = aggregate_fields
-            .iter()
-            .map(|field| Expr::Column(field.qualified_column()))
-            .collect();
-        aggregate_fields.insert(window_index, window_field.clone());
-        let window_expression = Expr::ScalarFunction(ScalarFunction {
-            func: window(),
-            args: vec![
-                // calculate the start of the bin
-                Expr::BinaryExpr(BinaryExpr {
-                    left: Box::new(Expr::Column(timestamp_column.clone())),
-                    op: logical_expr::Operator::Minus,
-                    right: Box::new(Expr::Literal(
-                        ScalarValue::IntervalMonthDayNano(Some(
-                            IntervalMonthDayNanoType::make_value(0, 0, width.as_nanos() as i64 - 1),
-                        )),
-                        None,
-                    )),
-                }),
-                // add 1 nanosecond to the timestamp
-                Expr::BinaryExpr(BinaryExpr {
-                    left: Box::new(Expr::Column(timestamp_column.clone())),
-                    op: logical_expr::Operator::Plus,
-                    right: Box::new(Expr::Literal(
-                        ScalarValue::IntervalMonthDayNano(Some(
-                            IntervalMonthDayNanoType::make_value(0, 0, 1),
-                        )),
-                        None,
-                    )),
-                }),
-            ],
-        });
-        aggregate_expressions.insert(
-            window_index,
-            window_expression
-                .alias_qualified(window_field.qualifier().cloned(), window_field.name()),
-        );
-        Ok(LogicalPlan::Projection(
-            logical_expr::Projection::try_new_with_schema(
-                aggregate_expressions,
-                Arc::new(aggregate_plan),
-                Arc::new(schema_from_df_fields(&aggregate_fields).unwrap()),
-            )
-                .unwrap(),
-        ))
+        let raw_schema = input_schemas.remove(0);
+        let df_schema = Arc::new(DFSchema::try_from(raw_schema.schema.as_ref().clone())?);
+
+        let logical_operator = match &self.window_spec {
+            WindowBehavior::FromOperator { window, is_nested, .. } => {
+                if *is_nested {
+                    self.build_instant_operator(planner, node_id, df_schema, true)?
+                } else {
+                    match window {
+                        WindowType::Tumbling { width } => {
+                            self.build_tumbling_operator(planner, node_id, df_schema, *width)?
+                        }
+                        WindowType::Sliding { width, slide } => {
+                            self.build_sliding_operator(planner, node_id, df_schema, *width, *slide)?
+                        }
+                        WindowType::Session { .. } => {
+                            self.build_session_operator(planner, node_id, df_schema)?
+                        }
+                        WindowType::Instant => {
+                            return plan_err!(
+                                "Instant window is invalid within standard operator context"
+                            );
+                        }
+                    }
+                }
+            }
+            WindowBehavior::InData => self
+                .build_instant_operator(planner, node_id, df_schema, false)
+                .map_err(|e| e.context("Failed compiling instant window"))?,
+        };
+
+        let link = LogicalEdge::project_all(LogicalEdgeType::Shuffle, (*raw_schema).clone());
+        Ok(CompiledTopologyNode {
+            execution_unit: logical_operator,
+            routing_edges: vec![link],
+        })
+    }
+
+    fn yielded_schema(&self) -> FsSchema {
+        let schema_ref = (*self.output_schema).clone().into();
+        FsSchema::from_schema_unkeyed(Arc::new(schema_ref)).expect(
+            "StreamWindowAggregateNode output schema must contain timestamp column",
+        )
     }
 }
 
-impl UserDefinedLogicalNodeCore for AggregateExtension {
+impl UserDefinedLogicalNodeCore for StreamWindowAggregateNode {
     fn name(&self) -> &str {
-        AGGREGATE_EXTENSION_NAME
+        STREAM_AGG_EXTENSION_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.aggregate]
+        vec![&self.base_agg_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.output_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
@@ -454,135 +383,229 @@ impl UserDefinedLogicalNodeCore for AggregateExtension {
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
+        let spec_desc = match &self.window_spec {
+            WindowBehavior::InData => "InData".to_string(),
+            WindowBehavior::FromOperator { window, .. } => format!("FromOperator({window:?})"),
+        };
         write!(
             f,
-            "AggregateExtension: {} | window_behavior: {:?}",
+            "StreamWindowAggregate: {} | spec: {}",
             self.schema(),
-            match &self.window_behavior {
-                WindowBehavior::InData => "InData".to_string(),
-                WindowBehavior::FromOperator { window, .. } => format!("FromOperator({window:?})"),
-            }
+            spec_desc
         )
     }
 
     fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
         if inputs.len() != 1 {
-            return internal_err!("input size inconsistent");
+            return internal_err!("StreamWindowAggregateNode expects exactly 1 input");
         }
-
-        Ok(Self::new(
-            self.window_behavior.clone(),
+        Self::try_new(
+            self.window_spec.clone(),
             inputs[0].clone(),
-            self.key_fields.clone(),
-        ))
+            self.partition_keys.clone(),
+        )
     }
 }
 
-impl StreamExtension for AggregateExtension {
-    fn node_name(&self) -> Option<NamedNode> {
-        None
+// -----------------------------------------------------------------------------
+// Dedicated boundary math for window bin / post-aggregation projection
+// -----------------------------------------------------------------------------
+
+struct WindowBoundaryMath;
+
+impl WindowBoundaryMath {
+    fn interval_nanos(nanos: i64) -> Expr {
+        Expr::Literal(
+            ScalarValue::IntervalMonthDayNano(Some(
+                IntervalMonthDayNanoType::make_value(0, 0, nanos),
+            )),
+            None,
+        )
     }
 
-    fn plan_node(
-        &self,
-        planner: &Planner,
-        index: usize,
-        input_schemas: Vec<FsSchemaRef>,
-    ) -> Result<NodeWithIncomingEdges> {
-        if input_schemas.len() != 1 {
-            return plan_err!("AggregateExtension should have exactly one input");
-        }
-        let input_schema = input_schemas[0].clone();
-        let input_df_schema =
-            Arc::new(DFSchema::try_from(input_schema.schema.as_ref().clone()).unwrap());
-        let logical_node = match &self.window_behavior {
+    fn build_post_aggregation(
+        agg_plan: &LogicalPlan,
+        window_spec: WindowBehavior,
+    ) -> Result<LogicalPlan> {
+        let ts_field: DFField = agg_plan
+            .inputs()
+            .first()
+            .ok_or_else(|| DataFusionError::Plan("Aggregate has no inputs".into()))?
+            .schema()
+            .qualified_field_with_unqualified_name(TIMESTAMP_FIELD)?
+            .into();
+
+        let plan_with_ts = LogicalPlan::Extension(Extension {
+            node: Arc::new(SystemTimestampInjectorNode::try_new(
+                agg_plan.clone(),
+                ts_field.qualifier().cloned(),
+            )?),
+        });
+
+        let (win_field, win_index, duration, is_nested) = match window_spec {
+            WindowBehavior::InData => return Ok(plan_with_ts),
             WindowBehavior::FromOperator {
                 window,
-                window_field: _,
-                window_index: _,
+                window_field,
+                window_index,
                 is_nested,
-            } => {
-                if *is_nested {
-                    self.instant_window_config(planner, index, input_df_schema, true)?
-                } else {
-                    match window {
-                        WindowType::Tumbling { width } => {
-                            self.tumbling_window_config(planner, index, input_df_schema, *width)?
-                        }
-                        WindowType::Sliding { width, slide } => self.sliding_window_config(
-                            planner,
-                            index,
-                            input_df_schema,
-                            *width,
-                            *slide,
-                        )?,
-                        WindowType::Instant => {
-                            return plan_err!(
-                                "instant window not supported in aggregate extension"
-                            );
-                        }
-                        WindowType::Session { gap: _ } => {
-                            self.session_window_config(planner, index, input_df_schema)?
-                        }
-                    }
+            } => match window {
+                WindowType::Tumbling { width } | WindowType::Sliding { width, .. } => {
+                    (window_field, window_index, width, is_nested)
                 }
-            }
-            WindowBehavior::InData => self
-                .instant_window_config(planner, index, input_df_schema, false)
-                .map_err(|e| e.context("instant window"))?,
+                WindowType::Session { .. } => {
+                    return Ok(LogicalPlan::Extension(Extension {
+                        node: Arc::new(InjectWindowFieldNode::try_new(
+                            plan_with_ts,
+                            window_field,
+                            window_index,
+                        )?),
+                    }));
+                }
+                WindowType::Instant => return Ok(plan_with_ts),
+            },
         };
-        let edge = LogicalEdge::project_all(LogicalEdgeType::Shuffle, (*input_schema).clone());
-        Ok(NodeWithIncomingEdges {
-            node: logical_node,
-            edges: vec![edge],
-        })
+
+        if is_nested {
+            return Self::build_nested_projection(plan_with_ts, win_field, win_index, duration);
+        }
+
+        let mut output_fields = fields_with_qualifiers(agg_plan.schema());
+        let mut projections: Vec<_> = output_fields
+            .iter()
+            .map(|f| Expr::Column(f.qualified_column()))
+            .collect();
+
+        let ts_col_expr = Expr::Column(Column::new(ts_field.qualifier().cloned(), ts_field.name()));
+
+        output_fields.insert(win_index, win_field.clone());
+
+        let win_func_expr = Expr::ScalarFunction(ScalarFunction {
+            func: window(),
+            args: vec![
+                ts_col_expr.clone(),
+                Expr::BinaryExpr(BinaryExpr {
+                    left: Box::new(ts_col_expr.clone()),
+                    op: logical_expr::Operator::Plus,
+                    right: Box::new(Self::interval_nanos(duration.as_nanos() as i64)),
+                }),
+            ],
+        });
+
+        projections.insert(
+            win_index,
+            win_func_expr.alias_qualified(win_field.qualifier().cloned(), win_field.name()),
+        );
+
+        output_fields.push(ts_field);
+
+        let bin_end_expr = Expr::BinaryExpr(BinaryExpr {
+            left: Box::new(ts_col_expr),
+            op: logical_expr::Operator::Plus,
+            right: Box::new(Self::interval_nanos((duration.as_nanos() - 1) as i64)),
+        });
+        projections.push(bin_end_expr);
+
+        Ok(LogicalPlan::Projection(logical_expr::Projection::try_new_with_schema(
+            projections,
+            Arc::new(plan_with_ts),
+            Arc::new(schema_from_df_fields(&output_fields)?),
+        )?))
     }
 
-    fn output_schema(&self) -> FsSchema {
-        let output_schema = (*self.schema).clone().into();
-        FsSchema::from_schema_keys(Arc::new(output_schema), vec![]).unwrap()
+    fn build_nested_projection(
+        plan: LogicalPlan,
+        win_field: DFField,
+        win_index: usize,
+        duration: Duration,
+    ) -> Result<LogicalPlan> {
+        let ts_field: DFField = plan
+            .schema()
+            .qualified_field_with_unqualified_name(TIMESTAMP_FIELD)?
+            .into();
+        let ts_col_expr = Expr::Column(Column::new(ts_field.qualifier().cloned(), ts_field.name()));
+
+        let mut output_fields = fields_with_qualifiers(plan.schema());
+        let mut projections: Vec<_> = output_fields
+            .iter()
+            .map(|f| Expr::Column(f.qualified_column()))
+            .collect();
+
+        output_fields.insert(win_index, win_field.clone());
+
+        let win_func_expr = Expr::ScalarFunction(ScalarFunction {
+            func: window(),
+            args: vec![
+                Expr::BinaryExpr(BinaryExpr {
+                    left: Box::new(ts_col_expr.clone()),
+                    op: logical_expr::Operator::Minus,
+                    right: Box::new(Self::interval_nanos(duration.as_nanos() as i64 - 1)),
+                }),
+                Expr::BinaryExpr(BinaryExpr {
+                    left: Box::new(ts_col_expr),
+                    op: logical_expr::Operator::Plus,
+                    right: Box::new(Self::interval_nanos(1)),
+                }),
+            ],
+        });
+
+        projections.insert(
+            win_index,
+            win_func_expr.alias_qualified(win_field.qualifier().cloned(), win_field.name()),
+        );
+
+        Ok(LogicalPlan::Projection(logical_expr::Projection::try_new_with_schema(
+            projections,
+            Arc::new(plan),
+            Arc::new(schema_from_df_fields(&output_fields)?),
+        )?))
     }
 }
 
-/*
-This is a plan used for appending a _timestamp field to an existing record batch.
- */
+// -----------------------------------------------------------------------------
+// Field injection node (session window column placement)
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct WindowAppendExtension {
-    pub(crate) input: LogicalPlan,
-    pub(crate) window_field: DFField,
-    pub(crate) window_index: usize,
-    pub(crate) schema: DFSchemaRef,
+struct InjectWindowFieldNode {
+    pub(crate) upstream_plan: LogicalPlan,
+    pub(crate) target_field: DFField,
+    pub(crate) insertion_index: usize,
+    pub(crate) new_schema: DFSchemaRef,
 }
 
-multifield_partial_ord!(WindowAppendExtension, input, window_index);
+multifield_partial_ord!(InjectWindowFieldNode, upstream_plan, insertion_index);
 
-impl WindowAppendExtension {
-    fn new(input: LogicalPlan, window_field: DFField, window_index: usize) -> Self {
-        let mut fields = fields_with_qualifiers(input.schema());
-        fields.insert(window_index, window_field.clone());
-        let metadata = input.schema().metadata().clone();
-        Self {
-            input,
-            window_field,
-            window_index,
-            schema: Arc::new(schema_from_df_fields_with_metadata(&fields, metadata).unwrap()),
-        }
+impl InjectWindowFieldNode {
+    fn try_new(
+        upstream_plan: LogicalPlan,
+        target_field: DFField,
+        insertion_index: usize,
+    ) -> Result<Self> {
+        let mut fields = fields_with_qualifiers(upstream_plan.schema());
+        fields.insert(insertion_index, target_field.clone());
+        let meta = upstream_plan.schema().metadata().clone();
+
+        Ok(Self {
+            upstream_plan,
+            target_field,
+            insertion_index,
+            new_schema: Arc::new(schema_from_df_fields_with_metadata(&fields, meta)?),
+        })
     }
 }
 
-impl UserDefinedLogicalNodeCore for WindowAppendExtension {
+impl UserDefinedLogicalNodeCore for InjectWindowFieldNode {
     fn name(&self) -> &str {
-        "WindowAppendExtension"
+        "InjectWindowFieldNode"
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.input]
+        vec![&self.upstream_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.new_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
@@ -592,16 +615,19 @@ impl UserDefinedLogicalNodeCore for WindowAppendExtension {
     fn fmt_for_explain(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "WindowAppendExtension: field {:?} at {}",
-            self.window_field, self.window_index
+            "InjectWindowField: insert {:?} at offset {}",
+            self.target_field, self.insertion_index
         )
     }
 
     fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
-        Ok(Self::new(
+        if inputs.len() != 1 {
+            return internal_err!("InjectWindowFieldNode expects exactly 1 input");
+        }
+        Self::try_new(
             inputs[0].clone(),
-            self.window_field.clone(),
-            self.window_index,
-        ))
+            self.target_field.clone(),
+            self.insertion_index,
+        )
     }
 }

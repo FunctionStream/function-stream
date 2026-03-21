@@ -10,18 +10,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod connector;
-pub mod connector_table;
-pub mod field_spec;
-pub mod insert;
-pub mod optimizer;
+pub mod column_descriptor;
+pub mod connection_type;
+pub mod source_table;
+pub mod data_encoding_format;
+pub mod schema_context;
 pub mod schema_provider;
 pub mod table;
+pub mod table_execution_unit;
+pub mod table_role;
+pub mod temporal_pipeline_config;
 pub mod utils;
 
-pub use connector::{ConnectionType};
-pub use connector_table::{ConnectorTable, SourceOperator};
-pub use field_spec::FieldSpec;
-pub use insert::Insert;
-pub use schema_provider::{LogicalBatchInput, StreamSchemaProvider, StreamTable};
+pub use column_descriptor::ColumnDescriptor;
+pub use connection_type::ConnectionType;
+pub use source_table::{SourceOperator, SourceTable};
+
+/// Back-compat alias for [`SourceTable`].
+pub type ConnectorTable = SourceTable;
+pub use data_encoding_format::DataEncodingFormat;
+pub use schema_context::{DfSchemaContext, SchemaContext};
+pub use schema_provider::{
+    FunctionCatalog, LogicalBatchInput, ObjectName, StreamPlanningContext,
+    StreamPlanningContextBuilder, StreamSchemaProvider, StreamTable, TableCatalog,
+};
 pub use table::Table;
+pub use table_execution_unit::{EngineDescriptor, SyncMode, TableExecutionUnit};
+pub use table_role::{
+    apply_adapter_specific_rules, deduce_role, serialize_backend_params, validate_adapter_availability,
+    TableRole,
+};
+pub use temporal_pipeline_config::{resolve_temporal_logic, TemporalPipelineConfig, TemporalSpec};

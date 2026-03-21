@@ -1,5 +1,5 @@
-use crate::sql::extensions::sink::SinkExtension;
-use crate::sql::extensions::{StreamExtension};
+use crate::sql::extensions::sink::StreamEgressNode;
+use crate::sql::extensions::StreamingOperatorBlueprint;
 use datafusion::common::Result as DFResult;
 use datafusion::common::tree_node::{Transformed, TreeNodeRecursion, TreeNodeRewriter};
 use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore};
@@ -29,8 +29,8 @@ impl TreeNodeRewriter for SinkInputRewriter<'_> {
 
     fn f_down(&mut self, node: Self::Node) -> DFResult<Transformed<Self::Node>> {
         if let LogicalPlan::Extension(extension) = &node {
-            if let Some(sink_node) = extension.node.as_any().downcast_ref::<SinkExtension>() {
-                if let Some(named_node) = sink_node.node_name() {
+            if let Some(sink_node) = extension.node.as_any().downcast_ref::<StreamEgressNode>() {
+                if let Some(named_node) = sink_node.operator_identity() {
                     if let Some(inputs) = self.sink_inputs.remove(&named_node) {
                         let new_node = LogicalPlan::Extension(Extension {
                             node: Arc::new(sink_node.with_exprs_and_inputs(vec![], inputs)?),

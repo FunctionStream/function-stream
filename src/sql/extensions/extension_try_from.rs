@@ -15,53 +15,53 @@ use std::sync::Arc;
 use datafusion::common::{DataFusionError, Result};
 use datafusion::logical_expr::UserDefinedLogicalNode;
 
-use crate::sql::extensions::aggregate::AggregateExtension;
-use crate::sql::extensions::async_udf::AsyncUDFExtension;
-use crate::sql::extensions::debezium::{DebeziumUnrollingExtension, ToDebeziumExtension};
-use crate::sql::extensions::join::JoinExtension;
-use crate::sql::extensions::key_calculation::KeyCalculationExtension;
-use crate::sql::extensions::lookup::LookupJoin;
-use crate::sql::extensions::projection::ProjectionExtension;
-use crate::sql::extensions::remote_table::RemoteTableExtension;
-use crate::sql::extensions::sink::SinkExtension;
-use crate::sql::extensions::stream_extension::StreamExtension;
-use crate::sql::extensions::table_source::TableSourceExtension;
-use crate::sql::extensions::updating_aggregate::UpdatingAggregateExtension;
-use crate::sql::extensions::watermark_node::WatermarkNode;
-use crate::sql::extensions::window_fn::WindowFunctionExtension;
+use crate::sql::extensions::aggregate::StreamWindowAggregateNode;
+use crate::sql::extensions::async_udf::AsyncFunctionExecutionNode;
+use crate::sql::extensions::debezium::{PackDebeziumEnvelopeNode, UnrollDebeziumPayloadNode};
+use crate::sql::extensions::join::StreamingJoinNode;
+use crate::sql::extensions::key_calculation::KeyExtractionNode;
+use crate::sql::extensions::lookup::StreamReferenceJoinNode;
+use crate::sql::extensions::projection::StreamProjectionNode;
+use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::extensions::sink::StreamEgressNode;
+use crate::sql::extensions::streaming_operator_blueprint::StreamingOperatorBlueprint;
+use crate::sql::extensions::table_source::StreamIngestionNode;
+use crate::sql::extensions::updating_aggregate::ContinuousAggregateNode;
+use crate::sql::extensions::watermark_node::EventTimeWatermarkNode;
+use crate::sql::extensions::windows_function::StreamingWindowFunctionNode;
 
-fn try_from_t<T: StreamExtension + 'static>(
+fn try_from_t<T: StreamingOperatorBlueprint + 'static>(
     node: &dyn UserDefinedLogicalNode,
-) -> std::result::Result<&dyn StreamExtension, ()> {
+) -> std::result::Result<&dyn StreamingOperatorBlueprint, ()> {
     node.as_any()
         .downcast_ref::<T>()
-        .map(|t| t as &dyn StreamExtension)
+        .map(|t| t as &dyn StreamingOperatorBlueprint)
         .ok_or(())
 }
 
-impl<'a> TryFrom<&'a dyn UserDefinedLogicalNode> for &'a dyn StreamExtension {
+impl<'a> TryFrom<&'a dyn UserDefinedLogicalNode> for &'a dyn StreamingOperatorBlueprint {
     type Error = DataFusionError;
 
     fn try_from(node: &'a dyn UserDefinedLogicalNode) -> Result<Self, Self::Error> {
-        try_from_t::<TableSourceExtension>(node)
-            .or_else(|_| try_from_t::<WatermarkNode>(node))
-            .or_else(|_| try_from_t::<SinkExtension>(node))
-            .or_else(|_| try_from_t::<KeyCalculationExtension>(node))
-            .or_else(|_| try_from_t::<AggregateExtension>(node))
-            .or_else(|_| try_from_t::<RemoteTableExtension>(node))
-            .or_else(|_| try_from_t::<JoinExtension>(node))
-            .or_else(|_| try_from_t::<WindowFunctionExtension>(node))
-            .or_else(|_| try_from_t::<AsyncUDFExtension>(node))
-            .or_else(|_| try_from_t::<ToDebeziumExtension>(node))
-            .or_else(|_| try_from_t::<DebeziumUnrollingExtension>(node))
-            .or_else(|_| try_from_t::<UpdatingAggregateExtension>(node))
-            .or_else(|_| try_from_t::<LookupJoin>(node))
-            .or_else(|_| try_from_t::<ProjectionExtension>(node))
+        try_from_t::<StreamIngestionNode>(node)
+            .or_else(|_| try_from_t::<EventTimeWatermarkNode>(node))
+            .or_else(|_| try_from_t::<StreamEgressNode>(node))
+            .or_else(|_| try_from_t::<KeyExtractionNode>(node))
+            .or_else(|_| try_from_t::<StreamWindowAggregateNode>(node))
+            .or_else(|_| try_from_t::<RemoteTableBoundaryNode>(node))
+            .or_else(|_| try_from_t::<StreamingJoinNode>(node))
+            .or_else(|_| try_from_t::<StreamingWindowFunctionNode>(node))
+            .or_else(|_| try_from_t::<AsyncFunctionExecutionNode>(node))
+            .or_else(|_| try_from_t::<PackDebeziumEnvelopeNode>(node))
+            .or_else(|_| try_from_t::<UnrollDebeziumPayloadNode>(node))
+            .or_else(|_| try_from_t::<ContinuousAggregateNode>(node))
+            .or_else(|_| try_from_t::<StreamReferenceJoinNode>(node))
+            .or_else(|_| try_from_t::<StreamProjectionNode>(node))
             .map_err(|_| DataFusionError::Plan(format!("unexpected node: {}", node.name())))
     }
 }
 
-impl<'a> TryFrom<&'a Arc<dyn UserDefinedLogicalNode>> for &'a dyn StreamExtension {
+impl<'a> TryFrom<&'a Arc<dyn UserDefinedLogicalNode>> for &'a dyn StreamingOperatorBlueprint {
     type Error = DataFusionError;
 
     fn try_from(node: &'a Arc<dyn UserDefinedLogicalNode>) -> Result<Self, Self::Error> {

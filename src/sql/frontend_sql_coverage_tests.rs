@@ -23,7 +23,7 @@ use crate::coordinator::Coordinator;
 use crate::sql::common::TIMESTAMP_FIELD;
 use crate::sql::parse::parse_sql;
 use crate::sql::rewrite_plan;
-use crate::sql::schema::optimizer::produce_optimized_plan;
+use crate::sql::logical_planner::optimizers::produce_optimized_plan;
 use crate::sql::schema::StreamSchemaProvider;
 
 fn assert_parses_as(sql: &str, type_prefix: &str) {

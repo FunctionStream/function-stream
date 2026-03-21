@@ -225,7 +225,7 @@ impl PlanVisitor for Executor {
     ) -> PlanVisitorResult {
         let result = (|| -> Result<ExecuteResult, ExecuteError> {
             let catalog_table =
-                CatalogTable::ConnectorTable(plan.connector_table.clone());
+                CatalogTable::ConnectorTable(plan.source_table.clone());
             let mut schema_provider = StreamSchemaProvider::new();
             schema_provider.insert_catalog_table(catalog_table.clone());
 

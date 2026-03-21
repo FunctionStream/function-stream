@@ -1,140 +1,231 @@
-use datafusion::common::{DFSchemaRef, Result, TableReference, internal_err};
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::fmt::Formatter;
+use std::sync::Arc;
+
+use datafusion::common::{DFSchemaRef, Result, TableReference, internal_err, plan_err};
 use datafusion::error::DataFusionError;
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use prost::Message;
-use std::fmt::Formatter;
-use std::sync::Arc;
 use protocol::grpc::api::ExpressionWatermarkConfig;
-use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
-use crate::multifield_partial_ord;
-use crate::sql::schema::utils::add_timestamp_field;
-use crate::sql::extensions::{NodeWithIncomingEdges, StreamExtension};
-use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::common::{FsSchema, FsSchemaRef};
 
-pub(crate) const WATERMARK_NODE_NAME: &str = "WatermarkNode";
+use crate::multifield_partial_ord;
+use crate::sql::common::{FsSchema, FsSchemaRef};
+use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
+use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use crate::sql::logical_planner::planner::{NamedNode, Planner};
+use crate::sql::schema::utils::add_timestamp_field;
+
+// -----------------------------------------------------------------------------
+// Constants & Identifiers
+// -----------------------------------------------------------------------------
+
+pub(crate) const EVENT_TIME_WATERMARK_NODE_NAME: &str = "EventTimeWatermarkNode";
+
+const INTERNAL_TIMESTAMP_COLUMN: &str = "_timestamp";
+
+const DEFAULT_WATERMARK_EMISSION_PERIOD_MICROS: u64 = 1_000_000;
+
+// -----------------------------------------------------------------------------
+// Logical Node Definition
+// -----------------------------------------------------------------------------
+
+/// Event-time watermark from a user strategy; drives time progress in stateful operators.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct WatermarkNode {
-    pub input: LogicalPlan,
-    pub qualifier: TableReference,
-    pub watermark_expression: Expr,
-    pub schema: DFSchemaRef,
-    timestamp_index: usize,
+pub(crate) struct EventTimeWatermarkNode {
+    pub(crate) upstream_plan: LogicalPlan,
+    pub(crate) namespace_qualifier: TableReference,
+    pub(crate) watermark_strategy_expr: Expr,
+    pub(crate) resolved_schema: DFSchemaRef,
+    pub(crate) internal_timestamp_offset: usize,
 }
 
 multifield_partial_ord!(
-    WatermarkNode,
-    input,
-    qualifier,
-    watermark_expression,
-    timestamp_index
+    EventTimeWatermarkNode,
+    upstream_plan,
+    namespace_qualifier,
+    watermark_strategy_expr,
+    internal_timestamp_offset
 );
 
-impl UserDefinedLogicalNodeCore for WatermarkNode {
+impl EventTimeWatermarkNode {
+    pub(crate) fn try_new(
+        upstream_plan: LogicalPlan,
+        namespace_qualifier: TableReference,
+        watermark_strategy_expr: Expr,
+    ) -> Result<Self> {
+        let resolved_schema = add_timestamp_field(
+            upstream_plan.schema().clone(),
+            Some(namespace_qualifier.clone()),
+        )?;
+
+        let internal_timestamp_offset = resolved_schema
+            .index_of_column_by_name(None, INTERNAL_TIMESTAMP_COLUMN)
+            .ok_or_else(|| {
+                DataFusionError::Plan(format!(
+                    "Fatal: Failed to resolve mandatory temporal column '{}'",
+                    INTERNAL_TIMESTAMP_COLUMN
+                ))
+            })?;
+
+        Ok(Self {
+            upstream_plan,
+            namespace_qualifier,
+            watermark_strategy_expr,
+            resolved_schema,
+            internal_timestamp_offset,
+        })
+    }
+
+    pub(crate) fn generate_fs_schema(&self) -> FsSchema {
+        FsSchema::new_unkeyed(
+            Arc::new(self.resolved_schema.as_ref().into()),
+            self.internal_timestamp_offset,
+        )
+    }
+
+    fn compile_operator_config(&self, planner: &Planner) -> Result<ExpressionWatermarkConfig> {
+        let physical_expr = planner.create_physical_expr(
+            &self.watermark_strategy_expr,
+            &self.resolved_schema,
+        )?;
+
+        let serialized_expr =
+            serialize_physical_expr(&physical_expr, &DefaultPhysicalExtensionCodec {})?;
+
+        Ok(ExpressionWatermarkConfig {
+            period_micros: DEFAULT_WATERMARK_EMISSION_PERIOD_MICROS,
+            idle_time_micros: None,
+            expression: serialized_expr.encode_to_vec(),
+            input_schema: Some(self.generate_fs_schema().into()),
+        })
+    }
+}
+
+// -----------------------------------------------------------------------------
+// DataFusion Logical Node Hooks
+// -----------------------------------------------------------------------------
+
+impl UserDefinedLogicalNodeCore for EventTimeWatermarkNode {
     fn name(&self) -> &str {
-        WATERMARK_NODE_NAME
+        EVENT_TIME_WATERMARK_NODE_NAME
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
-        vec![&self.input]
+        vec![&self.upstream_plan]
     }
 
     fn schema(&self) -> &DFSchemaRef {
-        &self.schema
+        &self.resolved_schema
     }
 
     fn expressions(&self) -> Vec<Expr> {
-        vec![self.watermark_expression.clone()]
+        vec![self.watermark_strategy_expr.clone()]
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "WatermarkNode({}): {}", self.qualifier, self.schema)
+        write!(
+            f,
+            "EventTimeWatermarkNode({}): Schema={}",
+            self.namespace_qualifier, self.resolved_schema
+        )
     }
 
-    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(
+        &self,
+        mut exprs: Vec<Expr>,
+        mut inputs: Vec<LogicalPlan>,
+    ) -> Result<Self> {
         if inputs.len() != 1 {
-            return internal_err!("input size inconsistent");
+            return internal_err!(
+                "EventTimeWatermarkNode requires exactly 1 upstream logical plan, but received {}",
+                inputs.len()
+            );
         }
         if exprs.len() != 1 {
-            return internal_err!("expected one expression; found {}", exprs.len());
+            return internal_err!(
+                "EventTimeWatermarkNode requires exactly 1 watermark strategy expression, but received {}",
+                exprs.len()
+            );
         }
 
-        let timestamp_index = self
-            .schema
-            .index_of_column_by_name(Some(&self.qualifier), "_timestamp")
-            .ok_or_else(|| DataFusionError::Plan("missing timestamp column".to_string()))?;
+        let internal_timestamp_offset = self
+            .resolved_schema
+            .index_of_column_by_name(Some(&self.namespace_qualifier), INTERNAL_TIMESTAMP_COLUMN)
+            .ok_or_else(|| {
+                DataFusionError::Plan(format!(
+                    "Optimizer Error: Lost tracking of temporal column '{}'",
+                    INTERNAL_TIMESTAMP_COLUMN
+                ))
+            })?;
 
         Ok(Self {
-            input: inputs[0].clone(),
-            qualifier: self.qualifier.clone(),
-            watermark_expression: exprs.into_iter().next().unwrap(),
-            schema: self.schema.clone(),
-            timestamp_index,
+            upstream_plan: inputs.remove(0),
+            namespace_qualifier: self.namespace_qualifier.clone(),
+            watermark_strategy_expr: exprs.remove(0),
+            resolved_schema: self.resolved_schema.clone(),
+            internal_timestamp_offset,
         })
     }
 }
 
-impl StreamExtension for WatermarkNode {
-    fn node_name(&self) -> Option<NamedNode> {
-        Some(NamedNode::Watermark(self.qualifier.clone()))
+// -----------------------------------------------------------------------------
+// Core Execution Blueprint Implementation
+// -----------------------------------------------------------------------------
+
+impl StreamingOperatorBlueprint for EventTimeWatermarkNode {
+    fn operator_identity(&self) -> Option<NamedNode> {
+        Some(NamedNode::Watermark(self.namespace_qualifier.clone()))
     }
 
-    fn plan_node(
+    fn compile_to_graph_node(
         &self,
         planner: &Planner,
-        index: usize,
-        input_schemas: Vec<FsSchemaRef>,
-    ) -> Result<NodeWithIncomingEdges> {
-        let expression = planner.create_physical_expr(&self.watermark_expression, &self.schema)?;
-        let expression = serialize_physical_expr(&expression, &DefaultPhysicalExtensionCodec {})?;
-        let node = LogicalNode::single(
-            index as u32,
-            format!("watermark_{index}"),
+        node_index: usize,
+        mut upstream_schemas: Vec<FsSchemaRef>,
+    ) -> Result<CompiledTopologyNode> {
+        if upstream_schemas.len() != 1 {
+            return plan_err!(
+                "Topology Violation: EventTimeWatermarkNode requires exactly 1 upstream input, received {}",
+                upstream_schemas.len()
+            );
+        }
+
+        let operator_config = self.compile_operator_config(planner)?;
+
+        let execution_unit = LogicalNode::single(
+            node_index as u32,
+            format!("watermark_{node_index}"),
             OperatorName::ExpressionWatermark,
-            ExpressionWatermarkConfig {
-                period_micros: 1_000_000,
-                idle_time_micros: None,
-                expression: expression.encode_to_vec(),
-                input_schema: Some(self.arroyo_schema().into()),
-            }
-                .encode_to_vec(),
-            "watermark".to_string(),
+            operator_config.encode_to_vec(),
+            "watermark_generator".to_string(),
             1,
         );
 
-        let incoming_edge =
-            LogicalEdge::project_all(LogicalEdgeType::Forward, input_schemas[0].as_ref().clone());
-        Ok(NodeWithIncomingEdges {
-            node,
-            edges: vec![incoming_edge],
-        })
-    }
-    fn output_schema(&self) -> FsSchema {
-        self.arroyo_schema()
-    }
-}
+        let incoming_edge = LogicalEdge::project_all(
+            LogicalEdgeType::Forward,
+            (*upstream_schemas.remove(0)).clone(),
+        );
 
-impl WatermarkNode {
-    pub(crate) fn new(
-        input: LogicalPlan,
-        qualifier: TableReference,
-        watermark_expression: Expr,
-    ) -> Result<Self> {
-        let schema = add_timestamp_field(input.schema().clone(), Some(qualifier.clone()))?;
-        let timestamp_index = schema
-            .index_of_column_by_name(None, "_timestamp")
-            .ok_or_else(|| DataFusionError::Plan("missing _timestamp column".to_string()))?;
-        Ok(Self {
-            input,
-            qualifier,
-            watermark_expression,
-            schema,
-            timestamp_index,
+        Ok(CompiledTopologyNode {
+            execution_unit,
+            routing_edges: vec![incoming_edge],
         })
     }
-    pub(crate) fn arroyo_schema(&self) -> FsSchema {
-        FsSchema::new_unkeyed(Arc::new(self.schema.as_ref().into()), self.timestamp_index)
+
+    fn yielded_schema(&self) -> FsSchema {
+        self.generate_fs_schema()
     }
 }

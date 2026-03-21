@@ -16,11 +16,13 @@
 //! analogous to `arroyo-types` + `arroyo-rpc` in Arroyo.
 
 pub mod arrow_ext;
+pub mod connector_options;
 pub mod control;
 pub mod date;
 pub mod debezium;
 pub mod fs_schema;
 pub mod errors;
+pub mod format_from_opts;
 pub mod formats;
 pub mod hash;
 pub mod message;
@@ -46,8 +48,9 @@ pub use control::{
     ErrorDomain, RetryHint, StopMode, TaskCheckpointEventType, TaskError,
 };
 pub use fs_schema::{FsSchema, FsSchemaRef};
+pub use connector_options::{ConnectorOptions, FromOpts};
 pub use errors::DataflowError;
-pub use formats::{BadData, Format, Framing, JsonFormat};
+pub use formats::{BadData, Format, Framing, JsonCompression, JsonFormat};
 pub use operator_config::{MetadataField, OperatorConfig, RateLimit};
 
 // ── Well-known column names ──

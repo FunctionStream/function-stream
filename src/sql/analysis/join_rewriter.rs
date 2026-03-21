@@ -1,6 +1,6 @@
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::extensions::join::JoinExtension;
-use crate::sql::extensions::key_calculation::KeyCalculationExtension;
+use crate::sql::extensions::join::StreamingJoinNode;
+use crate::sql::extensions::key_calculation::KeyExtractionNode;
 use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
 use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields_with_metadata};
 use crate::sql::common::TIMESTAMP_FIELD;
@@ -62,7 +62,7 @@ impl<'a> JoinRewriter<'a> {
         }
     }
 
-    /// [Internal] Wraps a join input in a KeyCalculation layer to facilitate Shuffle/KeyBy distribution.
+    /// [Internal] Wraps a join input in a key-extraction layer to facilitate shuffle / key-by distribution.
     fn build_keyed_side(
         &self,
         input: Arc<LogicalPlan>,
@@ -85,11 +85,11 @@ impl<'a> JoinRewriter<'a> {
             .collect();
 
         let projection = Projection::try_new(projection_exprs, input)?;
-        let key_ext = KeyCalculationExtension::new_named_and_trimmed(
+        let key_ext = KeyExtractionNode::try_new_with_projection(
             LogicalPlan::Projection(projection),
             (0..key_count).collect(),
             side.to_string(),
-        );
+        )?;
 
         Ok(LogicalPlan::Extension(Extension {
             node: Arc::new(key_ext),
@@ -209,13 +209,13 @@ impl TreeNodeRewriter for JoinRewriter<'_> {
         // 4. Resolve Output Watermark (Timestamp Projection)
         let plan_with_timestamp = self.apply_timestamp_resolution(rewritten_join)?;
 
-        // 5. Wrap in JoinExtension for Physical Planning
-        let ttl = (!is_instant).then_some(self.schema_provider.planning_options.ttl);
-        let extension = JoinExtension {
-            rewritten_join: plan_with_timestamp,
+        // 5. Wrap in StreamingJoinNode for physical planning
+        let state_retention_ttl = (!is_instant).then_some(self.schema_provider.planning_options.ttl);
+        let extension = StreamingJoinNode::new(
+            plan_with_timestamp,
             is_instant,
-            ttl,
-        };
+            state_retention_ttl,
+        );
 
         Ok(Transformed::yes(LogicalPlan::Extension(Extension {
             node: Arc::new(extension),

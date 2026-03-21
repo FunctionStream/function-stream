@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-use crate::sql::schema::connector_table::ConnectorTable;
+use crate::sql::schema::source_table::SourceTable;
 use datafusion::logical_expr::LogicalPlan;
 
 /// Plan node representing a fully resolved streaming table (DDL).
@@ -19,7 +19,7 @@ use datafusion::logical_expr::LogicalPlan;
 pub struct StreamingTable {
     pub name: String,
     pub comment: Option<String>,
-    pub connector_table: ConnectorTable,
+    pub source_table: SourceTable,
     pub logical_plan: LogicalPlan,
 }
 

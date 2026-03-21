@@ -10,18 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::schema::source_table::SourceTable;
+//! Logical planner optimizers: graph-level chaining ([`ChainingOptimizer`]) and
+//! DataFusion SQL logical-plan rules ([`produce_optimized_plan`]).
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
+mod chaining;
+mod datafusion_logical;
 
-/// Plan node that exposes a connector table config as a logical plan input.
-#[derive(Debug)]
-pub struct StreamingTableConnectorPlan {
-    pub table: SourceTable,
-}
-
-impl PlanNode for StreamingTableConnectorPlan {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_connector_table(self, context)
-    }
-}
+pub use chaining::ChainingOptimizer;
+pub use datafusion_logical::produce_optimized_plan;
