@@ -14,31 +14,28 @@ use datafusion::sql::sqlparser::ast::Statement as DFStatement;
 
 use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
 
-/// Represents a CREATE TABLE or CREATE VIEW statement.
-///
-/// This wraps the raw SQL AST node so the coordinator pipeline can
-/// distinguish table/view creation from other streaming SQL operations.
-#[derive(Debug)]
-pub struct CreateTable {
+/// `DROP TABLE` / `DROP TABLE IF EXISTS` (and `DROP STREAMING TABLE`, normalized at parse time).
+#[derive(Debug, Clone)]
+pub struct DropTableStatement {
     pub statement: DFStatement,
 }
 
-impl CreateTable {
+impl DropTableStatement {
     pub fn new(statement: DFStatement) -> Self {
         Self { statement }
     }
 }
 
-impl Statement for CreateTable {
+impl Statement for DropTableStatement {
     fn accept(
         &self,
         visitor: &dyn StatementVisitor,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        visitor.visit_create_table(self, context)
+        visitor.visit_drop_table_statement(self, context)
     }
 
-    fn as_create_table(&self) -> Option<&CreateTable> {
+    fn as_drop_table_statement(&self) -> Option<&DropTableStatement> {
         Some(self)
     }
 }

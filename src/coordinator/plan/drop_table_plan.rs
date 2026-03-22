@@ -10,16 +10,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Task Storage module
-//!
-//! Provides storage interface and implementation for task information.
+use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
-pub mod factory;
-mod function_info;
-mod proto_codec;
-mod rocksdb_storage;
-pub mod storage;
+#[derive(Debug, Clone)]
+pub struct DropTablePlan {
+    pub table_name: String,
+    pub if_exists: bool,
+}
 
-pub use factory::TaskStorageFactory;
-pub use function_info::FunctionInfo;
-pub use storage::{StoredTaskInfo, TaskModuleBytes, TaskStorage};
+impl DropTablePlan {
+    pub fn new(table_name: String, if_exists: bool) -> Self {
+        Self {
+            table_name,
+            if_exists,
+        }
+    }
+}
+
+impl PlanNode for DropTablePlan {
+    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
+        visitor.visit_drop_table_plan(self, context)
+    }
+}

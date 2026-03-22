@@ -37,4 +37,8 @@ impl Statement for StreamingTableStatement {
     ) -> StatementVisitorResult {
         visitor.visit_streaming_table_statement(self, context)
     }
+
+    fn as_streaming_table_statement(&self) -> Option<&StreamingTableStatement> {
+        Some(self)
+    }
 }

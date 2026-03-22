@@ -1,0 +1,91 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+//
+// All durable / persisted payloads for FunctionStream (single source of truth for storage wire format).
+// - Stream table catalog (MetaStore KV)
+// - Task rows (RocksDB task_meta / task_payload; values may be prefixed — see runtime codec)
+
+syntax = "proto3";
+
+package function_stream.storage;
+
+// =============================================================================
+// Stream catalog (coordinator stream tables: source / sink / memory)
+// =============================================================================
+
+// Top-level persisted record for one stream table.
+message TableDefinition {
+  string table_name = 1;
+  int64 updated_at_millis = 2;
+  oneof table_type {
+    StreamSource source = 3;
+    StreamSink sink = 4;
+    StreamMemory memory = 5;
+  }
+}
+
+message StreamSource {
+  bytes arrow_schema_ipc = 1;
+  optional string event_time_field = 2;
+  optional string watermark_field = 3;
+}
+
+message StreamSink {
+  bytes arrow_schema_ipc = 1;
+}
+
+message StreamMemory {
+  optional bytes logical_plan_bytes = 1;
+}
+
+// =============================================================================
+// Task storage (RocksDB metadata + module payload)
+// =============================================================================
+
+// Lifecycle state persisted for task recovery. New enum values MUST be appended
+// with new numbers (never renumber) for forward compatibility.
+enum ComponentStateKind {
+  COMPONENT_STATE_KIND_UNSPECIFIED = 0;
+  UNINITIALIZED = 1;
+  INITIALIZED = 2;
+  STARTING = 3;
+  RUNNING = 4;
+  CHECKPOINTING = 5;
+  STOPPING = 6;
+  STOPPED = 7;
+  CLOSING = 8;
+  CLOSED = 9;
+  ERROR = 10;
+}
+
+message ComponentStateProto {
+  ComponentStateKind kind = 1;
+  // Set when kind == ERROR
+  string error_message = 2;
+}
+
+// Stored in CF task_meta (after magic prefix FSP1).
+message TaskMetadataProto {
+  string task_type = 1;
+  ComponentStateProto state = 2;
+  uint64 created_at = 3;
+  optional uint64 checkpoint_id = 4;
+}
+
+message TaskModuleWasm {
+  bytes wasm_binary = 1;
+}
+
+message TaskModulePython {
+  string class_name = 1;
+  string module_path = 2;
+  optional bytes embedded_code = 3;
+}
+
+// Stored in CF task_payload (after magic prefix FSP1).
+message TaskModulePayloadProto {
+  oneof payload {
+    TaskModuleWasm wasm = 1;
+    TaskModulePython python = 2;
+  }
+}

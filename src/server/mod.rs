@@ -17,5 +17,5 @@ mod initializer;
 mod service;
 
 pub use handler::FunctionStreamServiceImpl;
-pub use initializer::register_components;
+pub use initializer::{bootstrap_system, build_core_registry};
 pub use service::start_server_with_shutdown;

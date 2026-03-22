@@ -14,6 +14,7 @@ mod create_function_plan;
 mod create_python_function_plan;
 mod create_table_plan;
 mod drop_function_plan;
+mod drop_table_plan;
 mod logical_plan_visitor;
 mod lookup_table_plan;
 mod optimizer;
@@ -26,8 +27,9 @@ mod visitor;
 
 pub use create_function_plan::CreateFunctionPlan;
 pub use create_python_function_plan::CreatePythonFunctionPlan;
-pub use create_table_plan::CreateTablePlan;
+pub use create_table_plan::{CreateTablePlan, CreateTablePlanBody};
 pub use drop_function_plan::DropFunctionPlan;
+pub use drop_table_plan::DropTablePlan;
 pub use logical_plan_visitor::LogicalPlanVisitor;
 pub use lookup_table_plan::LookupTablePlan;
 pub use optimizer::LogicalPlanner;

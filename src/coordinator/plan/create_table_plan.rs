@@ -12,16 +12,39 @@
 
 use datafusion::logical_expr::LogicalPlan;
 
+use crate::sql::schema::SourceTable;
+
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
-#[derive(Debug)]
+/// Payload for [`CreateTablePlan`]: either a DataFusion DDL plan or a connector `CREATE TABLE` (no `AS SELECT`).
+#[derive(Debug, Clone)]
+pub enum CreateTablePlanBody {
+    DataFusion(LogicalPlan),
+    ConnectorSource {
+        source_table: SourceTable,
+        if_not_exists: bool,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub struct CreateTablePlan {
-    pub logical_plan: LogicalPlan,
+    pub body: CreateTablePlanBody,
 }
 
 impl CreateTablePlan {
     pub fn new(logical_plan: LogicalPlan) -> Self {
-        Self { logical_plan }
+        Self {
+            body: CreateTablePlanBody::DataFusion(logical_plan),
+        }
+    }
+
+    pub fn connector_source(source_table: SourceTable, if_not_exists: bool) -> Self {
+        Self {
+            body: CreateTablePlanBody::ConnectorSource {
+                source_table,
+                if_not_exists,
+            },
+        }
     }
 }
 

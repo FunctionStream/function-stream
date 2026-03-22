@@ -11,8 +11,8 @@
 // limitations under the License.
 
 use super::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, ShowFunctions, StartFunction,
-    StopFunction, StreamingTableStatement,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropTableStatement,
+    ShowFunctions, StartFunction, StopFunction, StreamingTableStatement,
 };
 use crate::coordinator::plan::PlanNode;
 use crate::coordinator::statement::Statement;
@@ -98,6 +98,12 @@ pub trait StatementVisitor {
     fn visit_streaming_table_statement(
         &self,
         stmt: &StreamingTableStatement,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_drop_table_statement(
+        &self,
+        stmt: &DropTableStatement,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 }

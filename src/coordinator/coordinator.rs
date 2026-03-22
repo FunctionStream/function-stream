@@ -10,252 +10,248 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
 
-use crate::coordinator::analyze::{Analysis, Analyzer};
+use crate::coordinator::analyze::Analyzer;
 use crate::coordinator::dataset::ExecuteResult;
 use crate::coordinator::execution::Executor;
 use crate::coordinator::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
 use crate::coordinator::statement::Statement;
-use crate::runtime::taskexecutor::TaskManager;
 use crate::sql::schema::StreamSchemaProvider;
 
 use super::execution_context::ExecutionContext;
+use super::runtime_context::CoordinatorRuntimeContext;
 
+#[derive(Default)]
 pub struct Coordinator {}
-
-impl Default for Coordinator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl Coordinator {
     pub fn new() -> Self {
         Self {}
     }
 
+    // ========================================================================
+    // Plan compilation
+    // ========================================================================
+
     pub fn compile_plan(
         &self,
         stmt: &dyn Statement,
         schema_provider: StreamSchemaProvider,
-    ) -> Result<Box<dyn PlanNode>, anyhow::Error> {
-        let context = ExecutionContext::new();
-        let analysis = self.step_analyze(&context, stmt)?;
-        let plan = self.step_build_logical_plan(&analysis, schema_provider)?;
-        self.step_optimize(&analysis, plan)
+    ) -> Result<Box<dyn PlanNode>> {
+        self.compile_plan_internal(&ExecutionContext::new(), stmt, schema_provider)
     }
 
-    /// Same as [`Self::execute`], but uses the provided catalog / stream tables (e.g. tests).
-    pub fn execute_with_schema_provider(
+    /// Internal pipeline: Analyze → build logical plan → optimize.
+    fn compile_plan_internal(
         &self,
+        context: &ExecutionContext,
         stmt: &dyn Statement,
         schema_provider: StreamSchemaProvider,
-    ) -> ExecuteResult {
-        let start_time = Instant::now();
-        let context = ExecutionContext::new();
-        let execution_id = context.execution_id;
+    ) -> Result<Box<dyn PlanNode>> {
+        let exec_id = context.execution_id;
+        let start = Instant::now();
 
-        match self.execute_pipeline(&context, stmt, schema_provider) {
-            Ok(result) => {
+        let analysis = Analyzer::new(context)
+            .analyze(stmt)
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("Analyzer phase failed")?;
+        log::debug!(
+            "[{}] Analyze phase finished in {}ms",
+            exec_id,
+            start.elapsed().as_millis()
+        );
+
+        let plan = LogicalPlanVisitor::new(schema_provider).visit(&analysis);
+
+        let opt_start = Instant::now();
+        let optimized = LogicalPlanner::new().optimize(plan, &analysis);
+        log::debug!(
+            "[{}] Optimizer phase finished in {}ms",
+            exec_id,
+            opt_start.elapsed().as_millis()
+        );
+
+        Ok(optimized)
+    }
+
+    // ========================================================================
+    // Execution
+    // ========================================================================
+
+    pub fn execute(&self, stmt: &dyn Statement) -> ExecuteResult {
+        match CoordinatorRuntimeContext::try_from_globals() {
+            Ok(ctx) => self.execute_with_runtime_context(stmt, &ctx),
+            Err(e) => ExecuteResult::err(e.to_string()),
+        }
+    }
+
+    pub async fn execute_with_stream_catalog(&self, stmt: &dyn Statement) -> ExecuteResult {
+        self.execute(stmt)
+    }
+
+    /// Same as [`Self::execute`], but uses an explicit [`CoordinatorRuntimeContext`] (e.g. tests or custom wiring).
+    pub fn execute_with_runtime_context(
+        &self,
+        stmt: &dyn Statement,
+        runtime: &CoordinatorRuntimeContext,
+    ) -> ExecuteResult {
+        let start = Instant::now();
+        let context = ExecutionContext::new();
+        let exec_id = context.execution_id;
+        let schema_provider = runtime.planning_schema_provider();
+
+        let result = (|| -> Result<ExecuteResult> {
+            let plan = self.compile_plan_internal(&context, stmt, schema_provider)?;
+
+            let exec_start = Instant::now();
+            let res = Executor::new(
+                Arc::clone(&runtime.task_manager),
+                runtime.catalog_manager.clone(),
+            )
+            .execute(plan.as_ref())
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("Executor phase failed")?;
+
+            log::debug!(
+                "[{}] Executor phase finished in {}ms",
+                exec_id,
+                exec_start.elapsed().as_millis()
+            );
+            Ok(res)
+        })();
+
+        match result {
+            Ok(res) => {
                 log::debug!(
                     "[{}] Execution completed in {}ms",
-                    execution_id,
-                    start_time.elapsed().as_millis()
+                    exec_id,
+                    start.elapsed().as_millis()
                 );
-                result
+                res
             }
             Err(e) => {
                 log::error!(
                     "[{}] Execution failed after {}ms. Error: {:#}",
-                    execution_id,
-                    start_time.elapsed().as_millis(),
+                    exec_id,
+                    start.elapsed().as_millis(),
                     e
                 );
                 ExecuteResult::err(format!("Execution failed: {:#}", e))
             }
         }
     }
+}
 
-    pub fn execute(&self, stmt: &dyn Statement) -> ExecuteResult {
-        self.execute_with_schema_provider(stmt, StreamSchemaProvider::new())
-    }
+// ---------------------------------------------------------------------------
+// Test-only helpers (used by `create_streaming_table_coordinator_tests` below)
+// ---------------------------------------------------------------------------
 
-    fn execute_pipeline(
-        &self,
-        context: &ExecutionContext,
-        stmt: &dyn Statement,
-        schema_provider: StreamSchemaProvider,
-    ) -> Result<ExecuteResult> {
-        let analysis = self.step_analyze(context, stmt)?;
-        let plan = self.step_build_logical_plan(&analysis, schema_provider)?;
-        let optimized_plan = self.step_optimize(&analysis, plan)?;
-        self.step_execute(optimized_plan)
-    }
+#[cfg(test)]
+use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 
-    fn step_analyze(&self, context: &ExecutionContext, stmt: &dyn Statement) -> Result<Analysis> {
-        let start = Instant::now();
-        let analyzer = Analyzer::new(context);
-        let result = analyzer
-            .analyze(stmt)
-            .map_err(|e| anyhow::anyhow!(e))
-            .context("Analyzer phase failed");
+#[cfg(test)]
+use crate::sql::common::TIMESTAMP_FIELD;
+#[cfg(test)]
+use crate::sql::parse::parse_sql;
 
-        log::debug!(
-            "[{}] Analyze phase finished in {}ms",
-            context.execution_id,
-            start.elapsed().as_millis()
-        );
-        result
-    }
+#[cfg(test)]
+fn fake_stream_schema_provider() -> StreamSchemaProvider {
+    let mut provider = StreamSchemaProvider::new();
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Int64, false),
+        Field::new(
+            TIMESTAMP_FIELD,
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            false,
+        ),
+    ]));
+    provider.add_source_table(
+        "src".to_string(),
+        schema,
+        Some(TIMESTAMP_FIELD.to_string()),
+        None,
+    );
+    provider
+}
 
-    fn step_build_logical_plan(
-        &self,
-        analysis: &Analysis,
-        schema_provider: StreamSchemaProvider,
-    ) -> Result<Box<dyn PlanNode>> {
-        let visitor = LogicalPlanVisitor::new(schema_provider);
-        let plan = visitor.visit(analysis);
-        Ok(plan)
-    }
+#[cfg(test)]
+fn fake_stream_schema_provider_with_v() -> StreamSchemaProvider {
+    let mut provider = StreamSchemaProvider::new();
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Int64, false),
+        Field::new("v", DataType::Utf8, true),
+        Field::new(
+            TIMESTAMP_FIELD,
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            false,
+        ),
+    ]));
+    provider.add_source_table(
+        "src".to_string(),
+        schema,
+        Some(TIMESTAMP_FIELD.to_string()),
+        None,
+    );
+    provider
+}
 
-    fn step_optimize(
-        &self,
-        analysis: &Analysis,
-        plan: Box<dyn PlanNode>,
-    ) -> Result<Box<dyn PlanNode>> {
-        let start = Instant::now();
-        let planner = LogicalPlanner::new();
-        let optimized = planner.optimize(plan, analysis);
+#[cfg(test)]
+fn fake_src_dim_provider() -> StreamSchemaProvider {
+    let mut provider = fake_stream_schema_provider_with_v();
+    let dim = Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Int64, false),
+        Field::new("name", DataType::Utf8, true),
+        Field::new("amt", DataType::Float64, true),
+        Field::new(
+            TIMESTAMP_FIELD,
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            false,
+        ),
+    ]));
+    provider.add_source_table(
+        "dim".to_string(),
+        dim,
+        Some(TIMESTAMP_FIELD.to_string()),
+        None,
+    );
+    provider
+}
 
-        log::debug!(
-            "Optimizer phase finished in {}ms",
-            start.elapsed().as_millis()
-        );
-        Ok(optimized)
-    }
-
-    fn step_execute(&self, plan: Box<dyn PlanNode>) -> Result<ExecuteResult> {
-        let start = Instant::now();
-        let task_manager = match TaskManager::get() {
-            Ok(tm) => tm,
-            Err(e) => {
-                return Ok(ExecuteResult::err(format!(
-                    "Failed to get TaskManager: {}",
-                    e
-                )));
-            }
-        };
-        let executor = Executor::new(task_manager.clone());
-        let result = executor
-            .execute(plan.as_ref())
-            .map_err(|e| anyhow::anyhow!(e))
-            .context("Executor phase failed");
-
-        log::debug!(
-            "Executor phase finished in {}ms",
-            start.elapsed().as_millis()
-        );
-        result
-    }
+#[cfg(test)]
+fn assert_coordinator_streaming_build_ok(
+    sql: &str,
+    provider: StreamSchemaProvider,
+    expect_sink_substring: &str,
+    expect_connector_substring: &str,
+) {
+    let stmts = parse_sql(sql).unwrap_or_else(|e| panic!("parse {sql:?}: {e}"));
+    assert_eq!(stmts.len(), 1);
+    let plan = Coordinator::new()
+        .compile_plan(stmts[0].as_ref(), provider)
+        .unwrap_or_else(|e| panic!("compile_plan {sql:?}: {e:#}"));
+    let rendered = format!("{plan:?}");
+    assert!(rendered.contains("StreamingTable"), "{rendered}");
+    assert!(
+        rendered.contains(expect_sink_substring),
+        "expected sink name fragment {expect_sink_substring:?} in:\n{rendered}"
+    );
+    assert!(
+        rendered.contains(expect_connector_substring),
+        "expected connector fragment {expect_connector_substring:?} in:\n{rendered}"
+    );
 }
 
 #[cfg(test)]
 mod create_streaming_table_coordinator_tests {
-    use std::sync::Arc;
-
-    use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
-
+    use super::{
+        assert_coordinator_streaming_build_ok, fake_src_dim_provider,
+        fake_stream_schema_provider, fake_stream_schema_provider_with_v,
+    };
     use crate::sql::common::TIMESTAMP_FIELD;
-    use crate::sql::parse::parse_sql;
-    use crate::sql::schema::StreamSchemaProvider;
-
-    use super::Coordinator;
-
-    fn fake_stream_schema_provider() -> StreamSchemaProvider {
-        let mut provider = StreamSchemaProvider::new();
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int64, false),
-            Field::new(
-                TIMESTAMP_FIELD,
-                DataType::Timestamp(TimeUnit::Nanosecond, None),
-                false,
-            ),
-        ]));
-        provider.add_source_table(
-            "src".to_string(),
-            schema,
-            Some(TIMESTAMP_FIELD.to_string()),
-            None,
-        );
-        provider
-    }
-
-    fn fake_stream_schema_provider_with_v() -> StreamSchemaProvider {
-        let mut provider = StreamSchemaProvider::new();
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int64, false),
-            Field::new("v", DataType::Utf8, true),
-            Field::new(
-                TIMESTAMP_FIELD,
-                DataType::Timestamp(TimeUnit::Nanosecond, None),
-                false,
-            ),
-        ]));
-        provider.add_source_table(
-            "src".to_string(),
-            schema,
-            Some(TIMESTAMP_FIELD.to_string()),
-            None,
-        );
-        provider
-    }
-
-    fn fake_src_dim_provider() -> StreamSchemaProvider {
-        let mut provider = fake_stream_schema_provider_with_v();
-        let dim = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int64, false),
-            Field::new("name", DataType::Utf8, true),
-            Field::new("amt", DataType::Float64, true),
-            Field::new(
-                TIMESTAMP_FIELD,
-                DataType::Timestamp(TimeUnit::Nanosecond, None),
-                false,
-            ),
-        ]));
-        provider.add_source_table(
-            "dim".to_string(),
-            dim,
-            Some(TIMESTAMP_FIELD.to_string()),
-            None,
-        );
-        provider
-    }
-
-    fn assert_coordinator_streaming_build_ok(
-        sql: &str,
-        provider: StreamSchemaProvider,
-        expect_sink_substring: &str,
-        expect_connector_substring: &str,
-    ) {
-        let stmts = parse_sql(sql).unwrap_or_else(|e| panic!("parse {sql:?}: {e}"));
-        assert_eq!(stmts.len(), 1);
-        let plan = Coordinator::new()
-            .compile_plan(stmts[0].as_ref(), provider)
-            .unwrap_or_else(|e| panic!("compile_plan {sql:?}: {e:#}"));
-        let rendered = format!("{plan:?}");
-        assert!(rendered.contains("StreamingTable"), "{rendered}");
-        assert!(
-            rendered.contains(expect_sink_substring),
-            "expected sink name fragment {expect_sink_substring:?} in:\n{rendered}"
-        );
-        assert!(
-            rendered.contains(expect_connector_substring),
-            "expected connector fragment {expect_connector_substring:?} in:\n{rendered}"
-        );
-    }
 
     #[test]
     fn coordinator_build_create_streaming_table_select_star_kafka() {
@@ -333,7 +329,12 @@ mod create_streaming_table_coordinator_tests {
             let sql = format!(
                 "CREATE STREAMING TABLE sink_w_{label} WITH ('connector'='kafka') AS {body}"
             );
-            assert_coordinator_streaming_build_ok(&sql, p.clone(), &format!("sink_w_{label}"), "kafka");
+            assert_coordinator_streaming_build_ok(
+                &sql,
+                p.clone(),
+                &format!("sink_w_{label}"),
+                "kafka",
+            );
         }
     }
 

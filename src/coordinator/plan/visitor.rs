@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use super::{
-    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
+    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan, DropTablePlan,
     LookupTablePlan, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
     StreamingTableConnectorPlan,
 };
@@ -107,6 +107,12 @@ pub trait PlanVisitor {
     fn visit_streaming_connector_table(
         &self,
         plan: &StreamingTableConnectorPlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_drop_table_plan(
+        &self,
+        plan: &DropTablePlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 }

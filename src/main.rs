@@ -179,9 +179,7 @@ fn main() -> Result<()> {
     );
 
     // 2. Component Initialization
-    let registry = server::register_components();
-    registry
-        .initialize_all(&config)
+    server::bootstrap_system(&config)
         .context("Component initialization failed")?;
 
     // 3. Server Startup

@@ -14,6 +14,7 @@ mod create_function;
 mod create_python_function;
 mod create_table;
 mod drop_function;
+mod drop_table;
 mod show_functions;
 mod start_function;
 mod stop_function;
@@ -24,6 +25,7 @@ pub use create_function::{ConfigSource, CreateFunction, FunctionSource};
 pub use create_python_function::{CreatePythonFunction, PythonModule};
 pub use create_table::CreateTable;
 pub use drop_function::DropFunction;
+pub use drop_table::DropTableStatement;
 pub use show_functions::ShowFunctions;
 pub use start_function::StartFunction;
 pub use stop_function::StopFunction;
@@ -38,4 +40,16 @@ pub trait Statement: fmt::Debug + Send + Sync {
         visitor: &dyn StatementVisitor,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
+
+    fn as_create_table(&self) -> Option<&CreateTable> {
+        None
+    }
+
+    fn as_drop_table_statement(&self) -> Option<&DropTableStatement> {
+        None
+    }
+
+    fn as_streaming_table_statement(&self) -> Option<&StreamingTableStatement> {
+        None
+    }
 }

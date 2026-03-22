@@ -39,7 +39,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_server(true)
         .compile_protos(&["proto/function_stream.proto"], &["proto"])?;
 
-    // 2. fs_api.proto → with file descriptor set + serde for REST/JSON
     let api_dir = out_dir.join("api");
     std::fs::create_dir_all(&api_dir)?;
 
@@ -56,10 +55,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_server(false)
         .compile_protos(&["proto/fs_api.proto"], &["proto"])?;
 
+    let storage_dir = out_dir.join("storage");
+    std::fs::create_dir_all(&storage_dir)?;
+    tonic_build::configure()
+        .out_dir(&storage_dir)
+        .protoc_arg("--experimental_allow_proto3_optional")
+        .build_client(false)
+        .build_server(false)
+        .compile_protos(&["proto/storage.proto"], &["proto"])?;
+
     log::info!("Protocol Buffers code generated successfully");
     println!("cargo:rustc-env=PROTO_GEN_DIR={}", out_dir.display());
     println!("cargo:rerun-if-changed=proto/function_stream.proto");
     println!("cargo:rerun-if-changed=proto/fs_api.proto");
+    println!("cargo:rerun-if-changed=proto/storage.proto");
 
     Ok(())
 }

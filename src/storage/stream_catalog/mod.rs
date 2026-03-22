@@ -10,16 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Task Storage module
-//!
-//! Provides storage interface and implementation for task information.
+//! Stream table catalog: protobuf persistence, MVCC-style planning snapshots for the coordinator.
 
-pub mod factory;
-mod function_info;
-mod proto_codec;
-mod rocksdb_storage;
-pub mod storage;
+mod codec;
+mod manager;
+mod meta_store;
 
-pub use factory::TaskStorageFactory;
-pub use function_info::FunctionInfo;
-pub use storage::{StoredTaskInfo, TaskModuleBytes, TaskStorage};
+pub use manager::{
+    CatalogManager, initialize_stream_catalog, planning_schema_provider,
+    restore_global_catalog_from_store,
+};
+pub use meta_store::{InMemoryMetaStore, MetaStore};

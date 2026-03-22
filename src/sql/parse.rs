@@ -14,8 +14,11 @@
 //!
 //! **Data-definition / pipeline shape (this entry point)**  
 //! Only these table-related forms are supported:
-//! - **`CREATE TABLE ...`** (including `CREATE TABLE ... AS SELECT` where the planner accepts it)
+//! - **`CREATE TABLE ... (cols [, WATERMARK FOR ...]) WITH ('connector' = '...', 'format' = '...', ...)`**  
+//!   connector-backed **source** DDL (no `AS SELECT`; `connector` in `WITH` selects this path)
+//! - **`CREATE TABLE ...`** other forms (including `CREATE TABLE ... AS SELECT` where DataFusion accepts it)
 //! - **`CREATE STREAMING TABLE ... WITH (...) AS SELECT ...`** (streaming sink DDL)
+//! - **`DROP TABLE`** / **`DROP TABLE IF EXISTS`** / **`DROP STREAMING TABLE`** (alias for `DROP TABLE` on the stream catalog)
 //!
 //! **`INSERT` is not supported** here — use `CREATE TABLE ... AS SELECT` or
 //! `CREATE STREAMING TABLE ... AS SELECT` to define the query shape instead.
@@ -26,14 +29,29 @@ use std::collections::HashMap;
 
 use datafusion::common::{Result, plan_err};
 use datafusion::error::DataFusionError;
-use datafusion::sql::sqlparser::ast::{SqlOption, Statement as DFStatement};
+use datafusion::sql::sqlparser::ast::{ObjectType, SqlOption, Statement as DFStatement};
 use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
 use datafusion::sql::sqlparser::parser::Parser;
 
 use crate::coordinator::{
-    CreateFunction, CreateTable, DropFunction, ShowFunctions, StartFunction,
+    CreateFunction, CreateTable, DropFunction, DropTableStatement, ShowFunctions, StartFunction,
     Statement as CoordinatorStatement, StopFunction, StreamingTableStatement,
 };
+
+/// `DROP STREAMING TABLE t` is accepted as sugar for `DROP TABLE t` against the same catalog.
+fn rewrite_drop_streaming_table(sql: &str) -> String {
+    let trimmed = sql.trim_start();
+    let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+    if tokens.len() >= 4
+        && tokens[0].eq_ignore_ascii_case("drop")
+        && tokens[1].eq_ignore_ascii_case("streaming")
+        && tokens[2].eq_ignore_ascii_case("table")
+    {
+        let rest = tokens[3..].join(" ");
+        return format!("DROP TABLE {rest}");
+    }
+    sql.to_string()
+}
 
 pub fn parse_sql(query: &str) -> Result<Vec<Box<dyn CoordinatorStatement>>> {
     let trimmed = query.trim();
@@ -42,7 +60,8 @@ pub fn parse_sql(query: &str) -> Result<Vec<Box<dyn CoordinatorStatement>>> {
     }
 
     let dialect = FunctionStreamDialect {};
-    let statements = Parser::parse_sql(&dialect, trimmed)
+    let to_parse = rewrite_drop_streaming_table(trimmed);
+    let statements = Parser::parse_sql(&dialect, &to_parse)
         .map_err(|e| DataFusionError::Plan(format!("SQL parse error: {e}")))?;
 
     if statements.is_empty() {
@@ -73,6 +92,25 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
         s @ DFStatement::CreateTable(_) => Ok(Box::new(CreateTable::new(s))),
         s @ DFStatement::CreateStreamingTable { .. } => {
             Ok(Box::new(StreamingTableStatement::new(s)))
+        }
+        stmt @ DFStatement::Drop { .. } => {
+            {
+                let DFStatement::Drop {
+                    object_type,
+                    names,
+                    ..
+                } = &stmt
+                else {
+                    unreachable!()
+                };
+                if *object_type != ObjectType::Table {
+                    return plan_err!("Only DROP TABLE is supported in this SQL frontend");
+                }
+                if names.len() != 1 {
+                    return plan_err!("DROP TABLE supports exactly one table name per statement");
+                }
+            }
+            Ok(Box::new(DropTableStatement::new(stmt)))
         }
         DFStatement::Insert { .. } => plan_err!(
             "INSERT is not supported; only CREATE TABLE and CREATE STREAMING TABLE (with AS SELECT) \
@@ -156,6 +194,34 @@ mod tests {
     fn test_parse_create_table() {
         let stmt = first_stmt("CREATE TABLE foo (id INT, name VARCHAR)");
         assert!(is_type(stmt.as_ref(), "CreateTable"));
+    }
+
+    #[test]
+    fn test_parse_create_table_connector_source_ddl() {
+        let sql = concat!(
+            "CREATE TABLE kafka_src (id BIGINT, ts TIMESTAMP NOT NULL, WATERMARK FOR ts) ",
+            "WITH ('connector' = 'kafka', 'format' = 'json', 'topic' = 'events')",
+        );
+        let stmt = first_stmt(sql);
+        assert!(is_type(stmt.as_ref(), "CreateTable"));
+    }
+
+    #[test]
+    fn test_parse_drop_table() {
+        let stmt = first_stmt("DROP TABLE foo");
+        assert!(is_type(stmt.as_ref(), "DropTableStatement"));
+    }
+
+    #[test]
+    fn test_parse_drop_table_if_exists() {
+        let stmt = first_stmt("DROP TABLE IF EXISTS foo");
+        assert!(is_type(stmt.as_ref(), "DropTableStatement"));
+    }
+
+    #[test]
+    fn test_parse_drop_streaming_table_rewritten() {
+        let stmt = first_stmt("DROP STREAMING TABLE my_sink");
+        assert!(is_type(stmt.as_ref(), "DropTableStatement"));
     }
 
     /// `CREATE STREAMING TABLE` is the sink DDL supported by FunctionStream (not `CREATE STREAM TABLE`).

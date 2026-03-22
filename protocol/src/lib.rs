@@ -37,3 +37,12 @@ pub mod grpc {
 /// File descriptor set for fs_api.proto (for gRPC reflection / REST gateway).
 pub const FS_API_FILE_DESCRIPTOR_SET: &[u8] =
     tonic::include_file_descriptor_set!("fs_api_descriptor");
+
+// ─────────────── Durable storage (storage.proto: catalog + task rows) ───────────────
+
+/// Prost types for persisted stream catalog and task storage (`proto/storage.proto`).
+pub mod storage {
+    #![allow(clippy::all)]
+    #![allow(warnings)]
+    include!("../generated/storage/function_stream.storage.rs");
+}

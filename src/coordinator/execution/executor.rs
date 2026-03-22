@@ -10,20 +10,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::coordinator::dataset::{ExecuteResult, ShowFunctionsResult, empty_record_batch};
+use std::sync::Arc;
+
+use thiserror::Error;
+use tracing::{debug, info};
+
+use crate::coordinator::dataset::{empty_record_batch, ExecuteResult, ShowFunctionsResult};
 use crate::coordinator::plan::{
-    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
-    LookupTablePlan, PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult,
-    ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
+    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, CreateTablePlanBody,
+    DropFunctionPlan, DropTablePlan, LookupTablePlan, PlanNode, PlanVisitor, PlanVisitorContext,
+    PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
     StreamingTableConnectorPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::schema::table::Table as CatalogTable;
-use crate::sql::analysis::{ StreamSchemaProvider};
-use std::sync::Arc;
-use thiserror::Error;
-use tracing::{debug, info};
+use crate::sql::schema::StreamTable;
+use crate::storage::stream_catalog::CatalogManager;
 
 #[derive(Error, Debug)]
 pub enum ExecuteError {
@@ -39,11 +41,15 @@ pub enum ExecuteError {
 
 pub struct Executor {
     task_manager: Arc<TaskManager>,
+    catalog_manager: Arc<CatalogManager>,
 }
 
 impl Executor {
-    pub fn new(task_manager: Arc<TaskManager>) -> Self {
-        Self { task_manager }
+    pub fn new(task_manager: Arc<TaskManager>, catalog_manager: Arc<CatalogManager>) -> Self {
+        Self {
+            task_manager,
+            catalog_manager,
+        }
     }
 
     pub fn execute(&self, plan: &dyn PlanNode) -> Result<ExecuteResult, ExecuteError> {
@@ -54,8 +60,11 @@ impl Executor {
 
         match visitor_result {
             PlanVisitorResult::Execute(result) => {
-                let elapsed = timer.elapsed();
-                debug!(target: "executor", elapsed_ms = elapsed.as_millis(), "Execution completed");
+                debug!(
+                    target: "executor",
+                    elapsed_ms = timer.elapsed().as_millis(),
+                    "Execution completed"
+                );
                 result
             }
         }
@@ -63,23 +72,22 @@ impl Executor {
 }
 
 impl PlanVisitor for Executor {
-    #[allow(clippy::redundant_closure_call)]
     fn visit_create_function(
         &self,
         plan: &CreateFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let result = (|| -> Result<ExecuteResult, ExecuteError> {
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
             let function_bytes = match &plan.function_source {
                 FunctionSource::Path(path) => std::fs::read(path).map_err(|e| {
-                    ExecuteError::Validation(format!("Failed to read function at {}: {}", path, e))
+                    ExecuteError::Validation(format!("Failed to read function at {path}: {e}"))
                 })?,
                 FunctionSource::Bytes(bytes) => bytes.clone(),
             };
 
             let config_bytes = match &plan.config_source {
                 Some(ConfigSource::Path(path)) => std::fs::read(path).map_err(|e| {
-                    ExecuteError::Validation(format!("Failed to read config at {}: {}", path, e))
+                    ExecuteError::Validation(format!("Failed to read config at {path}: {e}"))
                 })?,
                 Some(ConfigSource::Bytes(bytes)) => bytes.clone(),
                 None => {
@@ -92,35 +100,34 @@ impl PlanVisitor for Executor {
             info!(config_size = config_bytes.len(), "Registering Wasm task");
             self.task_manager
                 .register_task(&config_bytes, &function_bytes)
-                .map_err(|e| ExecuteError::Task(format!("Registration failed: {:?}", e)))?;
+                .map_err(|e| ExecuteError::Task(format!("Registration failed: {e:?}")))?;
 
             Ok(ExecuteResult::ok_with_data(
                 "Function registered successfully",
                 empty_record_batch(),
             ))
-        })();
+        };
 
-        PlanVisitorResult::Execute(result)
+        PlanVisitorResult::Execute(execute())
     }
 
-    #[allow(clippy::redundant_closure_call)]
     fn visit_drop_function(
         &self,
         plan: &DropFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let result = (|| -> Result<ExecuteResult, ExecuteError> {
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
             self.task_manager
                 .remove_task(&plan.name)
-                .map_err(|e| ExecuteError::Task(format!("Removal failed: {}", e)))?;
+                .map_err(|e| ExecuteError::Task(format!("Removal failed: {e}")))?;
 
             Ok(ExecuteResult::ok_with_data(
                 format!("Function '{}' dropped", plan.name),
                 empty_record_batch(),
             ))
-        })();
+        };
 
-        PlanVisitorResult::Execute(result)
+        PlanVisitorResult::Execute(execute())
     }
 
     fn visit_start_function(
@@ -142,48 +149,43 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(result)
     }
 
-    #[allow(clippy::redundant_closure_call)]
     fn visit_show_functions(
         &self,
         _plan: &ShowFunctionsPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let result = {
-            let functions = self.task_manager.list_all_functions();
+        let functions = self.task_manager.list_all_functions();
+        let result = ExecuteResult::ok_with_data(
+            format!("Found {} task(s)", functions.len()),
+            ShowFunctionsResult::new(functions),
+        );
 
-            Ok(ExecuteResult::ok_with_data(
-                format!("Found {} task(s)", functions.len()),
-                ShowFunctionsResult::new(functions),
-            ))
-        };
-
-        PlanVisitorResult::Execute(result)
+        PlanVisitorResult::Execute(Ok(result))
     }
 
-    #[allow(clippy::redundant_closure_call)]
     fn visit_create_python_function(
         &self,
         plan: &CreatePythonFunctionPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let result = (|| -> Result<ExecuteResult, ExecuteError> {
-            let modules: Vec<(String, Vec<u8>)> = plan
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
+            let modules = plan
                 .modules
                 .iter()
                 .map(|m| (m.name.clone(), m.bytes.clone()))
-                .collect();
+                .collect::<Vec<_>>();
 
             self.task_manager
                 .register_python_task(plan.config_content.as_bytes(), &modules)
-                .map_err(|e| ExecuteError::Task(format!("Python registration failed: {}", e)))?;
+                .map_err(|e| ExecuteError::Task(format!("Python registration failed: {e}")))?;
 
             Ok(ExecuteResult::ok_with_data(
                 format!("Python function '{}' deployed", plan.class_name),
                 empty_record_batch(),
             ))
-        })();
+        };
 
-        PlanVisitorResult::Execute(result)
+        PlanVisitorResult::Execute(execute())
     }
 
     fn visit_stop_function(
@@ -210,12 +212,50 @@ impl PlanVisitor for Executor {
         plan: &CreateTablePlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        // TODO: register table in catalog and execute DDL
-        let result = Err(ExecuteError::Internal(format!(
-            "CREATE TABLE execution not yet implemented. LogicalPlan:\n{}",
-            plan.logical_plan.display_indent()
-        )));
-        PlanVisitorResult::Execute(result)
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
+            let (table_name, if_not_exists, stream_table) = match &plan.body {
+                CreateTablePlanBody::ConnectorSource {
+                    source_table,
+                    if_not_exists,
+                } => {
+                    let table_name = source_table.name().to_string();
+                    let schema = Arc::new(source_table.produce_physical_schema());
+                    let table_instance = StreamTable::Source {
+                        name: table_name.clone(),
+                        schema,
+                        event_time_field: source_table.event_time_field().map(str::to_string),
+                        watermark_field: source_table.watermark_field().map(str::to_string),
+                    };
+                    (table_name, *if_not_exists, table_instance)
+                }
+                CreateTablePlanBody::DataFusion(_) => {
+                    return Err(ExecuteError::Internal(
+                        "Operation not supported: Currently, the system strictly supports creating tables backed by an external Connector Source (e.g., Kafka, Postgres). In-memory tables, Views, or CTAS (Create Table As Select) are not supported."
+                            .into(),
+                    ));
+                }
+            };
+
+            if if_not_exists && self.catalog_manager.has_stream_table(&table_name) {
+                return Ok(ExecuteResult::ok(format!(
+                    "Table '{table_name}' already exists (skipped)"
+                )));
+            }
+
+            self.catalog_manager
+                .add_table(stream_table)
+                .map_err(|e| {
+                    ExecuteError::Internal(format!(
+                        "Failed to register connector source table '{table_name}': {e}"
+                    ))
+                })?;
+
+            Ok(ExecuteResult::ok(format!(
+                "Created connector source table '{table_name}'"
+            )))
+        };
+
+        PlanVisitorResult::Execute(execute())
     }
 
     fn visit_streaming_table(
@@ -223,19 +263,23 @@ impl PlanVisitor for Executor {
         plan: &StreamingTable,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let result = (|| -> Result<ExecuteResult, ExecuteError> {
-            let catalog_table =
-                CatalogTable::ConnectorTable(plan.source_table.clone());
-            let mut schema_provider = StreamSchemaProvider::new();
-            schema_provider.insert_catalog_table(catalog_table.clone());
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
+            let sink = StreamTable::Sink {
+                name: plan.name.clone(),
+                schema: Arc::new(plan.logical_plan.schema().as_arrow().clone()),
+            };
 
+            self.catalog_manager
+                .add_table(sink)
+                .map_err(|e| ExecuteError::Internal(e.to_string()))?;
 
             Ok(ExecuteResult::ok_with_data(
-                format!("Streaming table '{}' compiled successfully", plan.name),
+                format!("Registered streaming table '{}'", plan.name),
                 empty_record_batch(),
             ))
-        })();
-        PlanVisitorResult::Execute(result)
+        };
+
+        PlanVisitorResult::Execute(execute())
     }
 
     fn visit_lookup_table(
@@ -243,10 +287,9 @@ impl PlanVisitor for Executor {
         _plan: &LookupTablePlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let result = Err(ExecuteError::Internal(
+        PlanVisitorResult::Execute(Err(ExecuteError::Internal(
             "LookupTable execution not yet implemented".to_string(),
-        ));
-        PlanVisitorResult::Execute(result)
+        )))
     }
 
     fn visit_streaming_connector_table(
@@ -254,9 +297,27 @@ impl PlanVisitor for Executor {
         _plan: &StreamingTableConnectorPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let result = Err(ExecuteError::Internal(
+        PlanVisitorResult::Execute(Err(ExecuteError::Internal(
             "StreamingTableConnector execution not yet implemented".to_string(),
-        ));
-        PlanVisitorResult::Execute(result)
+        )))
+    }
+
+    fn visit_drop_table_plan(
+        &self,
+        plan: &DropTablePlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
+            self.catalog_manager
+                .drop_table(&plan.table_name, plan.if_exists)
+                .map_err(|e| ExecuteError::Internal(e.to_string()))?;
+
+            Ok(ExecuteResult::ok(format!(
+                "Dropped table '{}'",
+                plan.table_name
+            )))
+        };
+
+        PlanVisitorResult::Execute(execute())
     }
 }
