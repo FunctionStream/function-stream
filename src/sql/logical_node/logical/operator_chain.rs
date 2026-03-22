@@ -12,19 +12,62 @@
 
 use std::sync::Arc;
 
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
+use prost::Message;
+use protocol::grpc::api::ConnectorOp;
+use serde::{Deserialize, Serialize};
 
 use super::operator_name::OperatorName;
 use crate::sql::common::FsSchema;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChainedLogicalOperator {
     pub operator_id: String,
     pub operator_name: OperatorName,
     pub operator_config: Vec<u8>,
 }
 
-#[derive(Clone, Debug)]
+impl ChainedLogicalOperator {
+    pub fn extract_connector_name(&self) -> Option<String> {
+        if matches!(
+            self.operator_name,
+            OperatorName::ConnectorSource | OperatorName::ConnectorSink
+        ) {
+            ConnectorOp::decode(self.operator_config.as_slice())
+                .ok()
+                .map(|op| op.connector)
+        } else {
+            None
+        }
+    }
+
+    pub fn extract_feature(&self) -> Option<String> {
+        match self.operator_name {
+            OperatorName::AsyncUdf => Some("async-udf".to_string()),
+            OperatorName::Join => Some("join-with-expiration".to_string()),
+            OperatorName::InstantJoin => Some("windowed-join".to_string()),
+            OperatorName::WindowFunction => Some("sql-window-function".to_string()),
+            OperatorName::LookupJoin => Some("lookup-join".to_string()),
+            OperatorName::TumblingWindowAggregate => {
+                Some("sql-tumbling-window-aggregate".to_string())
+            }
+            OperatorName::SlidingWindowAggregate => {
+                Some("sql-sliding-window-aggregate".to_string())
+            }
+            OperatorName::SessionWindowAggregate => {
+                Some("sql-session-window-aggregate".to_string())
+            }
+            OperatorName::UpdatingAggregate => Some("sql-updating-aggregate".to_string()),
+            OperatorName::ConnectorSource => self
+                .extract_connector_name()
+                .map(|c| format!("{c}-source")),
+            OperatorName::ConnectorSink => self.extract_connector_name().map(|c| format!("{c}-sink")),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OperatorChain {
     pub(crate) operators: Vec<ChainedLogicalOperator>,
     pub(crate) edges: Vec<Arc<FsSchema>>,
@@ -41,11 +84,11 @@ impl OperatorChain {
     pub fn iter(
         &self,
     ) -> impl Iterator<Item = (&ChainedLogicalOperator, Option<&Arc<FsSchema>>)> {
-        self.operators
-            .iter()
-            .zip_longest(self.edges.iter())
-            .map(|e| e.left_and_right())
-            .map(|(l, r)| (l.unwrap(), r))
+        self.operators.iter().zip_longest(&self.edges).filter_map(|e| match e {
+            EitherOrBoth::Both(op, edge) => Some((op, Some(edge))),
+            EitherOrBoth::Left(op) => Some((op, None)),
+            EitherOrBoth::Right(_) => None,
+        })
     }
 
     pub fn iter_mut(
@@ -53,13 +96,18 @@ impl OperatorChain {
     ) -> impl Iterator<Item = (&mut ChainedLogicalOperator, Option<&Arc<FsSchema>>)> {
         self.operators
             .iter_mut()
-            .zip_longest(self.edges.iter())
-            .map(|e| e.left_and_right())
-            .map(|(l, r)| (l.unwrap(), r))
+            .zip_longest(&self.edges)
+            .filter_map(|e| match e {
+                EitherOrBoth::Both(op, edge) => Some((op, Some(edge))),
+                EitherOrBoth::Left(op) => Some((op, None)),
+                EitherOrBoth::Right(_) => None,
+            })
     }
 
     pub fn first(&self) -> &ChainedLogicalOperator {
-        &self.operators[0]
+        self.operators
+            .first()
+            .expect("OperatorChain must contain at least one operator")
     }
 
     pub fn len(&self) -> usize {

@@ -25,7 +25,6 @@ pub mod types;
 pub use schema::{StreamPlanningContext, StreamSchemaProvider};
 pub use parse::parse_sql;
 pub use analysis::rewrite_plan;
-pub use logical_planner::CompiledSql;
 
 #[cfg(test)]
 mod frontend_sql_coverage_tests;

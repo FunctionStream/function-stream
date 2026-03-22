@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use anyhow::{anyhow, bail, Context};
+use datafusion::arrow::datatypes::Schema;
 use datafusion::common::{internal_err, plan_err, Result as DFResult};
-use datafusion::execution::context::SessionContext;
 use parking_lot::RwLock;
 use prost::Message;
 use protocol::storage::{self as pb, table_definition};
@@ -37,36 +37,28 @@ pub struct StreamTableCatalogCache {
 pub struct CatalogManager {
     store: Arc<dyn MetaStore>,
     cache: RwLock<StreamTableCatalogCache>,
-    session_ctx: Arc<SessionContext>,
 }
 
 static GLOBAL_CATALOG: OnceLock<Arc<CatalogManager>> = OnceLock::new();
 
 impl CatalogManager {
-    pub fn new(store: Arc<dyn MetaStore>, session_ctx: Arc<SessionContext>) -> Self {
+    pub fn new(store: Arc<dyn MetaStore>) -> Self {
         Self {
             store,
             cache: RwLock::new(StreamTableCatalogCache::default()),
-            session_ctx,
         }
     }
 
     pub fn init_global_in_memory() -> anyhow::Result<()> {
-        Self::init_global(
-            Arc::new(super::InMemoryMetaStore::new()),
-            Arc::new(SessionContext::new()),
-        )
+        Self::init_global(Arc::new(super::InMemoryMetaStore::new()))
     }
 
-    pub fn init_global(
-        store: Arc<dyn MetaStore>,
-        session_ctx: Arc<SessionContext>,
-    ) -> anyhow::Result<()> {
+    pub fn init_global(store: Arc<dyn MetaStore>) -> anyhow::Result<()> {
         if GLOBAL_CATALOG.get().is_some() {
             bail!("CatalogManager already initialized");
         }
 
-        let mgr = Arc::new(CatalogManager::new(store, session_ctx));
+        let mgr = Arc::new(CatalogManager::new(store));
         GLOBAL_CATALOG
             .set(mgr)
             .map_err(|_| anyhow!("CatalogManager global install failed"))?;
@@ -164,16 +156,15 @@ impl CatalogManager {
                 event_time_field: event_time_field.clone(),
                 watermark_field: watermark_field.clone(),
             }),
-            StreamTable::Sink { schema, .. } => table_definition::TableType::Sink(pb::StreamSink {
-                arrow_schema_ipc: CatalogCodec::encode_schema(schema)?,
-            }),
-            StreamTable::Memory { logical_plan, .. } => {
-                let logical_plan_bytes = logical_plan
-                    .as_ref()
-                    .map(|plan| CatalogCodec::encode_logical_plan(plan))
-                    .transpose()?;
-
-                table_definition::TableType::Memory(pb::StreamMemory { logical_plan_bytes })
+            StreamTable::Sink { program, .. } => {
+                let logical_program_bincode = CatalogCodec::encode_logical_program(program)?;
+                let schema = program
+                    .egress_arrow_schema()
+                    .unwrap_or_else(|| Arc::new(Schema::empty()));
+                table_definition::TableType::Sink(pb::StreamSink {
+                    arrow_schema_ipc: CatalogCodec::encode_schema(&schema)?,
+                    logical_program_bincode,
+                })
             }
         };
 
@@ -199,19 +190,17 @@ impl CatalogManager {
                 event_time_field: src.event_time_field,
                 watermark_field: src.watermark_field,
             }),
-            table_definition::TableType::Sink(sink) => Ok(StreamTable::Sink {
-                name: proto_def.table_name,
-                schema: CatalogCodec::decode_schema(&sink.arrow_schema_ipc)?,
-            }),
-            table_definition::TableType::Memory(mem) => {
-                let logical_plan = mem
-                    .logical_plan_bytes
-                    .map(|bytes| CatalogCodec::decode_logical_plan(&bytes, &self.session_ctx))
-                    .transpose()?;
-
-                Ok(StreamTable::Memory {
+            table_definition::TableType::Sink(sink) => {
+                if sink.logical_program_bincode.is_empty() {
+                    return internal_err!(
+                        "Corrupted catalog row: sink '{}' missing logical_program_bincode",
+                        proto_def.table_name
+                    );
+                }
+                let program = CatalogCodec::decode_logical_program(&sink.logical_program_bincode)?;
+                Ok(StreamTable::Sink {
                     name: proto_def.table_name,
-                    logical_plan,
+                    program,
                 })
             }
         }
@@ -242,18 +231,15 @@ mod tests {
     use std::sync::Arc;
 
     use datafusion::arrow::datatypes::{DataType, Field, Schema};
-    use datafusion::execution::context::SessionContext;
 
+    use crate::sql::logical_node::logical::LogicalProgram;
     use crate::sql::schema::StreamTable;
     use crate::storage::stream_catalog::{InMemoryMetaStore, MetaStore};
 
     use super::CatalogManager;
 
     fn create_test_manager() -> CatalogManager {
-        CatalogManager::new(
-            Arc::new(InMemoryMetaStore::new()),
-            Arc::new(SessionContext::new()),
-        )
+        CatalogManager::new(Arc::new(InMemoryMetaStore::new()))
     }
 
     #[test]
@@ -312,19 +298,17 @@ mod tests {
     #[test]
     fn restore_from_store_rebuilds_cache() {
         let store: Arc<dyn MetaStore> = Arc::new(InMemoryMetaStore::new());
-        let session = Arc::new(SessionContext::new());
 
-        let mgr_a = CatalogManager::new(Arc::clone(&store), Arc::clone(&session));
-        let schema = Arc::new(Schema::new(vec![Field::new("x", DataType::Utf8, true)]));
+        let mgr_a = CatalogManager::new(Arc::clone(&store));
 
         mgr_a
             .add_table(StreamTable::Sink {
                 name: "sink1".into(),
-                schema,
+                program: LogicalProgram::default(),
             })
             .unwrap();
 
-        let mgr_b = CatalogManager::new(store, session);
+        let mgr_b = CatalogManager::new(store);
         mgr_b.restore_from_store().unwrap();
 
         let ctx = mgr_b.acquire_planning_context();

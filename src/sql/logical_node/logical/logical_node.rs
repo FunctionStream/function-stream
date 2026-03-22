@@ -12,10 +12,14 @@
 
 use std::fmt::{Debug, Display, Formatter};
 
+use datafusion::common::{DataFusionError, Result};
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+
 use super::operator_chain::{ChainedLogicalOperator, OperatorChain};
 use super::operator_name::OperatorName;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LogicalNode {
     pub node_id: u32,
     pub description: String,
@@ -46,6 +50,24 @@ impl LogicalNode {
             parallelism,
         }
     }
+
+    pub fn resolve_pipeline_operator_name(&self) -> Result<String> {
+        let first_op = self
+            .operator_chain
+            .operators
+            .first()
+            .ok_or_else(|| DataFusionError::Plan("Invalid LogicalNode: Operator chain is empty".into()))?;
+
+        if let Some(connector_name) = first_op.extract_connector_name() {
+            return Ok(connector_name);
+        }
+
+        if self.operator_chain.len() == 1 {
+            return Ok(first_op.operator_id.clone());
+        }
+
+        Ok("chained_op".to_string())
+    }
 }
 
 impl Display for LogicalNode {
@@ -56,16 +78,12 @@ impl Display for LogicalNode {
 
 impl Debug for LogicalNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}[{}]",
-            self.operator_chain
-                .operators
-                .iter()
-                .map(|op| op.operator_id.clone())
-                .collect::<Vec<_>>()
-                .join(" -> "),
-            self.parallelism
-        )
+        let chain_path = self
+            .operator_chain
+            .operators
+            .iter()
+            .map(|op| op.operator_id.as_str())
+            .join(" -> ");
+        write!(f, "{chain_path}[{}]", self.parallelism)
     }
 }

@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Arrow Schema IPC and DataFusion logical plan serialization.
+//! Arrow Schema IPC and [`LogicalProgram`] bincode payloads for stream catalog rows.
 
 use std::io::Cursor;
 use std::sync::Arc;
@@ -20,8 +20,8 @@ use datafusion::arrow::ipc::reader::StreamReader;
 use datafusion::arrow::ipc::writer::StreamWriter;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::common::{DataFusionError, Result};
-use datafusion::execution::context::SessionContext;
-use datafusion::logical_expr::LogicalPlan;
+
+use crate::sql::logical_node::logical::LogicalProgram;
 
 pub struct CatalogCodec;
 
@@ -47,11 +47,11 @@ impl CatalogCodec {
         Ok(reader.schema())
     }
 
-    pub fn encode_logical_plan(plan: &LogicalPlan) -> Result<Vec<u8>> {
-        datafusion_proto::bytes::logical_plan_to_bytes(plan).map(|b| b.to_vec())
+    pub fn encode_logical_program(program: &LogicalProgram) -> Result<Vec<u8>> {
+        program.encode_for_catalog()
     }
 
-    pub fn decode_logical_plan(bytes: &[u8], ctx: &SessionContext) -> Result<LogicalPlan> {
-        datafusion_proto::bytes::logical_plan_from_bytes(bytes, ctx)
+    pub fn decode_logical_program(bytes: &[u8]) -> Result<LogicalProgram> {
+        LogicalProgram::decode_for_catalog(bytes)
     }
 }

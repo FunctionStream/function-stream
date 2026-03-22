@@ -91,86 +91,78 @@ impl LogicalPlanVisitor {
             return plan_err!("Statement mismatch: Expected CREATE STREAMING TABLE AST node");
         };
 
-        let target_name = name.to_string();
-        debug!(
-            "Initiating streaming sink compilation for identifier: {}",
-            target_name
-        );
+        let sink_table_name = name.to_string();
+        debug!("Initiating streaming sink compilation for identifier: {}", sink_table_name);
 
-        let mut connector_options = ConnectorOptions::new(with_options, &None)?;
-        let adapter_type = connector_options.pull_opt_str(OPT_CONNECTOR)?.ok_or_else(|| {
+        let mut sink_properties = ConnectorOptions::new(with_options, &None)?;
+        let connector_type = sink_properties.pull_opt_str(OPT_CONNECTOR)?.ok_or_else(|| {
             plan_datafusion_err!(
-                "Validation Error: Streaming table '{}' requires the '{}' property",
-                target_name,
-                OPT_CONNECTOR
-            )
+            "Validation Error: Streaming table '{}' requires the '{}' property",
+            sink_table_name,
+            OPT_CONNECTOR
+        )
         })?;
 
-        let routing_exprs = Self::extract_partitioning_keys(&mut connector_options)?;
+        let partition_keys = Self::extract_partitioning_keys(&mut sink_properties)?;
 
-        let mut logical_plan = rewrite_plan(
+        let mut query_logical_plan = rewrite_plan(
             produce_optimized_plan(&Statement::Query(query.clone()), &self.schema_provider)?,
             &self.schema_provider,
         )?;
 
-        if logical_plan
-            .schema()
-            .fields()
-            .iter()
-            .any(|f| is_json_union(f.data_type()))
-        {
-            logical_plan = serialize_outgoing_json(&self.schema_provider, Arc::new(logical_plan));
+        if query_logical_plan.schema().fields().iter().any(|f| is_json_union(f.data_type())) {
+            query_logical_plan = serialize_outgoing_json(&self.schema_provider, Arc::new(query_logical_plan));
         }
 
-        let output_descriptors = logical_plan
+        let output_schema_fields = query_logical_plan
             .schema()
             .fields()
             .iter()
             .map(|f| ColumnDescriptor::from((**f).clone()))
             .collect::<Vec<_>>();
 
-        let mut source_definition = SourceTable::from_options(
-            &target_name,
-            &adapter_type,
+        let mut sink_definition = SourceTable::from_options(
+            &sink_table_name,
+            &connector_type,
             false,
-            output_descriptors,
+            output_schema_fields,
             vec![],
             None,
-            &mut connector_options,
+            &mut sink_properties,
             None,
             &self.schema_provider,
             Some(ConnectionType::Sink),
             comment.clone().unwrap_or_default(),
         )?;
-        source_definition.partition_exprs = Arc::new(routing_exprs);
+        sink_definition.partition_exprs = Arc::new(partition_keys);
 
-        let sink_schema = logical_plan.schema().clone();
-        let egress_node = StreamEgressNode::try_new(
-            TableReference::bare(target_name.clone()),
-            Table::ConnectorTable(source_definition.clone()),
-            sink_schema,
-            logical_plan,
+        let output_schema = query_logical_plan.schema().clone();
+        let sink_plan_node = StreamEgressNode::try_new(
+            TableReference::bare(sink_table_name.clone()),
+            Table::ConnectorTable(sink_definition.clone()),
+            output_schema,
+            query_logical_plan,
         )?;
 
-        let mut plan_topology = rewrite_sinks(vec![maybe_add_key_extension_to_sink(
+        let mut rewritten_plans = rewrite_sinks(vec![maybe_add_key_extension_to_sink(
             LogicalPlan::Extension(Extension {
-                node: Arc::new(egress_node),
+                node: Arc::new(sink_plan_node),
             }),
         )?])?;
 
-        let final_execution_plan = plan_topology.remove(0);
+        let final_logical_plan = rewritten_plans.remove(0);
 
-        self.validate_graph_topology(&final_execution_plan)?;
+        let validated_program = self.validate_graph_topology(&final_logical_plan)?;
 
         Ok(StreamingTable {
-            name: target_name,
+            name: sink_table_name,
             comment: comment.clone(),
-            source_table: source_definition,
-            logical_plan: final_execution_plan,
+            source_table: sink_definition,
+            program: validated_program,
         })
     }
 
-    fn validate_graph_topology(&self, logical_plan: &LogicalPlan) -> Result<()> {
+    fn validate_graph_topology(&self, logical_plan: &LogicalPlan) -> Result<LogicalProgram> {
         let mut session_config = SessionConfig::new();
         let opts = session_config.options_mut();
         opts.optimizer.enable_round_robin_repartition = false;
@@ -193,7 +185,7 @@ impl LogicalPlanVisitor {
             LogicalProgram::new(graph_compiler.into_graph(), ProgramConfig::default());
         executable_program.optimize(&ChainingOptimizer {});
 
-        Ok(())
+        Ok(executable_program)
     }
 
     fn extract_partitioning_keys(

@@ -266,7 +266,7 @@ impl PlanVisitor for Executor {
         let execute = || -> Result<ExecuteResult, ExecuteError> {
             let sink = StreamTable::Sink {
                 name: plan.name.clone(),
-                schema: Arc::new(plan.logical_plan.schema().as_arrow().clone()),
+                program: plan.program.clone(),
             };
 
             self.catalog_manager

@@ -19,15 +19,13 @@ use datafusion::datasource::{DefaultTableSource, TableProvider, TableType};
 use datafusion::execution::{FunctionRegistry, SessionStateDefaults};
 use datafusion::logical_expr::expr_rewriter::FunctionRewrite;
 use datafusion::logical_expr::planner::ExprPlanner;
-use datafusion::logical_expr::{
-    AggregateUDF, Expr, LogicalPlan, ScalarUDF, TableSource, WindowUDF,
-};
+use datafusion::logical_expr::{AggregateUDF, Expr, ScalarUDF, TableSource, WindowUDF};
 use datafusion::optimizer::Analyzer;
 use datafusion::sql::planner::ContextProvider;
 use datafusion::sql::TableReference;
 use unicase::UniCase;
 
-use crate::sql::logical_node::logical::DylibUdfConfig;
+use crate::sql::logical_node::logical::{DylibUdfConfig, LogicalProgram};
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::sql::schema::utils::window_arrow_struct;
 use crate::sql::types::{PlaceholderUdf, PlanningOptions};
@@ -49,25 +47,23 @@ pub enum StreamTable {
     },
     Sink {
         name: String,
-        schema: Arc<Schema>,
-    },
-    Memory {
-        name: String,
-        logical_plan: Option<LogicalPlan>,
+        program: LogicalProgram,
     },
 }
 
 impl StreamTable {
     pub fn name(&self) -> &str {
         match self {
-            Self::Source { name, .. } | Self::Sink { name, .. } | Self::Memory { name, .. } => name,
+            Self::Source { name, .. } | Self::Sink { name, .. } => name,
         }
     }
 
     pub fn schema(&self) -> Arc<Schema> {
         match self {
-            Self::Source { schema, .. } | Self::Sink { schema, .. } => Arc::clone(schema),
-            Self::Memory { .. } => Arc::new(Schema::empty()),
+            Self::Source { schema, .. } => Arc::clone(schema),
+            Self::Sink { program, .. } => program
+                .egress_arrow_schema()
+                .unwrap_or_else(|| Arc::new(Schema::empty())),
         }
     }
 }
@@ -208,8 +204,8 @@ impl StreamPlanningContext {
         });
     }
 
-    pub fn add_sink_table(&mut self, name: String, schema: Arc<Schema>) {
-        self.register_stream_table(StreamTable::Sink { name, schema });
+    pub fn add_sink_table(&mut self, name: String, program: LogicalProgram) {
+        self.register_stream_table(StreamTable::Sink { name, program });
     }
 
     pub fn insert_table(&mut self, table: StreamTable) {

@@ -2375,6 +2375,7 @@ dependencies = [
  "proctitle",
  "prost",
  "protocol",
+ "rand 0.8.5",
  "rdkafka",
  "rocksdb",
  "serde",

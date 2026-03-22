@@ -56,11 +56,8 @@ use std::fmt::Debug;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-pub mod compiled_sql;
 pub(crate) mod planner;
 pub mod optimizers;
-
-pub use compiled_sql::CompiledSql;
 
 // ─────────────────── Updating Meta Helpers ───────────────────
 

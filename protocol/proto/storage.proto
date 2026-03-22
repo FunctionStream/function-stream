@@ -10,7 +10,7 @@ syntax = "proto3";
 package function_stream.storage;
 
 // =============================================================================
-// Stream catalog (coordinator stream tables: source / sink / memory)
+// Stream catalog (coordinator stream tables: source / sink)
 // =============================================================================
 
 // Top-level persisted record for one stream table.
@@ -20,7 +20,6 @@ message TableDefinition {
   oneof table_type {
     StreamSource source = 3;
     StreamSink sink = 4;
-    StreamMemory memory = 5;
   }
 }
 
@@ -32,10 +31,7 @@ message StreamSource {
 
 message StreamSink {
   bytes arrow_schema_ipc = 1;
-}
-
-message StreamMemory {
-  optional bytes logical_plan_bytes = 1;
+  bytes logical_program_bincode = 2;
 }
 
 // =============================================================================

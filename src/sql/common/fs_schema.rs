@@ -7,6 +7,7 @@ use datafusion::arrow::array::{RecordBatch, TimestampNanosecondArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaBuilder, TimeUnit};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::{DataFusionError, Result as DFResult};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::SystemTime;
 use arrow::compute::{filter_record_batch, lexsort_to_indices, partition, take, SortColumn};
@@ -22,7 +23,7 @@ use crate::sql::common::converter::Converter;
 
 pub type FsSchemaRef = Arc<FsSchema>;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct FsSchema {
     pub schema: Arc<Schema>,
     pub timestamp_index: usize,

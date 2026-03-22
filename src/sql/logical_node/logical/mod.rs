@@ -11,6 +11,7 @@
 // limitations under the License.
 
 mod dylib_udf_config;
+mod fs_program_convert;
 mod logical_edge;
 mod logical_graph;
 mod logical_node;

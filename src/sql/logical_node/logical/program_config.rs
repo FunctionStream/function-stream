@@ -1,5 +1,6 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
+//
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
@@ -10,13 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use protocol::grpc::api::FsProgramConfig;
 
-use super::dylib_udf_config::DylibUdfConfig;
-use super::python_udf_config::PythonUdfConfig;
-
+/// Placeholder program-level config (UDF tables live elsewhere; wire maps stay empty).
 #[derive(Clone, Debug, Default)]
-pub struct ProgramConfig {
-    pub udf_dylibs: HashMap<String, DylibUdfConfig>,
-    pub python_udfs: HashMap<String, PythonUdfConfig>,
+pub struct ProgramConfig {}
+
+impl From<ProgramConfig> for FsProgramConfig {
+    fn from(_: ProgramConfig) -> Self {
+        Self {
+            udf_dylibs: Default::default(),
+            python_udfs: Default::default(),
+        }
+    }
+}
+
+impl From<FsProgramConfig> for ProgramConfig {
+    fn from(_: FsProgramConfig) -> Self {
+        Self::default()
+    }
 }

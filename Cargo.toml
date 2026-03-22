@@ -60,6 +60,7 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 proctitle = "0.1"
 unicase = "2.7"
 petgraph = "0.7"
+rand = { version = "0.8", features = ["small_rng"] }
 itertools = "0.14"
 strum = { version = "0.26", features = ["derive"] }
 datafusion-functions-aggregate = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
