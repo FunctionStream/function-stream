@@ -14,10 +14,13 @@
 
 pub mod buffer_and_event;
 pub mod common;
-pub mod input;
-pub mod output;
-pub mod processor;
 pub mod sink;
 pub mod source;
+pub mod streaming;
 pub mod task;
 pub mod taskexecutor;
+pub mod wasm;
+
+pub use wasm::input;
+pub use wasm::output;
+pub use wasm::processor;

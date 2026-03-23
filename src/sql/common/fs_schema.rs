@@ -21,6 +21,15 @@ use super::{to_nanos, TIMESTAMP_FIELD};
 use std::ops::Range;
 use crate::sql::common::converter::Converter;
 
+#[derive(Debug, Copy, Clone)]
+pub enum FieldValueType<'a> {
+    Int64(Option<i64>),
+    UInt64(Option<u64>),
+    Int32(Option<i32>),
+    String(Option<&'a str>),
+    Bytes(Option<&'a [u8]>),
+}
+
 pub type FsSchemaRef = Arc<FsSchema>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]

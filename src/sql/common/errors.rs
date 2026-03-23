@@ -1,5 +1,8 @@
 use std::fmt;
 
+/// Result type for streaming operators and collectors.
+pub type DataflowResult<T> = std::result::Result<T, DataflowError>;
+
 /// Unified error type for streaming dataflow operations.
 #[derive(Debug)]
 pub enum DataflowError {
@@ -25,6 +28,16 @@ impl fmt::Display for DataflowError {
 }
 
 impl std::error::Error for DataflowError {}
+
+impl DataflowError {
+    pub fn with_operator(self, operator_id: impl Into<String>) -> Self {
+        let id = operator_id.into();
+        match self {
+            DataflowError::Operator(m) => DataflowError::Operator(format!("{id}: {m}")),
+            other => DataflowError::Operator(format!("{id}: {other}")),
+        }
+    }
+}
 
 impl From<arrow_schema::ArrowError> for DataflowError {
     fn from(e: arrow_schema::ArrowError) -> Self {

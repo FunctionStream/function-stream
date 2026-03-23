@@ -30,7 +30,7 @@ pub mod operator_config;
 pub mod task_info;
 pub mod time_utils;
 pub mod worker;
-mod converter;
+pub mod converter;
 
 // ── Re-exports from existing modules ──
 pub use arrow_ext::{DisplayAsSql, FsExtensionType, GetArrowSchema, GetArrowType};
@@ -45,11 +45,11 @@ pub use worker::{MachineId, WorkerId};
 // ── Re-exports from new modules ──
 pub use control::{
     CheckpointCompleted, CheckpointEvent, CompactionResult, ControlMessage, ControlResp,
-    ErrorDomain, RetryHint, StopMode, TaskCheckpointEventType, TaskError,
+    ErrorDomain, RetryHint, StopMode, TableConfig, TaskCheckpointEventType, TaskError,
 };
 pub use fs_schema::{FsSchema, FsSchemaRef};
 pub use connector_options::{ConnectorOptions, FromOpts};
-pub use errors::DataflowError;
+pub use errors::{DataflowError, DataflowResult};
 pub use formats::{BadData, Format, Framing, JsonCompression, JsonFormat};
 pub use operator_config::{MetadataField, OperatorConfig, RateLimit};
 

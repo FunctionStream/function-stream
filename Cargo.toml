@@ -84,6 +84,11 @@ cornucopia_async = { git = "https://github.com/ArroyoSystems/cornucopia", branch
 cornucopia = { git = "https://github.com/ArroyoSystems/cornucopia", branch = "sqlite" }
 jiter = {git = "https://github.com/ArroyoSystems/jiter", branch = "disable_python" }
 
+arroyo-state = { path = "../arroyo/crates/arroyo-state" }
+governor = "0.8.0"
+mini-moka = "0.10"
+sha2 = "0.10"
+hex = "0.4"
 
 [features]
 default = ["incremental-cache", "python"]
