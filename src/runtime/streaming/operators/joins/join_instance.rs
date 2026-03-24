@@ -1,4 +1,4 @@
-//! 瞬时 JOIN：双通道喂入 DataFusion 物理计划，水位线推进时闭合实例并抽干结果。
+//! 瞬时 JOIN：双通道喂入 DataFusion 物理计划，水位线推进时闭合实例并抽干结果（纯内存版）。
 
 use anyhow::{anyhow, Result};
 use arrow::compute::{max, min, partition, sort_to_indices, take};
@@ -18,9 +18,8 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tracing::warn;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::{MessageOperator, Registry};
 use async_trait::async_trait;
-use tracing_subscriber::Registry;
 use protocol::grpc::api::JoinOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
@@ -33,6 +32,7 @@ enum JoinSide {
 }
 
 impl JoinSide {
+    #[allow(dead_code)]
     fn name(&self) -> &'static str {
         match self {
             JoinSide::Left => "left",
@@ -149,16 +149,6 @@ impl InstantJoinOperator {
             }
         }
 
-        let wm = ctx.last_present_watermark();
-        {
-            let mut tm = ctx.table_manager_guard().await?;
-            let table = tm
-                .get_expiring_time_key_table(side.name(), wm)
-                .await
-                .map_err(|e| anyhow!("{e:?}"))?;
-            table.insert(from_nanos(max_timestamp as u128), batch.clone());
-        }
-
         let unkeyed_batch = self.input_schema(side).unkeyed_batch(&batch)?;
 
         if max_timestamp == min_timestamp {
@@ -201,39 +191,7 @@ impl MessageOperator for InstantJoinOperator {
         "InstantJoin"
     }
 
-    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-
-        let left_batches: Vec<_> = {
-            let mut tm = ctx.table_manager_guard().await?;
-            let left_table = tm
-                .get_expiring_time_key_table("left", watermark)
-                .await
-                .map_err(|e| anyhow!("{e:?}"))?;
-            left_table
-                .all_batches_for_watermark(watermark)
-                .flat_map(|(_time, batches)| batches.iter().cloned())
-                .collect()
-        };
-        for batch in left_batches {
-            self.process_side_internal(JoinSide::Left, batch, ctx).await?;
-        }
-
-        let right_batches: Vec<_> = {
-            let mut tm = ctx.table_manager_guard().await?;
-            let right_table = tm
-                .get_expiring_time_key_table("right", watermark)
-                .await
-                .map_err(|e| anyhow!("{e:?}"))?;
-            right_table
-                .all_batches_for_watermark(watermark)
-                .flat_map(|(_time, batches)| batches.iter().cloned())
-                .collect()
-        };
-        for batch in right_batches {
-            self.process_side_internal(JoinSide::Right, batch, ctx).await?;
-        }
-
+    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 
@@ -286,22 +244,8 @@ impl MessageOperator for InstantJoinOperator {
     async fn snapshot_state(
         &mut self,
         _barrier: CheckpointBarrier,
-        ctx: &mut TaskContext,
+        _ctx: &mut TaskContext,
     ) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-        let mut tm = ctx.table_manager_guard().await?;
-        tm.get_expiring_time_key_table("left", watermark)
-            .await
-            .map_err(|e| anyhow!("{e:?}"))?
-            .flush(watermark)
-            .await
-            .map_err(|e| anyhow!("{e:?}"))?;
-        tm.get_expiring_time_key_table("right", watermark)
-            .await
-            .map_err(|e| anyhow!("{e:?}"))?
-            .flush(watermark)
-            .await
-            .map_err(|e| anyhow!("{e:?}"))?;
         Ok(())
     }
 }

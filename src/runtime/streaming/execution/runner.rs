@@ -5,11 +5,9 @@ use crate::runtime::streaming::protocol::control::ControlCommand;
 use crate::runtime::streaming::protocol::event::StreamEvent;
 use crate::runtime::streaming::protocol::stream_out::StreamOutput;
 use crate::runtime::streaming::protocol::tracked::TrackedEvent;
-use crate::runtime::streaming::protocol::Watermark;
 use super::tracker::barrier_aligner::{AlignmentStatus, BarrierAligner};
 use super::tracker::watermark_tracker::WatermarkTracker;
 use crate::runtime::streaming::network::endpoint::BoxedEventStream;
-use arroyo_types::CheckpointBarrier;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use tokio::sync::mpsc::Receiver;
@@ -245,7 +243,7 @@ impl SubtaskRunner {
             StreamEvent::Watermark(wm) => {
                 if let Some(aligned_wm) = st.wm_tracker.update(input_idx, wm) {
                     if let Watermark::EventTime(t) = aligned_wm {
-                        st.ctx.last_present_watermark = Some(t);
+                        st.ctx.advance_watermark(t);
                     }
                     let outputs = st
                         .operator

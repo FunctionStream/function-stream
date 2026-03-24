@@ -17,6 +17,7 @@ use tracing::{info, warn};
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::format::DataSerializer;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
 // ============================================================================
@@ -49,7 +50,7 @@ pub struct KafkaSinkOperator {
     pub timestamp_col_idx: Option<usize>,
     pub key_col_idx: Option<usize>,
 
-    pub serializer: ArrowSerializer,
+    pub serializer: DataSerializer,
 
     at_least_once_producer: Option<FutureProducer>,
     transactional_state: Option<TransactionalState>,
@@ -64,7 +65,7 @@ impl KafkaSinkOperator {
         consistency_mode: ConsistencyMode,
         client_config: HashMap<String, String>,
         input_schema: FsSchema,
-        serializer: ArrowSerializer,
+        serializer: DataSerializer,
     ) -> Self {
         Self {
             topic,
@@ -102,7 +103,7 @@ impl KafkaSinkOperator {
         if let Some(idx) = tx_index {
             config.set("enable.idempotence", "true");
             let transactional_id = format!(
-                "arroyo-tx-{}-{}-{}-{}",
+                "fs-tx-{}-{}-{}-{}",
                 ctx.job_id, self.topic, ctx.subtask_idx, idx
             );
             config.set("transactional.id", &transactional_id);
@@ -236,10 +237,10 @@ impl MessageOperator for KafkaSinkOperator {
         batch: RecordBatch,
         _ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
-        let payload_iter = self.serializer.serialize(&batch);
+        let payloads = self.serializer.serialize(&batch)?;
         let producer = self.current_producer().clone();
 
-        for (i, payload) in payload_iter.enumerate() {
+        for (i, payload) in payloads.iter().enumerate() {
             let ts_millis = self
                 .timestamp_col_idx
                 .and_then(|idx| event_timestamp_ms(&batch, i, idx));

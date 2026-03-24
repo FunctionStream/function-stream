@@ -16,9 +16,8 @@ use std::time::{Duration, SystemTime};
 use tracing::{debug, info};
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::{MessageOperator, Registry};
 use async_trait::async_trait;
-use tracing_subscriber::Registry;
 use protocol::grpc::api::ExpressionWatermarkConfig;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_millis, CheckpointBarrier, FsSchema, Watermark};
@@ -242,3 +241,4 @@ impl WatermarkGeneratorConstructor {
         ))
     }
 }
+

@@ -80,11 +80,7 @@ datafusion-functions-window = {git = 'https://github.com/ArroyoSystems/arrow-dat
 
 sqlparser = { git = "https://github.com/FunctionStream/sqlparser-rs", branch = "0.6.0/function-sql-parser" }
 
-cornucopia_async = { git = "https://github.com/ArroyoSystems/cornucopia", branch = "sqlite" }
-cornucopia = { git = "https://github.com/ArroyoSystems/cornucopia", branch = "sqlite" }
-jiter = {git = "https://github.com/ArroyoSystems/jiter", branch = "disable_python" }
-
-arroyo-state = { path = "../arroyo/crates/arroyo-state" }
+ahash = "0.8"
 governor = "0.8.0"
 mini-moka = "0.10"
 sha2 = "0.10"

@@ -2,4 +2,4 @@
 
 pub mod kafka;
 
-pub use kafka::{BatchDeserializer, KafkaSourceOperator, KafkaState};
+pub use kafka::{BatchDeserializer, BufferedDeserializer, KafkaSourceOperator, KafkaState};

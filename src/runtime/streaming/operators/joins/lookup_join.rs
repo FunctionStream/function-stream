@@ -14,13 +14,14 @@ use datafusion_proto::physical_plan::from_proto::parse_physical_expr;
 use datafusion_proto::protobuf::PhysicalExprNode;
 use mini_moka::sync::Cache;
 use prost::Message;
+use protocol::grpc::api::{JoinType, LookupJoinOperator as LookupJoinProto};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use protocol::grpc::api::JoinType;
+
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
-use crate::runtime::streaming::protocol::stream_output::StreamOutput;
+use crate::runtime::streaming::api::operator::{MessageOperator, Registry};
+use crate::runtime::streaming::connectors::{LookupConnector, connectors};
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, FsSchema, MetadataField, OperatorConfig, Watermark, LOOKUP_KEY_INDEX_FIELD};
 
@@ -273,7 +274,7 @@ pub struct LookupJoinConstructor;
 impl LookupJoinConstructor {
     pub fn with_config(
         &self,
-        config: LookupJoinOperator,
+        config: LookupJoinProto,
         registry: Arc<Registry>,
     ) -> anyhow::Result<LookupJoinOperator> {
         let join_type = config.join_type();
@@ -361,3 +362,4 @@ impl LookupJoinConstructor {
         })
     }
 }
+

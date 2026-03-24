@@ -4,8 +4,66 @@ use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
 use crate::runtime::streaming::protocol::stream_out::StreamOutput;
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
+use datafusion::common::Result as DfResult;
+use datafusion::execution::context::SessionContext;
+use datafusion::execution::FunctionRegistry;
+use datafusion::logical_expr::{AggregateUDF, ScalarUDF, WindowUDF};
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Duration;
 use crate::sql::common::{CheckpointBarrier, Watermark};
+
+// ---------------------------------------------------------------------------
+// Registry — 算子 / UDF 注册表（取代 tracing_subscriber::Registry）
+// ---------------------------------------------------------------------------
+
+/// 运行时函数与状态注册表。
+///
+/// 包装 DataFusion [`SessionContext`]，为物理计划反序列化提供 UDF / UDAF / UDWF 查询能力。
+/// `Arc<Registry>` 在工厂中创建后，由各构造器共享。
+pub struct Registry {
+    ctx: SessionContext,
+}
+
+impl Registry {
+    pub fn new() -> Self {
+        Self {
+            ctx: SessionContext::new(),
+        }
+    }
+
+    pub fn session_context(&self) -> &SessionContext {
+        &self.ctx
+    }
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FunctionRegistry for Registry {
+    fn udfs(&self) -> HashSet<String> {
+        self.ctx.udfs()
+    }
+
+    fn udf(&self, name: &str) -> DfResult<Arc<ScalarUDF>> {
+        self.ctx.udf(name)
+    }
+
+    fn udaf(&self, name: &str) -> DfResult<Arc<AggregateUDF>> {
+        self.ctx.udaf(name)
+    }
+
+    fn udwf(&self, name: &str) -> DfResult<Arc<WindowUDF>> {
+        self.ctx.udwf(name)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ConstructedOperator
+// ---------------------------------------------------------------------------
 
 /// 工厂反射产出的具体算子实例
 pub enum ConstructedOperator {

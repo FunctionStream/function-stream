@@ -1,4 +1,6 @@
-//! 滑动窗口聚合：与 worker `arrow/sliding_aggregating_window` 对齐，实现 [`MessageOperator`]。
+//! 滑动窗口聚合：纯内存版。
+//! 完全依赖内部的 TieredRecordBatchHolder 和 ActiveBin 在内存中进行计算，
+//! 摆脱 TableManager 依赖，遇到 Barrier 自动透传。
 
 use anyhow::{anyhow, bail, Result};
 use arrow::compute::{partition, sort_to_indices, take};
@@ -25,13 +27,14 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::MessageOperator;
 use async_trait::async_trait;
-use tracing_subscriber::Registry;
+use crate::runtime::streaming::api::operator::Registry;
 use protocol::grpc::api::SlidingWindowAggregateOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, Watermark};
 use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
 // ============================================================================
-// Tiered panes
+// 纯内存状态：阶梯式时间面板 (Tiered panes)
+// 这部分本身就是极佳的内存数据结构，原样保留！
 // ============================================================================
 
 #[derive(Default, Debug)]
@@ -202,7 +205,7 @@ impl TieredRecordBatchHolder {
 }
 
 // ============================================================================
-// Per-bin partial aggregation
+// Per-bin partial aggregation (纯内存缓冲区)
 // ============================================================================
 
 struct ActiveBin {
@@ -249,7 +252,7 @@ impl ActiveBin {
 }
 
 // ============================================================================
-// Operator
+// 算子主体
 // ============================================================================
 
 pub struct SlidingWindowOperator {
@@ -314,29 +317,7 @@ impl MessageOperator for SlidingWindowOperator {
         "SlidingWindow"
     }
 
-    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-        let mut tm = ctx.table_manager_guard().await?;
-        let table = tm
-            .get_expiring_time_key_table("t", watermark)
-            .await
-            .map_err(|e| anyhow!("expiring time key table t: {e}"))?;
-
-        let watermark_bin = self.bin_start(watermark.unwrap_or(SystemTime::UNIX_EPOCH));
-
-        for (timestamp, batches) in table.all_batches_for_watermark(watermark) {
-            let bin = self.bin_start(*timestamp);
-            if bin < watermark_bin {
-                for batch in batches {
-                    self.tiered_record_batches.insert(batch.clone(), bin)?;
-                }
-            } else {
-                let slot = self.active_bins.entry(bin).or_default();
-                for batch in batches {
-                    slot.finished_batches.push(batch.clone());
-                }
-            }
-        }
+    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 
@@ -470,28 +451,7 @@ impl MessageOperator for SlidingWindowOperator {
         Ok(final_outputs)
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, ctx: &mut TaskContext) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-        let mut tm = ctx.table_manager_guard().await?;
-        let table = tm
-            .get_expiring_time_key_table("t", watermark)
-            .await
-            .map_err(|e| anyhow!("expiring time key table t: {e}"))?;
-
-        for (bin_start, active_bin) in self.active_bins.iter_mut() {
-            active_bin.close_and_drain().await?;
-
-            for batch in &active_bin.finished_batches {
-                let state_batch = Self::add_bin_start_as_timestamp(
-                    batch,
-                    *bin_start,
-                    self.partial_schema.schema.clone(),
-                )?;
-                table.insert(*bin_start, state_batch);
-            }
-        }
-
-        table.flush(watermark).await?;
+    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 
@@ -500,6 +460,8 @@ impl MessageOperator for SlidingWindowOperator {
     }
 }
 
+// ============================================================================
+// 构造器
 // ============================================================================
 
 pub struct SlidingAggregatingWindowConstructor;
@@ -576,3 +538,4 @@ impl SlidingAggregatingWindowConstructor {
         })
     }
 }
+

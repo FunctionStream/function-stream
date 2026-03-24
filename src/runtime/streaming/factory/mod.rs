@@ -1,3 +1,6 @@
 pub mod registry;
 
-pub use registry:: OperatorFactory;
+pub use registry::{
+    ConnectorSinkDispatcher, ConnectorSourceDispatcher, OperatorConstructor, OperatorFactory,
+    PassthroughConstructor,
+};

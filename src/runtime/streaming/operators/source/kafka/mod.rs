@@ -1,6 +1,8 @@
 //! Kafka 源算子：实现 [`crate::runtime::streaming::api::source::SourceOperator`]，由 [`crate::runtime::streaming::execution::SourceRunner`] 轮询 `fetch_next`。
 
 use anyhow::{anyhow, Context as _, Result};
+use arrow_array::RecordBatch;
+use arrow_schema::SchemaRef;
 use async_trait::async_trait;
 use bincode::{Decode, Encode};
 use governor::{DefaultDirectRateLimiter, Quota, RateLimiter as GovernorRateLimiter};
@@ -10,11 +12,12 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
-use arrow_array::RecordBatch;
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::source::{SourceEvent, SourceOffset, SourceOperator};
+use crate::runtime::streaming::format::{BadDataPolicy, DataDeserializer, Format};
 use crate::sql::common::{CheckpointBarrier, MetadataField};
+use crate::sql::common::fs_schema::FieldValueType;
 // ============================================================================
 // 1. 领域模型：Kafka 状态与配置
 // ============================================================================
@@ -25,8 +28,7 @@ pub struct KafkaState {
     offset: i64,
 }
 
-/// 模拟 Arroyo 原版的 Deserializer Buffer
-/// （工业实现中，反序列化常带 buffer，满 N 条或超时后吐出一个 [`RecordBatch`]）。
+/// 增量反序列化缓冲 trait：Source 逐条 `deserialize_slice`，攒满后 `flush_buffer` 输出 [`RecordBatch`]。
 pub trait BatchDeserializer: Send + 'static {
     fn deserialize_slice(
         &mut self,
@@ -38,6 +40,54 @@ pub trait BatchDeserializer: Send + 'static {
     fn should_flush(&self) -> bool;
 
     fn flush_buffer(&mut self) -> Result<Option<RecordBatch>>;
+}
+
+// ---------------------------------------------------------------------------
+// BufferedDeserializer — 基于 DataDeserializer 的默认 BatchDeserializer 实现
+// ---------------------------------------------------------------------------
+
+/// 将 [`DataDeserializer`] 包装为 [`BatchDeserializer`]：逐条缓存 payload，达到阈值后批量反序列化。
+pub struct BufferedDeserializer {
+    inner: DataDeserializer,
+    buffer: Vec<Vec<u8>>,
+    batch_size: usize,
+}
+
+impl BufferedDeserializer {
+    pub fn new(format: Format, schema: SchemaRef, bad_data_policy: BadDataPolicy, batch_size: usize) -> Self {
+        Self {
+            inner: DataDeserializer::new(format, schema, bad_data_policy),
+            buffer: Vec::with_capacity(batch_size),
+            batch_size,
+        }
+    }
+}
+
+impl BatchDeserializer for BufferedDeserializer {
+    fn deserialize_slice(
+        &mut self,
+        payload: &[u8],
+        _timestamp: u64,
+        _metadata: Option<HashMap<&str, FieldValueType<'_>>>,
+    ) -> Result<()> {
+        self.buffer.push(payload.to_vec());
+        Ok(())
+    }
+
+    fn should_flush(&self) -> bool {
+        self.buffer.len() >= self.batch_size
+    }
+
+    fn flush_buffer(&mut self) -> Result<Option<RecordBatch>> {
+        if self.buffer.is_empty() {
+            return Ok(None);
+        }
+
+        let refs: Vec<&[u8]> = self.buffer.iter().map(|v| v.as_slice()).collect();
+        let batch = self.inner.deserialize_batch(&refs)?;
+        self.buffer.clear();
+        Ok(Some(batch))
+    }
 }
 
 impl SourceOffset {
@@ -109,9 +159,9 @@ impl KafkaSourceOperator {
         let group_id = match (&self.group_id, &self.group_id_prefix) {
             (Some(gid), _) => gid.clone(),
             (None, Some(prefix)) => {
-                format!("{}-arroyo-{}-{}", prefix, ctx.job_id, ctx.subtask_idx)
+                format!("{}-fs-{}-{}", prefix, ctx.job_id, ctx.subtask_idx)
             }
-            (None, None) => format!("arroyo-{}-{}-consumer", ctx.job_id, ctx.subtask_idx),
+            (None, None) => format!("fs-{}-{}-consumer", ctx.job_id, ctx.subtask_idx),
         };
 
         for (key, value) in &self.client_configs {

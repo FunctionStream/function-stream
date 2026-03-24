@@ -16,18 +16,21 @@
 pub mod api;
 pub mod arrow;
 pub mod cluster;
+pub mod connectors;
 pub mod error;
 pub mod execution;
 pub mod factory;
+pub mod format;
 pub mod memory;
 pub mod network;
 pub mod operators;
 pub mod protocol;
 pub mod state;
-mod format;
+pub mod storage;
 
 pub use api::{
-    ConstructedOperator, MessageOperator, SourceEvent, SourceOffset, SourceOperator, TaskContext,
+    ConstructedOperator, MessageOperator, Registry, SourceEvent, SourceOffset, SourceOperator,
+    TaskContext,
 };
 pub use cluster::{
     CompileError, ExchangeMode, ExecutionGraph, JobCompiler, JobId, PartitioningStrategy,
@@ -36,7 +39,7 @@ pub use cluster::{
 };
 pub use error::RunError;
 pub use execution::{SOURCE_IDLE_SLEEP, SourceRunner, SubtaskRunner};
-pub use factory:: OperatorFactory;
+pub use factory::{OperatorConstructor, OperatorFactory};
 pub use memory::{MemoryPool, MemoryTicket};
 pub use network::{BoxedEventStream, NetworkEnvironment, PhysicalSender, RemoteSenderStub};
 pub use protocol::{

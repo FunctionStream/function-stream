@@ -28,6 +28,7 @@ pub enum OperatorName {
     SlidingWindowAggregate,
     SessionWindowAggregate,
     UpdatingAggregate,
+    KeyBy,
     ConnectorSource,
     ConnectorSink,
 }
@@ -320,6 +321,7 @@ impl LogicalProgram {
                         "sql-session-window-aggregate".to_string()
                     }
                     OperatorName::UpdatingAggregate => "sql-updating-aggregate".to_string(),
+                    OperatorName::KeyBy => "key-by-routing".to_string(),
                     OperatorName::ConnectorSource => "connector-source".to_string(),
                     OperatorName::ConnectorSink => "connector-sink".to_string(),
                 };

@@ -1,4 +1,4 @@
-use crate::runtime::streaming::protocol::watermark::{merge_watermarks, watermark_strictly_advances, Watermark};
+use crate::runtime::streaming::protocol::watermark::{merge_watermarks, watermark_strictly_advances};
 use crate::sql::common::Watermark;
 
 #[derive(Debug)]

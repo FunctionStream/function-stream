@@ -30,6 +30,7 @@ pub enum OperatorName {
     SlidingWindowAggregate,
     SessionWindowAggregate,
     UpdatingAggregate,
+    KeyBy,
     ConnectorSource,
     ConnectorSink,
 }

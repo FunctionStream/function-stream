@@ -1,8 +1,9 @@
-//! 会话窗口聚合：与 worker `arrow/session_aggregating_window` 对齐，实现 [`MessageOperator`]。
+//! 会话窗口聚合：纯内存版，完全脱离持久化状态存储。
+//! 利用 BTreeMap 充当优先队列，数据天然在内存中进行 Gap 合并与触发。
 
 use anyhow::{anyhow, bail, Context, Result};
 use arrow::compute::{
-    concat_batches, filter_record_batch, kernels::cmp::gt_eq, lexsort_to_indices, max, partition, take,
+    concat_batches, filter_record_batch, kernels::cmp::gt_eq, lexsort_to_indices, partition, take,
 };
 use arrow::row::{RowConverter, SortField};
 use arrow_array::types::TimestampNanosecondType;
@@ -22,12 +23,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tracing::warn;
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::MessageOperator;
 use async_trait::async_trait;
-use tracing_subscriber::Registry;
+use crate::runtime::streaming::api::operator::Registry;
 use protocol::grpc::api::SessionWindowAggregateOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
@@ -35,7 +35,7 @@ use crate::sql::common::converter::Converter;
 use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
 use crate::sql::schema::utils::window_arrow_struct;
 // ============================================================================
-// 领域模型
+// 领域模型与纯内存状态
 // ============================================================================
 
 struct SessionWindowConfig {
@@ -167,7 +167,7 @@ struct SessionWindowResult {
 struct KeySessionState {
     config: Arc<SessionWindowConfig>,
     active_session: Option<ActiveSession>,
-    buffered_batches: BTreeMap<SystemTime, Vec<RecordBatch>>,
+    buffered_batches: BTreeMap<SystemTime, Vec<RecordBatch>>, // 纯内存缓冲
 }
 
 impl KeySessionState {
@@ -323,7 +323,7 @@ fn build_session_output_schema(
 }
 
 // ============================================================================
-// 算子
+// 算子本体：负责处理输入数据与时间流，路由给具体的 KeySessionState
 // ============================================================================
 
 pub struct SessionWindowOperator {
@@ -564,10 +564,7 @@ impl SessionWindowOperator {
 
         let window_start_array = PrimitiveArray::<TimestampNanosecondType>::from(start_times);
         let window_end_array = PrimitiveArray::<TimestampNanosecondType>::from(end_times.clone());
-        let timestamp_array = PrimitiveArray::<TimestampNanosecondType>::from(
-            end_times.into_iter().map(|t| t - 1).collect::<Vec<_>>(),
-        );
-
+        
         let result_batches: Vec<&RecordBatch> = session_results.iter().map(|res| &res.batch).collect();
         let merged_batch = concat_batches(&session_results[0].batch.schema(), result_batches)?;
 
@@ -584,12 +581,12 @@ impl SessionWindowOperator {
         let mut columns = key_columns;
         columns.insert(self.config.window_index, Arc::new(window_struct_array));
         columns.extend_from_slice(merged_batch.columns());
-        columns.push(Arc::new(timestamp_array));
 
         RecordBatch::try_new(self.config.output_schema.clone(), columns)
             .context("failed to create session window output batch")
     }
 
+    #[allow(dead_code)]
     fn earliest_batch_time(&self) -> Option<SystemTime> {
         self.pq_start_times
             .first_key_value()
@@ -603,44 +600,7 @@ impl MessageOperator for SessionWindowOperator {
         "SessionWindow"
     }
 
-    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
-        let mut tm = ctx.table_manager_guard().await?;
-        let start_time_opt = tm
-            .get_global_keyed_state::<u32, Option<SystemTime>>("e")
-            .await
-            .map_err(|e| anyhow!("global keyed state e: {e}"))?
-            .get_all()
-            .values()
-            .filter_map(|e| *e)
-            .min();
-
-        let Some(start_time) = start_time_opt else {
-            return Ok(());
-        };
-
-        let state_table = tm
-            .get_expiring_time_key_table("s", Some(start_time))
-            .await
-            .map_err(|e| anyhow!("expiring time key table s: {e}"))?;
-        for (_, batches) in state_table.all_batches_for_watermark(Some(start_time)) {
-            for batch in batches {
-                let filtered = self.filter_batch_by_time(batch.clone(), Some(start_time))?;
-                if filtered.num_rows() > 0 {
-                    let sorted = self.sort_batch(&filtered)?;
-                    self.ingest_sorted_batch(sorted, Some(start_time)).await?;
-                }
-            }
-        }
-
-        if let Some(ts) = ctx.last_present_watermark() {
-            let evicted = self.evaluate_watermark(ts).await?;
-            if !evicted.is_empty() {
-                warn!(
-                    "evicted {} session result batch(es) when restoring from state",
-                    evicted.len()
-                );
-            }
-        }
+    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 
@@ -658,23 +618,6 @@ impl MessageOperator for SessionWindowOperator {
         }
 
         let sorted_batch = self.sort_batch(&filtered_batch)?;
-
-        let max_timestamp = max(
-            sorted_batch
-                .column(self.config.input_schema_ref.timestamp_index)
-                .as_any()
-                .downcast_ref::<TimestampNanosecondArray>()
-                .ok_or_else(|| anyhow!("expected timestamp column"))?,
-        )
-        .ok_or_else(|| anyhow!("expected max timestamp"))?;
-
-        let mut tm = ctx.table_manager_guard().await?;
-        let table = tm
-            .get_expiring_time_key_table("s", ctx.last_present_watermark())
-            .await
-            .map_err(|e| anyhow!("expiring time key table s: {e}"))?;
-        table.insert(from_nanos(max_timestamp as u128), sorted_batch.clone());
-        drop(tm);
 
         self.ingest_sorted_batch(sorted_batch, watermark_time).await?;
 
@@ -697,22 +640,7 @@ impl MessageOperator for SessionWindowOperator {
             .collect())
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, ctx: &mut TaskContext) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-        let mut tm = ctx.table_manager_guard().await?;
-
-        tm.get_expiring_time_key_table("s", watermark)
-            .await
-            .map_err(|e| anyhow!("expiring time key table s: {e}"))?
-            .flush(watermark)
-            .await?;
-
-        tm.get_global_keyed_state::<u32, Option<SystemTime>>("e")
-            .await
-            .map_err(|e| anyhow!("global keyed state e: {e}"))?
-            .insert(ctx.subtask_idx, self.earliest_batch_time())
-            .await;
-
+    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 
@@ -722,7 +650,7 @@ impl MessageOperator for SessionWindowOperator {
 }
 
 // ============================================================================
-// 构造器（返回 [`SessionWindowOperator`]，供 Actor 子任务直接 `Box::new`）
+// 构造器
 // ============================================================================
 
 pub struct SessionAggregatingWindowConstructor;
@@ -802,3 +730,4 @@ impl SessionAggregatingWindowConstructor {
         })
     }
 }
+

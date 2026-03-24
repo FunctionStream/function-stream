@@ -1,4 +1,5 @@
-//! 带 TTL 的 Key-Time Join：两侧状态表 + DataFusion 物理计划成对计算。
+//! 带 TTL 的 Key-Time Join：纯内存状态版 + DataFusion 物理计划成对计算。
+//! 完全移除了底层 TableManager 和持久化状态依赖。
 
 use anyhow::{anyhow, Result};
 use arrow::compute::concat_batches;
@@ -9,14 +10,14 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion_proto::{physical_plan::AsExecutionPlan, protobuf::PhysicalPlanNode};
 use futures::StreamExt;
 use prost::Message;
+use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tracing::warn;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::{MessageOperator, Registry};
 use async_trait::async_trait;
-use tracing_subscriber::Registry;
 use protocol::grpc::api::JoinOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
@@ -28,32 +29,64 @@ enum JoinSide {
     Right,
 }
 
-impl JoinSide {
-    fn table_name(&self) -> &'static str {
-        match self {
-            JoinSide::Left => "left",
-            JoinSide::Right => "right",
+// ============================================================================
+// 纯内存状态缓冲区 (In-Memory TTL Buffer)
+// ============================================================================
+
+struct StateBuffer {
+    batches: VecDeque<(SystemTime, RecordBatch)>,
+    ttl: Duration,
+}
+
+impl StateBuffer {
+    fn new(ttl: Duration) -> Self {
+        Self {
+            batches: VecDeque::new(),
+            ttl,
         }
+    }
+
+    fn insert(&mut self, batch: RecordBatch, time: SystemTime) {
+        self.batches.push_back((time, batch));
+    }
+
+    fn expire(&mut self, current_time: SystemTime) {
+        let cutoff = current_time
+            .checked_sub(self.ttl)
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        while let Some((time, _)) = self.batches.front() {
+            if *time < cutoff {
+                self.batches.pop_front();
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn get_all_batches(&self) -> Vec<RecordBatch> {
+        self.batches.iter().map(|(_, b)| b.clone()).collect()
     }
 }
 
+// ============================================================================
+// 算子主体
+// ============================================================================
+
 pub struct JoinWithExpirationOperator {
-    /// 保留与配置/表注册语义一致；实际 TTL 由状态表配置决定。
-    #[allow(dead_code)]
-    left_expiration: Duration,
-    #[allow(dead_code)]
-    right_expiration: Duration,
     left_input_schema: FsSchema,
     right_input_schema: FsSchema,
     left_schema: FsSchema,
     right_schema: FsSchema,
+
     left_passer: Arc<RwLock<Option<RecordBatch>>>,
     right_passer: Arc<RwLock<Option<RecordBatch>>>,
     join_exec_plan: Arc<dyn ExecutionPlan>,
+
+    left_state: StateBuffer,
+    right_state: StateBuffer,
 }
 
 impl JoinWithExpirationOperator {
-    /// 执行 DataFusion 物理计划，返回 JOIN 结果批次（不经过 Collector）。
     async fn compute_pair(
         &mut self,
         left: RecordBatch,
@@ -71,6 +104,7 @@ impl JoinWithExpirationOperator {
         self.join_exec_plan
             .reset()
             .map_err(|e| anyhow!("join plan reset: {e}"))?;
+
         let mut result_stream = self
             .join_exec_plan
             .execute(0, SessionContext::new().task_ctx())
@@ -90,42 +124,22 @@ impl JoinWithExpirationOperator {
         batch: RecordBatch,
         ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
-        let watermark = ctx.last_present_watermark();
-        let target_name = side.table_name();
-        let opposite_name = match side {
-            JoinSide::Left => JoinSide::Right.table_name(),
-            JoinSide::Right => JoinSide::Left.table_name(),
-        };
+        let current_time = ctx
+            .last_present_watermark()
+            .unwrap_or_else(SystemTime::now);
 
-        let mut tm = ctx.table_manager_guard().await?;
+        self.left_state.expire(current_time);
+        self.right_state.expire(current_time);
 
-        let inserted_rows = {
-            let target_table = tm
-                .get_key_time_table(target_name, watermark)
-                .await
-                .map_err(|e| anyhow!("{e:?}"))?;
-            target_table
-                .insert(batch.clone())
-                .await
-                .map_err(|e| anyhow!("{e:?}"))?
-        };
-
-        let opposite_table = tm
-            .get_key_time_table(opposite_name, watermark)
-            .await
-            .map_err(|e| anyhow!("{e:?}"))?;
-
-        let mut opposite_batches = Vec::new();
-        for row in inserted_rows {
-            if let Some(matched_batch) = opposite_table
-                .get_batch(row.as_ref())
-                .map_err(|e| anyhow!("{e:?}"))?
-            {
-                opposite_batches.push(matched_batch.clone());
-            }
+        match side {
+            JoinSide::Left => self.left_state.insert(batch.clone(), current_time),
+            JoinSide::Right => self.right_state.insert(batch.clone(), current_time),
         }
 
-        drop(tm);
+        let opposite_batches = match side {
+            JoinSide::Left => self.right_state.get_all_batches(),
+            JoinSide::Right => self.left_state.get_all_batches(),
+        };
 
         if opposite_batches.is_empty() {
             return Ok(vec![]);
@@ -193,8 +207,6 @@ impl MessageOperator for JoinWithExpirationOperator {
         _barrier: CheckpointBarrier,
         _ctx: &mut TaskContext,
     ) -> Result<()> {
-        // `KeyTimeView` 无 `flush`；写入已通过 `insert` 经 `state_tx` 进入后端刷写管线，
-        // 与 worker 侧 `JoinWithExpiration` 未单独实现 `handle_checkpoint` 一致。
         Ok(())
     }
 
@@ -203,8 +215,10 @@ impl MessageOperator for JoinWithExpirationOperator {
     }
 }
 
-/// 从配置构造 [`JoinWithExpirationOperator`]（实现 [`MessageOperator`]）。
-/// 注意：`ConstructedOperator` 仅包装 `ArrowOperator`，此处不返回该类型。
+// ============================================================================
+// 构造器
+// ============================================================================
+
 pub struct JoinWithExpirationConstructor;
 
 impl JoinWithExpirationConstructor {
@@ -247,8 +261,6 @@ impl JoinWithExpirationConstructor {
         }
 
         Ok(JoinWithExpirationOperator {
-            left_expiration: ttl,
-            right_expiration: ttl,
             left_input_schema,
             right_input_schema,
             left_schema,
@@ -256,6 +268,8 @@ impl JoinWithExpirationConstructor {
             left_passer,
             right_passer,
             join_exec_plan,
+            left_state: StateBuffer::new(ttl),
+            right_state: StateBuffer::new(ttl),
         })
     }
 }

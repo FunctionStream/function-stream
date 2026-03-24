@@ -1,4 +1,6 @@
-//! 窗口函数（按事件时间分桶的瞬时执行）：与 worker `arrow/window_fn` 对齐，实现 [`MessageOperator`]。
+//! 窗口函数（按事件时间分桶的瞬时执行）：纯内存版。
+//! 完全依赖内部的 ActiveWindowExec 通道在内存中缓冲数据，
+//! 摆脱持久化状态存储的依赖，遇到 Barrier 自动透传。
 
 use anyhow::{anyhow, Result};
 use arrow::compute::{max, min};
@@ -18,13 +20,16 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tracing::warn;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::{MessageOperator, Registry};
 use async_trait::async_trait;
-use tracing_subscriber::Registry;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
 use crate::sql::common::time_utils::print_time;
 use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
+
+// ============================================================================
+// 纯内存执行缓冲区
+// ============================================================================
 
 struct ActiveWindowExec {
     sender: Option<UnboundedSender<RecordBatch>>,
@@ -57,6 +62,10 @@ impl ActiveWindowExec {
         Ok(results)
     }
 }
+
+// ============================================================================
+// 算子主体
+// ============================================================================
 
 pub struct WindowFunctionOperator {
     input_schema: FsSchemaRef,
@@ -141,25 +150,7 @@ impl MessageOperator for WindowFunctionOperator {
         "WindowFunction"
     }
 
-    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-        let mut tm = ctx.table_manager_guard().await?;
-        let table = tm
-            .get_expiring_time_key_table("input", watermark)
-            .await
-            .map_err(|e| anyhow!("expiring time key table input: {e}"))?;
-
-        for (timestamp, batches) in table.all_batches_for_watermark(watermark) {
-            let exec = self.get_or_create_exec(*timestamp)?;
-            for batch in batches {
-                exec
-                    .sender
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("window exec sender missing on restore"))?
-                    .send(batch.clone())
-                    .map_err(|e| anyhow!("restore send: {e}"))?;
-            }
-        }
+    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 
@@ -172,17 +163,9 @@ impl MessageOperator for WindowFunctionOperator {
         let current_watermark = ctx.last_present_watermark();
         let split_batches = self.filter_and_split_batches(batch, current_watermark)?;
 
-        let mut tm = ctx.table_manager_guard().await?;
-        let table = tm
-            .get_expiring_time_key_table("input", current_watermark)
-            .await
-            .map_err(|e| anyhow!("expiring time key table input: {e}"))?;
-
         for (sub_batch, timestamp) in split_batches {
-            table.insert(timestamp, sub_batch.clone());
             let exec = self.get_or_create_exec(timestamp)?;
-            exec
-                .sender
+            exec.sender
                 .as_ref()
                 .ok_or_else(|| anyhow!("window exec sender missing"))?
                 .send(sub_batch)
@@ -227,14 +210,7 @@ impl MessageOperator for WindowFunctionOperator {
         Ok(final_outputs)
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, ctx: &mut TaskContext) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-        let mut tm = ctx.table_manager_guard().await?;
-        tm.get_expiring_time_key_table("input", watermark)
-            .await
-            .map_err(|e| anyhow!("expiring time key table input: {e}"))?
-            .flush(watermark)
-            .await?;
+    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 
@@ -242,6 +218,10 @@ impl MessageOperator for WindowFunctionOperator {
         Ok(vec![])
     }
 }
+
+// ============================================================================
+// 构造器
+// ============================================================================
 
 pub struct WindowFunctionConstructor;
 
@@ -290,3 +270,4 @@ impl WindowFunctionConstructor {
         })
     }
 }
+

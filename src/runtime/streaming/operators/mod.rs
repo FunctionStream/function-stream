@@ -2,25 +2,22 @@
 
 pub mod grouping;
 pub mod joins;
+pub mod key_by;
 pub mod sink;
 pub mod source;
 pub mod watermark;
 pub mod windows;
 
-pub use grouping::{
-    IncrementalAggregatingConstructor, IncrementalAggregatingFunc, Key, UpdatingCache,
-};
+pub use grouping::{IncrementalAggregatingFunc, Key, UpdatingCache};
 pub use joins::{
-    InstantJoinConstructor, InstantJoinOperator, JoinWithExpirationConstructor,
-    JoinWithExpirationOperator, LookupJoinConstructor, LookupJoinOperator, LookupJoinType,
+    InstantJoinOperator, JoinWithExpirationOperator, LookupJoinOperator, LookupJoinType,
 };
+pub use key_by::KeyByOperator;
 pub use sink::{ConsistencyMode, KafkaSinkOperator};
-pub use source::{BatchDeserializer, KafkaSourceOperator, KafkaState};
-pub use watermark::{WatermarkGeneratorConstructor, WatermarkGeneratorOperator, WatermarkGeneratorState};
+pub use source::{BatchDeserializer, BufferedDeserializer, KafkaSourceOperator, KafkaState};
+pub use watermark::{WatermarkGeneratorOperator, WatermarkGeneratorState};
 pub use windows::{
-    SessionAggregatingWindowConstructor, SessionWindowOperator,
-    SlidingAggregatingWindowConstructor, SlidingWindowOperator,
-    TumblingAggregateWindowConstructor, TumblingWindowOperator, WindowFunctionConstructor,
+    SessionWindowOperator, SlidingWindowOperator, TumblingWindowOperator,
     WindowFunctionOperator,
 };
 
