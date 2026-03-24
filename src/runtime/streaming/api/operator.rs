@@ -8,6 +8,7 @@ use datafusion::common::Result as DfResult;
 use datafusion::execution::context::SessionContext;
 use datafusion::execution::FunctionRegistry;
 use datafusion::logical_expr::{AggregateUDF, ScalarUDF, WindowUDF};
+use datafusion::logical_expr::planner::ExprPlanner;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
@@ -58,6 +59,10 @@ impl FunctionRegistry for Registry {
 
     fn udwf(&self, name: &str) -> DfResult<Arc<WindowUDF>> {
         self.ctx.udwf(name)
+    }
+
+    fn expr_planners(&self) -> Vec<Arc<dyn ExprPlanner>> {
+        self.ctx.expr_planners()
     }
 }
 

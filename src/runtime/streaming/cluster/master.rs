@@ -6,10 +6,9 @@ use crate::runtime::streaming::cluster::graph::{
     PhysicalEdgeDescriptor, ResourceProfile, SubtaskIndex, TaskDeploymentDescriptor, VertexId,
 };
 
-use arroyo_datastream::logical::{LogicalEdgeType, LogicalGraph, OperatorChain};
 use petgraph::Direction;
 use sha2::{Digest, Sha256};
-use crate::sql::logical_node::logical::{LogicalEdgeType, LogicalGraph};
+use crate::sql::logical_node::logical::{LogicalEdgeType, LogicalGraph, OperatorChain};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CompileError {
@@ -167,7 +166,7 @@ impl JobCompiler {
                 LogicalEdgeType::Shuffle
                 | LogicalEdgeType::LeftJoin
                 | LogicalEdgeType::RightJoin => {
-                    if let Some(key_indices) = edge.schema.key_indices.as_ref() {
+                    if let Some(key_indices) = edge.schema.storage_keys() {
                         if !key_indices.is_empty() {
                             PartitioningStrategy::HashByKeys(key_indices.clone())
                         } else {

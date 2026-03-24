@@ -7,7 +7,7 @@ use crate::runtime::streaming::factory::OperatorFactory;
 use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::NetworkEnvironment;
 use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
-use arroyo_state::tables::table_manager::TableManager;
+use crate::runtime::streaming::storage::manager::TableManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::{channel, Sender};

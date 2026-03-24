@@ -26,6 +26,7 @@ pub use logical_edge::{LogicalEdge, LogicalEdgeType};
 pub use logical_graph::{LogicalGraph, Optimizer};
 pub use logical_node::LogicalNode;
 pub use logical_program::LogicalProgram;
+pub use operator_chain::OperatorChain;
 pub use operator_name::OperatorName;
 pub use program_config::ProgramConfig;
 pub use python_udf_config::PythonUdfConfig;
