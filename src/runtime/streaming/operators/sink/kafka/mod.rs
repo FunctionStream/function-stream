@@ -209,14 +209,7 @@ impl MessageOperator for KafkaSinkOperator {
                 self.at_least_once_producer = Some(self.create_producer(ctx, None)?);
             }
             ConsistencyMode::ExactlyOnce => {
-                let mut next_idx = {
-                    let mut tm = ctx.table_manager_guard().await?;
-                    let index_table = tm
-                        .get_global_keyed_state::<u32, usize>("tx_idx")
-                        .await
-                        .map_err(|e| anyhow!(e))?;
-                    index_table.get(&ctx.subtask_idx).copied().unwrap_or(0)
-                };
+                let mut next_idx = 0usize;
 
                 let active_producer = self.create_producer(ctx, Some(next_idx))?;
                 next_idx += 1;
@@ -300,17 +293,6 @@ impl MessageOperator for KafkaSinkOperator {
             let state = self.transactional_state.as_mut().unwrap();
             let old_producer = std::mem::replace(&mut state.active_producer, new_producer);
             state.producer_awaiting_commit = Some(old_producer);
-
-            {
-                let mut tm = ctx.table_manager_guard().await?;
-                let index_table = tm
-                    .get_global_keyed_state::<u32, usize>("tx_idx")
-                    .await
-                    .map_err(|e| anyhow!(e))?;
-                index_table
-                    .insert(ctx.subtask_idx, state.next_transaction_index)
-                    .await;
-            }
 
             state.next_transaction_index += 1;
         }

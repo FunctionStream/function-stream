@@ -111,6 +111,7 @@ impl Coordinator {
             let res = Executor::new(
                 Arc::clone(&runtime.task_manager),
                 runtime.catalog_manager.clone(),
+                Arc::clone(&runtime.job_manager),
             )
             .execute(plan.as_ref())
             .map_err(|e| anyhow::anyhow!(e))

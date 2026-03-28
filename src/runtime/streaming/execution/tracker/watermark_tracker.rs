@@ -5,6 +5,7 @@ use crate::sql::common::Watermark;
 pub struct WatermarkTracker {
     watermarks: Vec<Option<Watermark>>,
     current_min_watermark: Option<Watermark>,
+    eof_count: usize,
 }
 
 impl WatermarkTracker {
@@ -12,6 +13,7 @@ impl WatermarkTracker {
         Self {
             watermarks: vec![None; input_count],
             current_min_watermark: None,
+            eof_count: 0,
         }
     }
 
@@ -30,6 +32,15 @@ impl WatermarkTracker {
 
         self.current_min_watermark = Some(new_min);
         Some(new_min)
+    }
+
+    pub fn increment_eof(&mut self) -> usize {
+        self.eof_count += 1;
+        self.eof_count
+    }
+
+    pub fn input_count(&self) -> usize {
+        self.watermarks.len()
     }
 }
 

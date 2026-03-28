@@ -9,7 +9,7 @@ use crate::runtime::streaming::api::operator::ConstructedOperator;
 use crate::runtime::streaming::operators::PassthroughOperator;
 use crate::runtime::streaming::operators::grouping::IncrementalAggregatingConstructor;
 use crate::runtime::streaming::operators::joins::{
-    InstantJoinConstructor, JoinWithExpirationConstructor, LookupJoinConstructor,
+    InstantJoinConstructor, JoinWithExpirationConstructor,
 };
 use crate::runtime::streaming::operators::key_by::KeyByConstructor;
 use crate::runtime::streaming::operators::watermark::WatermarkGeneratorConstructor;
@@ -18,11 +18,14 @@ use crate::runtime::streaming::operators::windows::{
     TumblingAggregateWindowConstructor, WindowFunctionConstructor,
 };
 
+pub mod kafka_factory;
+
+use kafka_factory::{register_kafka_plugins, KafkaSinkDispatcher, KafkaSourceDispatcher};
+
 use protocol::grpc::api::{
     ConnectorOp, ExpressionWatermarkConfig,
     JoinOperator as JoinOperatorProto,
     KeyPlanOperator as KeyByProto,
-    LookupJoinOperator as LookupJoinProto,
     SessionWindowAggregateOperator, SlidingWindowAggregateOperator,
     TumblingWindowAggregateOperator, UpdatingAggregateOperator,
     WindowFunctionOperator as WindowFunctionProto,
@@ -45,7 +48,7 @@ pub trait OperatorConstructor: Send + Sync {
 
 /// 持有 `name → OperatorConstructor` 映射与共享 [`Registry`]。
 ///
-/// [`TaskManager`] 在部署 TDD 时调用 [`create_operator`]，完成从字节流到运行时算子的
+/// `JobManager` 在部署任务时调用 [`create_operator`]，完成从字节流到运行时算子的
 /// 反射式实例化。
 pub struct OperatorFactory {
     constructors: HashMap<String, Box<dyn OperatorConstructor>>,
@@ -118,6 +121,8 @@ impl OperatorFactory {
         self.register("Projection", Box::new(PassthroughConstructor("Projection")));
         self.register("ArrowValue", Box::new(PassthroughConstructor("ArrowValue")));
         self.register("ArrowKey", Box::new(PassthroughConstructor("ArrowKey")));
+
+        register_kafka_plugins(self);
     }
 }
 
@@ -197,11 +202,8 @@ impl OperatorConstructor for InstantJoinBridge {
 
 struct LookupJoinBridge;
 impl OperatorConstructor for LookupJoinBridge {
-    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        let proto = LookupJoinProto::decode(config)
-            .map_err(|e| anyhow!("Decode LookupJoinOperator failed: {e}"))?;
-        let op = LookupJoinConstructor.with_config(proto, registry)?;
-        Ok(ConstructedOperator::Operator(Box::new(op)))
+    fn with_config(&self, _config: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
+        Err(anyhow!("LookupJoin is not supported in the current runtime"))
     }
 }
 
@@ -232,24 +234,16 @@ impl OperatorConstructor for KeyByBridge {
 pub struct ConnectorSourceDispatcher;
 
 impl OperatorConstructor for ConnectorSourceDispatcher {
-    fn with_config(&self, config: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
+    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
         let op = ConnectorOp::decode(config)
             .map_err(|e| anyhow!("decode ConnectorOp (source): {e}"))?;
 
         match op.connector.as_str() {
-            "kafka" => {
-                // TODO: 委托给 crate::connectors::kafka::build_kafka_source(&op.config)
-                Err(anyhow!(
-                    "ConnectorSource '{}' factory wiring not yet implemented",
-                    op.connector
-                ))
-            }
-            "redis" => {
-                Err(anyhow!(
-                    "ConnectorSource '{}' factory wiring not yet implemented",
-                    op.connector
-                ))
-            }
+            "kafka" => KafkaSourceDispatcher.with_config(config, registry),
+            "redis" => Err(anyhow!(
+                "ConnectorSource '{}' factory wiring not yet implemented",
+                op.connector
+            )),
             other => Err(anyhow!("Unsupported source connector type: {}", other)),
         }
     }
@@ -258,18 +252,12 @@ impl OperatorConstructor for ConnectorSourceDispatcher {
 pub struct ConnectorSinkDispatcher;
 
 impl OperatorConstructor for ConnectorSinkDispatcher {
-    fn with_config(&self, config: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
+    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
         let op = ConnectorOp::decode(config)
             .map_err(|e| anyhow!("decode ConnectorOp (sink): {e}"))?;
 
         match op.connector.as_str() {
-            "kafka" => {
-                // TODO: 委托给 crate::connectors::kafka::build_kafka_sink(&op.config)
-                Err(anyhow!(
-                    "ConnectorSink '{}' factory wiring not yet implemented",
-                    op.connector
-                ))
-            }
+            "kafka" => KafkaSinkDispatcher.with_config(config, registry),
             other => Err(anyhow!("Unsupported sink connector type: {}", other)),
         }
     }

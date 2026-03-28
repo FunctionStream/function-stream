@@ -220,6 +220,14 @@ impl FsSchema {
         self.key_indices.as_ref()
     }
 
+    pub fn clone_storage_key_indices(&self) -> Option<Vec<usize>> {
+        self.key_indices.clone()
+    }
+
+    pub fn clone_routing_key_indices(&self) -> Option<Vec<usize>> {
+        self.routing_key_indices.clone()
+    }
+
     pub fn filter_by_time(
         &self,
         batch: RecordBatch,

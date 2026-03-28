@@ -1,6 +1,5 @@
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::source::SourceOperator;
-use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
 use crate::runtime::streaming::protocol::stream_out::StreamOutput;
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
@@ -126,25 +125,6 @@ pub trait MessageOperator: Send + 'static {
         _ctx: &mut TaskContext,
     ) -> anyhow::Result<Vec<StreamOutput>> {
         Ok(vec![])
-    }
-
-    /// 返回 `true` 时应立即结束运行循环（如 `StopMode::Immediate`）。
-    async fn handle_control(
-        &mut self,
-        command: ControlCommand,
-        _ctx: &mut TaskContext,
-    ) -> anyhow::Result<bool> {
-        match command {
-            ControlCommand::Stop { mode } => {
-                if mode == StopMode::Immediate {
-                    return Ok(true);
-                }
-                Ok(false)
-            }
-            ControlCommand::DropState | ControlCommand::Commit { .. } => Ok(false),
-            ControlCommand::Start | ControlCommand::UpdateConfig { .. } => Ok(false),
-            ControlCommand::TriggerCheckpoint { .. } => Ok(false),
-        }
     }
 
     async fn on_close(&mut self, _ctx: &mut TaskContext) -> anyhow::Result<Vec<StreamOutput>> {

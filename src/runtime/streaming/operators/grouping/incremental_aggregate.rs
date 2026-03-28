@@ -473,8 +473,7 @@ impl IncrementalAggregatingFunc {
         Ok(())
     }
 
-    async fn initialize(&mut self, ctx: &mut TaskContext) -> Result<()> {
-        let mut tm = ctx.table_manager_guard().await?;
+    async fn initialize(&mut self, _ctx: &mut TaskContext) -> Result<()> {
         // let table = tm
         //     .get_uncached_key_value_view("a")
         //     .await

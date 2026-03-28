@@ -10,34 +10,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Runtime resources for a single coordinator run: [`TaskManager`] and [`CatalogManager`].
+//! Runtime resources for a single coordinator run: [`TaskManager`], [`CatalogManager`], and [`JobManager`].
 
 use std::sync::Arc;
 
 use anyhow::Result;
 
+use crate::runtime::streaming::job::JobManager;
 use crate::runtime::taskexecutor::TaskManager;
 use crate::sql::schema::StreamSchemaProvider;
 use crate::storage::stream_catalog::CatalogManager;
 
 /// Dependencies shared by analyze / plan / execute, analogous to installing globals in
-/// [`TaskManager`] and [`CatalogManager`].
+/// [`TaskManager`], [`CatalogManager`], and [`JobManager`].
 #[derive(Clone)]
 pub struct CoordinatorRuntimeContext {
     pub task_manager: Arc<TaskManager>,
     pub catalog_manager: Arc<CatalogManager>,
-    /// When set (e.g. unit tests), used for SQL planning instead of a catalog snapshot.
+    pub job_manager: Arc<JobManager>,
     planning_schema_override: Option<StreamSchemaProvider>,
 }
 
 impl CoordinatorRuntimeContext {
-    /// Resolve [`TaskManager`] and global stream catalog (same pattern as server startup).
     pub fn try_from_globals() -> Result<Self> {
         Ok(Self {
             task_manager: TaskManager::get()
                 .map_err(|e| anyhow::anyhow!("Failed to get TaskManager: {}", e))?,
             catalog_manager: CatalogManager::global()
                 .map_err(|e| anyhow::anyhow!("Failed to get CatalogManager: {}", e))?,
+            job_manager: JobManager::global()
+                .map_err(|e| anyhow::anyhow!("Failed to get JobManager: {}", e))?,
             planning_schema_override: None,
         })
     }
@@ -45,11 +47,13 @@ impl CoordinatorRuntimeContext {
     pub fn new(
         task_manager: Arc<TaskManager>,
         catalog_manager: Arc<CatalogManager>,
+        job_manager: Arc<JobManager>,
         planning_schema_override: Option<StreamSchemaProvider>,
     ) -> Self {
         Self {
             task_manager,
             catalog_manager,
+            job_manager,
             planning_schema_override,
         }
     }

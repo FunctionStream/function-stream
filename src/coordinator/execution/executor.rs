@@ -12,6 +12,7 @@
 
 use std::sync::Arc;
 
+use protocol::grpc::api::FsProgram;
 use thiserror::Error;
 use tracing::{debug, info};
 
@@ -23,6 +24,7 @@ use crate::coordinator::plan::{
     StreamingTableConnectorPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
+use crate::runtime::streaming::job::JobManager;
 use crate::runtime::taskexecutor::TaskManager;
 use crate::sql::schema::StreamTable;
 use crate::storage::stream_catalog::CatalogManager;
@@ -42,13 +44,19 @@ pub enum ExecuteError {
 pub struct Executor {
     task_manager: Arc<TaskManager>,
     catalog_manager: Arc<CatalogManager>,
+    job_manager: Arc<JobManager>,
 }
 
 impl Executor {
-    pub fn new(task_manager: Arc<TaskManager>, catalog_manager: Arc<CatalogManager>) -> Self {
+    pub fn new(
+        task_manager: Arc<TaskManager>,
+        catalog_manager: Arc<CatalogManager>,
+        job_manager: Arc<JobManager>,
+    ) -> Self {
         Self {
             task_manager,
             catalog_manager,
+            job_manager,
         }
     }
 
@@ -273,8 +281,22 @@ impl PlanVisitor for Executor {
                 .add_table(sink)
                 .map_err(|e| ExecuteError::Internal(e.to_string()))?;
 
+            let fs_program: FsProgram = plan.program.clone().into();
+            let job_manager: Arc<JobManager> = Arc::clone(&self.job_manager);
+
+            let job_id = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(job_manager.submit_job(fs_program))
+            })
+            .map_err(|e| ExecuteError::Internal(format!("Failed to submit streaming job: {e}")))?;
+
+            info!(
+                job_id = %job_id,
+                table = %plan.name,
+                "Streaming table registered and job submitted"
+            );
+
             Ok(ExecuteResult::ok_with_data(
-                format!("Registered streaming table '{}'", plan.name),
+                format!("Streaming table '{}' created, job_id = {}", plan.name, job_id),
                 empty_record_batch(),
             ))
         };

@@ -92,7 +92,8 @@ pub fn build_core_registry() -> ComponentRegistry {
     let builder = {
         let b = ComponentRegistryBuilder::new()
             .register("WasmCache", initialize_wasm_cache)
-            .register("TaskManager", initialize_task_manager);
+            .register("TaskManager", initialize_task_manager)
+            .register("JobManager", initialize_job_manager);
         #[cfg(feature = "python")]
         let b = b.register("PythonService", initialize_python_service);
         b
@@ -150,12 +151,31 @@ fn initialize_python_service(config: &GlobalConfig) -> Result<()> {
     Ok(())
 }
 
+fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
+    use crate::runtime::streaming::api::operator::Registry;
+    use crate::runtime::streaming::factory::OperatorFactory;
+    use crate::runtime::streaming::job::JobManager;
+    use std::sync::Arc;
+
+    let registry = Arc::new(Registry::new());
+    let factory = Arc::new(OperatorFactory::new(registry));
+    let max_memory_bytes = config.streaming.max_memory_bytes.unwrap_or(256 * 1024 * 1024);
+
+    JobManager::init(factory, max_memory_bytes)
+        .context("JobManager service failed to start")?;
+
+    Ok(())
+}
+
 fn initialize_coordinator(_config: &GlobalConfig) -> Result<()> {
     crate::runtime::taskexecutor::TaskManager::get()
         .context("Dependency violation: Coordinator requires TaskManager")?;
 
     crate::storage::stream_catalog::CatalogManager::global()
         .context("Dependency violation: Coordinator requires StreamCatalog")?;
+
+    crate::runtime::streaming::job::JobManager::global()
+        .context("Dependency violation: Coordinator requires JobManager")?;
 
     Ok(())
 }

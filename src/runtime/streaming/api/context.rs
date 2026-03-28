@@ -2,11 +2,9 @@ use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::protocol::event::StreamEvent;
 use crate::runtime::streaming::protocol::tracked::TrackedEvent;
 use crate::runtime::streaming::network::endpoint::PhysicalSender;
-use crate::runtime::streaming::storage::manager::TableManager;
 
 use arrow_array::RecordBatch;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub struct TaskContext {
     pub job_id: String,
@@ -17,7 +15,6 @@ pub struct TaskContext {
     pub outboxes: Vec<PhysicalSender>,
 
     memory_pool: Arc<MemoryPool>,
-    table_manager: Option<Arc<Mutex<TableManager>>>,
 
     current_watermark: Option<std::time::SystemTime>,
 }
@@ -30,7 +27,6 @@ impl TaskContext {
         parallelism: u32,
         outboxes: Vec<PhysicalSender>,
         memory_pool: Arc<MemoryPool>,
-        table_manager: Option<Arc<Mutex<TableManager>>>,
     ) -> Self {
         Self {
             job_id,
@@ -39,7 +35,6 @@ impl TaskContext {
             parallelism,
             outboxes,
             memory_pool,
-            table_manager,
             current_watermark: None,
         }
     }
@@ -77,26 +72,8 @@ impl TaskContext {
     }
 
     // ========================================================================
-    // 状态管理与背压网络发送 API
+    // 背压网络发送 API
     // ========================================================================
-
-    pub async fn table_manager(&self) -> tokio::sync::MutexGuard<'_, TableManager> {
-        self.table_manager
-            .as_ref()
-            .expect("State backend not initialized")
-            .lock()
-            .await
-    }
-
-    pub async fn table_manager_guard(
-        &self,
-    ) -> anyhow::Result<tokio::sync::MutexGuard<'_, TableManager>> {
-        let arc = self
-            .table_manager
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("table_manager is not configured on TaskContext"))?;
-        Ok(arc.lock().await)
-    }
 
     /// 受内存池管控的数据发送：申请精准字节的内存船票后广播到所有下游
     pub async fn collect(&self, batch: RecordBatch) -> anyhow::Result<()> {

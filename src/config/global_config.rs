@@ -20,6 +20,13 @@ use crate::config::service_config::ServiceConfig;
 use crate::config::wasm_config::WasmConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StreamingConfig {
+    /// Maximum heap memory (in bytes) available to the streaming runtime's memory pool.
+    /// Defaults to 256 MiB when absent.
+    pub max_memory_bytes: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GlobalConfig {
     pub service: ServiceConfig,
     pub logging: LogConfig,
@@ -31,6 +38,8 @@ pub struct GlobalConfig {
     pub state_storage: crate::config::storage::StateStorageConfig,
     #[serde(default)]
     pub task_storage: crate::config::storage::TaskStorageConfig,
+    #[serde(default)]
+    pub streaming: StreamingConfig,
 }
 
 impl GlobalConfig {

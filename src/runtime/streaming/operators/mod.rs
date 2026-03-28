@@ -15,9 +15,7 @@ mod value_execution;
 pub use stateless_physical_executor::StatelessPhysicalExecutor;
 
 pub use grouping::{IncrementalAggregatingFunc, Key, UpdatingCache};
-pub use joins::{
-    InstantJoinOperator, JoinWithExpirationOperator, LookupJoinOperator, LookupJoinType,
-};
+pub use joins::{InstantJoinOperator, JoinWithExpirationOperator};
 pub use key_by::KeyByOperator;
 pub use sink::{ConsistencyMode, KafkaSinkOperator};
 pub use source::{BatchDeserializer, BufferedDeserializer, KafkaSourceOperator, KafkaState};

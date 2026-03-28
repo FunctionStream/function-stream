@@ -25,6 +25,7 @@ pub mod errors;
 pub mod format_from_opts;
 pub mod formats;
 pub mod hash;
+pub mod kafka_catalog;
 pub mod message;
 pub mod operator_config;
 pub mod task_info;
@@ -49,6 +50,10 @@ pub use control::{
 };
 pub use fs_schema::{FsSchema, FsSchemaRef};
 pub use connector_options::{ConnectorOptions, FromOpts};
+pub use kafka_catalog::{
+    KafkaConfig, KafkaConfigAuthentication, KafkaTable, KafkaTableSourceOffset, ReadMode,
+    SchemaRegistryConfig, SinkCommitMode, TableType,
+};
 pub use errors::{DataflowError, DataflowResult};
 pub use formats::{BadData, Format, Framing, JsonCompression, JsonFormat};
 pub use operator_config::{MetadataField, OperatorConfig, RateLimit};

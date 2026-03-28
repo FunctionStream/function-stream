@@ -1,13 +1,15 @@
-//! Chandy–Lamport 风格屏障对齐。
+//! Chandy–Lamport 风格屏障对齐（零内存缓冲：未对齐时从轮询池移除输入流，依赖底层背压）。
 
 use std::collections::HashSet;
-use crate::runtime::streaming::protocol::TrackedEvent;
+
 use crate::sql::common::CheckpointBarrier;
 
 #[derive(Debug)]
 pub enum AlignmentStatus {
+    /// 未对齐：外层应将当前通道从 `StreamMap` 挂起（Pause）。
     Pending,
-    Complete(Vec<(usize, TrackedEvent)>),
+    /// 已对齐：外层触发快照并唤醒所有挂起通道（Resume）。
+    Complete,
 }
 
 #[derive(Debug)]
@@ -15,7 +17,6 @@ pub struct BarrierAligner {
     input_count: usize,
     current_epoch: Option<u32>,
     reached_inputs: HashSet<usize>,
-    buffered_events: Vec<(usize, TrackedEvent)>,
 }
 
 impl BarrierAligner {
@@ -24,32 +25,21 @@ impl BarrierAligner {
             input_count,
             current_epoch: None,
             reached_inputs: HashSet::new(),
-            buffered_events: Vec::new(),
         }
-    }
-
-    pub fn is_blocked(&self, input_idx: usize) -> bool {
-        self.current_epoch.is_some() && self.reached_inputs.contains(&input_idx)
-    }
-
-    pub fn buffer_event(&mut self, input_idx: usize, event: TrackedEvent) {
-        self.buffered_events.push((input_idx, event));
     }
 
     pub fn mark(&mut self, input_idx: usize, barrier: &CheckpointBarrier) -> AlignmentStatus {
         if self.current_epoch != Some(barrier.epoch) {
             self.current_epoch = Some(barrier.epoch);
             self.reached_inputs.clear();
-            self.buffered_events.clear();
         }
 
         self.reached_inputs.insert(input_idx);
 
         if self.reached_inputs.len() == self.input_count {
-            let released = std::mem::take(&mut self.buffered_events);
             self.current_epoch = None;
             self.reached_inputs.clear();
-            AlignmentStatus::Complete(released)
+            AlignmentStatus::Complete
         } else {
             AlignmentStatus::Pending
         }

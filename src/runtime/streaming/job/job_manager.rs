@@ -1,100 +1,92 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
+
+use anyhow::anyhow;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tracing::{error, info, warn};
 
 use protocol::grpc::api::{ChainedOperator, FsProgram};
-use tokio::sync::mpsc;
-use tracing::error;
 
-use crate::runtime::streaming::api::operator::ConstructedOperator;
+use crate::runtime::streaming::api::context::TaskContext;
+use crate::runtime::streaming::api::operator::{ConstructedOperator, MessageOperator};
+use crate::runtime::streaming::execution::runner::Pipeline;
 use crate::runtime::streaming::factory::OperatorFactory;
 use crate::runtime::streaming::job::edge_manager::EdgeManager;
 use crate::runtime::streaming::job::models::{PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus};
-use crate::runtime::streaming::job::pipeline_runner::{FusionOperatorChain, PipelineRunner};
 use crate::runtime::streaming::memory::MemoryPool;
+use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
 use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
-use crate::runtime::streaming::storage::manager::TableManager;
+
+static GLOBAL_JOB_MANAGER: OnceLock<Arc<JobManager>> = OnceLock::new();
 
 pub struct JobManager {
     active_jobs: Arc<RwLock<HashMap<String, PhysicalExecutionGraph>>>,
     operator_factory: Arc<OperatorFactory>,
     memory_pool: Arc<MemoryPool>,
-    table_manager: Option<Arc<tokio::sync::Mutex<TableManager>>>,
 }
 
 impl JobManager {
-    pub fn new(
-        operator_factory: Arc<OperatorFactory>,
-        max_memory_bytes: usize,
-        table_manager: Option<Arc<tokio::sync::Mutex<TableManager>>>,
-    ) -> Self {
+    pub fn new(operator_factory: Arc<OperatorFactory>, max_memory_bytes: usize) -> Self {
         Self {
             active_jobs: Arc::new(RwLock::new(HashMap::new())),
             operator_factory,
             memory_pool: MemoryPool::new(max_memory_bytes),
-            table_manager,
         }
     }
 
-    /// 从逻辑计划点火物理线程
+    pub fn init(operator_factory: Arc<OperatorFactory>, max_memory_bytes: usize) -> anyhow::Result<()> {
+        let manager = Arc::new(Self::new(operator_factory, max_memory_bytes));
+        GLOBAL_JOB_MANAGER
+            .set(manager)
+            .map_err(|_| anyhow!("JobManager singleton already initialized"))
+    }
+
+    pub fn global() -> anyhow::Result<Arc<Self>> {
+        GLOBAL_JOB_MANAGER
+            .get()
+            .cloned()
+            .ok_or_else(|| anyhow!("JobManager not initialized. Call init() first."))
+    }
+
+    /// 核心主干：从逻辑计划点火物理流水线
     pub async fn submit_job(&self, program: FsProgram) -> anyhow::Result<String> {
         let job_id = format!("job-{}", chrono::Utc::now().timestamp_millis());
-
         let mut edge_manager = EdgeManager::build(&program.nodes, &program.edges);
-        let mut physical_pipelines = HashMap::new();
+        let mut pipelines = HashMap::new();
 
         for node in &program.nodes {
-            let pipe_id = node.node_index as u32;
-            let (inbox, outboxes) = edge_manager.take_endpoints(pipe_id);
-            let chain = self.create_chain(&node.operators)?;
-            let (ctrl_tx, ctrl_rx) = mpsc::channel(64);
+            let pipeline_id = node.node_index as u32;
+
+            let (raw_inboxes, raw_outboxes) = edge_manager.take_endpoints(pipeline_id);
+            let physical_outboxes = raw_outboxes.into_iter().map(PhysicalSender::Local).collect();
+            let physical_inboxes: Vec<BoxedEventStream> = raw_inboxes
+                .into_iter()
+                .map(|rx| Box::pin(ReceiverStream::new(rx)) as _)
+                .collect();
+
+            let operators = self.build_operator_chain(&node.operators)?;
+
+            let (control_tx, control_rx) = mpsc::channel(64);
             let status = Arc::new(RwLock::new(PipelineStatus::Initializing));
 
-            let thread_status = status.clone();
-            let job_id_for_thread = job_id.clone();
-            let exit_job_id = job_id_for_thread.clone();
-            let registry_ptr = self.active_jobs.clone();
-            let memory_pool = self.memory_pool.clone();
-            let table_manager = self.table_manager.clone();
+            let handle = self.spawn_pipeline_thread(
+                job_id.clone(),
+                pipeline_id,
+                operators,
+                physical_inboxes,
+                physical_outboxes,
+                control_rx,
+                Arc::clone(&status),
+            )?;
 
-            let handle = std::thread::Builder::new()
-                .name(format!("Job-{}-Pipe-{}", job_id, pipe_id))
-                .spawn(move || {
-                    {
-                        let mut st = thread_status.write().unwrap();
-                        *st = PipelineStatus::Running;
-                    }
-
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("build current thread runtime");
-
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        rt.block_on(async move {
-                            let mut runner = PipelineRunner::new(
-                                pipe_id,
-                                chain,
-                                inbox,
-                                outboxes,
-                                ctrl_rx,
-                                job_id_for_thread.clone(),
-                                memory_pool,
-                                table_manager,
-                            );
-                            runner.run().await
-                        })
-                    }));
-
-                    Self::on_pipeline_exit(exit_job_id, pipe_id, result, thread_status, registry_ptr);
-                })?;
-
-            physical_pipelines.insert(
-                pipe_id,
+            pipelines.insert(
+                pipeline_id,
                 PhysicalPipeline {
-                    pipeline_id: pipe_id,
+                    pipeline_id,
                     handle: Some(handle),
                     status,
-                    control_tx: ctrl_tx,
+                    control_tx,
                 },
             );
         }
@@ -102,97 +94,157 @@ impl JobManager {
         let graph = PhysicalExecutionGraph {
             job_id: job_id.clone(),
             program,
-            pipelines: physical_pipelines,
+            pipelines,
             start_time: std::time::Instant::now(),
         };
 
         self.active_jobs.write().unwrap().insert(job_id.clone(), graph);
+        info!(job_id = %job_id, "Job submitted successfully.");
+
         Ok(job_id)
     }
 
     pub async fn stop_job(&self, job_id: &str, mode: StopMode) -> anyhow::Result<()> {
-        let controllers = {
-            let jobs = self.active_jobs.read().unwrap();
-            let graph = jobs
+        let control_senders: Vec<_> = {
+            let jobs_guard = self.active_jobs.read().unwrap();
+            let graph = jobs_guard
                 .get(job_id)
-                .ok_or_else(|| anyhow::anyhow!("job not found: {job_id}"))?;
-            graph
-                .pipelines
-                .values()
-                .map(|p| p.control_tx.clone())
-                .collect::<Vec<_>>()
+                .ok_or_else(|| anyhow::anyhow!("Job not found: {job_id}"))?;
+
+            graph.pipelines.values().map(|p| p.control_tx.clone()).collect()
         };
 
-        for tx in controllers {
-            tx.send(ControlCommand::Stop { mode: mode.clone() }).await?;
+        for tx in control_senders {
+            let _ = tx.send(ControlCommand::Stop { mode: mode.clone() }).await;
         }
+
+        info!(job_id = %job_id, mode = ?mode, "Job stop signal dispatched.");
         Ok(())
     }
 
     pub fn get_pipeline_statuses(&self, job_id: &str) -> Option<HashMap<u32, PipelineStatus>> {
-        let jobs = self.active_jobs.read().unwrap();
-        let graph = jobs.get(job_id)?;
+        let jobs_guard = self.active_jobs.read().unwrap();
+        let graph = jobs_guard.get(job_id)?;
+
         Some(
-            graph
-                .pipelines
+            graph.pipelines
                 .iter()
-                .map(|(id, pipeline)| (*id, pipeline.status.read().unwrap().clone()))
+                .map(|(id, pipeline)| {
+                    (*id, pipeline.status.read().unwrap().clone())
+                })
                 .collect(),
         )
     }
 
-    fn create_chain(&self, operators: &[ChainedOperator]) -> anyhow::Result<FusionOperatorChain> {
-        let mut chain = Vec::with_capacity(operators.len());
-        for op in operators {
-            match self
-                .operator_factory
-                .create_operator(&op.operator_name, &op.operator_config)?
-            {
+    // ========================================================================
+    // 内部私有方法
+    // ========================================================================
+
+    fn build_operator_chain(
+        &self,
+        operator_configs: &[ChainedOperator],
+    ) -> anyhow::Result<Vec<Box<dyn MessageOperator>>> {
+        let mut chain = Vec::with_capacity(operator_configs.len());
+
+        for op_config in operator_configs {
+            let constructed = self.operator_factory
+                .create_operator(&op_config.operator_name, &op_config.operator_config)?;
+
+            match constructed {
                 ConstructedOperator::Operator(msg_op) => chain.push(msg_op),
                 ConstructedOperator::Source(_) => {
-                    return Err(anyhow::anyhow!(
-                        "source operator '{}' cannot be used inside a physical pipeline chain",
-                        op.operator_name
-                    ));
+                    anyhow::bail!(
+                        "Topology Error: Source operator '{}' cannot be scheduled inside a MessageOperator physical chain.",
+                        op_config.operator_name
+                    );
                 }
             }
         }
-        Ok(FusionOperatorChain::new(chain))
+        Ok(chain)
     }
 
-    fn on_pipeline_exit(
+    fn spawn_pipeline_thread(
+        &self,
         job_id: String,
-        pipe_id: u32,
-        result: std::thread::Result<anyhow::Result<()>>,
+        pipeline_id: u32,
+        operators: Vec<Box<dyn MessageOperator>>,
+        inboxes: Vec<BoxedEventStream>,
+        outboxes: Vec<PhysicalSender>,
+        control_rx: mpsc::Receiver<ControlCommand>,
         status: Arc<RwLock<PipelineStatus>>,
-        _registry: Arc<RwLock<HashMap<String, PhysicalExecutionGraph>>>,
+    ) -> anyhow::Result<std::thread::JoinHandle<()>> {
+        let memory_pool = Arc::clone(&self.memory_pool);
+        let thread_name = format!("Task-{job_id}-{pipeline_id}");
+
+        let handle = std::thread::Builder::new()
+            .name(thread_name)
+            .spawn(move || {
+                *status.write().unwrap() = PipelineStatus::Running;
+
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("Failed to build current-thread Tokio runtime for pipeline");
+
+                let job_id_inner = job_id.clone();
+                let execution_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    rt.block_on(async move {
+                        let ctx = TaskContext::new(
+                            job_id_inner,
+                            pipeline_id,
+                            0,
+                            1,
+                            outboxes,
+                            memory_pool,
+                        );
+
+                        let pipeline = Pipeline::new(operators, ctx, inboxes, control_rx)
+                            .map_err(|e| anyhow::anyhow!("Pipeline init failed: {e}"))?;
+
+                        pipeline.run().await.map_err(|e| anyhow::anyhow!("Pipeline execution failed: {e}"))
+                    })
+                }));
+
+                Self::handle_pipeline_exit(&job_id, pipeline_id, execution_result, &status);
+            })?;
+
+        Ok(handle)
+    }
+
+    fn handle_pipeline_exit(
+        job_id: &str,
+        pipeline_id: u32,
+        thread_result: std::thread::Result<anyhow::Result<()>>,
+        status: &RwLock<PipelineStatus>,
     ) {
-        let mut needs_abort = false;
-        match result {
+        let mut is_fatal = false;
+        let final_status = match thread_result {
+            Ok(Ok(_)) => {
+                info!(job_id = %job_id, pipeline_id = pipeline_id, "Pipeline finished gracefully.");
+                PipelineStatus::Finished
+            }
             Ok(Err(e)) => {
-                *status.write().unwrap() = PipelineStatus::Failed {
+                error!(job_id = %job_id, pipeline_id = pipeline_id, error = %e, "Pipeline failed.");
+                is_fatal = true;
+                PipelineStatus::Failed {
                     error: e.to_string(),
                     is_panic: false,
-                };
-                needs_abort = true;
+                }
             }
             Err(_) => {
-                *status.write().unwrap() = PipelineStatus::Failed {
-                    error: "panic".into(),
+                error!(job_id = %job_id, pipeline_id = pipeline_id, "Pipeline thread panicked!");
+                is_fatal = true;
+                PipelineStatus::Failed {
+                    error: "Task thread encountered an unexpected panic".into(),
                     is_panic: true,
-                };
-                needs_abort = true;
+                }
             }
-            Ok(Ok(_)) => {
-                *status.write().unwrap() = PipelineStatus::Finished;
-            }
-        }
+        };
 
-        if needs_abort {
-            error!(
-                "Pipeline {}-{} failed. Initiating Job Abort.",
-                job_id, pipe_id
-            );
+        *status.write().unwrap() = final_status;
+
+        if is_fatal {
+            warn!(job_id = %job_id, pipeline_id = pipeline_id, "Pipeline failure detected, Job should be aborted or recovered.");
         }
     }
 }

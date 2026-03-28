@@ -73,6 +73,8 @@ impl WatermarkGeneratorOperator {
         Some(from_nanos(max_ts as u128))
     }
 
+    /// 水位线计算必须取评估后数组的 **Max**，不能取 Min：同一 Batch 内多行时，
+    /// Min 会低估“已见事件时间”的安全基线（例如 ts-5s 在两行上 min 会偏早）。
     fn evaluate_watermark(&self, batch: &RecordBatch) -> Result<SystemTime> {
         let watermark_array = self
             .expression
@@ -84,10 +86,10 @@ impl WatermarkGeneratorOperator {
             .downcast_ref::<TimestampNanosecondArray>()
             .ok_or_else(|| anyhow!("watermark expression must return TimestampNanosecondArray"))?;
 
-        let min_watermark_nanos = aggregate::min(typed_array)
-            .ok_or_else(|| anyhow!("failed to extract min watermark from batch"))?;
+        let max_watermark_nanos = aggregate::max(typed_array)
+            .ok_or_else(|| anyhow!("failed to extract max watermark from batch"))?;
 
-        Ok(from_nanos(min_watermark_nanos as u128))
+        Ok(from_nanos(max_watermark_nanos as u128))
     }
 }
 
@@ -101,19 +103,8 @@ impl MessageOperator for WatermarkGeneratorOperator {
         Some(Duration::from_secs(1))
     }
 
-    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
+    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
         self.last_event_wall = SystemTime::now();
-
-        let mut tm = ctx.table_manager_guard().await?;
-        let gs = tm
-            .get_global_keyed_state::<u32, WatermarkGeneratorState>("s")
-            .await
-            .map_err(|e| anyhow!("global keyed state s: {e}"))?;
-
-        if let Some(recovered) = gs.get(&ctx.subtask_idx) {
-            self.state = *recovered;
-        }
-
         Ok(())
     }
 
@@ -132,12 +123,15 @@ impl MessageOperator for WatermarkGeneratorOperator {
         };
 
         let new_watermark = self.evaluate_watermark(&batch)?;
+
+        // 死守单调递增底线，绝不倒流
         self.state.max_watermark = self.state.max_watermark.max(new_watermark);
 
         let time_since_last_emit = max_batch_ts
             .duration_since(self.state.last_watermark_emitted_at)
             .unwrap_or(Duration::ZERO);
 
+        // 空闲唤醒或达到发射间隔则发射水印
         if self.is_idle || time_since_last_emit > self.interval {
             debug!(
                 "[{}] emitting expression watermark {}",
@@ -174,6 +168,7 @@ impl MessageOperator for WatermarkGeneratorOperator {
                 .last_event_wall
                 .elapsed()
                 .unwrap_or(Duration::ZERO);
+            // 系统时钟超时，发射 Idle 水印，避免下游一直等不到推进
             if !self.is_idle && elapsed > idle_timeout {
                 info!(
                     "task [{}] entering Idle after {:?}",
@@ -186,13 +181,7 @@ impl MessageOperator for WatermarkGeneratorOperator {
         Ok(vec![])
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, ctx: &mut TaskContext) -> Result<()> {
-        let mut tm = ctx.table_manager_guard().await?;
-        tm.get_global_keyed_state::<u32, WatermarkGeneratorState>("s")
-            .await
-            .map_err(|e| anyhow!("global keyed state s: {e}"))?
-            .insert(ctx.subtask_idx, self.state)
-            .await;
+    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 

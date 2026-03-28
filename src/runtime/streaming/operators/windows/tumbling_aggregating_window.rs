@@ -139,21 +139,7 @@ impl MessageOperator for TumblingWindowOperator {
         "TumblingWindow"
     }
 
-    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-        let mut tm = ctx.table_manager_guard().await?;
-        let table = tm
-            .get_expiring_time_key_table("t", watermark)
-            .await
-            .map_err(|e| anyhow!("expiring time key table t: {e}"))?;
-
-        for (timestamp, batches) in table.all_batches_for_watermark(watermark) {
-            let bin_start = self.bin_start(*timestamp);
-            let slot = self.active_bins.entry(bin_start).or_default();
-            for batch in batches {
-                slot.finished_batches.push(batch.clone());
-            }
-        }
+    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 
@@ -287,28 +273,7 @@ impl MessageOperator for TumblingWindowOperator {
         Ok(final_outputs)
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, ctx: &mut TaskContext) -> Result<()> {
-        let watermark = ctx.last_present_watermark();
-        let mut tm = ctx.table_manager_guard().await?;
-        let table = tm
-            .get_expiring_time_key_table("t", watermark)
-            .await
-            .map_err(|e| anyhow!("expiring time key table t: {e}"))?;
-
-        for (bin_start, active_bin) in self.active_bins.iter_mut() {
-            active_bin.close_and_drain().await?;
-
-            for batch in &active_bin.finished_batches {
-                let state_batch = Self::add_bin_start_as_timestamp(
-                    batch,
-                    *bin_start,
-                    self.partial_schema.schema.clone(),
-                )?;
-                table.insert(*bin_start, state_batch);
-            }
-        }
-
-        table.flush(watermark).await?;
+    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
         Ok(())
     }
 

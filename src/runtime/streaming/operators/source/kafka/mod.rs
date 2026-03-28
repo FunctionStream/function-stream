@@ -10,7 +10,7 @@ use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message as KMessage, Offset, TopicPartitionList};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::runtime::streaming::api::context::TaskContext;
@@ -28,7 +28,7 @@ pub struct KafkaState {
     offset: i64,
 }
 
-/// 增量反序列化缓冲 trait：Source 逐条 `deserialize_slice`，攒满后 `flush_buffer` 输出 [`RecordBatch`]。
+/// 增量反序列化缓冲 trait：Source 逐条 `deserialize_slice`，攒满或超时后 `flush_buffer` 输出 [`RecordBatch`]。
 pub trait BatchDeserializer: Send + 'static {
     fn deserialize_slice(
         &mut self,
@@ -40,6 +40,9 @@ pub trait BatchDeserializer: Send + 'static {
     fn should_flush(&self) -> bool;
 
     fn flush_buffer(&mut self) -> Result<Option<RecordBatch>>;
+
+    /// 缓冲区是否无任何待反序列化数据。
+    fn is_empty(&self) -> bool;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +91,10 @@ impl BatchDeserializer for BufferedDeserializer {
         self.buffer.clear();
         Ok(Some(batch))
     }
+
+    fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
 }
 
 impl SourceOffset {
@@ -103,6 +110,9 @@ impl SourceOffset {
 // ============================================================================
 // 2. 核心算子外壳
 // ============================================================================
+
+const KAFKA_POLL_TIMEOUT: Duration = Duration::from_millis(100);
+const MAX_BATCH_LINGER_TIME: Duration = Duration::from_millis(500);
 
 pub struct KafkaSourceOperator {
     pub topic: String,
@@ -121,6 +131,9 @@ pub struct KafkaSourceOperator {
 
     current_offsets: HashMap<i32, i64>,
     is_empty_assignment: bool,
+
+    /// 上次成功 flush 出 batch 的时间，用于低流量时按逗留时间强制发车。
+    last_flush_time: Instant,
 }
 
 impl KafkaSourceOperator {
@@ -149,6 +162,7 @@ impl KafkaSourceOperator {
             deserializer,
             current_offsets: HashMap::new(),
             is_empty_assignment: false,
+            last_flush_time: Instant::now(),
         }
     }
 
@@ -175,18 +189,8 @@ impl KafkaSourceOperator {
             .set("group.id", &group_id)
             .create()?;
 
-        let (has_state, state_map) = {
-            let mut tm = ctx.table_manager_guard().await?;
-            let global_state = tm
-                .get_global_keyed_state::<i32, KafkaState>("k")
-                .await
-                .map_err(|e| anyhow!(e))?;
-            let restored_states: Vec<_> = global_state.get_all().values().copied().collect();
-            let has_state = !restored_states.is_empty();
-            let state_map: HashMap<i32, KafkaState> =
-                restored_states.into_iter().map(|s| (s.partition, s)).collect();
-            (has_state, state_map)
-        };
+        let has_state = false;
+        let state_map: HashMap<i32, KafkaState> = HashMap::new();
 
         let metadata = consumer
             .fetch_metadata(Some(&self.topic), Duration::from_secs(30))
@@ -266,12 +270,16 @@ impl SourceOperator for KafkaSourceOperator {
             .as_ref()
             .ok_or_else(|| anyhow!("rate limiter not initialized"))?;
 
-        let recv_result = tokio::time::timeout(Duration::from_millis(50), consumer.recv()).await;
-
-        match recv_result {
+        match tokio::time::timeout(KAFKA_POLL_TIMEOUT, consumer.recv()).await {
             Ok(Ok(msg)) => {
+                let partition = msg.partition();
+                let offset = msg.offset();
+                let timestamp = msg.timestamp().to_millis().unwrap_or(0);
+
+                // 无论是否有 payload（含 Tombstone），都必须推进位点，否则会永久卡在墓碑消息上。
+                self.current_offsets.insert(partition, offset);
+
                 if let Some(payload) = msg.payload() {
-                    let timestamp = msg.timestamp().to_millis().unwrap_or(0);
                     let topic = msg.topic();
 
                     let connector_metadata = if !self.metadata_fields.is_empty() {
@@ -299,17 +307,25 @@ impl SourceOperator for KafkaSourceOperator {
                         timestamp.max(0) as u64,
                         connector_metadata,
                     )?;
+                } else {
+                    debug!(
+                        "Received tombstone message at partition {} offset {}",
+                        partition, offset
+                    );
+                }
 
-                    self.current_offsets.insert(msg.partition(), msg.offset());
+                rate_limiter.until_ready().await;
 
-                    rate_limiter.until_ready().await;
+                let should_flush_by_size = self.deserializer.should_flush();
+                let should_flush_by_time = self.last_flush_time.elapsed() > MAX_BATCH_LINGER_TIME;
 
-                    if self.deserializer.should_flush() {
-                        if let Some(batch) = self.deserializer.flush_buffer()? {
-                            return Ok(SourceEvent::Data(batch));
-                        }
+                if !self.deserializer.is_empty() && (should_flush_by_size || should_flush_by_time) {
+                    if let Some(batch) = self.deserializer.flush_buffer()? {
+                        self.last_flush_time = Instant::now();
+                        return Ok(SourceEvent::Data(batch));
                     }
                 }
+
                 Ok(SourceEvent::Idle)
             }
             Ok(Err(e)) => {
@@ -317,8 +333,10 @@ impl SourceOperator for KafkaSourceOperator {
                 Err(anyhow!("Kafka error: {}", e))
             }
             Err(_) => {
-                if self.deserializer.should_flush() {
+                // 超时内无新消息：若缓冲区仍有积压，强制 flush，避免低流量下数据长期滞留。
+                if !self.deserializer.is_empty() {
                     if let Some(batch) = self.deserializer.flush_buffer()? {
+                        self.last_flush_time = Instant::now();
                         return Ok(SourceEvent::Data(batch));
                     }
                 }
@@ -334,25 +352,8 @@ impl SourceOperator for KafkaSourceOperator {
     ) -> Result<()> {
         debug!("Source [{}] executing checkpoint", ctx.subtask_idx);
 
-        let mut tm = ctx.table_manager_guard().await?;
-        let global_state = tm
-            .get_global_keyed_state::<i32, KafkaState>("k")
-            .await
-            .map_err(|e| anyhow!(e))?;
-
         let mut topic_partitions = TopicPartitionList::new();
-
         for (&partition, &offset) in &self.current_offsets {
-            global_state
-                .insert(
-                    partition,
-                    KafkaState {
-                        partition,
-                        offset: offset + 1,
-                    },
-                )
-                .await;
-
             topic_partitions
                 .add_partition_offset(&self.topic, partition, Offset::Offset(offset))
                 .map_err(|e| anyhow!("add_partition_offset: {e}"))?;
