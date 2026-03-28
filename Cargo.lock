@@ -2326,7 +2326,6 @@ dependencies = [
  "arrow-schema 52.2.0",
  "clap",
  "comfy-table",
- "function-stream",
  "protocol",
  "rustyline",
  "thiserror 2.0.17",

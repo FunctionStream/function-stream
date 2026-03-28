@@ -38,7 +38,13 @@ use super::StreamSchemaProvider;
 use crate::multifield_partial_ord;
 use crate::sql::api::{ConnectionProfile, ConnectionSchema, SourceField};
 use crate::sql::common::connector_options::ConnectorOptions;
-use crate::sql::common::{BadData, Format, Framing, JsonCompression, JsonFormat};
+use crate::sql::common::kafka_catalog::{
+    KafkaConfig, KafkaConfigAuthentication, KafkaTable, KafkaTableSourceOffset, ReadMode,
+    SinkCommitMode, TableType as KafkaTableType,
+};
+use crate::sql::common::{
+    BadData, Format, Framing, FsSchema, JsonCompression, JsonFormat, OperatorConfig, RateLimit,
+};
 use crate::sql::schema::ConnectionType;
 use crate::sql::schema::table::SqlSource;
 use crate::sql::types::ProcessingMode;
@@ -303,8 +309,8 @@ impl SourceTable {
 
         let connection_schema = ConnectionSchema::try_new(
             format.clone(),
-            Some(bad_data),
-            framing,
+            Some(bad_data.clone()),
+            framing.clone(),
             schema_fields,
             None,
             Some(inferred_empty),
@@ -421,19 +427,34 @@ impl SourceTable {
 
         table.lookup_cache_ttl = options.pull_opt_duration("lookup.cache.ttl")?;
 
-        let extra_opts = options.drain_remaining_string_values()?;
-        let mut config_root = serde_json::json!({
-            "connector": connector_name,
-            "connection_schema": connection_schema,
-        });
-        if let serde_json::Value::Object(ref mut map) = config_root {
-            for (k, v) in extra_opts {
-                map.insert(k, serde_json::Value::String(v));
+        if connector_name.eq_ignore_ascii_case("kafka") {
+            let physical = table.produce_physical_schema();
+            let op_cfg = wire_kafka_operator_config(
+                options,
+                role,
+                &physical,
+                &format,
+                bad_data,
+                framing,
+            )?;
+            table.opaque_config = serde_json::to_string(&op_cfg).map_err(|e| {
+                DataFusionError::Plan(format!("failed to serialize Kafka OperatorConfig: {e}"))
+            })?;
+        } else {
+            let extra_opts = options.drain_remaining_string_values()?;
+            let mut config_root = serde_json::json!({
+                "connector": connector_name,
+                "connection_schema": connection_schema,
+            });
+            if let serde_json::Value::Object(ref mut map) = config_root {
+                for (k, v) in extra_opts {
+                    map.insert(k, serde_json::Value::String(v));
+                }
             }
+            table.opaque_config = serde_json::to_string(&config_root).map_err(|e| {
+                DataFusionError::Plan(format!("failed to serialize connector config: {e}"))
+            })?;
         }
-        table.opaque_config = serde_json::to_string(&config_root).map_err(|e| {
-            DataFusionError::Plan(format!("failed to serialize connector config: {e}"))
-        })?;
 
         if role == TableRole::Ingestion && encoding.supports_delta_updates() && primary_keys.is_empty()
         {
@@ -542,6 +563,147 @@ impl SourceTable {
             watermark_column,
         })
     }
+}
+
+/// Kafka: runtime [`KafkaSourceDispatcher`] / [`KafkaSinkDispatcher`] expect [`OperatorConfig`] JSON,
+/// not the legacy `{ connector, connection_schema, ... }` blob used by other adapters.
+fn wire_kafka_operator_config(
+    options: &mut ConnectorOptions,
+    role: TableRole,
+    physical_schema: &Schema,
+    format: &Option<Format>,
+    bad_data: BadData,
+    framing: Option<Framing>,
+) -> Result<OperatorConfig> {
+    let bootstrap_servers = match options.pull_opt_str("bootstrap.servers")? {
+        Some(s) => s,
+        None => options
+            .pull_opt_str("bootstrap_servers")?
+            .ok_or_else(|| {
+                plan_datafusion_err!(
+                    "Kafka connector requires 'bootstrap.servers' in the WITH clause"
+                )
+            })?,
+    };
+
+    let topic = options
+        .pull_opt_str("topic")?
+        .ok_or_else(|| plan_datafusion_err!("Kafka connector requires 'topic' in the WITH clause"))?;
+
+    let sql_format = format.clone().ok_or_else(|| {
+        plan_datafusion_err!(
+            "Kafka connector requires 'format' in the WITH clause (e.g. format = 'json')"
+        )
+    })?;
+
+    let rate_limit = options
+        .pull_opt_u64("rate_limit.messages_per_second")?
+        .map(|v| RateLimit {
+            messages_per_second: v.clamp(1, u32::MAX as u64) as u32,
+        });
+
+    let value_subject = options.pull_opt_str("value.subject")?;
+
+    let kind = match role {
+        TableRole::Ingestion => {
+            let offset = match options.pull_opt_str("scan.startup.mode")?.as_deref() {
+                Some("latest") => KafkaTableSourceOffset::Latest,
+                Some("earliest") => KafkaTableSourceOffset::Earliest,
+                None | Some("group-offsets") | Some("group") => KafkaTableSourceOffset::Group,
+                Some(other) => {
+                    return plan_err!(
+                        "invalid scan.startup.mode '{other}'; expected latest, earliest, or group-offsets"
+                    );
+                }
+            };
+            let read_mode = match options.pull_opt_str("isolation.level")?.as_deref() {
+                Some("read_committed") => Some(ReadMode::ReadCommitted),
+                Some("read_uncommitted") => Some(ReadMode::ReadUncommitted),
+                None => None,
+                Some(other) => {
+                    return plan_err!("invalid isolation.level '{other}'");
+                }
+            };
+            let group_id = match options.pull_opt_str("group.id")? {
+                Some(s) => Some(s),
+                None => options.pull_opt_str("group_id")?,
+            };
+            let group_id_prefix = options.pull_opt_str("group.id.prefix")?;
+            KafkaTableType::Source {
+                offset,
+                read_mode,
+                group_id,
+                group_id_prefix,
+            }
+        }
+        TableRole::Egress => {
+            let commit_mode = match options.pull_opt_str("sink.commit.mode")?.as_deref() {
+                Some("exactly-once") | Some("exactly_once") => SinkCommitMode::ExactlyOnce,
+                None | Some("at-least-once") | Some("at_least_once") => SinkCommitMode::AtLeastOnce,
+                Some(other) => {
+                    return plan_err!("invalid sink.commit.mode '{other}'");
+                }
+            };
+            let key_field = match options.pull_opt_str("sink.key.field")? {
+                Some(s) => Some(s),
+                None => options.pull_opt_str("key.field")?,
+            };
+            let timestamp_field = match options.pull_opt_str("sink.timestamp.field")? {
+                Some(s) => Some(s),
+                None => options.pull_opt_str("timestamp.field")?,
+            };
+            KafkaTableType::Sink {
+                commit_mode,
+                key_field,
+                timestamp_field,
+            }
+        }
+        TableRole::Reference => {
+            return plan_err!("Kafka connector cannot be used as a lookup table in this path");
+        }
+    };
+
+    // Role already decided; keep these out of librdkafka `connection_properties`.
+    let _ = options.pull_opt_str("type")?;
+    let _ = options.pull_opt_str("connector")?;
+
+    let connection_properties = options.drain_remaining_string_values()?;
+
+    let kafka_connection = KafkaConfig {
+        bootstrap_servers,
+        authentication: KafkaConfigAuthentication::None,
+        schema_registry_enum: None,
+        connection_properties,
+    };
+
+    let kafka_table = KafkaTable {
+        topic,
+        kind,
+        client_configs: HashMap::new(),
+        value_subject,
+    };
+
+    let fields: Vec<Field> = physical_schema
+        .fields()
+        .iter()
+        .map(|f| f.as_ref().clone())
+        .collect();
+    let input_schema = FsSchema::from_fields(fields);
+
+    Ok(OperatorConfig {
+        connection: serde_json::to_value(&kafka_connection).map_err(|e| {
+            DataFusionError::Plan(format!("Kafka connection serialization failed: {e}"))
+        })?,
+        table: serde_json::to_value(&kafka_table).map_err(|e| {
+            DataFusionError::Plan(format!("Kafka table serialization failed: {e}"))
+        })?,
+        format: Some(sql_format),
+        bad_data: Some(bad_data),
+        framing,
+        rate_limit,
+        metadata_fields: vec![],
+        input_schema: Some(input_schema),
+    })
 }
 
 /// Plan a SQL scalar expression against a table-qualified schema (e.g. watermark `AS` clause).
