@@ -25,6 +25,7 @@ use prost::Message;
 use protocol::grpc::api::{AsyncUdfOperator, AsyncUdfOrdering};
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::extension_node;
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::streaming_operator_blueprint::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{
@@ -33,8 +34,9 @@ use crate::sql::logical_node::logical::{
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{DFField, fields_with_qualifiers, schema_from_df_fields};
 
-pub(crate) const NODE_TYPE_NAME: &str = "AsyncFunctionExecutionNode";
-pub const ASYNC_RESULT_FIELD: &str = "__async_result";
+use super::ASYNC_RESULT_FIELD;
+
+pub(crate) const NODE_TYPE_NAME: &str = extension_node::ASYNC_FUNCTION_EXECUTION;
 
 /// Represents a logical node that executes an external asynchronous function (UDF)
 /// and projects the final results into the streaming pipeline.

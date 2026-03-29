@@ -18,6 +18,7 @@ use datafusion::logical_expr::{Expr, Extension, LogicalPlan, UserDefinedLogicalN
 use prost::Message;
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::extension_node;
 use crate::sql::common::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
@@ -31,7 +32,7 @@ use super::remote_table::RemoteTableBoundaryNode;
 // Constants & Identifiers
 // -----------------------------------------------------------------------------
 
-pub(crate) const STREAM_EGRESS_NODE_NAME: &str = "StreamEgressNode";
+pub(crate) const STREAM_EGRESS_NODE_NAME: &str = extension_node::STREAM_EGRESS;
 
 // -----------------------------------------------------------------------------
 // Logical Node Definition

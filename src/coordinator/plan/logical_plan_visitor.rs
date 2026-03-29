@@ -38,6 +38,7 @@ use crate::coordinator::tool::ConnectorOptions;
 use crate::sql::analysis::{
     maybe_add_key_extension_to_sink, rewrite_sinks, StreamSchemaProvider,
 };
+use crate::sql::common::with_option_keys as opt;
 use crate::sql::extensions::sink::StreamEgressNode;
 use crate::sql::functions::{is_json_union, serialize_outgoing_json};
 use crate::sql::logical_node::logical::{LogicalProgram, ProgramConfig};
@@ -46,9 +47,6 @@ use crate::sql::logical_planner::planner::PlanToGraphVisitor;
 use crate::sql::rewrite_plan;
 use crate::sql::schema::source_table::SourceTable;
 use crate::sql::schema::{ColumnDescriptor, ConnectionType, Table};
-
-const OPT_CONNECTOR: &str = "connector";
-const OPT_PARTITION_BY: &str = "partition_by";
 
 #[derive(Clone)]
 pub struct LogicalPlanVisitor {
@@ -95,11 +93,11 @@ impl LogicalPlanVisitor {
         debug!("Initiating streaming sink compilation for identifier: {}", sink_table_name);
 
         let mut sink_properties = ConnectorOptions::new(with_options, &None)?;
-        let connector_type = sink_properties.pull_opt_str(OPT_CONNECTOR)?.ok_or_else(|| {
+        let connector_type = sink_properties.pull_opt_str(opt::CONNECTOR)?.ok_or_else(|| {
             plan_datafusion_err!(
             "Validation Error: Streaming table '{}' requires the '{}' property",
             sink_table_name,
-            OPT_CONNECTOR
+            opt::CONNECTOR
         )
         })?;
 
@@ -192,7 +190,7 @@ impl LogicalPlanVisitor {
         options: &mut ConnectorOptions,
     ) -> Result<Option<Vec<Expr>>> {
         options
-            .pull_opt_str(OPT_PARTITION_BY)?
+            .pull_opt_str(opt::PARTITION_BY)?
             .map(|raw_cols| raw_cols.split(',').map(|c| col(c.trim())).collect())
             .map(Ok)
             .transpose()
@@ -200,7 +198,7 @@ impl LogicalPlanVisitor {
 
     fn contains_connector_property(options: &[SqlOption]) -> bool {
         options.iter().any(|opt| match opt {
-            SqlOption::KeyValue { key, .. } => key.value.eq_ignore_ascii_case(OPT_CONNECTOR),
+            SqlOption::KeyValue { key, .. } => key.value.eq_ignore_ascii_case(opt::CONNECTOR),
             _ => false,
         })
     }
@@ -279,10 +277,10 @@ impl LogicalPlanVisitor {
             .collect::<Vec<_>>();
 
         let mut connector_options = ConnectorOptions::new(&stmt.with_options, &None)?;
-        let adapter_type = connector_options.pull_opt_str(OPT_CONNECTOR)?.ok_or_else(|| {
+        let adapter_type = connector_options.pull_opt_str(opt::CONNECTOR)?.ok_or_else(|| {
             plan_datafusion_err!(
                 "Configuration Error: Missing required property '{}' in WITH clause",
-                OPT_CONNECTOR
+                opt::CONNECTOR
             )
         })?;
 

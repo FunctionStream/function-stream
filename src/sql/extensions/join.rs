@@ -22,6 +22,7 @@ use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
 use protocol::grpc::api::JoinOperator;
 
+use crate::sql::common::constants::{extension_node, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{
@@ -34,7 +35,7 @@ use crate::sql::logical_planner::FsPhysicalExtensionCodec;
 // Constants
 // -----------------------------------------------------------------------------
 
-pub(crate) const STREAM_JOIN_NODE_TYPE: &str = "StreamingJoinNode";
+pub(crate) const STREAM_JOIN_NODE_TYPE: &str = extension_node::STREAMING_JOIN;
 
 // -----------------------------------------------------------------------------
 // Logical Node Definition
@@ -187,7 +188,7 @@ impl StreamingOperatorBlueprint for StreamingJoinNode {
             node_identifier.clone(),
             self.determine_operator_type(),
             operator_config.encode_to_vec(),
-            "streaming_join".to_string(),
+            runtime_operator_kind::STREAMING_JOIN.to_string(),
             1,
         );
 

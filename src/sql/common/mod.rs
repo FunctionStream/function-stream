@@ -17,6 +17,8 @@
 
 pub mod arrow_ext;
 pub mod connector_options;
+pub mod with_option_keys;
+pub mod constants;
 pub mod control;
 pub mod date;
 pub mod debezium;

@@ -22,6 +22,7 @@ use prost::Message;
 use protocol::grpc::api::ProjectionOperator;
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::{extension_node, sql_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
@@ -32,8 +33,8 @@ use crate::sql::types::{DFField, schema_from_df_fields};
 // Constants & Identifiers
 // -----------------------------------------------------------------------------
 
-pub(crate) const STREAM_PROJECTION_NODE_NAME: &str = "StreamProjectionNode";
-const DEFAULT_PROJECTION_LABEL: &str = "projection";
+pub(crate) const STREAM_PROJECTION_NODE_NAME: &str = extension_node::STREAM_PROJECTION;
+const DEFAULT_PROJECTION_LABEL: &str = sql_field::DEFAULT_PROJECTION_LABEL;
 
 // -----------------------------------------------------------------------------
 // Logical Node Definition

@@ -15,6 +15,8 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use strum::{Display, EnumString};
 
+use crate::sql::common::constants::operator_feature;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, Display)]
 pub enum OperatorName {
     ExpressionWatermark,
@@ -33,6 +35,27 @@ pub enum OperatorName {
     KeyBy,
     ConnectorSource,
     ConnectorSink,
+}
+
+impl OperatorName {
+    /// 特性 / 指标聚合使用的 kebab-case 标签（与 [`crate::sql::common::constants::operator_feature`] 一致）。
+    pub fn feature_tag(self) -> Option<&'static str> {
+        match self {
+            Self::ExpressionWatermark | Self::ArrowValue | Self::ArrowKey | Self::Projection => None,
+            Self::AsyncUdf => Some(operator_feature::ASYNC_UDF),
+            Self::Join => Some(operator_feature::JOIN_WITH_EXPIRATION),
+            Self::InstantJoin => Some(operator_feature::WINDOWED_JOIN),
+            Self::WindowFunction => Some(operator_feature::SQL_WINDOW_FUNCTION),
+            Self::LookupJoin => Some(operator_feature::LOOKUP_JOIN),
+            Self::TumblingWindowAggregate => Some(operator_feature::SQL_TUMBLING_WINDOW_AGGREGATE),
+            Self::SlidingWindowAggregate => Some(operator_feature::SQL_SLIDING_WINDOW_AGGREGATE),
+            Self::SessionWindowAggregate => Some(operator_feature::SQL_SESSION_WINDOW_AGGREGATE),
+            Self::UpdatingAggregate => Some(operator_feature::SQL_UPDATING_AGGREGATE),
+            Self::KeyBy => Some(operator_feature::KEY_BY_ROUTING),
+            Self::ConnectorSource => Some(operator_feature::CONNECTOR_SOURCE),
+            Self::ConnectorSink => Some(operator_feature::CONNECTOR_SINK),
+        }
+    }
 }
 
 impl Serialize for OperatorName {

@@ -24,6 +24,7 @@ use protocol::grpc::api;
 use protocol::grpc::api::{ConnectorOp, LookupJoinCondition, LookupJoinOperator};
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::extension_node;
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
@@ -35,8 +36,8 @@ use crate::sql::schema::utils::add_timestamp_field_arrow;
 // Constants & Identifiers
 // -----------------------------------------------------------------------------
 
-pub const DICTIONARY_SOURCE_NODE_NAME: &str = "ReferenceTableSource";
-pub const STREAM_DICTIONARY_JOIN_NODE_NAME: &str = "StreamReferenceJoin";
+pub const DICTIONARY_SOURCE_NODE_NAME: &str = extension_node::REFERENCE_TABLE_SOURCE;
+pub const STREAM_DICTIONARY_JOIN_NODE_NAME: &str = extension_node::STREAM_REFERENCE_JOIN;
 
 // -----------------------------------------------------------------------------
 // Logical Node: Reference Table Source

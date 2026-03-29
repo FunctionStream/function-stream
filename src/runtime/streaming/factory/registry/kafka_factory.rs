@@ -1,3 +1,15 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //! Kafka Source/Sink：从 [`ConnectorOp`] + [`OperatorConfig`] 构造物理算子（鉴权与 client 配置合并）。
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -18,6 +30,7 @@ use crate::runtime::streaming::format::{
 };
 use crate::runtime::streaming::operators::sink::kafka::{ConsistencyMode, KafkaSinkOperator};
 use crate::runtime::streaming::operators::source::kafka::{BufferedDeserializer, KafkaSourceOperator};
+use crate::sql::common::constants::connector_type;
 use crate::sql::common::formats::{
     BadData, DecimalEncoding as SqlDecimalEncoding, Format as SqlFormat, JsonFormat as SqlJsonFormat,
     TimestampFormat as SqlTimestampFormat,
@@ -178,7 +191,7 @@ impl OperatorConstructor for KafkaSourceDispatcher {
         let op = ConnectorOp::decode(payload)
             .context("Failed to decode ConnectorOp protobuf for Kafka Source")?;
 
-        if op.connector != "kafka" {
+        if op.connector != connector_type::KAFKA {
             bail!(
                 "KafkaSourceDispatcher: expected connector 'kafka', got '{}'",
                 op.connector
@@ -257,7 +270,7 @@ impl OperatorConstructor for KafkaSinkDispatcher {
         let op = ConnectorOp::decode(payload)
             .context("Failed to decode ConnectorOp protobuf for Kafka Sink")?;
 
-        if op.connector != "kafka" {
+        if op.connector != connector_type::KAFKA {
             bail!(
                 "KafkaSinkDispatcher: expected connector 'kafka', got '{}'",
                 op.connector

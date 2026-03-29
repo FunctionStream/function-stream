@@ -27,6 +27,7 @@ use prost::Message;
 use protocol::grpc::api::{KeyPlanOperator, ProjectionOperator};
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::{extension_node, sql_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
@@ -34,7 +35,7 @@ use crate::sql::logical_planner::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{fields_with_qualifiers, schema_from_df_fields_with_metadata};
 
-pub(crate) const EXTENSION_NODE_IDENTIFIER: &str = "KeyExtractionNode";
+pub(crate) const EXTENSION_NODE_IDENTIFIER: &str = extension_node::KEY_EXTRACTION;
 
 /// Routing strategy for shuffling data across the stream topology.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
@@ -101,7 +102,7 @@ impl KeyExtractionNode {
         indices: &[usize],
     ) -> (Vec<u8>, OperatorName) {
         let operator_config = KeyPlanOperator {
-            name: "key".into(),
+            name: sql_field::DEFAULT_KEY_LABEL.into(),
             physical_plan: physical_plan_proto.encode_to_vec(),
             key_fields: indices.iter().map(|&idx| idx as u64).collect(),
         };
@@ -153,7 +154,11 @@ impl KeyExtractionNode {
         }
 
         let operator_config = ProjectionOperator {
-            name: self.operator_label.as_deref().unwrap_or("key").to_string(),
+            name: self
+                .operator_label
+                .as_deref()
+                .unwrap_or(sql_field::DEFAULT_KEY_LABEL)
+                .to_string(),
             input_schema: Some(input_schema_ref.as_ref().clone().into()),
             output_schema: Some(output_fs_schema.into()),
             exprs: physical_expr_payloads,

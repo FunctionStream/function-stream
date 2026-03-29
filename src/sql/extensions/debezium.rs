@@ -20,6 +20,7 @@ use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use datafusion::physical_plan::DisplayAs;
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::{cdc, extension_node};
 use crate::sql::common::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::logical_planner::updating_meta_field;
@@ -31,12 +32,8 @@ use super::{CompiledTopologyNode, StreamingOperatorBlueprint};
 // Constants & Identifiers
 // -----------------------------------------------------------------------------
 
-pub(crate) const UNROLL_NODE_NAME: &str = "UnrollDebeziumPayloadNode";
-pub(crate) const PACK_NODE_NAME: &str = "PackDebeziumEnvelopeNode";
-
-const CDC_FIELD_BEFORE: &str = "before";
-const CDC_FIELD_AFTER: &str = "after";
-const CDC_FIELD_OP: &str = "op";
+pub(crate) const UNROLL_NODE_NAME: &str = extension_node::UNROLL_DEBEZIUM_PAYLOAD;
+pub(crate) const PACK_NODE_NAME: &str = extension_node::PACK_DEBEZIUM_ENVELOPE;
 
 // -----------------------------------------------------------------------------
 // Core Schema Codec
@@ -68,12 +65,12 @@ impl DebeziumSchemaCodec {
 
         let mut envelope_fields = vec![
             Arc::new(Field::new(
-                CDC_FIELD_BEFORE,
+                cdc::BEFORE,
                 payload_struct_type.clone(),
                 true,
             )),
-            Arc::new(Field::new(CDC_FIELD_AFTER, payload_struct_type, true)),
-            Arc::new(Field::new(CDC_FIELD_OP, DataType::Utf8, true)),
+            Arc::new(Field::new(cdc::AFTER, payload_struct_type, true)),
+            Arc::new(Field::new(cdc::OP, DataType::Utf8, true)),
         ];
 
         if let Some(ts) = ts_field {
@@ -134,15 +131,15 @@ impl UnrollDebeziumPayloadNode {
     }
 
     fn validate_envelope_structure(schema: &DFSchemaRef) -> Result<(usize, usize)> {
-        let before_idx = schema.index_of_column_by_name(None, CDC_FIELD_BEFORE).ok_or_else(
+        let before_idx = schema.index_of_column_by_name(None, cdc::BEFORE).ok_or_else(
             || DataFusionError::Plan("Missing 'before' state column in CDC stream".into()),
         )?;
 
-        let after_idx = schema.index_of_column_by_name(None, CDC_FIELD_AFTER).ok_or_else(
+        let after_idx = schema.index_of_column_by_name(None, cdc::AFTER).ok_or_else(
             || DataFusionError::Plan("Missing 'after' state column in CDC stream".into()),
         )?;
 
-        let op_idx = schema.index_of_column_by_name(None, CDC_FIELD_OP).ok_or_else(|| {
+        let op_idx = schema.index_of_column_by_name(None, cdc::OP).ok_or_else(|| {
             DataFusionError::Plan("Missing 'op' operation column in CDC stream".into())
         })?;
 
@@ -158,7 +155,7 @@ impl UnrollDebeziumPayloadNode {
         if *schema.field(op_idx).data_type() != DataType::Utf8 {
             return plan_err!(
                 "The '{}' column must be of type Utf8",
-                CDC_FIELD_OP
+                cdc::OP
             );
         }
 

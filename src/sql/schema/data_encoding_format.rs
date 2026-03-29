@@ -16,6 +16,7 @@ use datafusion::arrow::datatypes::{DataType, Field};
 use datafusion::common::{Result, plan_err};
 
 use super::column_descriptor::ColumnDescriptor;
+use crate::sql::common::with_option_keys as opt;
 use crate::sql::common::Format;
 
 /// High-level payload encoding (orthogonal to `Format` wire details in `ConnectionSchema`).
@@ -30,10 +31,13 @@ pub enum DataEncodingFormat {
 
 impl DataEncodingFormat {
     pub fn extract_from_map(opts: &HashMap<String, String>) -> Result<Self> {
-        let format_str = opts.get("format").map(|s| s.as_str()).unwrap_or("json");
+        let format_str = opts
+            .get(opt::FORMAT)
+            .map(|s| s.as_str())
+            .unwrap_or(opt::DEFAULT_FORMAT_VALUE);
         let is_debezium = opts
-            .get("format.debezium")
-            .or_else(|| opts.get("json.debezium"))
+            .get(opt::FORMAT_DEBEZIUM_FLAG)
+            .or_else(|| opts.get(opt::JSON_DEBEZIUM))
             .map(|s| s == "true")
             .unwrap_or(false);
 

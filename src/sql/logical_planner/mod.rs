@@ -1,3 +1,15 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use datafusion::arrow::{
     array::{
         Array, AsArray, BooleanBuilder, PrimitiveArray, RecordBatch, StringArray, StructArray,
@@ -31,6 +43,7 @@ use crate::make_udf_function;
 use crate::sql::functions::MultiHashFunction;
 use crate::sql::analysis::UNNESTED_COL;
 use crate::sql::schema::utils::window_arrow_struct;
+use crate::sql::common::constants::cdc;
 use crate::sql::common::{TIMESTAMP_FIELD, UPDATING_META_FIELD};
 use datafusion::arrow::datatypes::{TimestampNanosecondType, UInt64Type};
 use datafusion::catalog::memory::MemorySourceConfig;
@@ -763,9 +776,9 @@ pub struct DebeziumUnrollingExec {
 impl DebeziumUnrollingExec {
     pub fn try_new(input: Arc<dyn ExecutionPlan>, primary_keys: Vec<usize>) -> Result<Self> {
         let input_schema = input.schema();
-        let before_index = input_schema.index_of("before")?;
-        let after_index = input_schema.index_of("after")?;
-        let op_index = input_schema.index_of("op")?;
+        let before_index = input_schema.index_of(cdc::BEFORE)?;
+        let after_index = input_schema.index_of(cdc::AFTER)?;
+        let op_index = input_schema.index_of(cdc::OP)?;
         let _timestamp_index = input_schema.index_of(TIMESTAMP_FIELD)?;
         let before_type = input_schema.field(before_index).data_type();
         let after_type = input_schema.field(after_index).data_type();
@@ -888,9 +901,9 @@ impl DebeziumUnrollingStream {
             return plan_err!("there must be at least one primary key for a Debezium source");
         }
         let input_schema = input.schema();
-        let before_index = input_schema.index_of("before")?;
-        let after_index = input_schema.index_of("after")?;
-        let op_index = input_schema.index_of("op")?;
+        let before_index = input_schema.index_of(cdc::BEFORE)?;
+        let after_index = input_schema.index_of(cdc::AFTER)?;
+        let op_index = input_schema.index_of(cdc::OP)?;
         let timestamp_index = input_schema.index_of(TIMESTAMP_FIELD)?;
 
         Ok(Self {

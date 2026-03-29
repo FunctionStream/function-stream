@@ -1,3 +1,15 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use itertools::Itertools;
 
 use datafusion::arrow::datatypes::DataType;
@@ -301,31 +313,10 @@ impl LogicalProgram {
         let mut s = HashSet::new();
         for n in self.graph.node_weights() {
             for t in &n.operator_chain.operators {
-                let feature = match &t.operator_name {
-                    OperatorName::AsyncUdf => "async-udf".to_string(),
-                    OperatorName::ExpressionWatermark
-                    | OperatorName::ArrowValue
-                    | OperatorName::ArrowKey
-                    | OperatorName::Projection => continue,
-                    OperatorName::Join => "join-with-expiration".to_string(),
-                    OperatorName::InstantJoin => "windowed-join".to_string(),
-                    OperatorName::WindowFunction => "sql-window-function".to_string(),
-                    OperatorName::LookupJoin => "lookup-join".to_string(),
-                    OperatorName::TumblingWindowAggregate => {
-                        "sql-tumbling-window-aggregate".to_string()
-                    }
-                    OperatorName::SlidingWindowAggregate => {
-                        "sql-sliding-window-aggregate".to_string()
-                    }
-                    OperatorName::SessionWindowAggregate => {
-                        "sql-session-window-aggregate".to_string()
-                    }
-                    OperatorName::UpdatingAggregate => "sql-updating-aggregate".to_string(),
-                    OperatorName::KeyBy => "key-by-routing".to_string(),
-                    OperatorName::ConnectorSource => "connector-source".to_string(),
-                    OperatorName::ConnectorSink => "connector-sink".to_string(),
+                let Some(tag) = t.operator_name.feature_tag() else {
+                    continue;
                 };
-                s.insert(feature);
+                s.insert(tag.to_string());
             }
         }
         s

@@ -18,6 +18,7 @@ use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use prost::Message;
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::extension_node;
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::debezium::DebeziumSchemaCodec;
 use crate::sql::logical_node::logical::{LogicalNode, OperatorName};
@@ -32,7 +33,7 @@ use super::{CompiledTopologyNode, StreamingOperatorBlueprint};
 // Constants & Identifiers
 // -----------------------------------------------------------------------------
 
-pub(crate) const STREAM_INGESTION_NODE_NAME: &str = "StreamIngestionNode";
+pub(crate) const STREAM_INGESTION_NODE_NAME: &str = extension_node::STREAM_INGESTION;
 
 // -----------------------------------------------------------------------------
 // Logical Node Definition

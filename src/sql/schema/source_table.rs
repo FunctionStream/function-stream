@@ -42,6 +42,7 @@ use crate::sql::common::kafka_catalog::{
     KafkaConfig, KafkaConfigAuthentication, KafkaTable, KafkaTableSourceOffset, ReadMode,
     SinkCommitMode, TableType as KafkaTableType,
 };
+use crate::sql::common::with_option_keys as opt;
 use crate::sql::common::{
     BadData, Format, Framing, FsSchema, JsonCompression, JsonFormat, OperatorConfig, RateLimit,
 };
@@ -246,7 +247,7 @@ impl SourceTable {
     ) -> Result<Self> {
         let _ = connection_profile;
 
-        if let Some(c) = options.pull_opt_str("connector")? {
+        if let Some(c) = options.pull_opt_str(opt::CONNECTOR)? {
             if c != connector_name {
                 return plan_err!(
                     "WITH option `connector` is '{c}' but table uses connector '{connector_name}'"
@@ -274,7 +275,7 @@ impl SourceTable {
             .map_err(|e| DataFusionError::Plan(format!("invalid framing: '{e}'")))?;
 
         if temporary
-            && let Some(t) = options.insert_str("type", "lookup")?
+            && let Some(t) = options.insert_str(opt::TYPE, "lookup")?
             && t != "lookup"
         {
             return plan_err!(
@@ -321,7 +322,7 @@ impl SourceTable {
         let role = if let Some(t) = connection_type_override {
             t.into()
         } else {
-            match options.pull_opt_str("type")?.as_deref() {
+            match options.pull_opt_str(opt::TYPE)?.as_deref() {
                 None | Some("source") => TableRole::Ingestion,
                 Some("sink") => TableRole::Egress,
                 Some("lookup") => TableRole::Reference,
@@ -349,12 +350,12 @@ impl SourceTable {
             inferred_fields: None,
         };
 
-        if let Some(event_time_field) = options.pull_opt_field("event_time_field")? {
+        if let Some(event_time_field) = options.pull_opt_field(opt::EVENT_TIME_FIELD)? {
             warn!("`event_time_field` WITH option is deprecated; use WATERMARK FOR syntax");
             table.temporal_config.event_column = Some(event_time_field);
         }
 
-        if let Some(watermark_field) = options.pull_opt_field("watermark_field")? {
+        if let Some(watermark_field) = options.pull_opt_field(opt::WATERMARK_FIELD)? {
             warn!("`watermark_field` WITH option is deprecated; use WATERMARK FOR syntax");
             table.temporal_config.watermark_strategy_column = Some(watermark_field);
         }
@@ -417,15 +418,15 @@ impl SourceTable {
         }
 
         let idle_from_micros = options
-            .pull_opt_i64("idle_micros")?
+            .pull_opt_i64(opt::IDLE_MICROS)?
             .filter(|t| *t > 0)
             .map(|t| Duration::from_micros(t as u64));
-        let idle_from_duration = options.pull_opt_duration("idle_time")?;
+        let idle_from_duration = options.pull_opt_duration(opt::IDLE_TIME)?;
         table.temporal_config.liveness_timeout = idle_from_micros.or(idle_from_duration);
 
-        table.lookup_cache_max_bytes = options.pull_opt_u64("lookup.cache.max_bytes")?;
+        table.lookup_cache_max_bytes = options.pull_opt_u64(opt::LOOKUP_CACHE_MAX_BYTES)?;
 
-        table.lookup_cache_ttl = options.pull_opt_duration("lookup.cache.ttl")?;
+        table.lookup_cache_ttl = options.pull_opt_duration(opt::LOOKUP_CACHE_TTL)?;
 
         if connector_name.eq_ignore_ascii_case("kafka") {
             let physical = table.produce_physical_schema();
@@ -442,15 +443,19 @@ impl SourceTable {
             })?;
         } else {
             let extra_opts = options.drain_remaining_string_values()?;
-            let mut config_root = serde_json::json!({
-                "connector": connector_name,
-                "connection_schema": connection_schema,
-            });
-            if let serde_json::Value::Object(ref mut map) = config_root {
-                for (k, v) in extra_opts {
-                    map.insert(k, serde_json::Value::String(v));
-                }
+            let mut map = serde_json::Map::new();
+            map.insert(
+                opt::CONNECTOR.to_string(),
+                serde_json::Value::String(connector_name.to_string()),
+            );
+            let schema_val = serde_json::to_value(&connection_schema).map_err(|e| {
+                DataFusionError::Plan(format!("failed to serialize connection schema: {e}"))
+            })?;
+            map.insert(opt::CONNECTION_SCHEMA.to_string(), schema_val);
+            for (k, v) in extra_opts {
+                map.insert(k, serde_json::Value::String(v));
             }
+            let config_root = serde_json::Value::Object(map);
             table.opaque_config = serde_json::to_string(&config_root).map_err(|e| {
                 DataFusionError::Plan(format!("failed to serialize connector config: {e}"))
             })?;
@@ -575,10 +580,10 @@ fn wire_kafka_operator_config(
     bad_data: BadData,
     framing: Option<Framing>,
 ) -> Result<OperatorConfig> {
-    let bootstrap_servers = match options.pull_opt_str("bootstrap.servers")? {
+    let bootstrap_servers = match options.pull_opt_str(opt::KAFKA_BOOTSTRAP_SERVERS)? {
         Some(s) => s,
         None => options
-            .pull_opt_str("bootstrap_servers")?
+            .pull_opt_str(opt::KAFKA_BOOTSTRAP_SERVERS_LEGACY)?
             .ok_or_else(|| {
                 plan_datafusion_err!(
                     "Kafka connector requires 'bootstrap.servers' in the WITH clause"
@@ -587,7 +592,7 @@ fn wire_kafka_operator_config(
     };
 
     let topic = options
-        .pull_opt_str("topic")?
+        .pull_opt_str(opt::KAFKA_TOPIC)?
         .ok_or_else(|| plan_datafusion_err!("Kafka connector requires 'topic' in the WITH clause"))?;
 
     let sql_format = format.clone().ok_or_else(|| {
@@ -597,16 +602,16 @@ fn wire_kafka_operator_config(
     })?;
 
     let rate_limit = options
-        .pull_opt_u64("rate_limit.messages_per_second")?
+        .pull_opt_u64(opt::KAFKA_RATE_LIMIT_MESSAGES_PER_SECOND)?
         .map(|v| RateLimit {
             messages_per_second: v.clamp(1, u32::MAX as u64) as u32,
         });
 
-    let value_subject = options.pull_opt_str("value.subject")?;
+    let value_subject = options.pull_opt_str(opt::KAFKA_VALUE_SUBJECT)?;
 
     let kind = match role {
         TableRole::Ingestion => {
-            let offset = match options.pull_opt_str("scan.startup.mode")?.as_deref() {
+            let offset = match options.pull_opt_str(opt::KAFKA_SCAN_STARTUP_MODE)?.as_deref() {
                 Some("latest") => KafkaTableSourceOffset::Latest,
                 Some("earliest") => KafkaTableSourceOffset::Earliest,
                 None | Some("group-offsets") | Some("group") => KafkaTableSourceOffset::Group,
@@ -616,7 +621,7 @@ fn wire_kafka_operator_config(
                     );
                 }
             };
-            let read_mode = match options.pull_opt_str("isolation.level")?.as_deref() {
+            let read_mode = match options.pull_opt_str(opt::KAFKA_ISOLATION_LEVEL)?.as_deref() {
                 Some("read_committed") => Some(ReadMode::ReadCommitted),
                 Some("read_uncommitted") => Some(ReadMode::ReadUncommitted),
                 None => None,
@@ -624,11 +629,11 @@ fn wire_kafka_operator_config(
                     return plan_err!("invalid isolation.level '{other}'");
                 }
             };
-            let group_id = match options.pull_opt_str("group.id")? {
+            let group_id = match options.pull_opt_str(opt::KAFKA_GROUP_ID)? {
                 Some(s) => Some(s),
-                None => options.pull_opt_str("group_id")?,
+                None => options.pull_opt_str(opt::KAFKA_GROUP_ID_LEGACY)?,
             };
-            let group_id_prefix = options.pull_opt_str("group.id.prefix")?;
+            let group_id_prefix = options.pull_opt_str(opt::KAFKA_GROUP_ID_PREFIX)?;
             KafkaTableType::Source {
                 offset,
                 read_mode,
@@ -637,20 +642,20 @@ fn wire_kafka_operator_config(
             }
         }
         TableRole::Egress => {
-            let commit_mode = match options.pull_opt_str("sink.commit.mode")?.as_deref() {
+            let commit_mode = match options.pull_opt_str(opt::KAFKA_SINK_COMMIT_MODE)?.as_deref() {
                 Some("exactly-once") | Some("exactly_once") => SinkCommitMode::ExactlyOnce,
                 None | Some("at-least-once") | Some("at_least_once") => SinkCommitMode::AtLeastOnce,
                 Some(other) => {
                     return plan_err!("invalid sink.commit.mode '{other}'");
                 }
             };
-            let key_field = match options.pull_opt_str("sink.key.field")? {
+            let key_field = match options.pull_opt_str(opt::KAFKA_SINK_KEY_FIELD)? {
                 Some(s) => Some(s),
-                None => options.pull_opt_str("key.field")?,
+                None => options.pull_opt_str(opt::KAFKA_KEY_FIELD_LEGACY)?,
             };
-            let timestamp_field = match options.pull_opt_str("sink.timestamp.field")? {
+            let timestamp_field = match options.pull_opt_str(opt::KAFKA_SINK_TIMESTAMP_FIELD)? {
                 Some(s) => Some(s),
-                None => options.pull_opt_str("timestamp.field")?,
+                None => options.pull_opt_str(opt::KAFKA_TIMESTAMP_FIELD_LEGACY)?,
             };
             KafkaTableType::Sink {
                 commit_mode,
@@ -664,8 +669,8 @@ fn wire_kafka_operator_config(
     };
 
     // Role already decided; keep these out of librdkafka `connection_properties`.
-    let _ = options.pull_opt_str("type")?;
-    let _ = options.pull_opt_str("connector")?;
+    let _ = options.pull_opt_str(opt::TYPE)?;
+    let _ = options.pull_opt_str(opt::CONNECTOR)?;
 
     let connection_properties = options.drain_remaining_string_values()?;
 

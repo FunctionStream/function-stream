@@ -21,6 +21,7 @@ use datafusion_proto::{physical_plan::AsExecutionPlan, protobuf::PhysicalPlanNod
 use prost::Message;
 use protocol::grpc::api::WindowFunctionOperator;
 
+use crate::sql::common::constants::{extension_node, proto_operator_name, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::FsPhysicalExtensionCodec;
@@ -33,7 +34,7 @@ use super::{CompiledTopologyNode, StreamingOperatorBlueprint};
 // Constants & Identifiers
 // -----------------------------------------------------------------------------
 
-pub(crate) const STREAMING_WINDOW_NODE_NAME: &str = "StreamingWindowFunctionNode";
+pub(crate) const STREAMING_WINDOW_NODE_NAME: &str = extension_node::STREAMING_WINDOW_FUNCTION;
 
 // -----------------------------------------------------------------------------
 // Logical Node Definition
@@ -163,7 +164,7 @@ impl StreamingOperatorBlueprint for StreamingWindowFunctionNode {
         let evaluation_plan_payload = self.compile_physical_evaluation_plan(planner)?;
 
         let operator_config = WindowFunctionOperator {
-            name: "WindowFunction".to_string(),
+            name: proto_operator_name::WINDOW_FUNCTION.to_string(),
             input_schema: Some(input_schema.as_ref().clone().into()),
             binning_function: binning_payload,
             window_function_plan: evaluation_plan_payload,
@@ -174,7 +175,7 @@ impl StreamingOperatorBlueprint for StreamingWindowFunctionNode {
             format!("window_function_{node_index}"),
             OperatorName::WindowFunction,
             operator_config.encode_to_vec(),
-            "streaming_window_evaluator".to_string(),
+            runtime_operator_kind::STREAMING_WINDOW_EVALUATOR.to_string(),
             1,
         );
 

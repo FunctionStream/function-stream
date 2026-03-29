@@ -31,6 +31,7 @@ use protocol::grpc::api::{
 };
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::{extension_node, proto_operator_name};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{
     CompiledTopologyNode, StreamingOperatorBlueprint, SystemTimestampInjectorNode,
@@ -43,8 +44,7 @@ use crate::sql::types::{
     schema_from_df_fields, schema_from_df_fields_with_metadata,
 };
 
-pub(crate) const STREAM_AGG_EXTENSION_NAME: &str = "StreamWindowAggregateNode";
-const INTERNAL_TIMESTAMP_COL: &str = "_timestamp";
+pub(crate) const STREAM_AGG_EXTENSION_NAME: &str = extension_node::STREAM_WINDOW_AGGREGATE;
 
 /// Represents a streaming windowed aggregation node in the logical plan.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -104,7 +104,7 @@ impl StreamWindowAggregateNode {
         )?;
 
         let operator_config = TumblingWindowAggregateOperator {
-            name: "TumblingWindow".to_string(),
+            name: proto_operator_name::TUMBLING_WINDOW.to_string(),
             width_micros: duration.as_micros() as u64,
             binning_function: binning_expr.encode_to_vec(),
             input_schema: Some(
@@ -175,7 +175,7 @@ impl StreamWindowAggregateNode {
             format!("sliding_window_{node_id}"),
             OperatorName::SlidingWindowAggregate,
             operator_config.encode_to_vec(),
-            "sliding window".to_string(),
+            proto_operator_name::SLIDING_WINDOW_LABEL.to_string(),
             1,
         ))
     }
@@ -255,7 +255,7 @@ impl StreamWindowAggregateNode {
         apply_final_projection: bool,
     ) -> Result<LogicalNode> {
         let ts_column_expr =
-            Expr::Column(Column::new_unqualified(INTERNAL_TIMESTAMP_COL.to_string()));
+            Expr::Column(Column::new_unqualified(TIMESTAMP_FIELD.to_string()));
         let binning_expr = planner.create_physical_expr(&ts_column_expr, &input_schema)?;
         let binning_proto = serialize_physical_expr(&binning_expr, &DefaultPhysicalExtensionCodec {})?;
 
@@ -277,7 +277,7 @@ impl StreamWindowAggregateNode {
         } = planner.split_physical_plan(self.partition_keys.clone(), &self.base_agg_plan, true)?;
 
         let operator_config = TumblingWindowAggregateOperator {
-            name: "InstantWindow".to_string(),
+            name: proto_operator_name::INSTANT_WINDOW.to_string(),
             width_micros: 0,
             binning_function: binning_proto.encode_to_vec(),
             input_schema: Some(
@@ -298,7 +298,7 @@ impl StreamWindowAggregateNode {
             format!("instant_window_{node_id}"),
             OperatorName::TumblingWindowAggregate,
             operator_config.encode_to_vec(),
-            "instant window".to_string(),
+            proto_operator_name::INSTANT_WINDOW_LABEL.to_string(),
             1,
         ))
     }

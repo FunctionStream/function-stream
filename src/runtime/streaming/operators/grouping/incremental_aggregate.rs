@@ -1,3 +1,15 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use anyhow::{anyhow, bail, Result};
 use arrow::compute::max_array;
 use arrow::row::{RowConverter, SortField};
@@ -13,6 +25,7 @@ use arrow_schema::{DataType, Field, FieldRef, Schema, SchemaBuilder, TimeUnit};
 use datafusion::common::{Result as DFResult, ScalarValue};
 use datafusion::physical_expr::aggregate::AggregateFunctionExpr;
 use datafusion::physical_plan::{Accumulator, PhysicalExpr};
+use crate::sql::common::constants::updating_state_field;
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::from_proto::parse_physical_expr;
 use datafusion_proto::protobuf::PhysicalExprNode;
@@ -239,7 +252,7 @@ impl IncrementalAggregatingFunc {
                 .expect("_updating_meta must be StructArray");
 
             let is_retract_array = meta_struct
-                .column_by_name("is_retract")
+                .column_by_name(updating_state_field::IS_RETRACT)
                 .expect("meta struct must have is_retract");
             
             Some(is_retract_array.as_any().downcast_ref::<BooleanArray>().expect("is_retract must be BooleanArray"))

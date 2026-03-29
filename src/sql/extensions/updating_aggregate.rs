@@ -25,6 +25,7 @@ use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
 use protocol::grpc::api::UpdatingAggregateOperator;
 
+use crate::sql::common::constants::{extension_node, proto_operator_name, updating_state_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, IsRetractExtension, StreamingOperatorBlueprint};
 use crate::sql::functions::multi_hash;
@@ -36,7 +37,7 @@ use crate::sql::logical_planner::planner::{NamedNode, Planner};
 // Constants & Configuration
 // -----------------------------------------------------------------------------
 
-pub(crate) const CONTINUOUS_AGGREGATE_NODE_NAME: &str = "ContinuousAggregateNode";
+pub(crate) const CONTINUOUS_AGGREGATE_NODE_NAME: &str = extension_node::CONTINUOUS_AGGREGATE;
 
 const DEFAULT_FLUSH_INTERVAL_MICROS: u64 = 10_000_000;
 
@@ -102,9 +103,9 @@ impl ContinuousAggregateNode {
         };
 
         named_struct(vec![
-            lit("is_retract"),
+            lit(updating_state_field::IS_RETRACT),
             lit(false),
-            lit("id"),
+            lit(updating_state_field::ID),
             state_id_hash,
         ])
     }
@@ -128,7 +129,7 @@ impl ContinuousAggregateNode {
             planner.serialize_as_physical_expr(&meta_expr, &upstream_df_schema)?;
 
         Ok(UpdatingAggregateOperator {
-            name: "UpdatingAggregate".to_string(),
+            name: proto_operator_name::UPDATING_AGGREGATE.to_string(),
             input_schema: Some((**upstream_schema).clone().into()),
             final_schema: Some(self.yielded_schema().into()),
             aggregate_exec: compiled_agg_payload,
@@ -220,7 +221,7 @@ impl StreamingOperatorBlueprint for ContinuousAggregateNode {
             format!("updating_aggregate_{node_index}"),
             OperatorName::UpdatingAggregate,
             operator_config.encode_to_vec(),
-            "UpdatingAggregate".to_string(),
+            proto_operator_name::UPDATING_AGGREGATE.to_string(),
             1,
         );
 

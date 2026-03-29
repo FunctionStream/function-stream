@@ -16,13 +16,14 @@ use datafusion::common::{DFSchemaRef, Result, TableReference, internal_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::extension_node;
 use crate::sql::schema::utils::{add_timestamp_field, has_timestamp_field};
 
 // -----------------------------------------------------------------------------
 // Constants & Identifiers
 // -----------------------------------------------------------------------------
 
-pub(crate) const TIMESTAMP_INJECTOR_NODE_NAME: &str = "SystemTimestampInjectorNode";
+pub(crate) const TIMESTAMP_INJECTOR_NODE_NAME: &str = extension_node::SYSTEM_TIMESTAMP_INJECTOR;
 
 // -----------------------------------------------------------------------------
 // Logical Node Definition

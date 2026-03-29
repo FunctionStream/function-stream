@@ -1,3 +1,15 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use crate::sql::schema::StreamSchemaProvider;
 use datafusion::arrow::array::{
     Array, ArrayRef, StringArray, UnionArray,
@@ -22,7 +34,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Write};
 use std::sync::{Arc, OnceLock};
 
-const SERIALIZE_JSON_UNION: &str = "serialize_json_union";
+use crate::sql::common::constants::scalar_fn;
 
 /// Borrowed from DataFusion
 ///
@@ -57,7 +69,7 @@ make_udf_function!(MultiHashFunction, MULTI_HASH, multi_hash);
 pub fn register_all(registry: &mut dyn FunctionRegistry) {
     registry
         .register_udf(Arc::new(create_udf(
-            "get_first_json_object",
+            scalar_fn::GET_FIRST_JSON_OBJECT,
             vec![DataType::Utf8, DataType::Utf8],
             DataType::Utf8,
             Volatility::Immutable,
@@ -67,7 +79,7 @@ pub fn register_all(registry: &mut dyn FunctionRegistry) {
 
     registry
         .register_udf(Arc::new(create_udf(
-            "extract_json",
+            scalar_fn::EXTRACT_JSON,
             vec![DataType::Utf8, DataType::Utf8],
             DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
             Volatility::Immutable,
@@ -77,7 +89,7 @@ pub fn register_all(registry: &mut dyn FunctionRegistry) {
 
     registry
         .register_udf(Arc::new(create_udf(
-            "extract_json_string",
+            scalar_fn::EXTRACT_JSON_STRING,
             vec![DataType::Utf8, DataType::Utf8],
             DataType::Utf8,
             Volatility::Immutable,
@@ -87,7 +99,7 @@ pub fn register_all(registry: &mut dyn FunctionRegistry) {
 
     registry
         .register_udf(Arc::new(create_udf(
-            SERIALIZE_JSON_UNION,
+            scalar_fn::SERIALIZE_JSON_UNION,
             vec![DataType::Union(union_fields(), UnionMode::Sparse)],
             DataType::Utf8,
             Volatility::Immutable,
@@ -190,7 +202,7 @@ impl ScalarUDFImpl for MultiHashFunction {
     }
 
     fn name(&self) -> &str {
-        "multi_hash"
+        scalar_fn::MULTI_HASH
     }
 
     fn signature(&self) -> &Signature {
@@ -456,7 +468,7 @@ pub(crate) fn serialize_outgoing_json(
             if is_json_union(f.data_type()) {
                 Expr::Alias(Alias::new(
                     Expr::ScalarFunction(ScalarFunction::new_udf(
-                        registry.udf(SERIALIZE_JSON_UNION).unwrap(),
+                        registry.udf(scalar_fn::SERIALIZE_JSON_UNION).unwrap(),
                         vec![col(f.name())],
                     )),
                     Option::<TableReference>::None,

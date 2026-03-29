@@ -22,19 +22,19 @@ use prost::Message;
 use protocol::grpc::api::ExpressionWatermarkConfig;
 
 use crate::multifield_partial_ord;
+use crate::sql::common::constants::{extension_node, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::schema::utils::add_timestamp_field;
+use crate::sql::types::TIMESTAMP_FIELD;
 
 // -----------------------------------------------------------------------------
 // Constants & Identifiers
 // -----------------------------------------------------------------------------
 
-pub(crate) const EVENT_TIME_WATERMARK_NODE_NAME: &str = "EventTimeWatermarkNode";
-
-const INTERNAL_TIMESTAMP_COLUMN: &str = "_timestamp";
+pub(crate) const EVENT_TIME_WATERMARK_NODE_NAME: &str = extension_node::EVENT_TIME_WATERMARK;
 
 const DEFAULT_WATERMARK_EMISSION_PERIOD_MICROS: u64 = 1_000_000;
 
@@ -72,11 +72,11 @@ impl EventTimeWatermarkNode {
         )?;
 
         let internal_timestamp_offset = resolved_schema
-            .index_of_column_by_name(None, INTERNAL_TIMESTAMP_COLUMN)
+            .index_of_column_by_name(None, TIMESTAMP_FIELD)
             .ok_or_else(|| {
                 DataFusionError::Plan(format!(
                     "Fatal: Failed to resolve mandatory temporal column '{}'",
-                    INTERNAL_TIMESTAMP_COLUMN
+                    TIMESTAMP_FIELD
                 ))
             })?;
 
@@ -163,11 +163,11 @@ impl UserDefinedLogicalNodeCore for EventTimeWatermarkNode {
 
         let internal_timestamp_offset = self
             .resolved_schema
-            .index_of_column_by_name(Some(&self.namespace_qualifier), INTERNAL_TIMESTAMP_COLUMN)
+            .index_of_column_by_name(Some(&self.namespace_qualifier), TIMESTAMP_FIELD)
             .ok_or_else(|| {
                 DataFusionError::Plan(format!(
                     "Optimizer Error: Lost tracking of temporal column '{}'",
-                    INTERNAL_TIMESTAMP_COLUMN
+                    TIMESTAMP_FIELD
                 ))
             })?;
 
@@ -210,7 +210,7 @@ impl StreamingOperatorBlueprint for EventTimeWatermarkNode {
             format!("watermark_{node_index}"),
             OperatorName::ExpressionWatermark,
             operator_config.encode_to_vec(),
-            "watermark_generator".to_string(),
+            runtime_operator_kind::WATERMARK_GENERATOR.to_string(),
             1,
         );
 

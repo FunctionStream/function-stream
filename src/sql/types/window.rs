@@ -1,7 +1,21 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use std::time::Duration;
 
 use datafusion::common::{Result, plan_err};
 use datafusion::logical_expr::Expr;
+
+use crate::sql::common::constants::window_fn;
 
 use super::DFField;
 
@@ -54,7 +68,7 @@ pub fn find_window(expression: &Expr) -> Result<Option<WindowType>> {
 
     match expression {
         Expr::ScalarFunction(ScalarFunction { func: fun, args }) => match fun.name() {
-            "hop" => {
+            name if name == window_fn::HOP => {
                 if args.len() != 2 {
                     unreachable!();
                 }
@@ -73,14 +87,14 @@ pub fn find_window(expression: &Expr) -> Result<Option<WindowType>> {
                     Ok(Some(WindowType::Sliding { width, slide }))
                 }
             }
-            "tumble" => {
+            name if name == window_fn::TUMBLE => {
                 if args.len() != 1 {
                     unreachable!("wrong number of arguments for tumble(), expect one");
                 }
                 let width = get_duration(&args[0])?;
                 Ok(Some(WindowType::Tumbling { width }))
             }
-            "session" => {
+            name if name == window_fn::SESSION => {
                 if args.len() != 1 {
                     unreachable!("wrong number of arguments for session(), expected one");
                 }

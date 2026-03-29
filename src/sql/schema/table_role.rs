@@ -18,6 +18,7 @@ use datafusion::error::DataFusionError;
 
 use super::column_descriptor::ColumnDescriptor;
 use super::connection_type::ConnectionType;
+use crate::sql::common::with_option_keys as opt;
 
 /// Role of a connector-backed table in the pipeline (ingest / egress / lookup).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -87,7 +88,7 @@ pub fn apply_adapter_specific_rules(adapter: &str, mut cols: Vec<ColumnDescripto
 }
 
 pub fn deduce_role(options: &HashMap<String, String>) -> Result<TableRole> {
-    match options.get("type").map(|s| s.as_str()) {
+    match options.get(opt::TYPE).map(|s| s.as_str()) {
         None | Some("source") => Ok(TableRole::Ingestion),
         Some("sink") => Ok(TableRole::Egress),
         Some("lookup") => Ok(TableRole::Reference),
@@ -98,7 +99,7 @@ pub fn deduce_role(options: &HashMap<String, String>) -> Result<TableRole> {
 pub fn serialize_backend_params(adapter: &str, options: &HashMap<String, String>) -> Result<String> {
     let mut payload = serde_json::Map::new();
     payload.insert(
-        "adapter".to_string(),
+        opt::ADAPTER.to_string(),
         serde_json::Value::String(adapter.to_string()),
     );
 
