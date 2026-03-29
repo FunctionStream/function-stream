@@ -31,10 +31,9 @@ use crate::sql::extensions::streaming_operator_blueprint::{CompiledTopologyNode,
 use crate::sql::logical_node::logical::{
     DylibUdfConfig, LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName,
 };
+use crate::sql::common::constants::sql_field;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{DFField, fields_with_qualifiers, schema_from_df_fields};
-
-use super::ASYNC_RESULT_FIELD;
 
 pub(crate) const NODE_TYPE_NAME: &str = extension_node::ASYNC_FUNCTION_EXECUTION;
 
@@ -91,7 +90,7 @@ impl AsyncFunctionExecutionNode {
 
         let raw_result_field = DFField::new(
             None,
-            ASYNC_RESULT_FIELD,
+            sql_field::ASYNC_RESULT,
             self.function_config.return_type.clone(),
             true,
         );

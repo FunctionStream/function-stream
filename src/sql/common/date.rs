@@ -13,6 +13,8 @@
 use serde::Serialize;
 use std::convert::TryFrom;
 
+use super::constants::{date_part_keyword, date_trunc_keyword};
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Hash, Serialize)]
 pub enum DatePart {
     Year,
@@ -33,19 +35,20 @@ impl TryFrom<&str> for DatePart {
     type Error = String;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "year" => Ok(DatePart::Year),
-            "month" => Ok(DatePart::Month),
-            "week" => Ok(DatePart::Week),
-            "day" => Ok(DatePart::Day),
-            "hour" => Ok(DatePart::Hour),
-            "minute" => Ok(DatePart::Minute),
-            "second" => Ok(DatePart::Second),
-            "millisecond" => Ok(DatePart::Millisecond),
-            "microsecond" => Ok(DatePart::Microsecond),
-            "nanosecond" => Ok(DatePart::Nanosecond),
-            "dow" => Ok(DatePart::DayOfWeek),
-            "doy" => Ok(DatePart::DayOfYear),
+        let v = value.to_lowercase();
+        match v.as_str() {
+            date_part_keyword::YEAR => Ok(DatePart::Year),
+            date_part_keyword::MONTH => Ok(DatePart::Month),
+            date_part_keyword::WEEK => Ok(DatePart::Week),
+            date_part_keyword::DAY => Ok(DatePart::Day),
+            date_part_keyword::HOUR => Ok(DatePart::Hour),
+            date_part_keyword::MINUTE => Ok(DatePart::Minute),
+            date_part_keyword::SECOND => Ok(DatePart::Second),
+            date_part_keyword::MILLISECOND => Ok(DatePart::Millisecond),
+            date_part_keyword::MICROSECOND => Ok(DatePart::Microsecond),
+            date_part_keyword::NANOSECOND => Ok(DatePart::Nanosecond),
+            date_part_keyword::DOW => Ok(DatePart::DayOfWeek),
+            date_part_keyword::DOY => Ok(DatePart::DayOfYear),
             _ => Err(format!("'{value}' is not a valid DatePart")),
         }
     }
@@ -67,15 +70,16 @@ impl TryFrom<&str> for DateTruncPrecision {
     type Error = String;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "year" => Ok(DateTruncPrecision::Year),
-            "quarter" => Ok(DateTruncPrecision::Quarter),
-            "month" => Ok(DateTruncPrecision::Month),
-            "week" => Ok(DateTruncPrecision::Week),
-            "day" => Ok(DateTruncPrecision::Day),
-            "hour" => Ok(DateTruncPrecision::Hour),
-            "minute" => Ok(DateTruncPrecision::Minute),
-            "second" => Ok(DateTruncPrecision::Second),
+        let v = value.to_lowercase();
+        match v.as_str() {
+            date_trunc_keyword::YEAR => Ok(DateTruncPrecision::Year),
+            date_trunc_keyword::QUARTER => Ok(DateTruncPrecision::Quarter),
+            date_trunc_keyword::MONTH => Ok(DateTruncPrecision::Month),
+            date_trunc_keyword::WEEK => Ok(DateTruncPrecision::Week),
+            date_trunc_keyword::DAY => Ok(DateTruncPrecision::Day),
+            date_trunc_keyword::HOUR => Ok(DateTruncPrecision::Hour),
+            date_trunc_keyword::MINUTE => Ok(DateTruncPrecision::Minute),
+            date_trunc_keyword::SECOND => Ok(DateTruncPrecision::Second),
             _ => Err(format!("'{value}' is not a valid DateTruncPrecision")),
         }
     }

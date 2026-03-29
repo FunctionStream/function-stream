@@ -37,7 +37,7 @@ use async_trait::async_trait;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
 use crate::sql::common::time_utils::print_time;
-use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 
 // ============================================================================
 // 纯内存执行缓冲区

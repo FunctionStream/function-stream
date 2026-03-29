@@ -10,4 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use crate::sql::common::constants::sql_field::ASYNC_RESULT as ASYNC_RESULT_FIELD;
+//! 流式物理执行扩展：元数据列、UDF、内存/无界 Reader、CDC 与 proto 编解码。
+
+mod cdc;
+mod codec;
+mod meta;
+mod readers;
+mod udfs;
+
+pub use cdc::{DebeziumUnrollingExec, ToDebeziumExec};
+pub use codec::{DecodingContext, FsPhysicalExtensionCodec};
+pub use meta::{updating_meta_field, updating_meta_fields};
+pub use readers::FsMemExec;
+pub use udfs::{WindowFunctionUdf, window};

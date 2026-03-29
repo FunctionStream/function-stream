@@ -20,6 +20,8 @@ use datafusion::error::DataFusionError;
 use datafusion::sql::sqlparser::ast::{Expr, Ident, SqlOption, Value as SqlValue, ValueWithSpan};
 use tracing::warn;
 
+use super::constants::{interval_duration_unit, with_opt_bool_str};
+
 pub trait FromOpts: Sized {
     fn from_opts(opts: &mut ConnectorOptions) -> DFResult<Self>;
 }
@@ -88,8 +90,8 @@ impl ConnectorOptions {
                 value: SqlValue::SingleQuotedString(s),
                 span: _,
             })) => match s.as_str() {
-                "true" | "yes" => Ok(Some(true)),
-                "false" | "no" => Ok(Some(false)),
+                with_opt_bool_str::TRUE | with_opt_bool_str::YES => Ok(Some(true)),
+                with_opt_bool_str::FALSE | with_opt_bool_str::NO => Ok(Some(false)),
                 _ => Err(plan_datafusion_err!(
                     "expected with option '{}' to be a boolean, but it was `'{}'`",
                     name,
@@ -367,11 +369,21 @@ fn parse_interval_to_duration(s: &str) -> Result<Duration, DataFusionError> {
     let value: u64 = parts[0]
         .parse()
         .map_err(|_| DataFusionError::Plan(format!("invalid interval number: {}", parts[0])))?;
-    let duration = match parts[1].to_lowercase().as_str() {
-        "second" | "seconds" | "s" => Duration::from_secs(value),
-        "minute" | "minutes" | "min" => Duration::from_secs(value * 60),
-        "hour" | "hours" | "h" => Duration::from_secs(value * 3600),
-        "day" | "days" | "d" => Duration::from_secs(value * 86400),
+    let unit_lc = parts[1].to_lowercase();
+    let unit = unit_lc.as_str();
+    let duration = match unit {
+        interval_duration_unit::SECOND
+        | interval_duration_unit::SECONDS
+        | interval_duration_unit::S => Duration::from_secs(value),
+        interval_duration_unit::MINUTE
+        | interval_duration_unit::MINUTES
+        | interval_duration_unit::MIN => Duration::from_secs(value * 60),
+        interval_duration_unit::HOUR
+        | interval_duration_unit::HOURS
+        | interval_duration_unit::H => Duration::from_secs(value * 3600),
+        interval_duration_unit::DAY
+        | interval_duration_unit::DAYS
+        | interval_duration_unit::D => Duration::from_secs(value * 86400),
         unit => {
             return Err(DataFusionError::Plan(format!(
                 "unsupported interval unit '{unit}'"

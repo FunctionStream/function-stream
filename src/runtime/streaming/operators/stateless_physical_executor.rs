@@ -27,7 +27,7 @@ use futures::StreamExt;
 use prost::Message;
 
 use crate::runtime::streaming::api::operator::Registry;
-use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 
 pub struct StatelessPhysicalExecutor {
     batch: Arc<RwLock<Option<RecordBatch>>>,

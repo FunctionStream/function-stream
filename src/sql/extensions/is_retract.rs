@@ -17,7 +17,7 @@ use datafusion::common::{DFSchemaRef, Result, TableReference};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 
 use crate::multifield_partial_ord;
-use crate::sql::logical_planner::updating_meta_field;
+use crate::sql::physical::updating_meta_field;
 use crate::sql::types::{DFField, TIMESTAMP_FIELD, fields_with_qualifiers, schema_from_df_fields};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

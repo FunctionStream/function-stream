@@ -37,6 +37,9 @@ use super::temporal_pipeline_config::{resolve_temporal_logic, TemporalPipelineCo
 use super::StreamSchemaProvider;
 use crate::multifield_partial_ord;
 use crate::sql::api::{ConnectionProfile, ConnectionSchema, SourceField};
+use crate::sql::common::constants::{
+    connection_table_role, connector_type, kafka_with_value, sql_field,
+};
 use crate::sql::common::connector_options::ConnectorOptions;
 use crate::sql::common::kafka_catalog::{
     KafkaConfig, KafkaConfigAuthentication, KafkaTable, KafkaTableSourceOffset, ReadMode,
@@ -266,7 +269,7 @@ impl SourceTable {
 
         if let Some(Format::Json(JsonFormat { compression, .. })) = &format
             && !matches!(compression, JsonCompression::Uncompressed)
-            && connector_name != "filesystem"
+            && connector_name != connector_type::FILESYSTEM
         {
             return plan_err!("'json.compression' is only supported for the filesystem connector");
         }
@@ -275,8 +278,8 @@ impl SourceTable {
             .map_err(|e| DataFusionError::Plan(format!("invalid framing: '{e}'")))?;
 
         if temporary
-            && let Some(t) = options.insert_str(opt::TYPE, "lookup")?
-            && t != "lookup"
+            && let Some(t) = options.insert_str(opt::TYPE, connection_table_role::LOOKUP)?
+            && t != connection_table_role::LOOKUP
         {
             return plan_err!(
                 "Cannot have a temporary table with type '{t}'; temporary tables must be type 'lookup'"
@@ -323,9 +326,9 @@ impl SourceTable {
             t.into()
         } else {
             match options.pull_opt_str(opt::TYPE)?.as_deref() {
-                None | Some("source") => TableRole::Ingestion,
-                Some("sink") => TableRole::Egress,
-                Some("lookup") => TableRole::Reference,
+                None | Some(connection_table_role::SOURCE) => TableRole::Ingestion,
+                Some(connection_table_role::SINK) => TableRole::Egress,
+                Some(connection_table_role::LOOKUP) => TableRole::Reference,
                 Some(other) => {
                     return plan_err!("invalid connection type '{other}' in WITH options");
                 }
@@ -405,13 +408,14 @@ impl SourceTable {
 
                 table.schema_specs.push(ColumnDescriptor::new_computed(
                     Field::new(
-                        "__watermark",
+                        sql_field::COMPUTED_WATERMARK,
                         logical_expr.get_type(&df_schema)?,
                         false,
                     ),
                     logical_expr,
                 ));
-                table.temporal_config.watermark_strategy_column = Some("__watermark".to_string());
+                table.temporal_config.watermark_strategy_column =
+                    Some(sql_field::COMPUTED_WATERMARK.to_string());
             } else {
                 table.temporal_config.watermark_strategy_column = Some(time_field);
             }
@@ -428,7 +432,7 @@ impl SourceTable {
 
         table.lookup_cache_ttl = options.pull_opt_duration(opt::LOOKUP_CACHE_TTL)?;
 
-        if connector_name.eq_ignore_ascii_case("kafka") {
+        if connector_name.eq_ignore_ascii_case(connector_type::KAFKA) {
             let physical = table.produce_physical_schema();
             let op_cfg = wire_kafka_operator_config(
                 options,
@@ -612,9 +616,15 @@ fn wire_kafka_operator_config(
     let kind = match role {
         TableRole::Ingestion => {
             let offset = match options.pull_opt_str(opt::KAFKA_SCAN_STARTUP_MODE)?.as_deref() {
-                Some("latest") => KafkaTableSourceOffset::Latest,
-                Some("earliest") => KafkaTableSourceOffset::Earliest,
-                None | Some("group-offsets") | Some("group") => KafkaTableSourceOffset::Group,
+                Some(s) if s == kafka_with_value::SCAN_LATEST => KafkaTableSourceOffset::Latest,
+                Some(s) if s == kafka_with_value::SCAN_EARLIEST => KafkaTableSourceOffset::Earliest,
+                Some(s)
+                    if s == kafka_with_value::SCAN_GROUP_OFFSETS
+                        || s == kafka_with_value::SCAN_GROUP =>
+                {
+                    KafkaTableSourceOffset::Group
+                }
+                None => KafkaTableSourceOffset::Group,
                 Some(other) => {
                     return plan_err!(
                         "invalid scan.startup.mode '{other}'; expected latest, earliest, or group-offsets"
@@ -622,8 +632,12 @@ fn wire_kafka_operator_config(
                 }
             };
             let read_mode = match options.pull_opt_str(opt::KAFKA_ISOLATION_LEVEL)?.as_deref() {
-                Some("read_committed") => Some(ReadMode::ReadCommitted),
-                Some("read_uncommitted") => Some(ReadMode::ReadUncommitted),
+                Some(s) if s == kafka_with_value::ISOLATION_READ_COMMITTED => {
+                    Some(ReadMode::ReadCommitted)
+                }
+                Some(s) if s == kafka_with_value::ISOLATION_READ_UNCOMMITTED => {
+                    Some(ReadMode::ReadUncommitted)
+                }
                 None => None,
                 Some(other) => {
                     return plan_err!("invalid isolation.level '{other}'");
@@ -643,8 +657,19 @@ fn wire_kafka_operator_config(
         }
         TableRole::Egress => {
             let commit_mode = match options.pull_opt_str(opt::KAFKA_SINK_COMMIT_MODE)?.as_deref() {
-                Some("exactly-once") | Some("exactly_once") => SinkCommitMode::ExactlyOnce,
-                None | Some("at-least-once") | Some("at_least_once") => SinkCommitMode::AtLeastOnce,
+                Some(s)
+                    if s == kafka_with_value::SINK_COMMIT_EXACTLY_ONCE_HYPHEN
+                        || s == kafka_with_value::SINK_COMMIT_EXACTLY_ONCE_UNDERSCORE =>
+                {
+                    SinkCommitMode::ExactlyOnce
+                }
+                None => SinkCommitMode::AtLeastOnce,
+                Some(s)
+                    if s == kafka_with_value::SINK_COMMIT_AT_LEAST_ONCE_HYPHEN
+                        || s == kafka_with_value::SINK_COMMIT_AT_LEAST_ONCE_UNDERSCORE =>
+                {
+                    SinkCommitMode::AtLeastOnce
+                }
                 Some(other) => {
                     return plan_err!("invalid sink.commit.mode '{other}'");
                 }

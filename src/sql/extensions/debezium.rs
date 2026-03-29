@@ -23,7 +23,7 @@ use crate::multifield_partial_ord;
 use crate::sql::common::constants::{cdc, extension_node};
 use crate::sql::common::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::logical_planner::updating_meta_field;
+use crate::sql::physical::updating_meta_field;
 use crate::sql::types::TIMESTAMP_FIELD;
 
 use super::{CompiledTopologyNode, StreamingOperatorBlueprint};

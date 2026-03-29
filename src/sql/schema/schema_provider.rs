@@ -26,6 +26,7 @@ use datafusion::sql::TableReference;
 use unicase::UniCase;
 
 use crate::sql::logical_node::logical::{DylibUdfConfig, LogicalProgram};
+use crate::sql::common::constants::{planning_placeholder_udf, window_fn};
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::sql::schema::utils::window_arrow_struct;
 use crate::sql::types::{PlaceholderUdf, PlanningOptions};
@@ -95,7 +96,7 @@ impl TableProvider for LogicalBatchInput {
         _filters: &[Expr],
         _limit: Option<usize>,
     ) -> Result<Arc<dyn datafusion::physical_plan::ExecutionPlan>> {
-        Ok(Arc::new(crate::sql::logical_planner::FsMemExec::new(
+        Ok(Arc::new(crate::sql::physical::FsMemExec::new(
             self.table_name.clone(),
             Arc::clone(&self.schema),
         )))
@@ -378,7 +379,7 @@ impl StreamPlanningContextBuilder {
     pub fn with_streaming_extensions(mut self) -> Result<Self> {
         let extensions = vec![
             PlaceholderUdf::with_return(
-                "hop",
+                window_fn::HOP,
                 vec![
                     DataType::Interval(datatypes::IntervalUnit::MonthDayNano),
                     DataType::Interval(datatypes::IntervalUnit::MonthDayNano),
@@ -386,22 +387,26 @@ impl StreamPlanningContextBuilder {
                 window_arrow_struct(),
             ),
             PlaceholderUdf::with_return(
-                "tumble",
+                window_fn::TUMBLE,
                 vec![DataType::Interval(datatypes::IntervalUnit::MonthDayNano)],
                 window_arrow_struct(),
             ),
             PlaceholderUdf::with_return(
-                "session",
+                window_fn::SESSION,
                 vec![DataType::Interval(datatypes::IntervalUnit::MonthDayNano)],
                 window_arrow_struct(),
             ),
             PlaceholderUdf::with_return(
-                "unnest",
-                vec![DataType::List(Arc::new(Field::new("field", DataType::Utf8, true)))],
+                planning_placeholder_udf::UNNEST,
+                vec![DataType::List(Arc::new(Field::new(
+                    planning_placeholder_udf::LIST_ELEMENT_FIELD,
+                    DataType::Utf8,
+                    true,
+                )))],
                 DataType::Utf8,
             ),
             PlaceholderUdf::with_return(
-                "row_time",
+                planning_placeholder_udf::ROW_TIME,
                 vec![],
                 DataType::Timestamp(datatypes::TimeUnit::Nanosecond, None),
             ),

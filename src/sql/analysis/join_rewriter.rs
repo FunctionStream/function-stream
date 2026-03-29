@@ -15,6 +15,7 @@ use crate::sql::extensions::join::StreamingJoinNode;
 use crate::sql::extensions::key_calculation::KeyExtractionNode;
 use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
 use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields_with_metadata};
+use crate::sql::common::constants::mem_exec_join_side;
 use crate::sql::common::TIMESTAMP_FIELD;
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
 use datafusion::common::{
@@ -198,8 +199,8 @@ impl TreeNodeRewriter for JoinRewriter<'_> {
 
         // 2. Prepare Keyed Inputs for Shuffle
         let (left_on, right_on): (Vec<_>, Vec<_>) = join.on.clone().into_iter().unzip();
-        let keyed_left = self.build_keyed_side(join.left, left_on, "left")?;
-        let keyed_right = self.build_keyed_side(join.right, right_on, "right")?;
+        let keyed_left = self.build_keyed_side(join.left, left_on, mem_exec_join_side::LEFT)?;
+        let keyed_right = self.build_keyed_side(join.right, right_on, mem_exec_join_side::RIGHT)?;
 
         // 3. Assemble Rewritten Join Node
         let join_schema = Arc::new(build_join_schema(

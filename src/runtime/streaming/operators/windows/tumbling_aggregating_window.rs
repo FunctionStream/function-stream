@@ -44,7 +44,7 @@ use protocol::grpc::api::TumblingWindowAggregateOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, Watermark};
 use crate::sql::common::time_utils::print_time;
-use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 use crate::sql::schema::utils::add_timestamp_field_arrow;
 
 struct ActiveBin {

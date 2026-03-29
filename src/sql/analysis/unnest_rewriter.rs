@@ -18,6 +18,7 @@ use datafusion::common::{Column, Result as DFResult, plan_err};
 use datafusion::logical_expr::expr::ScalarFunction;
 use datafusion::logical_expr::{ColumnUnnestList, Expr, LogicalPlan, Projection, Unnest};
 
+use crate::sql::common::constants::planning_placeholder_udf;
 use crate::sql::types::{DFField, fields_with_qualifiers, schema_from_df_fields};
 
 pub const UNNESTED_COL: &str = "__unnested";
@@ -31,7 +32,7 @@ impl UnnestRewriter {
 
         let expr = expr.transform_up(|e| {
             if let Expr::ScalarFunction(ScalarFunction { func: udf, args }) = &e
-                && udf.name() == "unnest"
+                && udf.name() == planning_placeholder_udf::UNNEST
             {
                 match args.len() {
                     1 => {

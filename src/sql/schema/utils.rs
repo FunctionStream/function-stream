@@ -16,6 +16,7 @@ use std::sync::Arc;
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use datafusion::common::{DFSchema, DFSchemaRef, Result as DFResult, TableReference};
 
+use crate::sql::common::constants::window_interval_field;
 use crate::sql::types::{DFField, TIMESTAMP_FIELD};
 
 /// Returns the Arrow struct type for a window (start, end) pair.
@@ -23,12 +24,12 @@ pub fn window_arrow_struct() -> DataType {
     DataType::Struct(
         vec![
             Arc::new(Field::new(
-                "start",
+                window_interval_field::START,
                 DataType::Timestamp(TimeUnit::Nanosecond, None),
                 false,
             )),
             Arc::new(Field::new(
-                "end",
+                window_interval_field::END,
                 DataType::Timestamp(TimeUnit::Nanosecond, None),
                 false,
             )),

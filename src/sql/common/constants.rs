@@ -31,6 +31,15 @@ pub mod window_fn {
     pub const SESSION: &str = "session";
 }
 
+// ── 流规划期占位标量 UDF（`StreamPlanningContextBuilder::with_streaming_extensions`）──
+
+pub mod planning_placeholder_udf {
+    pub const UNNEST: &str = "unnest";
+    pub const ROW_TIME: &str = "row_time";
+    /// `List` 内元素字段名，仅用于占位签名的 Arrow 形态
+    pub const LIST_ELEMENT_FIELD: &str = "field";
+}
+
 // ── `OperatorName` 在指标 / 特性集合中使用的 kebab-case 标签 ─────────────────
 
 pub mod operator_feature {
@@ -107,15 +116,204 @@ pub mod updating_state_field {
 // ── 计划里常用的列名 / 别名 ───────────────────────────────────────────────────
 
 pub mod sql_field {
-    /// 异步 UDF 重写后的结果列（与历史 `extensions::constants` 对齐）。
+    /// 异步 UDF 重写后的结果列名。
     pub const ASYNC_RESULT: &str = "__async_result";
     pub const DEFAULT_KEY_LABEL: &str = "key";
     pub const DEFAULT_PROJECTION_LABEL: &str = "projection";
+    /// `WATERMARK FOR … AS expr` 生成的计算列名（与 `TemporalPipelineConfig` 一致）。
+    pub const COMPUTED_WATERMARK: &str = "__watermark";
+}
+
+// ── `ConnectorOptions` / WITH 解析用到的字面量 ────────────────────────────────
+
+/// 单引号字符串形式的布尔取值（见 [`super::connector_options::ConnectorOptions::pull_opt_bool`]）。
+pub mod with_opt_bool_str {
+    pub const TRUE: &str = "true";
+    pub const YES: &str = "yes";
+    pub const FALSE: &str = "false";
+    pub const NO: &str = "no";
+}
+
+/// `INTERVAL '…'` / 间隔字符串解析中的单位 token（小写；解析前会对单位做 `to_lowercase`）。
+pub mod interval_duration_unit {
+    pub const SECOND: &str = "second";
+    pub const SECONDS: &str = "seconds";
+    pub const S: &str = "s";
+    pub const MINUTE: &str = "minute";
+    pub const MINUTES: &str = "minutes";
+    pub const MIN: &str = "min";
+    pub const HOUR: &str = "hour";
+    pub const HOURS: &str = "hours";
+    pub const H: &str = "h";
+    pub const DAY: &str = "day";
+    pub const DAYS: &str = "days";
+    pub const D: &str = "d";
+}
+
+// ── `format` / `framing.method` / `bad_data` 的 WITH 取值（见 `format_from_opts`）──────
+
+/// `format = '…'` 的名称（小写；`Format::from_opts` 会对值做 `to_lowercase`）。
+pub mod connection_format_value {
+    pub const JSON: &str = "json";
+    pub const DEBEZIUM_JSON: &str = "debezium_json";
+    pub const AVRO: &str = "avro";
+    pub const PARQUET: &str = "parquet";
+    pub const PROTOBUF: &str = "protobuf";
+    pub const RAW_STRING: &str = "raw_string";
+    pub const RAW_BYTES: &str = "raw_bytes";
+}
+
+/// `framing.method` 合法取值（与 `Framing::from_opts` 一致；当前不做大小写折叠）。
+pub mod framing_method_value {
+    pub const NEWLINE: &str = "newline";
+    pub const NEWLINE_DELIMITED: &str = "newline_delimited";
+}
+
+/// `bad_data = '…'`（小写；解析前 `to_lowercase`）。
+pub mod bad_data_value {
+    pub const FAIL: &str = "fail";
+    pub const DROP: &str = "drop";
+}
+
+// ── `formats.rs` 里枚举的 wire 名（与 serde `snake_case` / `TryFrom` / `FromStr` 一致）────
+
+pub mod timestamp_format_value {
+    pub const RFC3339_SNAKE: &str = "rfc3339";
+    pub const RFC3339_UPPER: &str = "RFC3339";
+    pub const UNIX_MILLIS_SNAKE: &str = "unix_millis";
+    pub const UNIX_MILLIS_PASCAL: &str = "UnixMillis";
+}
+
+pub mod decimal_encoding_value {
+    pub const NUMBER: &str = "number";
+    pub const STRING: &str = "string";
+    pub const BYTES: &str = "bytes";
+}
+
+pub mod json_compression_value {
+    pub const UNCOMPRESSED: &str = "uncompressed";
+    pub const GZIP: &str = "gzip";
+}
+
+pub mod parquet_compression_value {
+    pub const UNCOMPRESSED: &str = "uncompressed";
+    pub const SNAPPY: &str = "snappy";
+    pub const GZIP: &str = "gzip";
+    pub const ZSTD: &str = "zstd";
+    pub const LZ4: &str = "lz4";
+    pub const LZ4_RAW: &str = "lz4_raw";
+}
+
+// ── `date_part` / `date_trunc` SQL 关键字（小写；解析前对输入做 `to_lowercase`）────────
+
+pub mod date_part_keyword {
+    pub const YEAR: &str = "year";
+    pub const MONTH: &str = "month";
+    pub const WEEK: &str = "week";
+    pub const DAY: &str = "day";
+    pub const HOUR: &str = "hour";
+    pub const MINUTE: &str = "minute";
+    pub const SECOND: &str = "second";
+    pub const MILLISECOND: &str = "millisecond";
+    pub const MICROSECOND: &str = "microsecond";
+    pub const NANOSECOND: &str = "nanosecond";
+    pub const DOW: &str = "dow";
+    pub const DOY: &str = "doy";
+}
+
+pub mod date_trunc_keyword {
+    pub const YEAR: &str = "year";
+    pub const QUARTER: &str = "quarter";
+    pub const MONTH: &str = "month";
+    pub const WEEK: &str = "week";
+    pub const DAY: &str = "day";
+    pub const HOUR: &str = "hour";
+    pub const MINUTE: &str = "minute";
+    pub const SECOND: &str = "second";
+}
+
+// ── `logical_planner/mod.rs` 物理计划与 Debezium 流水线 ───────────────────────
+
+/// `FsMemExec` / codec 里表示 join 左右输入的 `table_name`。
+pub mod mem_exec_join_side {
+    pub const LEFT: &str = "left";
+    pub const RIGHT: &str = "right";
+}
+
+/// 自定义 `ExecutionPlan::name()`（与 DataFusion explain / 调试一致）。
+pub mod physical_plan_node_name {
+    pub const RW_LOCK_READER: &str = "rw_lock_reader";
+    pub const UNBOUNDED_READER: &str = "unbounded_reader";
+    pub const VEC_READER: &str = "vec_reader";
+    pub const MEM_EXEC: &str = "mem_exec";
+    pub const DEBEZIUM_UNROLLING_EXEC: &str = "debezium_unrolling_exec";
+    pub const TO_DEBEZIUM_EXEC: &str = "to_debezium_exec";
+}
+
+/// 流式 `window(start, end)` 标量 UDF 的注册名。
+pub mod window_function_udf {
+    pub const NAME: &str = "window";
+}
+
+/// `window()` UDF 返回 struct 的字段名（与 `window_arrow_struct` 一致）。
+pub mod window_interval_field {
+    pub const START: &str = "start";
+    pub const END: &str = "end";
+}
+
+/// Debezium `op` 列中的单字母取值（unroll / pack 路径）。
+pub mod debezium_op_short {
+    pub const CREATE: &str = "c";
+    pub const READ: &str = "r";
+    pub const UPDATE: &str = "u";
+    pub const DELETE: &str = "d";
 }
 
 // ── 连接器类型短名（工厂注册等）──────────────────────────────────────────────
 
 pub mod connector_type {
     pub const KAFKA: &str = "kafka";
+    pub const KINESIS: &str = "kinesis";
+    pub const FILESYSTEM: &str = "filesystem";
+    pub const DELTA: &str = "delta";
+    pub const ICEBERG: &str = "iceberg";
+    pub const PULSAR: &str = "pulsar";
+    pub const NATS: &str = "nats";
     pub const REDIS: &str = "redis";
+    pub const MQTT: &str = "mqtt";
+    pub const WEBSOCKET: &str = "websocket";
+    pub const SSE: &str = "sse";
+    pub const NEXMARK: &str = "nexmark";
+    pub const BLACKHOLE: &str = "blackhole";
+    pub const MEMORY: &str = "memory";
+    pub const POSTGRES: &str = "postgres";
+}
+
+// ── 连接表 `WITH type = 'source'|'sink'|'lookup'`（`SourceTable::from_options` / `deduce_role`）──
+
+pub mod connection_table_role {
+    pub const SOURCE: &str = "source";
+    pub const SINK: &str = "sink";
+    /// 与虚拟 `lookup` 连接器短名相同（亦在 [`SUPPORTED_CONNECTOR_ADAPTERS`] 中）。
+    pub const LOOKUP: &str = "lookup";
+}
+
+/// [`crate::sql::schema::table_role::validate_adapter_availability`] 白名单（与 SQL `connector = '…'` 短名一致）。
+pub const SUPPORTED_CONNECTOR_ADAPTERS: &[&str] = &[
+    connector_type::KAFKA,
+];
+
+// ── Kafka 连接器 WITH 选项取值（`wire_kafka_operator_config`）────────────────
+
+pub mod kafka_with_value {
+    pub const SCAN_LATEST: &str = "latest";
+    pub const SCAN_EARLIEST: &str = "earliest";
+    pub const SCAN_GROUP_OFFSETS: &str = "group-offsets";
+    pub const SCAN_GROUP: &str = "group";
+    pub const ISOLATION_READ_COMMITTED: &str = "read_committed";
+    pub const ISOLATION_READ_UNCOMMITTED: &str = "read_uncommitted";
+    pub const SINK_COMMIT_EXACTLY_ONCE_HYPHEN: &str = "exactly-once";
+    pub const SINK_COMMIT_EXACTLY_ONCE_UNDERSCORE: &str = "exactly_once";
+    pub const SINK_COMMIT_AT_LEAST_ONCE_HYPHEN: &str = "at-least-once";
+    pub const SINK_COMMIT_AT_LEAST_ONCE_UNDERSCORE: &str = "at_least_once";
 }

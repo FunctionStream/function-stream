@@ -34,8 +34,9 @@ use crate::runtime::streaming::api::operator::{MessageOperator, Registry};
 use async_trait::async_trait;
 use protocol::grpc::api::JoinOperator;
 use crate::runtime::streaming::StreamOutput;
+use crate::sql::common::constants::mem_exec_join_side;
 use crate::sql::common::{from_nanos, CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
-use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum JoinSide {
@@ -47,8 +48,8 @@ impl JoinSide {
     #[allow(dead_code)]
     fn name(&self) -> &'static str {
         match self {
-            JoinSide::Left => "left",
-            JoinSide::Right => "right",
+            JoinSide::Left => mem_exec_join_side::LEFT,
+            JoinSide::Right => mem_exec_join_side::RIGHT,
         }
     }
 }

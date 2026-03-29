@@ -30,7 +30,7 @@ use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, IsRetractExtension, StreamingOperatorBlueprint};
 use crate::sql::functions::multi_hash;
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
-use crate::sql::logical_planner::FsPhysicalExtensionCodec;
+use crate::sql::physical::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 
 // -----------------------------------------------------------------------------

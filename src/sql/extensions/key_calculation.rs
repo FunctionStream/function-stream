@@ -31,7 +31,7 @@ use crate::sql::common::constants::{extension_node, sql_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
-use crate::sql::logical_planner::FsPhysicalExtensionCodec;
+use crate::sql::physical::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{fields_with_qualifiers, schema_from_df_fields_with_metadata};
 

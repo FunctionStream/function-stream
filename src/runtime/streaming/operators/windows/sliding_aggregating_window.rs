@@ -43,7 +43,7 @@ use crate::runtime::streaming::api::operator::Registry;
 use protocol::grpc::api::SlidingWindowAggregateOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, Watermark};
-use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 // ============================================================================
 // 纯内存状态：阶梯式时间面板 (Tiered panes)
 // 这部分本身就是极佳的内存数据结构，原样保留！

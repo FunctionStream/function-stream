@@ -16,6 +16,7 @@ use datafusion::arrow::datatypes::{DataType, Field};
 use datafusion::common::{Result, plan_err};
 
 use super::column_descriptor::ColumnDescriptor;
+use crate::sql::common::constants::{cdc, connection_format_value, with_opt_bool_str};
 use crate::sql::common::with_option_keys as opt;
 use crate::sql::common::Format;
 
@@ -38,14 +39,15 @@ impl DataEncodingFormat {
         let is_debezium = opts
             .get(opt::FORMAT_DEBEZIUM_FLAG)
             .or_else(|| opts.get(opt::JSON_DEBEZIUM))
-            .map(|s| s == "true")
+            .map(|s| s == with_opt_bool_str::TRUE)
             .unwrap_or(false);
 
         match (format_str, is_debezium) {
-            ("json", true) | ("debezium_json", _) => Ok(Self::DebeziumJson),
-            ("json", false) => Ok(Self::StandardJson),
-            ("avro", _) => Ok(Self::Avro),
-            ("parquet", _) => Ok(Self::Parquet),
+            (f, true) if f == connection_format_value::JSON => Ok(Self::DebeziumJson),
+            (f, _) if f == connection_format_value::DEBEZIUM_JSON => Ok(Self::DebeziumJson),
+            (f, false) if f == connection_format_value::JSON => Ok(Self::StandardJson),
+            (f, _) if f == connection_format_value::AVRO => Ok(Self::Avro),
+            (f, _) if f == connection_format_value::PARQUET => Ok(Self::Parquet),
             _ => Ok(Self::Raw),
         }
     }
@@ -78,9 +80,9 @@ impl DataEncodingFormat {
         let struct_type = DataType::Struct(fields.into());
 
         Ok(vec![
-            ColumnDescriptor::new_physical(Field::new("before", struct_type.clone(), true)),
-            ColumnDescriptor::new_physical(Field::new("after", struct_type.clone(), true)),
-            ColumnDescriptor::new_physical(Field::new("op", DataType::Utf8, true)),
+            ColumnDescriptor::new_physical(Field::new(cdc::BEFORE, struct_type.clone(), true)),
+            ColumnDescriptor::new_physical(Field::new(cdc::AFTER, struct_type.clone(), true)),
+            ColumnDescriptor::new_physical(Field::new(cdc::OP, DataType::Utf8, true)),
         ])
     }
 }

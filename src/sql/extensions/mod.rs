@@ -12,9 +12,6 @@
 
 mod macros;
 
-pub(crate) mod constants;
-pub(crate) use constants::ASYNC_RESULT_FIELD;
-
 pub(crate) mod streaming_operator_blueprint;
 pub(crate) use streaming_operator_blueprint::{CompiledTopologyNode, StreamingOperatorBlueprint};
 

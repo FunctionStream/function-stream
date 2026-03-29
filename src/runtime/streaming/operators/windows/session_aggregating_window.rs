@@ -44,7 +44,7 @@ use protocol::grpc::api::SessionWindowAggregateOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
 use crate::sql::common::converter::Converter;
-use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 use crate::sql::schema::utils::window_arrow_struct;
 // ============================================================================
 // 领域模型与纯内存状态

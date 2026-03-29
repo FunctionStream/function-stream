@@ -17,6 +17,7 @@ use std::str::FromStr;
 use datafusion::common::{Result as DFResult, plan_datafusion_err, plan_err};
 
 use super::connector_options::ConnectorOptions;
+use super::constants::{bad_data_value, connection_format_value, framing_method_value};
 use super::with_option_keys as opt;
 use super::formats::{
     AvroFormat, BadData, DecimalEncoding, Format, Framing, JsonCompression, JsonFormat,
@@ -65,18 +66,25 @@ impl Format {
         let Some(name) = opts.pull_opt_str(opt::FORMAT)? else {
             return Ok(None);
         };
-        match name.to_lowercase().as_str() {
-            "json" => Ok(Some(Format::Json(JsonFormat::from_opts(opts)?))),
-            "debezium_json" => {
+        let n = name.to_lowercase();
+        match n.as_str() {
+            connection_format_value::JSON => Ok(Some(Format::Json(JsonFormat::from_opts(opts)?))),
+            connection_format_value::DEBEZIUM_JSON => {
                 let mut j = JsonFormat::from_opts(opts)?;
                 j.debezium = true;
                 Ok(Some(Format::Json(j)))
             }
-            "avro" => Ok(Some(Format::Avro(AvroFormat::from_opts(opts)?))),
-            "parquet" => Ok(Some(Format::Parquet(ParquetFormat::from_opts(opts)?))),
-            "protobuf" => Ok(Some(Format::Protobuf(ProtobufFormat::from_opts(opts)?))),
-            "raw_string" => Ok(Some(Format::RawString(RawStringFormat {}))),
-            "raw_bytes" => Ok(Some(Format::RawBytes(RawBytesFormat {}))),
+            connection_format_value::AVRO => Ok(Some(Format::Avro(AvroFormat::from_opts(opts)?))),
+            connection_format_value::PARQUET => {
+                Ok(Some(Format::Parquet(ParquetFormat::from_opts(opts)?)))
+            }
+            connection_format_value::PROTOBUF => {
+                Ok(Some(Format::Protobuf(ProtobufFormat::from_opts(opts)?)))
+            }
+            connection_format_value::RAW_STRING => {
+                Ok(Some(Format::RawString(RawStringFormat {})))
+            }
+            connection_format_value::RAW_BYTES => Ok(Some(Format::RawBytes(RawBytesFormat {}))),
             _ => plan_err!("unknown format '{name}'"),
         }
     }
@@ -150,7 +158,7 @@ impl Framing {
         let method = opts.pull_opt_str(opt::FRAMING_METHOD)?;
         match method.as_deref() {
             None => Ok(None),
-            Some("newline") | Some("newline_delimited") => {
+            Some(framing_method_value::NEWLINE) | Some(framing_method_value::NEWLINE_DELIMITED) => {
                 let max = opts.pull_opt_u64(opt::FRAMING_MAX_LINE_LENGTH)?;
                 Ok(Some(Framing::Newline(NewlineDelimitedFraming {
                     max_line_length: max,
@@ -166,9 +174,10 @@ impl BadData {
         let Some(s) = opts.pull_opt_str(opt::BAD_DATA)? else {
             return Ok(BadData::Fail {});
         };
-        match s.to_lowercase().as_str() {
-            "fail" => Ok(BadData::Fail {}),
-            "drop" => Ok(BadData::Drop {}),
+        let v = s.to_lowercase();
+        match v.as_str() {
+            bad_data_value::FAIL => Ok(BadData::Fail {}),
+            bad_data_value::DROP => Ok(BadData::Drop {}),
             _ => plan_err!("invalid bad_data '{s}'"),
         }
     }

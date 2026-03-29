@@ -33,7 +33,7 @@ use async_trait::async_trait;
 use protocol::grpc::api::JoinOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
-use crate::sql::logical_planner::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum JoinSide {

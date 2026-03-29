@@ -16,6 +16,7 @@ use datafusion::common::{Result, plan_err};
 use datafusion::logical_expr::Expr;
 
 use super::column_descriptor::ColumnDescriptor;
+use crate::sql::common::constants::sql_field;
 
 /// Event-time and watermark configuration for streaming tables.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -47,7 +48,7 @@ pub fn resolve_temporal_logic(
         config.event_column = Some(meta.time_field.clone());
 
         if meta.watermark_expr.is_some() {
-            config.watermark_strategy_column = Some("__watermark".to_string());
+            config.watermark_strategy_column = Some(sql_field::COMPUTED_WATERMARK.to_string());
         } else {
             config.watermark_strategy_column = Some(meta.time_field);
         }

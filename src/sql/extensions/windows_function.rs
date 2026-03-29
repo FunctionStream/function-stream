@@ -24,7 +24,7 @@ use protocol::grpc::api::WindowFunctionOperator;
 use crate::sql::common::constants::{extension_node, proto_operator_name, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
-use crate::sql::logical_planner::FsPhysicalExtensionCodec;
+use crate::sql::physical::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::TIMESTAMP_FIELD;
 

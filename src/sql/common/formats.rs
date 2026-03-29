@@ -11,8 +11,14 @@
 // limitations under the License.
 
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+
+use super::constants::{
+    connection_format_value, decimal_encoding_value, json_compression_value,
+    parquet_compression_value, timestamp_format_value,
+};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default, Hash, PartialOrd)]
 #[serde(rename_all = "snake_case")]
@@ -28,8 +34,12 @@ impl TryFrom<&str> for TimestampFormat {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "RFC3339" | "rfc3339" => Ok(TimestampFormat::RFC3339),
-            "UnixMillis" | "unix_millis" => Ok(TimestampFormat::UnixMillis),
+            timestamp_format_value::RFC3339_UPPER | timestamp_format_value::RFC3339_SNAKE => {
+                Ok(TimestampFormat::RFC3339)
+            }
+            timestamp_format_value::UNIX_MILLIS_PASCAL | timestamp_format_value::UNIX_MILLIS_SNAKE => {
+                Ok(TimestampFormat::UnixMillis)
+            }
             _ => Err(()),
         }
     }
@@ -49,9 +59,9 @@ impl TryFrom<&str> for DecimalEncoding {
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "number" => Ok(Self::Number),
-            "string" => Ok(Self::String),
-            "bytes" => Ok(Self::Bytes),
+            decimal_encoding_value::NUMBER => Ok(Self::Number),
+            decimal_encoding_value::STRING => Ok(Self::String),
+            decimal_encoding_value::BYTES => Ok(Self::Bytes),
             _ => Err(()),
         }
     }
@@ -70,8 +80,8 @@ impl FromStr for JsonCompression {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "uncompressed" => Ok(JsonCompression::Uncompressed),
-            "gzip" => Ok(JsonCompression::Gzip),
+            json_compression_value::UNCOMPRESSED => Ok(JsonCompression::Uncompressed),
+            json_compression_value::GZIP => Ok(JsonCompression::Gzip),
             _ => Err(format!("invalid json compression '{s}'")),
         }
     }
@@ -151,12 +161,12 @@ impl FromStr for ParquetCompression {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "uncompressed" => Ok(ParquetCompression::Uncompressed),
-            "snappy" => Ok(ParquetCompression::Snappy),
-            "gzip" => Ok(ParquetCompression::Gzip),
-            "zstd" => Ok(ParquetCompression::Zstd),
-            "lz4" => Ok(ParquetCompression::Lz4),
-            "lz4_raw" => Ok(ParquetCompression::Lz4Raw),
+            parquet_compression_value::UNCOMPRESSED => Ok(ParquetCompression::Uncompressed),
+            parquet_compression_value::SNAPPY => Ok(ParquetCompression::Snappy),
+            parquet_compression_value::GZIP => Ok(ParquetCompression::Gzip),
+            parquet_compression_value::ZSTD => Ok(ParquetCompression::Zstd),
+            parquet_compression_value::LZ4 => Ok(ParquetCompression::Lz4),
+            parquet_compression_value::LZ4_RAW => Ok(ParquetCompression::Lz4Raw),
             _ => Err(format!("invalid parquet compression '{s}'")),
         }
     }
@@ -206,12 +216,12 @@ impl Display for Format {
 impl Format {
     pub fn name(&self) -> &'static str {
         match self {
-            Format::Json(_) => "json",
-            Format::Avro(_) => "avro",
-            Format::Protobuf(_) => "protobuf",
-            Format::Parquet(_) => "parquet",
-            Format::RawString(_) => "raw_string",
-            Format::RawBytes(_) => "raw_bytes",
+            Format::Json(_) => connection_format_value::JSON,
+            Format::Avro(_) => connection_format_value::AVRO,
+            Format::Protobuf(_) => connection_format_value::PROTOBUF,
+            Format::Parquet(_) => connection_format_value::PARQUET,
+            Format::RawString(_) => connection_format_value::RAW_STRING,
+            Format::RawBytes(_) => connection_format_value::RAW_BYTES,
         }
     }
 

@@ -49,7 +49,7 @@ use crate::runtime::streaming::arrow::decode_aggregate;
 use crate::runtime::streaming::operators::{Key, UpdatingCache};
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{to_nanos, CheckpointBarrier, FsSchema, Watermark, TIMESTAMP_FIELD, UPDATING_META_FIELD};
-use crate::sql::logical_planner::updating_meta_fields;
+use crate::sql::physical::updating_meta_fields;
 
 #[derive(Debug, Copy, Clone)]
 struct BatchData {

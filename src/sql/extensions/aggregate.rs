@@ -38,7 +38,7 @@ use crate::sql::extensions::{
 };
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner, SplitPlanOutput};
-use crate::sql::logical_planner::{window, FsPhysicalExtensionCodec};
+use crate::sql::physical::{window, FsPhysicalExtensionCodec};
 use crate::sql::types::{
     DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers,
     schema_from_df_fields, schema_from_df_fields_with_metadata,

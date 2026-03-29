@@ -43,7 +43,7 @@ use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalGraph, LogicalNode};
-use crate::sql::logical_planner::{
+use crate::sql::physical::{
     DebeziumUnrollingExec, DecodingContext, FsMemExec, FsPhysicalExtensionCodec, ToDebeziumExec,
 };
 use crate::sql::extensions::debezium::{PACK_NODE_NAME, UNROLL_NODE_NAME, UnrollDebeziumPayloadNode};

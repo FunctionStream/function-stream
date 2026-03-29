@@ -18,6 +18,9 @@ use datafusion::error::DataFusionError;
 
 use super::column_descriptor::ColumnDescriptor;
 use super::connection_type::ConnectionType;
+use crate::sql::common::constants::{
+    connection_table_role, connector_type, SUPPORTED_CONNECTOR_ADAPTERS,
+};
 use crate::sql::common::with_option_keys as opt;
 
 /// Role of a connector-backed table in the pipeline (ingest / egress / lookup).
@@ -49,25 +52,7 @@ impl From<ConnectionType> for TableRole {
 }
 
 pub fn validate_adapter_availability(adapter: &str) -> Result<()> {
-    let supported = [
-        "kafka",
-        "kinesis",
-        "filesystem",
-        "delta",
-        "iceberg",
-        "pulsar",
-        "nats",
-        "redis",
-        "mqtt",
-        "websocket",
-        "sse",
-        "nexmark",
-        "blackhole",
-        "lookup",
-        "memory",
-        "postgres",
-    ];
-    if !supported.contains(&adapter) {
+    if !SUPPORTED_CONNECTOR_ADAPTERS.contains(&adapter) {
         return Err(DataFusionError::Plan(format!("Unknown adapter '{adapter}'")));
     }
     Ok(())
@@ -75,7 +60,7 @@ pub fn validate_adapter_availability(adapter: &str) -> Result<()> {
 
 pub fn apply_adapter_specific_rules(adapter: &str, mut cols: Vec<ColumnDescriptor>) -> Vec<ColumnDescriptor> {
     match adapter {
-        "delta" | "iceberg" => {
+        a if a == connector_type::DELTA || a == connector_type::ICEBERG => {
             for c in &mut cols {
                 if matches!(c.data_type(), DataType::Timestamp(_, _)) {
                     c.force_precision(TimeUnit::Microsecond);
@@ -89,9 +74,9 @@ pub fn apply_adapter_specific_rules(adapter: &str, mut cols: Vec<ColumnDescripto
 
 pub fn deduce_role(options: &HashMap<String, String>) -> Result<TableRole> {
     match options.get(opt::TYPE).map(|s| s.as_str()) {
-        None | Some("source") => Ok(TableRole::Ingestion),
-        Some("sink") => Ok(TableRole::Egress),
-        Some("lookup") => Ok(TableRole::Reference),
+        None | Some(connection_table_role::SOURCE) => Ok(TableRole::Ingestion),
+        Some(connection_table_role::SINK) => Ok(TableRole::Egress),
+        Some(connection_table_role::LOOKUP) => Ok(TableRole::Reference),
         Some(other) => plan_err!("Invalid role '{other}'"),
     }
 }

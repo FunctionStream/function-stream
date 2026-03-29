@@ -11,7 +11,8 @@
 // limitations under the License.
 
 use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
-use crate::sql::extensions::{ASYNC_RESULT_FIELD, AsyncFunctionExecutionNode};
+use crate::sql::common::constants::sql_field;
+use crate::sql::extensions::AsyncFunctionExecutionNode;
 use crate::sql::schema::StreamSchemaProvider;
 use datafusion::common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
 use datafusion::common::{Column, Result as DFResult, TableReference, plan_err};
@@ -55,7 +56,7 @@ impl<'a> AsyncUdfRewriter<'a> {
                         );
                     }
                     return Ok(Transformed::yes(Expr::Column(Column::new_unqualified(
-                        ASYNC_RESULT_FIELD,
+                        sql_field::ASYNC_RESULT,
                     ))));
                 }
             }

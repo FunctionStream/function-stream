@@ -10,22 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod common;
-pub mod api;
+//! Debezium 与内部 changelog 行格式的互转。
 
-pub mod schema;
-pub mod functions;
-pub mod parse;
-pub mod logical_node;
-pub mod logical_planner;
-pub mod physical;
-pub mod analysis;
-pub(crate) mod extensions;
-pub mod types;
+mod encode;
+mod unroll;
 
-pub use schema::{StreamPlanningContext, StreamSchemaProvider};
-pub use parse::parse_sql;
-pub use analysis::rewrite_plan;
-
-#[cfg(test)]
-mod frontend_sql_coverage_tests;
+pub use encode::ToDebeziumExec;
+pub use unroll::DebeziumUnrollingExec;

@@ -29,7 +29,7 @@ use crate::sql::logical_node::logical::{
     LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName,
 };
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::logical_planner::FsPhysicalExtensionCodec;
+use crate::sql::physical::FsPhysicalExtensionCodec;
 
 // -----------------------------------------------------------------------------
 // Constants

@@ -14,6 +14,7 @@ use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
 use datafusion::common::{Column, Result as DFResult};
 use datafusion::logical_expr::Expr;
 
+use crate::sql::common::constants::planning_placeholder_udf;
 use crate::sql::types::TIMESTAMP_FIELD;
 
 /// Replaces the virtual `row_time()` scalar function with a physical reference to `_timestamp`.
@@ -26,9 +27,9 @@ impl TreeNodeRewriter for RowTimeRewriter {
     type Node = Expr;
 
     fn f_down(&mut self, node: Self::Node) -> DFResult<Transformed<Self::Node>> {
-        // Use pattern matching to identify the 'row_time' scalar function.
+        // Use pattern matching to identify the `row_time` scalar function.
         if let Expr::ScalarFunction(func) = &node
-            && func.name() == "row_time"
+            && func.name() == planning_placeholder_udf::ROW_TIME
         {
             // Map the virtual function to the physical internal timestamp column.
             // We use .alias() to preserve the original name "row_time()" in the output schema,
