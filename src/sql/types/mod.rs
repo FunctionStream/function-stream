@@ -18,6 +18,8 @@ mod window;
 
 use std::time::Duration;
 
+use crate::sql::common::constants::sql_planning_default;
+
 pub use data_type::convert_data_type;
 pub use df_field::{
     DFField, fields_with_qualifiers, schema_from_df_fields, schema_from_df_fields_with_metadata,
@@ -27,7 +29,7 @@ pub use stream_schema::StreamSchema;
 pub(crate) use window::WindowBehavior;
 pub use window::{WindowType, find_window, get_duration};
 
-pub const TIMESTAMP_FIELD: &str = "_timestamp";
+pub use crate::sql::common::constants::sql_field::TIMESTAMP_FIELD;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProcessingMode {
@@ -43,7 +45,7 @@ pub struct SqlConfig {
 impl Default for SqlConfig {
     fn default() -> Self {
         Self {
-            default_parallelism: 4,
+            default_parallelism: sql_planning_default::DEFAULT_PARALLELISM,
         }
     }
 }
@@ -56,7 +58,7 @@ pub struct PlanningOptions {
 impl Default for PlanningOptions {
     fn default() -> Self {
         Self {
-            ttl: Duration::from_secs(24 * 60 * 60),
+            ttl: Duration::from_secs(sql_planning_default::PLANNING_TTL_SECS),
         }
     }
 }

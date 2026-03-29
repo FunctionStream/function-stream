@@ -122,6 +122,18 @@ pub mod sql_field {
     pub const DEFAULT_PROJECTION_LABEL: &str = "projection";
     /// `WATERMARK FOR … AS expr` 生成的计算列名（与 `TemporalPipelineConfig` 一致）。
     pub const COMPUTED_WATERMARK: &str = "__watermark";
+    /// 流表事件时间物理列名（与 DataFusion 计划注入列一致）。
+    pub const TIMESTAMP_FIELD: &str = "_timestamp";
+    /// Changelog / updating 模式下的元数据列名。
+    pub const UPDATING_META_FIELD: &str = "_updating_meta";
+}
+
+// ── `SqlConfig` / `PlanningOptions` 默认值 ────────────────────────────────────
+
+pub mod sql_planning_default {
+    pub const DEFAULT_PARALLELISM: usize = 4;
+    /// [`PlanningOptions::default`] 的 TTL（秒）：24h。
+    pub const PLANNING_TTL_SECS: u64 = 24 * 60 * 60;
 }
 
 // ── `ConnectorOptions` / WITH 解析用到的字面量 ────────────────────────────────

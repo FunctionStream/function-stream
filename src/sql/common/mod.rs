@@ -61,8 +61,7 @@ pub use formats::{BadData, Format, Framing, JsonCompression, JsonFormat};
 pub use operator_config::{MetadataField, OperatorConfig, RateLimit};
 
 // ── Well-known column names ──
-pub const TIMESTAMP_FIELD: &str = "_timestamp";
-pub const UPDATING_META_FIELD: &str = "_updating_meta";
+pub use constants::sql_field::{TIMESTAMP_FIELD, UPDATING_META_FIELD};
 
 // ── Environment variables ──
 pub const JOB_ID_ENV: &str = "JOB_ID";
