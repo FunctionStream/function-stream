@@ -10,121 +10,164 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::mem;
+
 use petgraph::graph::{EdgeIndex, NodeIndex};
-use petgraph::visit::EdgeRef;
-use petgraph::Direction::{Incoming, Outgoing};
+use petgraph::prelude::*;
+use petgraph::visit::NodeRef;
+
 
 use crate::sql::logical_node::logical::{LogicalEdgeType, LogicalGraph, Optimizer};
 
 pub type NodeId = NodeIndex;
 pub type EdgeId = EdgeIndex;
 
-pub struct ChainingOptimizer;
+pub struct ChainingOptimizer {}
 
-impl ChainingOptimizer {
-    fn find_fusion_candidate(plan: &LogicalGraph) -> Option<(NodeId, NodeId, EdgeId)> {
-        let node_ids: Vec<NodeId> = plan.node_indices().collect();
+fn remove_in_place<N, E>(graph: &mut DiGraph<N, E>, node: NodeIndex) {
+    let incoming = graph.edges_directed(node, Incoming).next().unwrap();
 
-        for upstream_id in node_ids {
-            let upstream_node = plan.node_weight(upstream_id)?;
+    let parent = incoming.source().id();
+    let incoming = incoming.id();
+    graph.remove_edge(incoming);
 
-            if upstream_node.operator_chain.is_source() {
-                continue;
-            }
+    let outgoing: Vec<_> = graph
+        .edges_directed(node, Outgoing)
+        .map(|e| (e.id(), e.target().id()))
+        .collect();
 
-            let outgoing_edges: Vec<_> = plan.edges_directed(upstream_id, Outgoing).collect();
-
-            if outgoing_edges.len() != 1 {
-                continue;
-            }
-
-            let bridging_edge = &outgoing_edges[0];
-
-            if bridging_edge.weight().edge_type != LogicalEdgeType::Forward {
-                continue;
-            }
-
-            let downstream_id = bridging_edge.target();
-            let downstream_node = plan.node_weight(downstream_id)?;
-
-            if downstream_node.operator_chain.is_sink() {
-                continue;
-            }
-
-            if upstream_node.parallelism != downstream_node.parallelism {
-                continue;
-            }
-
-            let incoming_edges: Vec<_> = plan.edges_directed(downstream_id, Incoming).collect();
-            if incoming_edges.len() != 1 {
-                continue;
-            }
-
-            return Some((upstream_id, downstream_id, bridging_edge.id()));
-        }
-
-        None
+    for (edge, target) in outgoing {
+        let weight = graph.remove_edge(edge).unwrap();
+        graph.add_edge(parent, target, weight);
     }
 
-    fn apply_fusion(
-        plan: &mut LogicalGraph,
-        upstream_id: NodeId,
-        downstream_id: NodeId,
-        bridging_edge_id: EdgeId,
-    ) {
-        let bridging_edge = plan
-            .remove_edge(bridging_edge_id)
-            .expect("Graph Integrity Violation: Bridging edge missing");
-
-        let propagated_schema = bridging_edge.schema.clone();
-
-        let downstream_outgoing: Vec<_> = plan
-            .edges_directed(downstream_id, Outgoing)
-            .map(|e| (e.id(), e.target()))
-            .collect();
-
-        for (edge_id, target_id) in downstream_outgoing {
-            let edge_weight = plan
-                .remove_edge(edge_id)
-                .expect("Graph Integrity Violation: Outgoing edge missing");
-
-            plan.add_edge(upstream_id, target_id, edge_weight);
-        }
-
-        let downstream_node = plan
-            .remove_node(downstream_id)
-            .expect("Graph Integrity Violation: Downstream node missing");
-
-        let upstream_node = plan
-            .node_weight_mut(upstream_id)
-            .expect("Graph Integrity Violation: Upstream node missing");
-
-        upstream_node.description = format!(
-            "{} -> {}",
-            upstream_node.description, downstream_node.description
-        );
-
-        upstream_node
-            .operator_chain
-            .operators
-            .extend(downstream_node.operator_chain.operators);
-
-        upstream_node
-            .operator_chain
-            .edges
-            .push(propagated_schema);
-    }
+    graph.remove_node(node);
 }
 
 impl Optimizer for ChainingOptimizer {
     fn optimize_once(&self, plan: &mut LogicalGraph) -> bool {
-        if let Some((upstream_id, downstream_id, bridging_edge_id)) =
-            Self::find_fusion_candidate(plan)
-        {
-            Self::apply_fusion(plan, upstream_id, downstream_id, bridging_edge_id);
-            true
-        } else {
-            false
+        let node_indices: Vec<NodeIndex> = plan.node_indices().collect();
+
+        for &node_idx in &node_indices {
+            let cur = plan.node_weight(node_idx).unwrap();
+
+            // sources can't be chained
+            if cur.operator_chain.is_source() {
+                continue;
+            }
+
+            let mut successors = plan.edges_directed(node_idx, Outgoing).collect::<Vec<_>>();
+
+            if successors.len() != 1 {
+                continue;
+            }
+
+            let edge = successors.remove(0);
+            let edge_type = edge.weight().edge_type;
+
+            if edge_type != LogicalEdgeType::Forward {
+                continue;
+            }
+
+            let successor_idx = edge.target();
+
+            let successor_node = plan.node_weight(successor_idx).unwrap();
+
+            // skip if parallelism doesn't match or successor is a sink
+            if cur.parallelism != successor_node.parallelism
+                || successor_node.operator_chain.is_sink()
+            {
+                continue;
+            }
+
+            // skip successors with multiple predecessors
+            if plan.edges_directed(successor_idx, Incoming).count() > 1 {
+                continue;
+            }
+
+            // construct the new node
+            let mut new_cur = cur.clone();
+
+            new_cur.description = format!("{} -> {}", cur.description, successor_node.description);
+
+            new_cur
+                .operator_chain
+                .operators
+                .extend(successor_node.operator_chain.operators.clone());
+
+            new_cur
+                .operator_chain
+                .edges
+                .push(edge.weight().schema.clone());
+
+            mem::swap(&mut new_cur, plan.node_weight_mut(node_idx).unwrap());
+
+            // remove the old successor
+            remove_in_place(plan, successor_idx);
+            return true;
         }
+
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+
+    use crate::sql::common::FsSchema;
+    use crate::sql::logical_node::logical::{
+        LogicalEdge, LogicalEdgeType, LogicalGraph, LogicalNode, Optimizer, OperatorName,
+    };
+
+    use super::ChainingOptimizer;
+
+    fn forward_edge() -> LogicalEdge {
+        let s = Arc::new(Schema::new(vec![Field::new(
+            "_timestamp",
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            false,
+        )]));
+        LogicalEdge::new(LogicalEdgeType::Forward, FsSchema::new_unkeyed(s, 0))
+    }
+
+    fn proj_node(id: u32, label: &str) -> LogicalNode {
+        LogicalNode::single(
+            id,
+            format!("op_{label}"),
+            OperatorName::Projection,
+            vec![],
+            label.to_string(),
+            1,
+        )
+    }
+
+    fn source_node() -> LogicalNode {
+        LogicalNode::single(
+            0,
+            "src".into(),
+            OperatorName::ConnectorSource,
+            vec![],
+            "source".into(),
+            1,
+        )
+    }
+
+    /// Regression: upstream at last `NodeIndex` + remove non-last downstream swaps indices.
+    #[test]
+    fn fusion_remaps_when_upstream_was_last_node_index() {
+        let mut g = LogicalGraph::new();
+        let n0 = g.add_node(source_node());
+        let n1 = g.add_node(proj_node(1, "downstream"));
+        let n2 = g.add_node(proj_node(2, "upstream_last_index"));
+        let e = forward_edge();
+        g.add_edge(n0, n2, e.clone());
+        g.add_edge(n2, n1, e);
+
+        let changed = ChainingOptimizer {}.optimize_once(&mut g);
+        assert!(changed);
+        assert_eq!(g.node_count(), 2);
     }
 }

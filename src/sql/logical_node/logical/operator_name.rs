@@ -13,11 +13,11 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use strum::{Display, EnumString};
+use strum::{Display, EnumString, IntoStaticStr};
 
 use crate::sql::common::constants::operator_feature;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, Display)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, Display, IntoStaticStr)]
 pub enum OperatorName {
     ExpressionWatermark,
     ArrowValue,
@@ -38,6 +38,12 @@ pub enum OperatorName {
 }
 
 impl OperatorName {
+    /// Registry / worker lookup key; matches [`Display`] and protobuf operator names.
+    #[inline]
+    pub fn as_registry_key(self) -> &'static str {
+        self.into()
+    }
+
     pub fn feature_tag(self) -> Option<&'static str> {
         match self {
             Self::ExpressionWatermark | Self::ArrowValue | Self::ArrowKey | Self::Projection => None,

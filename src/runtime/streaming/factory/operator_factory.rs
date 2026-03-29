@@ -38,6 +38,8 @@ use protocol::grpc::api::{
     WindowFunctionOperator as WindowFunctionProto,
 };
 
+use crate::sql::logical_node::logical::OperatorName;
+
 ///
 pub struct OperatorFactory {
     constructors: HashMap<String, Box<dyn OperatorConstructor>>,
@@ -56,6 +58,10 @@ impl OperatorFactory {
 
     pub fn register(&mut self, name: &str, constructor: Box<dyn OperatorConstructor>) {
         self.constructors.insert(name.to_string(), constructor);
+    }
+
+    pub fn register_named(&mut self, name: OperatorName, constructor: Box<dyn OperatorConstructor>) {
+        self.register(name.as_registry_key(), constructor);
     }
 
     pub fn create_operator(&self, name: &str, payload: &[u8]) -> Result<ConstructedOperator> {
@@ -78,27 +84,36 @@ impl OperatorFactory {
     }
 
     fn register_builtins(&mut self) {
-        self.register("TumblingWindowAggregate", Box::new(TumblingWindowBridge));
-        self.register("SlidingWindowAggregate", Box::new(SlidingWindowBridge));
-        self.register("SessionWindowAggregate", Box::new(SessionWindowBridge));
+        self.register_named(OperatorName::TumblingWindowAggregate, Box::new(TumblingWindowBridge));
+        self.register_named(OperatorName::SlidingWindowAggregate, Box::new(SlidingWindowBridge));
+        self.register_named(OperatorName::SessionWindowAggregate, Box::new(SessionWindowBridge));
 
-        self.register("ExpressionWatermark", Box::new(WatermarkBridge));
+        self.register_named(OperatorName::ExpressionWatermark, Box::new(WatermarkBridge));
 
         // ─── SQL Window Function ───
-        self.register("WindowFunction", Box::new(WindowFunctionBridge));
+        self.register_named(OperatorName::WindowFunction, Box::new(WindowFunctionBridge));
 
         // ─── Join ───
-        self.register("Join", Box::new(JoinWithExpirationBridge));
-        self.register("InstantJoin", Box::new(InstantJoinBridge));
-        self.register("LookupJoin", Box::new(LookupJoinBridge));
+        self.register_named(OperatorName::Join, Box::new(JoinWithExpirationBridge));
+        self.register_named(OperatorName::InstantJoin, Box::new(InstantJoinBridge));
+        self.register_named(OperatorName::LookupJoin, Box::new(LookupJoinBridge));
 
-        self.register("UpdatingAggregate", Box::new(IncrementalAggregateBridge));
+        self.register_named(OperatorName::UpdatingAggregate, Box::new(IncrementalAggregateBridge));
 
-        self.register("KeyBy", Box::new(KeyByBridge));
+        self.register_named(OperatorName::KeyBy, Box::new(KeyByBridge));
 
-        self.register("Projection", Box::new(PassthroughConstructor("Projection")));
-        self.register("ArrowValue", Box::new(PassthroughConstructor("ArrowValue")));
-        self.register("ArrowKey", Box::new(PassthroughConstructor("ArrowKey")));
+        self.register_named(
+            OperatorName::Projection,
+            Box::new(PassthroughConstructor(OperatorName::Projection)),
+        );
+        self.register_named(
+            OperatorName::ArrowValue,
+            Box::new(PassthroughConstructor(OperatorName::ArrowValue)),
+        );
+        self.register_named(
+            OperatorName::ArrowKey,
+            Box::new(PassthroughConstructor(OperatorName::ArrowKey)),
+        );
 
         crate::runtime::streaming::factory::register_builtin_connectors(self);
         crate::runtime::streaming::factory::register_kafka_connector_plugins(self);
@@ -202,12 +217,12 @@ impl OperatorConstructor for KeyByBridge {
     }
 }
 
-pub struct PassthroughConstructor(pub &'static str);
+pub struct PassthroughConstructor(pub OperatorName);
 
 impl OperatorConstructor for PassthroughConstructor {
     fn with_config(&self, _config: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
         Ok(ConstructedOperator::Operator(Box::new(
-            PassthroughOperator::new(self.0),
+            PassthroughOperator::new(self.0.as_registry_key()),
         )))
     }
 }

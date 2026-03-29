@@ -104,6 +104,13 @@ impl LogicalPlanVisitor {
 
         let partition_keys = Self::extract_partitioning_keys(&mut sink_properties)?;
 
+        let sink_description = comment
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("sink `{}` ({connector_type})", sink_table_name));
+
         let mut query_logical_plan = rewrite_plan(
             produce_optimized_plan(&Statement::Query(query.clone()), &self.schema_provider)?,
             &self.schema_provider,
@@ -131,7 +138,7 @@ impl LogicalPlanVisitor {
             None,
             &self.schema_provider,
             Some(ConnectionType::Sink),
-            comment.clone().unwrap_or_default(),
+            sink_description,
         )?;
         sink_definition.partition_exprs = Arc::new(partition_keys);
 

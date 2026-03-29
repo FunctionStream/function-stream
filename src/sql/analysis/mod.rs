@@ -207,6 +207,10 @@ pub fn rewrite_plan(
 ) -> Result<LogicalPlan> {
     info!("Starting streaming plan rewrite pipeline");
 
+    let Transformed {
+        data: plan, ..
+    } = plan.rewrite_with_subqueries(&mut source_rewriter::SourceRewriter::new(schema_provider))?;
+
     let mut rewriter = stream_rewriter::StreamRewriter::new(schema_provider);
     let Transformed {
         data: rewritten_plan,

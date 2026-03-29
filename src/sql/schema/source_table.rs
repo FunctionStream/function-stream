@@ -139,6 +139,17 @@ impl SourceTable {
         self.temporal_config.watermark_strategy_column.as_deref()
     }
 
+    /// Watermark column name safe to persist for [`StreamTable::Source`]. Omits the computed
+    /// [`sql_field::COMPUTED_WATERMARK`] column: stream catalog only stores Arrow physical fields,
+    /// so `__watermark` cannot be resolved when the table is planned from the catalog.
+    pub fn stream_catalog_watermark_field(&self) -> Option<String> {
+        self.temporal_config
+            .watermark_strategy_column
+            .as_deref()
+            .filter(|w| *w != sql_field::COMPUTED_WATERMARK)
+            .map(str::to_string)
+    }
+
     #[inline]
     pub fn catalog_with_options(&self) -> &BTreeMap<String, String> {
         &self.catalog_with_options
@@ -382,10 +393,6 @@ impl SourceTable {
         }
 
         if let Some((time_field, watermark_expr)) = watermark {
-            let table_ref = TableReference::bare(table.table_identifier.as_str());
-            let df_schema =
-                DFSchema::try_from_qualified_schema(table_ref, &table.produce_physical_schema())?;
-
             let field = table
                 .schema_specs
                 .iter()
@@ -404,6 +411,19 @@ impl SourceTable {
                 );
             }
 
+            // Watermark 引用的时间列语义上必须非空，强制设为 NOT NULL，
+            // 避免用户建表时遗漏 NOT NULL 导致后续表达式 nullable 校验失败。
+            for col in table.schema_specs.iter_mut() {
+                if col.arrow_field().name().as_str() == time_field.as_str() {
+                    col.set_nullable(false);
+                    break;
+                }
+            }
+
+            let table_ref = TableReference::bare(table.table_identifier.as_str());
+            let df_schema =
+                DFSchema::try_from_qualified_schema(table_ref, &table.produce_physical_schema())?;
+
             table.temporal_config.event_column = Some(time_field.clone());
 
             if let Some(expr) = watermark_expr {
@@ -412,15 +432,10 @@ impl SourceTable {
                         DataFusionError::Plan(format!("could not plan watermark expression: {e}"))
                     })?;
 
-                let (data_type, nullable) = logical_expr.data_type_and_nullable(&df_schema)?;
+                let (data_type, _nullable) = logical_expr.data_type_and_nullable(&df_schema)?;
                 if !matches!(data_type, DataType::Timestamp(_, _)) {
                     return plan_err!(
                         "the type of the WATERMARK FOR expression must be TIMESTAMP, but was {data_type}"
-                    );
-                }
-                if nullable {
-                    return plan_err!(
-                        "the type of the WATERMARK FOR expression must be NOT NULL"
                     );
                 }
 

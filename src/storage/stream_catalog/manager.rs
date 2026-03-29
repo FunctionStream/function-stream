@@ -22,6 +22,7 @@ use protocol::storage::{self as pb, table_definition};
 use tracing::{info, warn};
 use unicase::UniCase;
 
+use crate::sql::common::constants::sql_field;
 use crate::sql::schema::{ObjectName, StreamPlanningContext, StreamTable};
 
 use super::codec::CatalogCodec;
@@ -168,7 +169,10 @@ impl CatalogManager {
             } => table_definition::TableType::Source(pb::StreamSource {
                 arrow_schema_ipc: CatalogCodec::encode_schema(schema)?,
                 event_time_field: event_time_field.clone(),
-                watermark_field: watermark_field.clone(),
+                watermark_field: watermark_field
+                    .as_ref()
+                    .filter(|w| *w != sql_field::COMPUTED_WATERMARK)
+                    .cloned(),
                 with_options: with_options
                     .iter()
                     .map(|(k, v)| (k.clone(), v.clone()))
@@ -206,7 +210,9 @@ impl CatalogManager {
                 name: proto_def.table_name,
                 schema: CatalogCodec::decode_schema(&src.arrow_schema_ipc)?,
                 event_time_field: src.event_time_field,
-                watermark_field: src.watermark_field,
+                watermark_field: src
+                    .watermark_field
+                    .filter(|w| w != sql_field::COMPUTED_WATERMARK),
                 with_options: src.with_options.into_iter().collect(),
             }),
             table_definition::TableType::Sink(sink) => {

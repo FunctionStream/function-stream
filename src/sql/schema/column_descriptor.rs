@@ -99,6 +99,16 @@ impl ColumnDescriptor {
         self.arrow_field().data_type()
     }
 
+    pub fn set_nullable(&mut self, nullable: bool) {
+        let f = match self {
+            Self::Physical(f) => f,
+            Self::SystemMeta { field, .. } => field,
+            Self::Computed { field, .. } => field,
+        };
+        *f = Field::new(f.name(), f.data_type().clone(), nullable)
+            .with_metadata(f.metadata().clone());
+    }
+
     pub fn force_precision(&mut self, unit: TimeUnit) {
         match self {
             Self::Physical(f) => {

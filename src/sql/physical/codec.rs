@@ -15,8 +15,9 @@ use std::sync::Arc;
 
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::Schema;
-use datafusion::common::{DataFusionError, Result, UnnestOptions};
+use datafusion::common::{DataFusionError, Result, UnnestOptions, not_impl_err};
 use datafusion::execution::FunctionRegistry;
+use datafusion::logical_expr::ScalarUDF;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::unnest::{ListUnnest, UnnestExec};
 use datafusion_proto::physical_plan::PhysicalExtensionCodec;
@@ -28,7 +29,8 @@ use protocol::grpc::api::{
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::sql::analysis::UNNESTED_COL;
-use crate::sql::common::constants::mem_exec_join_side;
+use crate::sql::common::constants::{mem_exec_join_side, window_function_udf};
+use crate::sql::physical::udfs::window;
 use crate::sql::physical::cdc::{DebeziumUnrollingExec, ToDebeziumExec};
 use crate::sql::physical::readers::{
     FsMemExec, RecordBatchVecReader, RwLockRecordBatchReader, UnboundedRecordBatchReader,
@@ -137,6 +139,13 @@ impl PhysicalExtensionCodec for FsPhysicalExtensionCodec {
                 "cannot serialize {node:?}"
             )))
         }
+    }
+
+    fn try_decode_udf(&self, name: &str, _buf: &[u8]) -> Result<Arc<ScalarUDF>> {
+        if name == window_function_udf::NAME {
+            return Ok(window());
+        }
+        not_impl_err!("PhysicalExtensionCodec is not provided for scalar function {name}")
     }
 }
 

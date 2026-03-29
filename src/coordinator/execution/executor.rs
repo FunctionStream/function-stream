@@ -82,6 +82,28 @@ impl Executor {
     }
 }
 
+
+fn strip_noisy_fields(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            // 兼容 camelCase 和 snake_case，直接把配置项连根拔起
+            map.remove("operatorConfig");
+            map.remove("operator_config");
+
+            // 继续向子节点递归
+            for (_, v) in map.iter_mut() {
+                strip_noisy_fields(v);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                strip_noisy_fields(v);
+            }
+        }
+        _ => {}
+    }
+}
+
 impl PlanVisitor for Executor {
     fn visit_create_function(
         &self,
@@ -273,7 +295,7 @@ impl PlanVisitor for Executor {
                         name: table_name.clone(),
                         schema,
                         event_time_field: source_table.event_time_field().map(str::to_string),
-                        watermark_field: source_table.watermark_field().map(str::to_string),
+                        watermark_field: source_table.stream_catalog_watermark_field(),
                         with_options: source_table.catalog_with_options().clone(),
                     };
                     (table_name, *if_not_exists, table_instance)
