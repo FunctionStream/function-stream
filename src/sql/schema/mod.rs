@@ -10,6 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod catalog_ddl;
 pub mod column_descriptor;
 pub mod connection_type;
 pub mod source_table;
@@ -22,6 +23,7 @@ pub mod table_role;
 pub mod temporal_pipeline_config;
 pub mod utils;
 
+pub use catalog_ddl::{schema_columns_one_line, show_create_stream_table, stream_table_row_detail};
 pub use column_descriptor::ColumnDescriptor;
 pub use connection_type::ConnectionType;
 pub use source_table::{SourceOperator, SourceTable};

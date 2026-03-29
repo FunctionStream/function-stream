@@ -2324,7 +2324,6 @@ dependencies = [
  "comfy-table",
  "protocol",
  "rustyline",
- "thiserror 2.0.17",
  "tokio",
  "tonic",
 ]

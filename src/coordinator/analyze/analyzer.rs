@@ -14,8 +14,9 @@ use super::Analysis;
 use crate::coordinator::execution_context::ExecutionContext;
 use crate::coordinator::statement::{
     CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropTableStatement,
-    ShowFunctions, StartFunction, Statement, StatementVisitor, StatementVisitorContext,
-    StatementVisitorResult, StopFunction, StreamingTableStatement,
+    ShowCatalogTables, ShowCreateTable, ShowFunctions, StartFunction, Statement,
+    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
+    StreamingTableStatement,
 };
 use std::fmt;
 
@@ -104,6 +105,22 @@ impl StatementVisitor for Analyzer<'_> {
     fn visit_show_functions(
         &self,
         stmt: &ShowFunctions,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_show_catalog_tables(
+        &self,
+        stmt: &ShowCatalogTables,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_show_create_table(
+        &self,
+        stmt: &ShowCreateTable,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))

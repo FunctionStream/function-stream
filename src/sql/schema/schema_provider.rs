@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{self as datatypes, DataType, Field, Schema};
@@ -45,6 +45,8 @@ pub enum StreamTable {
         schema: Arc<Schema>,
         event_time_field: Option<String>,
         watermark_field: Option<String>,
+        /// Persisted `WITH` options for `SHOW CREATE TABLE`.
+        with_options: BTreeMap<String, String>,
     },
     Sink {
         name: String,
@@ -202,6 +204,7 @@ impl StreamPlanningContext {
             schema,
             event_time_field,
             watermark_field,
+            with_options: BTreeMap::new(),
         });
     }
 

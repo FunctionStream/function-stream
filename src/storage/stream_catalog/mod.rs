@@ -15,9 +15,11 @@
 mod codec;
 mod manager;
 mod meta_store;
+mod rocksdb_meta_store;
 
 pub use manager::{
     CatalogManager, initialize_stream_catalog, planning_schema_provider,
     restore_global_catalog_from_store,
 };
 pub use meta_store::{InMemoryMetaStore, MetaStore};
+pub use rocksdb_meta_store::RocksDbMetaStore;

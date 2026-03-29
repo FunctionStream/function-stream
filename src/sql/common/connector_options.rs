@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::num::{NonZero, NonZeroU64};
 use std::str::FromStr;
 use std::time::Duration;
@@ -29,6 +29,22 @@ pub trait FromOpts: Sized {
 pub struct ConnectorOptions {
     options: HashMap<String, Expr>,
     partitions: Vec<Expr>,
+}
+
+fn sql_expr_to_catalog_string(e: &Expr) -> String {
+    match e {
+        Expr::Value(ValueWithSpan { value, .. }) => match value {
+            SqlValue::SingleQuotedString(s) | SqlValue::DoubleQuotedString(s) => s.clone(),
+            SqlValue::NationalStringLiteral(s) => s.clone(),
+            SqlValue::HexStringLiteral(s) => s.clone(),
+            SqlValue::Number(n, _) => n.clone(),
+            SqlValue::Boolean(b) => b.to_string(),
+            SqlValue::Null => "NULL".to_string(),
+            other => other.to_string(),
+        },
+        Expr::Identifier(ident) => ident.value.clone(),
+        other => other.to_string(),
+    }
 }
 
 impl ConnectorOptions {
@@ -330,6 +346,15 @@ impl ConnectorOptions {
             out.insert(k, format!("{v}"));
         }
         Ok(out)
+    }
+
+    /// Snapshot of all current `WITH` key/value pairs for catalog persistence (`SHOW CREATE TABLE`).
+    /// Call before any `pull_*` consumes options.
+    pub fn snapshot_for_catalog(&self) -> BTreeMap<String, String> {
+        self.options
+            .iter()
+            .map(|(k, v)| (k.clone(), sql_expr_to_catalog_string(v)))
+            .collect()
     }
 }
 

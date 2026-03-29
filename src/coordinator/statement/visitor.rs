@@ -12,7 +12,8 @@
 
 use super::{
     CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropTableStatement,
-    ShowFunctions, StartFunction, StopFunction, StreamingTableStatement,
+    ShowCatalogTables, ShowCreateTable, ShowFunctions, StartFunction, StopFunction,
+    StreamingTableStatement,
 };
 use crate::coordinator::plan::PlanNode;
 use crate::coordinator::statement::Statement;
@@ -80,6 +81,18 @@ pub trait StatementVisitor {
     fn visit_show_functions(
         &self,
         stmt: &ShowFunctions,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_show_catalog_tables(
+        &self,
+        stmt: &ShowCatalogTables,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_show_create_table(
+        &self,
+        stmt: &ShowCreateTable,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 

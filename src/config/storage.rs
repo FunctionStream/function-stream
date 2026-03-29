@@ -118,3 +118,27 @@ impl Default for TaskStorageConfig {
         }
     }
 }
+
+/// Stream table catalog (`CREATE TABLE` / `SHOW TABLES`) storage.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamCatalogConfig {
+    /// When `false`, the catalog is in-memory only and is **lost on process restart**.
+    #[serde(default = "default_stream_catalog_persist")]
+    pub persist: bool,
+    /// RocksDB directory for persisted catalog. Default: `{data_dir}/stream_catalog`.
+    #[serde(default)]
+    pub db_path: Option<String>,
+}
+
+fn default_stream_catalog_persist() -> bool {
+    true
+}
+
+impl Default for StreamCatalogConfig {
+    fn default() -> Self {
+        Self {
+            persist: default_stream_catalog_persist(),
+            db_path: None,
+        }
+    }
+}

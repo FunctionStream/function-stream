@@ -20,26 +20,62 @@ use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, TableCompon
 use protocol::cli::{function_stream_service_client::FunctionStreamServiceClient, SqlRequest};
 use rustyline::error::ReadlineError;
 use rustyline::{Config, DefaultEditor, EditMode};
+use std::fmt;
 use std::io::{self, Cursor, Write};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::Request;
 
-#[derive(Debug, thiserror::Error)]
+/// CLI errors.
+///
+/// **Important:** [`tonic::Status`] must not be formatted with `{}` — its [`fmt::Display`] dumps
+/// `details` / `metadata` (e.g. HTTP headers). Only [`tonic::Status::message`] is stored in
+/// [`ReplError::Rpc`].
+#[derive(Debug)]
 pub enum ReplError {
-    #[error("RPC error: {0}")]
-    Rpc(Box<tonic::Status>),
-    #[error("Connection failed: {0}")]
+    Rpc(String),
     Connection(String),
-    #[error("Internal error: {0}")]
     Internal(String),
-    #[error("IO error: {0}")]
-    Io(#[from] io::Error),
+    Io(io::Error),
+}
+
+impl fmt::Display for ReplError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReplError::Rpc(s) => f.write_str(s),
+            ReplError::Connection(s) => f.write_str(s),
+            ReplError::Internal(s) => write!(f, "Internal error: {s}"),
+            ReplError::Io(e) => write!(f, "IO error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for ReplError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ReplError::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<io::Error> for ReplError {
+    fn from(e: io::Error) -> Self {
+        ReplError::Io(e)
+    }
 }
 
 impl From<tonic::Status> for ReplError {
     fn from(s: tonic::Status) -> Self {
-        ReplError::Rpc(Box::new(s))
+        let msg = s.message();
+        if msg.is_empty() {
+            ReplError::Rpc(format!(
+                "gRPC {} (server returned no message)",
+                s.code()
+            ))
+        } else {
+            ReplError::Rpc(msg.to_string())
+        }
     }
 }
 

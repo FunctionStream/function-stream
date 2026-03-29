@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -73,6 +73,8 @@ pub struct SourceTable {
     pub lookup_cache_max_bytes: Option<u64>,
     pub lookup_cache_ttl: Option<Duration>,
     pub inferred_fields: Option<Vec<FieldRef>>,
+    /// Original `WITH` options for catalog / `SHOW CREATE TABLE` (snapshot at DDL parse time).
+    pub catalog_with_options: BTreeMap<String, String>,
 }
 
 multifield_partial_ord!(
@@ -84,7 +86,8 @@ multifield_partial_ord!(
     opaque_config,
     description,
     key_constraints,
-    connection_format
+    connection_format,
+    catalog_with_options
 );
 
 impl SourceTable {
@@ -114,6 +117,7 @@ impl SourceTable {
             lookup_cache_max_bytes: None,
             lookup_cache_ttl: None,
             inferred_fields: None,
+            catalog_with_options: BTreeMap::new(),
         }
     }
 
@@ -135,6 +139,11 @@ impl SourceTable {
         self.temporal_config.watermark_strategy_column.as_deref()
     }
 
+    #[inline]
+    pub fn catalog_with_options(&self) -> &BTreeMap<String, String> {
+        &self.catalog_with_options
+    }
+
     pub fn idle_time(&self) -> Option<Duration> {
         self.temporal_config.liveness_timeout
     }
@@ -149,6 +158,11 @@ impl SourceTable {
         _schema_ctx: &dyn SchemaContext,
     ) -> Result<Self> {
         validate_adapter_availability(adapter)?;
+
+        let catalog_with_options: BTreeMap<String, String> = options
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         let encoding = DataEncodingFormat::extract_from_map(options)?;
 
@@ -179,6 +193,7 @@ impl SourceTable {
             lookup_cache_max_bytes: None,
             lookup_cache_ttl: None,
             inferred_fields: None,
+            catalog_with_options,
         })
     }
 
@@ -249,6 +264,8 @@ impl SourceTable {
         description: String,
     ) -> Result<Self> {
         let _ = connection_profile;
+
+        let catalog_with_options = options.snapshot_for_catalog();
 
         if let Some(c) = options.pull_opt_str(opt::CONNECTOR)? {
             if c != connector_name {
@@ -351,6 +368,7 @@ impl SourceTable {
             lookup_cache_max_bytes: None,
             lookup_cache_ttl: None,
             inferred_fields: None,
+            catalog_with_options,
         };
 
         if let Some(event_time_field) = options.pull_opt_field(opt::EVENT_TIME_FIELD)? {

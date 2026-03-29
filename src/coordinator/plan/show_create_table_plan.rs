@@ -10,14 +10,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod data_set;
-mod execute_result;
-mod show_catalog_tables_result;
-mod show_create_table_result;
-mod show_functions_result;
+use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
-pub use data_set::{DataSet, empty_record_batch};
-pub use execute_result::ExecuteResult;
-pub use show_catalog_tables_result::ShowCatalogTablesResult;
-pub use show_create_table_result::ShowCreateTableResult;
-pub use show_functions_result::ShowFunctionsResult;
+#[derive(Debug, Clone)]
+pub struct ShowCreateTablePlan {
+    pub table_name: String,
+}
+
+impl ShowCreateTablePlan {
+    pub fn new(table_name: String) -> Self {
+        Self { table_name }
+    }
+}
+
+impl PlanNode for ShowCreateTablePlan {
+    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
+        visitor.visit_show_create_table(self, context)
+    }
+}

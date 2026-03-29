@@ -117,3 +117,10 @@ task_storage:
     
     # Maximum bytes for level base in bytes (optional)
     max_bytes_for_level_base: 268435456
+
+# Stream table catalog (SQL: CREATE TABLE connector sources, SHOW TABLES, SHOW CREATE TABLE).
+# When persist is true (default), metadata is stored under RocksDB at db_path (default: data/stream_catalog)
+# and reloaded after process restart. Set persist: false only for tests/ephemeral nodes.
+stream_catalog:
+  persist: true
+  # db_path: data/stream_catalog

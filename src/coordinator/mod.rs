@@ -26,5 +26,6 @@ pub use runtime_context::CoordinatorRuntimeContext;
 pub use dataset::{DataSet, ShowFunctionsResult};
 pub use statement::{
     CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropTableStatement,
-    PythonModule, ShowFunctions, StartFunction, Statement, StopFunction, StreamingTableStatement,
+    PythonModule, ShowCatalogTables, ShowCreateTable, ShowFunctions, StartFunction, Statement,
+    StopFunction, StreamingTableStatement,
 };

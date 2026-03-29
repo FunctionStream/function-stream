@@ -360,6 +360,22 @@ fn compile_plan_show_functions() {
 }
 
 #[test]
+fn compile_plan_show_tables() {
+    let stmts = parse_sql("SHOW TABLES").unwrap();
+    Coordinator::new()
+        .compile_plan(stmts[0].as_ref(), StreamSchemaProvider::new())
+        .expect("ShowCatalogTables plan");
+}
+
+#[test]
+fn compile_plan_show_create_table() {
+    let stmts = parse_sql("SHOW CREATE TABLE my_table").unwrap();
+    Coordinator::new()
+        .compile_plan(stmts[0].as_ref(), StreamSchemaProvider::new())
+        .expect("ShowCreateTable plan");
+}
+
+#[test]
 fn compile_plan_start_stop_drop_function() {
     for sql in [
         "START FUNCTION t1",

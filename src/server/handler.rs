@@ -112,8 +112,9 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let req = request.into_inner();
 
         let statements = parse_sql(&req.sql).map_err(|e| {
-            warn!("SQL parse rejection: {}", e);
-            Status::invalid_argument("Provided SQL syntax is invalid")
+            let detail = e.to_string();
+            warn!("SQL parse rejection: {}", detail);
+            Status::invalid_argument(detail)
         })?;
 
         if statements.is_empty() {
@@ -229,7 +230,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
             error!("show_functions execution failed: {}", result.message);
             return Ok(TonicResponse::new(ShowFunctionsResponse {
                 status_code: StatusCode::InternalServerError as i32,
-                message: "Failed to retrieve function definitions".to_string(),
+                message: result.message,
                 functions: vec![],
             }));
         }

@@ -19,6 +19,8 @@
 //! - **`CREATE TABLE ...`** other forms (including `CREATE TABLE ... AS SELECT` where DataFusion accepts it)
 //! - **`CREATE STREAMING TABLE ... WITH (...) AS SELECT ...`** (streaming sink DDL)
 //! - **`DROP TABLE`** / **`DROP TABLE IF EXISTS`** / **`DROP STREAMING TABLE`** (alias for `DROP TABLE` on the stream catalog)
+//! - **`SHOW TABLES`** — list stream catalog tables (connector sources and streaming sinks)
+//! - **`SHOW CREATE TABLE <name>`** — best-effort DDL text (full `WITH` / `AS SELECT` may not be stored)
 //!
 //! **`INSERT` is not supported** here — use `CREATE TABLE ... AS SELECT` or
 //! `CREATE STREAMING TABLE ... AS SELECT` to define the query shape instead.
@@ -29,13 +31,16 @@ use std::collections::HashMap;
 
 use datafusion::common::{Result, plan_err};
 use datafusion::error::DataFusionError;
-use datafusion::sql::sqlparser::ast::{ObjectType, SqlOption, Statement as DFStatement};
+use datafusion::sql::sqlparser::ast::{
+    ObjectType, ShowCreateObject, SqlOption, Statement as DFStatement,
+};
 use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
 use datafusion::sql::sqlparser::parser::Parser;
 
 use crate::coordinator::{
-    CreateFunction, CreateTable, DropFunction, DropTableStatement, ShowFunctions, StartFunction,
-    Statement as CoordinatorStatement, StopFunction, StreamingTableStatement,
+    CreateFunction, CreateTable, DropFunction, DropTableStatement, ShowCatalogTables,
+    ShowCreateTable, ShowFunctions, StartFunction, Statement as CoordinatorStatement, StopFunction,
+    StreamingTableStatement,
 };
 
 /// `DROP STREAMING TABLE t` is accepted as sugar for `DROP TABLE t` against the same catalog.
@@ -89,6 +94,15 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
             Ok(Box::new(DropFunction::new(name)))
         }
         DFStatement::ShowFunctions { .. } => Ok(Box::new(ShowFunctions::new())),
+        DFStatement::ShowTables { .. } => Ok(Box::new(ShowCatalogTables::new())),
+        DFStatement::ShowCreate { obj_type, obj_name } => {
+            if obj_type != ShowCreateObject::Table {
+                return plan_err!(
+                    "SHOW CREATE {obj_type} is not supported; use SHOW CREATE TABLE <name>"
+                );
+            }
+            Ok(Box::new(ShowCreateTable::new(obj_name.to_string())))
+        },
         s @ DFStatement::CreateTable(_) => Ok(Box::new(CreateTable::new(s))),
         s @ DFStatement::CreateStreamingTable { .. } => {
             Ok(Box::new(StreamingTableStatement::new(s)))
@@ -116,10 +130,7 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
             "INSERT is not supported; only CREATE TABLE and CREATE STREAMING TABLE (with AS SELECT) \
              are supported for defining table/query pipelines in this SQL frontend"
         ),
-        other => plan_err!(
-            "Unsupported SQL statement: {other}. \
-             For tables/pipelines use CREATE TABLE or CREATE STREAMING TABLE ... AS SELECT; INSERT is not supported."
-        ),
+        other => plan_err!("Unsupported SQL statement: {other}"),
     }
 }
 
@@ -188,6 +199,18 @@ mod tests {
     fn test_parse_show_functions() {
         let stmt = first_stmt("SHOW FUNCTIONS");
         assert!(is_type(stmt.as_ref(), "ShowFunctions"));
+    }
+
+    #[test]
+    fn test_parse_show_tables() {
+        let stmt = first_stmt("SHOW TABLES");
+        assert!(is_type(stmt.as_ref(), "ShowCatalogTables"));
+    }
+
+    #[test]
+    fn test_parse_show_create_table() {
+        let stmt = first_stmt("SHOW CREATE TABLE my_src");
+        assert!(is_type(stmt.as_ref(), "ShowCreateTable"));
     }
 
     #[test]

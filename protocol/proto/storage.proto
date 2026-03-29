@@ -27,6 +27,8 @@ message StreamSource {
   bytes arrow_schema_ipc = 1;
   optional string event_time_field = 2;
   optional string watermark_field = 3;
+  // Original CREATE TABLE ... WITH ('k'='v', ...) pairs (best-effort; keys sorted in DDL).
+  map<string, string> with_options = 4;
 }
 
 message StreamSink {

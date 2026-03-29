@@ -16,17 +16,20 @@ use protocol::grpc::api::FsProgram;
 use thiserror::Error;
 use tracing::{debug, info};
 
-use crate::coordinator::dataset::{empty_record_batch, ExecuteResult, ShowFunctionsResult};
+use crate::coordinator::dataset::{
+    empty_record_batch, ExecuteResult, ShowCatalogTablesResult, ShowCreateTableResult,
+    ShowFunctionsResult,
+};
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, CreateTablePlanBody,
     DropFunctionPlan, DropTablePlan, LookupTablePlan, PlanNode, PlanVisitor, PlanVisitorContext,
-    PlanVisitorResult, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
-    StreamingTableConnectorPlan,
+    PlanVisitorResult, ShowCatalogTablesPlan, ShowCreateTablePlan, ShowFunctionsPlan,
+    StartFunctionPlan, StopFunctionPlan, StreamingTable, StreamingTableConnectorPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::streaming::job::JobManager;
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::schema::StreamTable;
+use crate::sql::schema::{show_create_stream_table, StreamTable};
 use crate::storage::stream_catalog::CatalogManager;
 
 #[derive(Error, Debug)]
@@ -171,6 +174,44 @@ impl PlanVisitor for Executor {
         PlanVisitorResult::Execute(Ok(result))
     }
 
+    fn visit_show_catalog_tables(
+        &self,
+        _plan: &ShowCatalogTablesPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let tables = self.catalog_manager.list_stream_tables();
+        let n = tables.len();
+        let result = ExecuteResult::ok_with_data(
+            format!("{n} stream catalog table(s)"),
+            ShowCatalogTablesResult::from_tables(&tables),
+        );
+        PlanVisitorResult::Execute(Ok(result))
+    }
+
+    fn visit_show_create_table(
+        &self,
+        plan: &ShowCreateTablePlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
+            let t = self
+                .catalog_manager
+                .get_stream_table(&plan.table_name)
+                .ok_or_else(|| {
+                    ExecuteError::Validation(format!(
+                        "Table '{}' not found in stream catalog",
+                        plan.table_name
+                    ))
+                })?;
+            let ddl = show_create_stream_table(t.as_ref());
+            Ok(ExecuteResult::ok_with_data(
+                format!("SHOW CREATE TABLE {}", plan.table_name),
+                ShowCreateTableResult::new(plan.table_name.clone(), ddl),
+            ))
+        };
+        PlanVisitorResult::Execute(execute())
+    }
+
     fn visit_create_python_function(
         &self,
         plan: &CreatePythonFunctionPlan,
@@ -233,6 +274,7 @@ impl PlanVisitor for Executor {
                         schema,
                         event_time_field: source_table.event_time_field().map(str::to_string),
                         watermark_field: source_table.watermark_field().map(str::to_string),
+                        with_options: source_table.catalog_with_options().clone(),
                     };
                     (table_name, *if_not_exists, table_instance)
                 }
@@ -254,7 +296,8 @@ impl PlanVisitor for Executor {
                 .add_table(stream_table)
                 .map_err(|e| {
                     ExecuteError::Internal(format!(
-                        "Failed to register connector source table '{table_name}': {e}"
+                        "Failed to register connector source table '{}': {}",
+                        table_name, e
                     ))
                 })?;
 

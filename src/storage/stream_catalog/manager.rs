@@ -19,7 +19,7 @@ use datafusion::common::{internal_err, plan_err, Result as DFResult};
 use parking_lot::RwLock;
 use prost::Message;
 use protocol::storage::{self as pb, table_definition};
-use tracing::warn;
+use tracing::{info, warn};
 use unicase::UniCase;
 
 use crate::sql::schema::{ObjectName, StreamPlanningContext, StreamTable};
@@ -144,17 +144,35 @@ impl CatalogManager {
         ctx
     }
 
+    /// All stream catalog entries (connector sources + streaming sinks), sorted by table name.
+    pub fn list_stream_tables(&self) -> Vec<Arc<StreamTable>> {
+        let guard = self.cache.read();
+        let mut out: Vec<Arc<StreamTable>> = guard.streams.values().cloned().collect();
+        out.sort_by(|a, b| a.name().cmp(b.name()));
+        out
+    }
+
+    pub fn get_stream_table(&self, name: &str) -> Option<Arc<StreamTable>> {
+        let key = UniCase::new(name.to_string());
+        self.cache.read().streams.get(&key).cloned()
+    }
+
     fn encode_table(&self, table: &StreamTable) -> DFResult<pb::TableDefinition> {
         let table_type = match table {
             StreamTable::Source {
                 schema,
                 event_time_field,
                 watermark_field,
+                with_options,
                 ..
             } => table_definition::TableType::Source(pb::StreamSource {
                 arrow_schema_ipc: CatalogCodec::encode_schema(schema)?,
                 event_time_field: event_time_field.clone(),
                 watermark_field: watermark_field.clone(),
+                with_options: with_options
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
             }),
             StreamTable::Sink { program, .. } => {
                 let logical_program_bincode = CatalogCodec::encode_logical_program(program)?;
@@ -189,6 +207,7 @@ impl CatalogManager {
                 schema: CatalogCodec::decode_schema(&src.arrow_schema_ipc)?,
                 event_time_field: src.event_time_field,
                 watermark_field: src.watermark_field,
+                with_options: src.with_options.into_iter().collect(),
             }),
             table_definition::TableType::Sink(sink) => {
                 if sink.logical_program_bincode.is_empty() {
@@ -211,13 +230,45 @@ pub fn restore_global_catalog_from_store() {
     let Some(mgr) = CatalogManager::try_global() else {
         return;
     };
-    if let Err(e) = mgr.restore_from_store() {
-        warn!("Stream catalog restore_from_store skipped or failed: {e:#}");
+    match mgr.restore_from_store() {
+        Ok(()) => {
+            let n = mgr.list_stream_tables().len();
+            info!(stream_tables = n, "Stream catalog loaded from durable store");
+        }
+        Err(e) => warn!("Stream catalog restore_from_store failed: {e:#}"),
     }
 }
 
-pub fn initialize_stream_catalog(_config: &crate::config::GlobalConfig) -> anyhow::Result<()> {
-    CatalogManager::init_global_in_memory().context("Stream catalog (CatalogManager) init failed")
+pub fn initialize_stream_catalog(config: &crate::config::GlobalConfig) -> anyhow::Result<()> {
+    if !config.stream_catalog.persist {
+        return CatalogManager::init_global_in_memory()
+            .context("Stream catalog (CatalogManager) in-memory init failed");
+    }
+
+    let path = config
+        .stream_catalog
+        .db_path
+        .as_ref()
+        .map(|p| crate::config::resolve_path(p))
+        .unwrap_or_else(|| crate::config::get_data_dir().join("stream_catalog"));
+
+    std::fs::create_dir_all(&path).with_context(|| {
+        format!(
+            "Failed to create stream catalog directory {}",
+            path.display()
+        )
+    })?;
+
+    let store = std::sync::Arc::new(
+        super::RocksDbMetaStore::open(&path).with_context(|| {
+            format!(
+                "Failed to open stream catalog RocksDB at {}",
+                path.display()
+            )
+        })?,
+    );
+
+    CatalogManager::init_global(store).context("Stream catalog (CatalogManager) init failed")
 }
 
 pub fn planning_schema_provider() -> StreamPlanningContext {
@@ -228,6 +279,7 @@ pub fn planning_schema_provider() -> StreamPlanningContext {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::sync::Arc;
 
     use datafusion::arrow::datatypes::{DataType, Field, Schema};
@@ -252,6 +304,7 @@ mod tests {
             schema: Arc::clone(&schema),
             event_time_field: Some("ts".into()),
             watermark_field: None,
+            with_options: BTreeMap::new(),
         };
 
         mgr.add_table(table).unwrap();
@@ -275,6 +328,35 @@ mod tests {
     }
 
     #[test]
+    fn add_table_roundtrip_with_options() {
+        let mgr = create_test_manager();
+        let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int32, false)]));
+
+        let mut opts = BTreeMap::new();
+        opts.insert("connector".to_string(), "kafka".to_string());
+        opts.insert("topic".to_string(), "my-topic".to_string());
+
+        let table = StreamTable::Source {
+            name: "t_with".into(),
+            schema,
+            event_time_field: None,
+            watermark_field: None,
+            with_options: opts.clone(),
+        };
+
+        mgr.add_table(table).unwrap();
+
+        let ctx = mgr.acquire_planning_context();
+        let got = ctx.get_stream_table("t_with").expect("table present");
+
+        if let StreamTable::Source { with_options, .. } = got.as_ref() {
+            assert_eq!(with_options, &opts);
+        } else {
+            panic!("expected Source");
+        }
+    }
+
+    #[test]
     fn drop_table_if_exists() {
         let mgr = create_test_manager();
         let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int32, false)]));
@@ -284,6 +366,7 @@ mod tests {
             schema,
             event_time_field: None,
             watermark_field: None,
+            with_options: BTreeMap::new(),
         })
         .unwrap();
 

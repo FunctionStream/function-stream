@@ -27,12 +27,13 @@ use tracing::debug;
 use crate::coordinator::analyze::analysis::Analysis;
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan, DropTablePlan,
-    PlanNode, ShowFunctionsPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
+    PlanNode, ShowCatalogTablesPlan, ShowCreateTablePlan, ShowFunctionsPlan, StartFunctionPlan,
+    StopFunctionPlan, StreamingTable,
 };
 use crate::coordinator::statement::{
     CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropTableStatement,
-    ShowFunctions, StartFunction, StatementVisitor, StatementVisitorContext,
-    StatementVisitorResult, StopFunction, StreamingTableStatement,
+    ShowCatalogTables, ShowCreateTable, ShowFunctions, StartFunction, StatementVisitor,
+    StatementVisitorContext, StatementVisitorResult, StopFunction, StreamingTableStatement,
 };
 use crate::coordinator::tool::ConnectorOptions;
 use crate::sql::analysis::{
@@ -350,6 +351,24 @@ impl StatementVisitor for LogicalPlanVisitor {
         _ctx: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Plan(Box::new(ShowFunctionsPlan::new()))
+    }
+
+    fn visit_show_catalog_tables(
+        &self,
+        _stmt: &ShowCatalogTables,
+        _ctx: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Plan(Box::new(ShowCatalogTablesPlan::new()))
+    }
+
+    fn visit_show_create_table(
+        &self,
+        stmt: &ShowCreateTable,
+        _ctx: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Plan(Box::new(ShowCreateTablePlan::new(
+            stmt.table_name.clone(),
+        )))
     }
 
     fn visit_create_python_function(

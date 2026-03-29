@@ -40,6 +40,8 @@ pub struct GlobalConfig {
     pub task_storage: crate::config::storage::TaskStorageConfig,
     #[serde(default)]
     pub streaming: StreamingConfig,
+    #[serde(default)]
+    pub stream_catalog: crate::config::storage::StreamCatalogConfig,
 }
 
 impl GlobalConfig {
