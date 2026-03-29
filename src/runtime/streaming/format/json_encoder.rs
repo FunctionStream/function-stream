@@ -10,9 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 极致优化的 Arrow JSON 编码器。
 //!
-//! 解决 Arrow 原生 JSON 导出时不兼容 Kafka / 时间戳 / Decimal 的痛点。
 
 use arrow_array::{
     Array, Decimal128Array, TimestampMicrosecondArray,
@@ -44,7 +42,6 @@ impl EncoderFactory for CustomEncoderFactory {
             &self.timestamp_format,
             array.data_type(),
         ) {
-            // ── Timestamp → Unix 毫秒 ──
             (_, TimestampFormat::UnixMillis, DataType::Timestamp(TimeUnit::Nanosecond, _)) => {
                 let arr = array
                     .as_any()
@@ -106,7 +103,6 @@ impl EncoderFactory for CustomEncoderFactory {
                 Box::new(BinaryEncoder(arr))
             }
 
-            // 其他类型：降级使用 Arrow 原生 encoder
             _ => return Ok(None),
         };
 
@@ -115,7 +111,6 @@ impl EncoderFactory for CustomEncoderFactory {
 }
 
 // ---------------------------------------------------------------------------
-// UnixMillisEncoder — 各精度 Timestamp → i64 毫秒
 // ---------------------------------------------------------------------------
 
 enum UnixMillisEncoder {
@@ -138,7 +133,6 @@ impl Encoder for UnixMillisEncoder {
 }
 
 // ---------------------------------------------------------------------------
-// DecimalEncoder — Decimal128 → JSON 字符串 / Base64 Bytes
 // ---------------------------------------------------------------------------
 
 enum DecimalEncoder {
@@ -168,7 +162,6 @@ impl Encoder for DecimalEncoder {
 }
 
 // ---------------------------------------------------------------------------
-// BinaryEncoder — Binary → Base64 字符串
 // ---------------------------------------------------------------------------
 
 struct BinaryEncoder(arrow_array::BinaryArray);

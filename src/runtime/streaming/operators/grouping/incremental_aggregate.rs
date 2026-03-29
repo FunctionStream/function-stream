@@ -41,7 +41,6 @@ use std::{collections::HashMap, mem, sync::Arc};
 use tracing::{debug, warn};
 use protocol::grpc::api::UpdatingAggregateOperator;
 // =========================================================================
-// 引入全新的 Actor 框架核心协议 (取代了老旧的 ArrowOperator 和 Collector)
 // =========================================================================
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::MessageOperator;
@@ -175,7 +174,6 @@ struct Aggregator {
 }
 
 // =========================================================================
-// 核心算子结构体
 // =========================================================================
 
 pub struct IncrementalAggregatingFunc {
@@ -185,21 +183,18 @@ pub struct IncrementalAggregatingFunc {
     accumulators: UpdatingCache<Vec<IncrementalState>>,
     updated_keys: HashMap<Key, Option<Vec<ScalarValue>>>,
     
-    // 【新增】：算子自身持有输入元数据，不再依赖外部动态传入
     input_schema: Arc<FsSchema>,
     has_routing_keys: bool,
 
     sliding_state_schema: Arc<FsSchema>,
     batch_state_schema: Arc<FsSchema>,
     schema_without_metadata: Arc<Schema>,
-    /// 下游 changelog 批次 schema（与 planner `final_schema` 一致）。
     final_output_schema: Arc<Schema>,
     ttl: Duration,
     key_converter: RowConverter,
     new_generation: u64,
 }
 
-/// 全局聚合使用的空 key（单分区无 routing key）。
 static GLOBAL_KEY: LazyLock<Arc<Vec<u8>>> = LazyLock::new(|| Arc::new(Vec::new()));
 
 impl IncrementalAggregatingFunc {
@@ -389,7 +384,6 @@ impl IncrementalAggregatingFunc {
     }
 
     // =========================================================================
-    // 状态读写逻辑 (Checkpointing & Restore)
     // =========================================================================
 
     fn checkpoint_sliding(&mut self) -> DFResult<Option<Vec<ArrayRef>>> {
@@ -592,13 +586,11 @@ impl IncrementalAggregatingFunc {
         Ok(())
     }
 
-    /// 核心逻辑：从内存中提取这段时间的所有变更，生成 Changelog（追加与撤回）
     fn generate_changelog(&mut self) -> Result<Option<RecordBatch>> {
         let mut output_keys = Vec::with_capacity(self.updated_keys.len() * 2);
         let mut output_values = vec![Vec::with_capacity(self.updated_keys.len() * 2); self.aggregates.len()];
         let mut is_retracts = Vec::with_capacity(self.updated_keys.len() * 2);
 
-        // 提取变更
         let (updated_keys, updated_values): (Vec<_>, Vec<_>) = mem::take(&mut self.updated_keys).into_iter().unzip();
         let mut deleted_keys = vec![];
 
@@ -606,7 +598,6 @@ impl IncrementalAggregatingFunc {
             let append = self.evaluate(&k.0)?;
 
             if let Some(v) = retract {
-                // 如果没有变化，直接跳过
                 if v.iter().zip(append.iter()).take(v.len() - 1).all(|(a, b)| a == b) { continue; }
                 is_retracts.push(true);
                 output_keys.push(k.clone());
@@ -663,7 +654,6 @@ fn set_retract_metadata(metadata: ArrayRef, is_retract: Arc<BooleanArray>) -> Ar
 }
 
 // =========================================================================
-// 实现全新的 Actor MessageOperator 接口
 // =========================================================================
 
 #[async_trait::async_trait]
@@ -683,7 +673,6 @@ impl MessageOperator for IncrementalAggregatingFunc {
         batch: RecordBatch,
         _ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
-        // 数据进入仅更新内存中的 HashMap，暂不发送数据
         if self.has_routing_keys {
             self.keyed_aggregate(&batch)?;
         } else {
@@ -698,9 +687,7 @@ impl MessageOperator for IncrementalAggregatingFunc {
         _watermark: Watermark,
         _ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
-        // 如果是基于时间的 flush (可根据业务决定是否在水位线推进时 flush)
         if let Some(changelog_batch) = self.generate_changelog()? {
-            // Forward 表示按原路直连发送给下游
             Ok(vec![StreamOutput::Forward(changelog_batch)])
         } else {
             Ok(vec![])
@@ -747,7 +734,6 @@ impl MessageOperator for IncrementalAggregatingFunc {
 }
 
 // =========================================================================
-// 算子构造器保持对外 API 兼容
 // =========================================================================
 
 pub struct IncrementalAggregatingConstructor;

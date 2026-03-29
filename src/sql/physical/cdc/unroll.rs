@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Debezium 信封展开为内部带 retract 语义的行流。
 
 use std::any::Any;
 use std::pin::Pin;
@@ -86,7 +85,6 @@ impl DebeziumUnrollingExec {
         })
     }
 
-    /// 分布式反序列化路径：跳过 `try_new` 的 schema 校验（proto 已约定形态）。
     pub(crate) fn from_decoded_parts(
         input: Arc<dyn ExecutionPlan>,
         schema: SchemaRef,

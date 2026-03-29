@@ -10,14 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! SQL `WITH` 子句中的选项名，以及部分连接器序列化 JSON 的字段名（单一来源）。
 
-// ── 通用 / 表级 ─────────────────────────────────────────────────────────────
 
 pub const CONNECTOR: &str = "connector";
 pub const TYPE: &str = "type";
 pub const FORMAT: &str = "format";
-/// 未指定 `format` 选项时的默认格式名（值，非键）。
 pub const DEFAULT_FORMAT_VALUE: &str = "json";
 pub const BAD_DATA: &str = "bad_data";
 pub const PARTITION_BY: &str = "partition_by";
@@ -31,11 +28,9 @@ pub const IDLE_TIME: &str = "idle_time";
 pub const LOOKUP_CACHE_MAX_BYTES: &str = "lookup.cache.max_bytes";
 pub const LOOKUP_CACHE_TTL: &str = "lookup.cache.ttl";
 
-// ── 非 Kafka 连接器的 opaque JSON（`CONNECTOR` 与 WITH 选项同名）────────────
 
 pub const CONNECTION_SCHEMA: &str = "connection_schema";
 
-// ── 后端参数序列化（如 lookup）──────────────────────────────────────────────
 
 pub const ADAPTER: &str = "adapter";
 
@@ -92,6 +87,5 @@ pub const PROTOBUF_LENGTH_DELIMITED: &str = "protobuf.length_delimited";
 pub const FRAMING_METHOD: &str = "framing.method";
 pub const FRAMING_MAX_LINE_LENGTH: &str = "framing.max_line_length";
 
-// ── 从字符串 map 推断编码（catalog 等）──────────────────────────────────────
 
 pub const FORMAT_DEBEZIUM_FLAG: &str = "format.debezium";

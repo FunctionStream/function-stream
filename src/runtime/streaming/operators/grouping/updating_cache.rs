@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 按 key 的增量状态缓存：LRU + TTL（idle），供 [`super::incremental_aggregate`] 等使用。
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -35,7 +34,6 @@ struct Node<T> {
     next: Option<usize>,
 }
 
-/// 基于数组槽位 + 双向链表（LRU）的 UpdatingCache，支持按代更新与 TTL 逐出。
 pub struct UpdatingCache<T: Send + Sync> {
     map: HashMap<Key, usize>,
     nodes: Vec<Node<T>>,

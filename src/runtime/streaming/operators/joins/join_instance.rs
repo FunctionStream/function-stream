@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 瞬时 JOIN：双通道喂入 DataFusion 物理计划，水位线推进时闭合实例并抽干结果（纯内存版）。
 
 use anyhow::{anyhow, Result};
 use arrow::compute::{max, min, partition, sort_to_indices, take};
@@ -55,7 +54,6 @@ impl JoinSide {
     }
 }
 
-/// 瞬时 JOIN 执行实例：保存通道；窗口闭合时关闭通道并同步抽干 `SendableRecordBatchStream`。
 struct JoinInstance {
     left_tx: UnboundedSender<RecordBatch>,
     right_tx: UnboundedSender<RecordBatch>,
@@ -76,7 +74,6 @@ impl JoinInstance {
         }
     }
 
-    /// 关闭输入流，促使执行计划结束，并拉取全部 JOIN 结果。
     async fn close_and_drain(self) -> Result<Vec<RecordBatch>> {
         drop(self.left_tx);
         drop(self.right_tx);
@@ -264,8 +261,6 @@ impl MessageOperator for InstantJoinOperator {
     }
 }
 
-/// 与 `OperatorConstructor` 类似的配置入口；返回 [`InstantJoinOperator`]（实现 [`MessageOperator`]），
-/// 而非 `ConstructedOperator`（后者仅包装 `ArrowOperator`）。
 pub struct InstantJoinConstructor;
 
 impl InstantJoinConstructor {

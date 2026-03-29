@@ -22,13 +22,11 @@ use crate::sql::common::{CheckpointBarrier, Watermark};
 // ConstructedOperator
 // ---------------------------------------------------------------------------
 
-/// 工厂反射产出的具体算子实例
 pub enum ConstructedOperator {
     Source(Box<dyn SourceOperator>),
     Operator(Box<dyn MessageOperator>),
 }
 
-/// 多上游、被动驱动的消息算子。
 #[async_trait]
 pub trait MessageOperator: Send + 'static {
     fn name(&self) -> &str;
@@ -37,7 +35,6 @@ pub trait MessageOperator: Send + 'static {
         Ok(())
     }
 
-    /// `input_idx`：多输入拓扑下第几条边（与 `SubtaskRunner` 的 inbox 下标一致；单输入恒为 0）。
     async fn process_data(
         &mut self,
         input_idx: usize,
@@ -57,7 +54,6 @@ pub trait MessageOperator: Send + 'static {
         ctx: &mut TaskContext,
     ) -> anyhow::Result<()>;
 
-    /// 全局 checkpoint 确认后由 `SubtaskRunner` 在 [`ControlCommand::Commit`] 上调用（如 Kafka EOS 二阶段提交）。
     async fn commit_checkpoint(
         &mut self,
         _epoch: u32,
@@ -66,12 +62,10 @@ pub trait MessageOperator: Send + 'static {
         Ok(())
     }
 
-    /// 周期性时钟（如 Idle 检测）；`None` 表示不注册 tick。
     fn tick_interval(&self) -> Option<Duration> {
         None
     }
 
-    /// 与 [`Self::tick_interval`] 配套，由 `SubtaskRunner` 按固定间隔调用。
     async fn process_tick(
         &mut self,
         _tick_index: u64,

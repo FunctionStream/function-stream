@@ -10,8 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 带 TTL 的 Key-Time Join：纯内存状态版 + DataFusion 物理计划成对计算。
-//! 完全移除了底层 TableManager 和持久化状态依赖。
 
 use anyhow::{anyhow, Result};
 use arrow::compute::concat_batches;
@@ -43,7 +41,6 @@ enum JoinSide {
 }
 
 // ============================================================================
-// 纯内存状态缓冲区 (In-Memory TTL Buffer)
 // ============================================================================
 
 struct StateBuffer {
@@ -82,7 +79,6 @@ impl StateBuffer {
 }
 
 // ============================================================================
-// 算子主体
 // ============================================================================
 
 pub struct JoinWithExpirationOperator {
@@ -229,7 +225,6 @@ impl MessageOperator for JoinWithExpirationOperator {
 }
 
 // ============================================================================
-// 构造器
 // ============================================================================
 
 pub struct JoinWithExpirationConstructor;

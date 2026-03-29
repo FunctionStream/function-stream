@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 物理网络路由算子：利用 DataFusion 物理表达式提取 Key，基于 Hash 排序执行零拷贝切片路由。
 
 use anyhow::{anyhow, Result};
 use arrow_array::{Array, RecordBatch, UInt64Array};
@@ -65,7 +64,6 @@ impl MessageOperator for KeyByOperator {
             return Ok(vec![]);
         }
 
-        // 1. 执行物理表达式，提取所有 Key 列
         let mut key_columns = Vec::with_capacity(self.key_extractors.len());
         for expr in &self.key_extractors {
             let column_array = expr
@@ -76,18 +74,15 @@ impl MessageOperator for KeyByOperator {
             key_columns.push(column_array);
         }
 
-        // 2. 向量化计算 Hash 数组
         let mut hash_buffer = vec![0u64; num_rows];
         create_hashes(&key_columns, &self.random_state, &mut hash_buffer)
             .map_err(|e| anyhow!("Failed to compute hashes: {}", e))?;
 
         let hash_array = UInt64Array::from(hash_buffer);
 
-        // 3. 基于 Hash 值排序，获取重排 Indices
         let sorted_indices = sort_to_indices(&hash_array, None, None)
             .map_err(|e| anyhow!("Failed to sort hashes: {}", e))?;
 
-        // 4. 对齐重排 Hash 数组和原始 Batch
         let sorted_hashes_ref = take(&hash_array, &sorted_indices, None)?;
         let sorted_hashes = sorted_hashes_ref
             .as_any()
@@ -101,7 +96,6 @@ impl MessageOperator for KeyByOperator {
             .collect();
         let sorted_batch = RecordBatch::try_new(batch.schema(), sorted_columns?)?;
 
-        // 5. 零拷贝微批切片 —— 按 Hash 值连续段切分并标记路由意图
         let mut outputs = Vec::new();
         let mut start_idx = 0;
 

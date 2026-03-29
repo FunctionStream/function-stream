@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Kafka Source/Sink：从 [`ConnectorOp`] + [`OperatorConfig`] 构造物理算子（鉴权与 client 配置合并）。
 
 use anyhow::{anyhow, bail, Context, Result};
 use prost::Message;
@@ -43,7 +42,6 @@ use crate::sql::common::{FsSchema, OperatorConfig};
 
 const DEFAULT_SOURCE_BATCH_SIZE: usize = 1024;
 
-/// 合并连接级鉴权、全局 `connection_properties` 与表级 `client_configs`（表级覆盖同名键）。
 pub fn build_client_configs(config: &KafkaConfig, table: &KafkaTable) -> Result<HashMap<String, String>> {
     let mut client_configs = HashMap::new();
 
@@ -184,7 +182,6 @@ fn decode_operator_config(op: &ConnectorOp) -> Result<OperatorConfig> {
     })
 }
 
-/// 由 [`ConnectorOp`] 构造 Kafka Source（`connector` 须为 `kafka`）。
 pub struct KafkaSourceDispatcher;
 
 impl OperatorConstructor for KafkaSourceDispatcher {
@@ -263,7 +260,6 @@ impl OperatorConstructor for KafkaSourceDispatcher {
     }
 }
 
-/// 由 [`ConnectorOp`] 构造 Kafka Sink（`connector` 须为 `kafka`）。
 pub struct KafkaSinkDispatcher;
 
 impl OperatorConstructor for KafkaSinkDispatcher {

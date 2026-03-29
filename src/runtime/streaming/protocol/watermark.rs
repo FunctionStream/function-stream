@@ -10,12 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 水位线类型来自 `arroyo_types::Watermark`；此处提供 **多路对齐合并** 与 **单调推进** 判断。
 
 use crate::sql::common::Watermark;
 
-/// 多输入对齐：`Idle` 不参与事件时间取最小；若全部为 `Idle` 则输出 `Idle`。
-/// 任一路尚未有水位线时返回 `None`（木桶短板未齐）。
 pub fn merge_watermarks(per_input: &[Option<Watermark>]) -> Option<Watermark> {
     if per_input.iter().any(|w| w.is_none()) {
         return None;
@@ -46,7 +43,6 @@ pub fn merge_watermarks(per_input: &[Option<Watermark>]) -> Option<Watermark> {
     }
 }
 
-/// `new` 相对 `previous` 是否为 **严格推进**；`previous == None` 时恒为真。
 pub fn watermark_strictly_advances(new: Watermark, previous: Option<Watermark>) -> bool {
     match previous {
         None => true,

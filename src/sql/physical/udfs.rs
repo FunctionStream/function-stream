@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 流式 `window(start, end)` 标量 UDF。
 
 use std::any::Any;
 use std::sync::Arc;

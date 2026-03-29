@@ -10,8 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 通用无状态执行算子：驱动 DataFusion 物理计划（Filter, Case When, Scalar UDF 等），
-//! 不改变分区状态，适用于 Map / Filter 阶段。
 
 use anyhow::Result;
 use arrow_array::RecordBatch;

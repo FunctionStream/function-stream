@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 内部回撤流压回 Debezium `before` / `after` / `op` 信封。
 
 use std::any::Any;
 use std::collections::HashMap;
@@ -169,7 +168,6 @@ struct ToDebeziumStream {
     struct_projection: Vec<usize>,
 }
 
-/// 按主键 id 归并一行内的 changelog，输出 before/after 行索引与 op 字母。
 fn compact_changelog_by_id<'a>(
     num_rows: usize,
     is_retract: &'a BooleanArray,

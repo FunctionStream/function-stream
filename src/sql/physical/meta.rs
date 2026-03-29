@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Changelog 元数据列：`is_retract`、行 `id`（FixedSizeBinary）。
 
 use std::sync::{Arc, OnceLock};
 

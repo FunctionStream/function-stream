@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 无状态物理计划执行器：将单批次写入 `SingleLockedBatch` 并让 DataFusion 计划消费。
 
 use std::sync::{Arc, RwLock};
 

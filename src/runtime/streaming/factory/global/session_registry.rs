@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 运行时 UDF / UDAF / UDWF 查询表（基于 DataFusion [`SessionContext`]）。
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -21,10 +20,7 @@ use datafusion::execution::FunctionRegistry;
 use datafusion::logical_expr::planner::ExprPlanner;
 use datafusion::logical_expr::{AggregateUDF, ScalarUDF, WindowUDF};
 
-/// 为物理计划反序列化等路径提供 [`FunctionRegistry`] 实现。
 ///
-/// 由 [`crate::runtime::streaming::factory::OperatorFactory`] 持有 `Arc<Registry>`，
-/// 与各 [`crate::runtime::streaming::factory::OperatorConstructor`] 共享；须显式 [`Self::new`] 构造，无默认实例。
 pub struct Registry {
     ctx: SessionContext,
 }

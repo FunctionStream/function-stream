@@ -26,12 +26,9 @@ pub enum DecimalEncoding {
     Bytes,
 }
 
-/// 数据容错策略
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BadDataPolicy {
-    /// 遇到脏数据直接报错，导致算子 Panic 和重启
     Fail,
-    /// 丢弃脏数据，并记录监控 Metrics
     Drop,
 }
 

@@ -40,7 +40,6 @@ pub struct OperatorConfig {
     pub rate_limit: Option<RateLimit>,
     #[serde(default)]
     pub metadata_fields: Vec<MetadataField>,
-    /// Arrow 行 schema（Kafka Source/Sink 反序列化、序列化必需）。
     #[serde(default)]
     pub input_schema: Option<FsSchema>,
 }

@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 滚动（tumbling）窗口聚合：与 worker `arrow/tumbling_aggregating_window` 对齐，实现 [`MessageOperator`]。
 
 use anyhow::{anyhow, Result};
 use arrow::compute::{partition, sort_to_indices, take};

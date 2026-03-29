@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 全局算子工厂：内置窗口 / Join / KeyBy 等 Bridge。
 
 use anyhow::{anyhow, Result};
 use prost::Message;
@@ -39,10 +38,7 @@ use protocol::grpc::api::{
     WindowFunctionOperator as WindowFunctionProto,
 };
 
-/// 持有 `name → OperatorConstructor` 映射与共享 [`Registry`]。
 ///
-/// `JobManager` 在部署任务时调用 [`create_operator`]，完成从字节流到运行时算子的
-/// 反射式实例化。
 pub struct OperatorFactory {
     constructors: HashMap<String, Box<dyn OperatorConstructor>>,
     registry: Arc<Registry>,
@@ -62,7 +58,6 @@ impl OperatorFactory {
         self.constructors.insert(name.to_string(), constructor);
     }
 
-    /// 反射与实例化：从 TDD 的字节流中拉起运行时的业务算子
     pub fn create_operator(&self, name: &str, payload: &[u8]) -> Result<ConstructedOperator> {
         let ctor = self
             .constructors
@@ -78,18 +73,15 @@ impl OperatorFactory {
         ctor.with_config(payload, self.registry.clone())
     }
 
-    /// 列出已注册的所有算子名称（调试用）。
     pub fn registered_operators(&self) -> Vec<&str> {
         self.constructors.keys().map(|s| s.as_str()).collect()
     }
 
     fn register_builtins(&mut self) {
-        // ─── 窗口聚合 ───
         self.register("TumblingWindowAggregate", Box::new(TumblingWindowBridge));
         self.register("SlidingWindowAggregate", Box::new(SlidingWindowBridge));
         self.register("SessionWindowAggregate", Box::new(SessionWindowBridge));
 
-        // ─── 水位 ───
         self.register("ExpressionWatermark", Box::new(WatermarkBridge));
 
         // ─── SQL Window Function ───
@@ -100,13 +92,10 @@ impl OperatorFactory {
         self.register("InstantJoin", Box::new(InstantJoinBridge));
         self.register("LookupJoin", Box::new(LookupJoinBridge));
 
-        // ─── 增量聚合 ───
         self.register("UpdatingAggregate", Box::new(IncrementalAggregateBridge));
 
-        // ─── 物理网络路由 ───
         self.register("KeyBy", Box::new(KeyByBridge));
 
-        // ─── 透传类算子 ───
         self.register("Projection", Box::new(PassthroughConstructor("Projection")));
         self.register("ArrowValue", Box::new(PassthroughConstructor("ArrowValue")));
         self.register("ArrowKey", Box::new(PassthroughConstructor("ArrowKey")));

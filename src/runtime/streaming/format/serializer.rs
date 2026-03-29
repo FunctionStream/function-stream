@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 数据序列化器：将内存 [`RecordBatch`] 转换为二进制消息流，供 Sink 连接器发送。
 
 use anyhow::{anyhow, Result};
 use arrow_array::{Array, RecordBatch, StructArray};

@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Source / Sink 连接器协议：按 [`ConnectorOp::connector`] 分发到具体实现。
 
 use anyhow::{anyhow, Result};
 use prost::Message;

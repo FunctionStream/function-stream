@@ -38,7 +38,6 @@ pub enum OperatorName {
 }
 
 impl OperatorName {
-    /// 特性 / 指标聚合使用的 kebab-case 标签（与 [`crate::sql::common::constants::operator_feature`] 一致）。
     pub fn feature_tag(self) -> Option<&'static str> {
         match self {
             Self::ExpressionWatermark | Self::ArrowValue | Self::ArrowKey | Self::Projection => None,

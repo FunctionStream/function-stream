@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 执行层：Tokio Actor 运行容器。
 
 pub mod runner;
 pub mod source;

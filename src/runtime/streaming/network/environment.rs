@@ -16,7 +16,6 @@ use std::collections::HashMap;
 pub type VertexId = u32;
 pub type SubtaskIndex = u32;
 
-/// 物理网络路由注册表
 pub struct NetworkEnvironment {
     pub outboxes: HashMap<(VertexId, SubtaskIndex), Vec<PhysicalSender>>,
     pub inboxes: HashMap<(VertexId, SubtaskIndex), Vec<BoxedEventStream>>,

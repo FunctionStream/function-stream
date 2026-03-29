@@ -10,9 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 窗口函数（按事件时间分桶的瞬时执行）：纯内存版。
-//! 完全依赖内部的 ActiveWindowExec 通道在内存中缓冲数据，
-//! 摆脱持久化状态存储的依赖，遇到 Barrier 自动透传。
 
 use anyhow::{anyhow, Result};
 use arrow::compute::{max, min};
@@ -41,7 +38,6 @@ use crate::sql::common::time_utils::print_time;
 use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 
 // ============================================================================
-// 纯内存执行缓冲区
 // ============================================================================
 
 struct ActiveWindowExec {
@@ -77,7 +73,6 @@ impl ActiveWindowExec {
 }
 
 // ============================================================================
-// 算子主体
 // ============================================================================
 
 pub struct WindowFunctionOperator {
@@ -199,7 +194,6 @@ impl MessageOperator for WindowFunctionOperator {
 
         let mut final_outputs = Vec::new();
 
-        // 与 worker 一致：仅当桶时间戳 **严格小于** 当前事件时间水位时才结算（`watermark <= ts` 时保留）。
         let mut expired_timestamps = Vec::new();
         for &k in self.active_execs.keys() {
             if k < current_time {
@@ -233,7 +227,6 @@ impl MessageOperator for WindowFunctionOperator {
 }
 
 // ============================================================================
-// 构造器
 // ============================================================================
 
 pub struct WindowFunctionConstructor;

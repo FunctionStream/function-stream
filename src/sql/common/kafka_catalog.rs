@@ -10,22 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Kafka 表级与连接级配置（与 JSON Schema / Catalog 对齐）。
 //!
-//! 放在 [`crate::sql::common`] 而非 `runtime::streaming`，以便 **SQL 规划、Coordinator、连接配置存储**
-//! 与 **运行时工厂**（如 `ConnectorSourceDispatcher`）共用同一套类型，避免循环依赖。
 //!
-//! 与 [`crate::runtime::streaming::api::source::SourceOffset`] 语义相同但独立定义，运行时可用 `From`/`match` 做映射。
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-// ── KafkaTable：单表 Source/Sink ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct KafkaTable {
     pub topic: String,
-    /// Source / Sink 判别及各自字段；与顶层 JSON 扁平字段共用 `type` 标签。
     #[serde(flatten)]
     pub kind: TableType,
     #[serde(default)]
@@ -34,7 +28,6 @@ pub struct KafkaTable {
 }
 
 impl KafkaTable {
-    /// Schema Registry subject；未配置时与常见约定一致：`{topic}-value`。
     pub fn subject(&self) -> String {
         self.value_subject
             .clone()
@@ -82,7 +75,6 @@ pub enum SinkCommitMode {
     ExactlyOnce,
 }
 
-// ── KafkaConfig：集群 / 鉴权 / Schema Registry ───────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

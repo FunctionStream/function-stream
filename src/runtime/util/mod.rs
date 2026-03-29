@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 运行时跨子系统复用的工具函数（物理计划 proto 解码等）。
 
 mod physical_aggregate;
 

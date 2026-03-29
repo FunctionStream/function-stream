@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Debezium 与内部 changelog 行格式的互转。
 
 mod encode;
 mod unroll;

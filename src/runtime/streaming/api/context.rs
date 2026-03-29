@@ -52,15 +52,12 @@ impl TaskContext {
     }
 
     // ========================================================================
-    // 水位线与时间流管理 API
     // ========================================================================
 
-    /// 供业务算子调用：获取当前任务的安全水位线
     pub fn last_present_watermark(&self) -> Option<std::time::SystemTime> {
         self.current_watermark
     }
 
-    /// 供底座框架 (SubtaskRunner) 调用：推进本地时间，保证单调递增
     pub fn advance_watermark(&mut self, watermark: std::time::SystemTime) {
         if let Some(current) = self.current_watermark {
             if watermark > current {
@@ -72,10 +69,8 @@ impl TaskContext {
     }
 
     // ========================================================================
-    // 可观测性 API (Observability)
     // ========================================================================
 
-    /// 格式化当前 Task 的唯一标识，用于分布式追踪和日志打印
     pub fn task_identity(&self) -> String {
         format!(
             "Job[{}], Vertex[{}], Subtask[{}/{}]",
@@ -84,10 +79,8 @@ impl TaskContext {
     }
 
     // ========================================================================
-    // 背压网络发送 API
     // ========================================================================
 
-    /// 受内存池管控的数据发送：申请精准字节的内存船票后广播到所有下游
     pub async fn collect(&self, batch: RecordBatch) -> anyhow::Result<()> {
         if self.outboxes.is_empty() {
             return Ok(());
@@ -103,7 +96,6 @@ impl TaskContext {
         Ok(())
     }
 
-    /// 按 Key 哈希路由到单分区（用于 Shuffle / KeyBy）
     pub async fn collect_keyed(
         &self,
         key_hash: u64,
@@ -122,7 +114,6 @@ impl TaskContext {
         Ok(())
     }
 
-    /// 广播控制信号（如 Watermark, Barrier：不申请内存船票，保证在拥堵时畅通无阻）
     pub async fn broadcast(&self, event: StreamEvent) -> anyhow::Result<()> {
         let tracked_event = TrackedEvent::control(event);
         for outbox in &self.outboxes {

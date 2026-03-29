@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Source / Sink 连接器：`ConnectorOp` 分发与各连接器实现（如 Kafka）。
 
 mod dispatchers;
 pub mod kafka;

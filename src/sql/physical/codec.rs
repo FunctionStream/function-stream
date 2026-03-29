@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 分布式物理计划 proto 编解码（`FsExecNode`）。
 
 use std::sync::Arc;
 

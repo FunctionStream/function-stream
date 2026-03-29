@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 协议层：数据事件、控制命令、水位线合并与比较语义。
 
 pub mod control;
 pub mod event;

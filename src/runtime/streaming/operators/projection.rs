@@ -10,8 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 高性能投影算子：直接操作 Arrow Array 执行列映射与标量运算，
-//! 避开 DataFusion 执行树开销，适用于 SELECT 字段筛选和简单标量计算。
 
 use anyhow::Result;
 use arrow_array::RecordBatch;

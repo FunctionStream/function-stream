@@ -18,7 +18,6 @@ use tracing::{debug, warn};
 
 use super::ticket::MemoryTicket;
 
-/// 工业级全局内存池 (Global Memory Pool)
 #[derive(Debug)]
 pub struct MemoryPool {
     max_bytes: usize,

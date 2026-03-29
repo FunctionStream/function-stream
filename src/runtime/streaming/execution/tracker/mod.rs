@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 协调层：屏障对齐与多路水位线追踪。
 
 pub mod barrier_aligner;
 pub mod watermark_tracker;

@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 表达式水位生成器：与 worker `arrow/watermark_generator` 对齐，通过 [`StreamOutput::Watermark`] 向下游广播。
 
 use anyhow::{anyhow, Result};
 use arrow::compute::kernels::aggregate;
@@ -35,7 +34,6 @@ use protocol::grpc::api::ExpressionWatermarkConfig;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_millis, CheckpointBarrier, FsSchema, Watermark};
 
-/// 需持久化到 Checkpoint 的状态（与 worker `WatermarkGeneratorState` 语义一致）。
 #[derive(Debug, Copy, Clone, Encode, Decode, PartialEq, Eq)]
 pub struct WatermarkGeneratorState {
     pub last_watermark_emitted_at: SystemTime,
@@ -86,8 +84,6 @@ impl WatermarkGeneratorOperator {
         Some(from_nanos(max_ts as u128))
     }
 
-    /// 水位线计算必须取评估后数组的 **Max**，不能取 Min：同一 Batch 内多行时，
-    /// Min 会低估“已见事件时间”的安全基线（例如 ts-5s 在两行上 min 会偏早）。
     fn evaluate_watermark(&self, batch: &RecordBatch) -> Result<SystemTime> {
         let watermark_array = self
             .expression
@@ -137,14 +133,12 @@ impl MessageOperator for WatermarkGeneratorOperator {
 
         let new_watermark = self.evaluate_watermark(&batch)?;
 
-        // 死守单调递增底线，绝不倒流
         self.state.max_watermark = self.state.max_watermark.max(new_watermark);
 
         let time_since_last_emit = max_batch_ts
             .duration_since(self.state.last_watermark_emitted_at)
             .unwrap_or(Duration::ZERO);
 
-        // 空闲唤醒或达到发射间隔则发射水印
         if self.is_idle || time_since_last_emit > self.interval {
             debug!(
                 "[{}] emitting expression watermark {}",
@@ -181,7 +175,6 @@ impl MessageOperator for WatermarkGeneratorOperator {
                 .last_event_wall
                 .elapsed()
                 .unwrap_or(Duration::ZERO);
-            // 系统时钟超时，发射 Idle 水印，避免下游一直等不到推进
             if !self.is_idle && elapsed > idle_timeout {
                 info!(
                     "task [{}] entering Idle after {:?}",

@@ -10,9 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 滑动窗口聚合：纯内存版。
-//! 完全依赖内部的 TieredRecordBatchHolder 和 ActiveBin 在内存中进行计算，
-//! 摆脱 TableManager 依赖，遇到 Barrier 自动透传。
 
 use anyhow::{anyhow, bail, Result};
 use arrow::compute::{partition, sort_to_indices, take};
@@ -45,8 +42,6 @@ use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, Watermark};
 use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 // ============================================================================
-// 纯内存状态：阶梯式时间面板 (Tiered panes)
-// 这部分本身就是极佳的内存数据结构，原样保留！
 // ============================================================================
 
 #[derive(Default, Debug)]
@@ -217,7 +212,6 @@ impl TieredRecordBatchHolder {
 }
 
 // ============================================================================
-// Per-bin partial aggregation (纯内存缓冲区)
 // ============================================================================
 
 struct ActiveBin {
@@ -264,7 +258,6 @@ impl ActiveBin {
 }
 
 // ============================================================================
-// 算子主体
 // ============================================================================
 
 pub struct SlidingWindowOperator {
@@ -473,7 +466,6 @@ impl MessageOperator for SlidingWindowOperator {
 }
 
 // ============================================================================
-// 构造器
 // ============================================================================
 
 pub struct SlidingAggregatingWindowConstructor;

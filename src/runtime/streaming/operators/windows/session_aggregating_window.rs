@@ -10,8 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 会话窗口聚合：纯内存版，完全脱离持久化状态存储。
-//! 利用 BTreeMap 充当优先队列，数据天然在内存中进行 Gap 合并与触发。
 
 use anyhow::{anyhow, bail, Context, Result};
 use arrow::compute::{
@@ -47,7 +45,6 @@ use crate::sql::common::converter::Converter;
 use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 use crate::sql::schema::utils::window_arrow_struct;
 // ============================================================================
-// 领域模型与纯内存状态
 // ============================================================================
 
 struct SessionWindowConfig {
@@ -179,7 +176,7 @@ struct SessionWindowResult {
 struct KeySessionState {
     config: Arc<SessionWindowConfig>,
     active_session: Option<ActiveSession>,
-    buffered_batches: BTreeMap<SystemTime, Vec<RecordBatch>>, // 纯内存缓冲
+    buffered_batches: BTreeMap<SystemTime, Vec<RecordBatch>>,
 }
 
 impl KeySessionState {
@@ -335,7 +332,6 @@ fn build_session_output_schema(
 }
 
 // ============================================================================
-// 算子本体：负责处理输入数据与时间流，路由给具体的 KeySessionState
 // ============================================================================
 
 pub struct SessionWindowOperator {
@@ -662,7 +658,6 @@ impl MessageOperator for SessionWindowOperator {
 }
 
 // ============================================================================
-// 构造器
 // ============================================================================
 
 pub struct SessionAggregatingWindowConstructor;

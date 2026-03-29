@@ -10,12 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 物理网络路由算子：利用 DataFusion 物理表达式提取 Key，基于 Hash 排序执行零拷贝切片路由。
 //!
-//! 提供两种算子：
-//! - [`KeyByOperator`]：纯 Key 提取 + Hash 路由，适用于简单的 GROUP BY / PARTITION BY。
-//! - [`KeyExecutionOperator`]：先执行完整物理计划，再按指定列 Hash 路由，适用于需要先做
-//!   计算（如聚合结果映射）再分区的场景。
 
 use anyhow::{anyhow, Result};
 use arrow_array::{Array, ArrayRef, RecordBatch, UInt64Array};
@@ -72,7 +67,6 @@ impl MessageOperator for KeyByOperator {
             return Ok(vec![]);
         }
 
-        // 1. 执行物理表达式，提取所有 Key 列
         let mut key_columns = Vec::with_capacity(self.key_extractors.len());
         for expr in &self.key_extractors {
             let column_array = expr
@@ -83,18 +77,15 @@ impl MessageOperator for KeyByOperator {
             key_columns.push(column_array);
         }
 
-        // 2. 向量化计算 Hash 数组
         let mut hash_buffer = vec![0u64; num_rows];
         create_hashes(&key_columns, &self.random_state, &mut hash_buffer)
             .map_err(|e| anyhow!("Failed to compute hashes: {}", e))?;
 
         let hash_array = UInt64Array::from(hash_buffer);
 
-        // 3. 基于 Hash 值排序，获取重排 Indices
         let sorted_indices = sort_to_indices(&hash_array, None, None)
             .map_err(|e| anyhow!("Failed to sort hashes: {}", e))?;
 
-        // 4. 对齐重排 Hash 数组和原始 Batch
         let sorted_hashes_ref = take(&hash_array, &sorted_indices, None)?;
         let sorted_hashes = sorted_hashes_ref
             .as_any()
@@ -108,7 +99,6 @@ impl MessageOperator for KeyByOperator {
             .collect();
         let sorted_batch = RecordBatch::try_new(batch.schema(), sorted_columns?)?;
 
-        // 5. 零拷贝微批切片 —— 按 Hash 值连续段切分并标记路由意图
         let mut outputs = Vec::new();
         let mut start_idx = 0;
 
@@ -177,12 +167,8 @@ impl KeyByConstructor {
 }
 
 // ===========================================================================
-// KeyExecutionOperator — 先执行物理计划，再按 Key 列 Hash 路由
 // ===========================================================================
 
-/// 键控路由执行算子：先驱动 DataFusion 物理计划完成计算（如聚合结果映射），
-/// 再根据 `key_fields` 指定列计算 Hash 并以 [`StreamOutput::Keyed`] 输出，
-/// 实现算子内部分区。
 pub struct KeyExecutionOperator {
     name: String,
     executor: StatelessPhysicalExecutor,
@@ -219,7 +205,6 @@ impl MessageOperator for KeyExecutionOperator {
     ) -> Result<Vec<StreamOutput>> {
         let mut outputs = Vec::new();
 
-        // 1. 执行物理转换
         let mut stream = self.executor.process_batch(batch).await?;
 
         while let Some(batch_result) = stream.next().await {
@@ -229,7 +214,6 @@ impl MessageOperator for KeyExecutionOperator {
                 continue;
             }
 
-            // 2. 提取 Key 列并计算 Hash
             let key_columns: Vec<ArrayRef> = self
                 .key_fields
                 .iter()
@@ -241,7 +225,6 @@ impl MessageOperator for KeyExecutionOperator {
                 .map_err(|e| anyhow!("hash compute: {e}"))?;
             let hash_array = UInt64Array::from(hash_buffer);
 
-            // 3. 基于 Hash 排序，获取重排 Indices
             let sorted_indices = sort_to_indices(&hash_array, None, None)
                 .map_err(|e| anyhow!("sort hashes: {e}"))?;
 
@@ -259,7 +242,6 @@ impl MessageOperator for KeyExecutionOperator {
             let sorted_batch =
                 RecordBatch::try_new(out_batch.schema(), sorted_columns?)?;
 
-            // 4. 零拷贝切片 —— 按 Hash 连续段分组，标记 Keyed 路由意图
             let mut start_idx = 0;
             while start_idx < num_rows {
                 let current_hash = sorted_hashes.value(start_idx);

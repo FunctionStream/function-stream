@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 无界/锁控 `RecordBatch` 数据源与规划期占位 `FsMemExec`。
 
 use std::any::Any;
 use std::mem;

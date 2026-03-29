@@ -32,7 +32,6 @@ use crate::runtime::streaming::execution::tracker::{
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
 // ==========================================
-// 第一部分：逻辑处理层 - 算子融合链 (Logical Driver)
 // ==========================================
 
 #[async_trait]
@@ -62,7 +61,6 @@ impl ChainedDriver {
         Self { operator, next }
     }
 
-    /// 从后往前组装算子，构建责任链
     pub fn build_chain(mut operators: Vec<Box<dyn MessageOperator>>) -> Option<Box<dyn OperatorDrive>> {
         if operators.is_empty() {
             return None;
@@ -227,7 +225,6 @@ impl OperatorDrive for ChainedDriver {
 }
 
 // ==========================================
-// 第二部分：物理执行层 - 流水线 (Physical Driver)
 // ==========================================
 
 pub struct Pipeline {
@@ -238,7 +235,6 @@ pub struct Pipeline {
 
     wm_tracker: WatermarkTracker,
     barrier_aligner: BarrierAligner,
-    /// Barrier 未对齐时从轮询池移除的输入流（背压）
     paused_streams: Vec<Option<BoxedEventStream>>,
 }
 
@@ -376,5 +372,4 @@ impl Pipeline {
     }
 }
 
-/// 与执行引擎语义对齐的别名
 pub type SubtaskRunner = Pipeline;

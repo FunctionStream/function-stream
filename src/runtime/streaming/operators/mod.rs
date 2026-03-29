@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 内置算子。
 
 pub mod grouping;
 pub mod joins;
@@ -44,7 +43,6 @@ use async_trait::async_trait;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
-/// 透传数据。
 pub struct PassthroughOperator {
     name: String,
 }

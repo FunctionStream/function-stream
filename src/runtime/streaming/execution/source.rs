@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 源任务物理驱动：控制面优先、`fetch_next` 非阻塞契约、可选融合算子链下推。
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::source::{SourceEvent, SourceOperator};
@@ -30,7 +29,6 @@ pub const WATERMARK_EMIT_INTERVAL: Duration = Duration::from_millis(200);
 
 pub struct SourceRunner {
     operator: Box<dyn SourceOperator>,
-    /// 有链时数据与信号经链尾再 `collect` / `broadcast`；无链则直接走 `TaskContext`。
     chain_head: Option<Box<dyn OperatorDrive>>,
     ctx: TaskContext,
     control_rx: Receiver<ControlCommand>,

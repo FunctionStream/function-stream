@@ -10,14 +10,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 控制平面：与 [`super::event::StreamEvent`] 队列分离的高优先级指令。
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use crate::sql::common::CheckpointBarrier;
 
-/// 可序列化的 barrier 载荷（`CheckpointBarrier` 本身未实现 `serde`，供 RPC / 持久化使用）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckpointBarrierWire {
     pub epoch: u32,
@@ -55,7 +53,6 @@ impl From<CheckpointBarrierWire> for CheckpointBarrier {
     }
 }
 
-/// JobManager / 调度器下发的高优控制指令。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ControlCommand {
     Start,
@@ -63,7 +60,6 @@ pub enum ControlCommand {
     DropState,
     Commit { epoch: u32 },
     UpdateConfig { config_json: String },
-    /// 通常由 [`crate::runtime::streaming::SourceRunner`] 接收，源头落盘后向下游注入 `Barrier`。
     TriggerCheckpoint { barrier: CheckpointBarrierWire },
 }
 

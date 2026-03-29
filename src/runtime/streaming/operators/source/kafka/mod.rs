@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Kafka 源算子：实现 [`crate::runtime::streaming::api::source::SourceOperator`]，由 [`crate::runtime::streaming::execution::SourceRunner`] 轮询 `fetch_next`。
 
 use anyhow::{anyhow, Context as _, Result};
 use arrow_array::RecordBatch;
@@ -31,7 +30,6 @@ use crate::runtime::streaming::format::{BadDataPolicy, DataDeserializer, Format}
 use crate::sql::common::{CheckpointBarrier, MetadataField};
 use crate::sql::common::fs_schema::FieldValueType;
 // ============================================================================
-// 1. 领域模型：Kafka 状态与配置
 // ============================================================================
 
 #[derive(Copy, Clone, Debug, Encode, Decode, PartialEq, PartialOrd)]
@@ -40,7 +38,6 @@ pub struct KafkaState {
     offset: i64,
 }
 
-/// 增量反序列化缓冲 trait：Source 逐条 `deserialize_slice`，攒满或超时后 `flush_buffer` 输出 [`RecordBatch`]。
 pub trait BatchDeserializer: Send + 'static {
     fn deserialize_slice(
         &mut self,
@@ -53,15 +50,12 @@ pub trait BatchDeserializer: Send + 'static {
 
     fn flush_buffer(&mut self) -> Result<Option<RecordBatch>>;
 
-    /// 缓冲区是否无任何待反序列化数据。
     fn is_empty(&self) -> bool;
 }
 
 // ---------------------------------------------------------------------------
-// BufferedDeserializer — 基于 DataDeserializer 的默认 BatchDeserializer 实现
 // ---------------------------------------------------------------------------
 
-/// 将 [`DataDeserializer`] 包装为 [`BatchDeserializer`]：逐条缓存 payload，达到阈值后批量反序列化。
 pub struct BufferedDeserializer {
     inner: DataDeserializer,
     buffer: Vec<Vec<u8>>,
@@ -120,7 +114,6 @@ impl SourceOffset {
 }
 
 // ============================================================================
-// 2. 核心算子外壳
 // ============================================================================
 
 const KAFKA_POLL_TIMEOUT: Duration = Duration::from_millis(100);
@@ -144,7 +137,6 @@ pub struct KafkaSourceOperator {
     current_offsets: HashMap<i32, i64>,
     is_empty_assignment: bool,
 
-    /// 上次成功 flush 出 batch 的时间，用于低流量时按逗留时间强制发车。
     last_flush_time: Instant,
 }
 
@@ -251,7 +243,6 @@ impl KafkaSourceOperator {
 }
 
 // ============================================================================
-// 3. 实现 SourceOperator 协议
 // ============================================================================
 
 #[async_trait]
@@ -288,7 +279,6 @@ impl SourceOperator for KafkaSourceOperator {
                 let offset = msg.offset();
                 let timestamp = msg.timestamp().to_millis().unwrap_or(0);
 
-                // 无论是否有 payload（含 Tombstone），都必须推进位点，否则会永久卡在墓碑消息上。
                 self.current_offsets.insert(partition, offset);
 
                 if let Some(payload) = msg.payload() {
@@ -345,7 +335,6 @@ impl SourceOperator for KafkaSourceOperator {
                 Err(anyhow!("Kafka error: {}", e))
             }
             Err(_) => {
-                // 超时内无新消息：若缓冲区仍有积压，强制 flush，避免低流量下数据长期滞留。
                 if !self.deserializer.is_empty() {
                     if let Some(batch) = self.deserializer.flush_buffer()? {
                         self.last_flush_time = Instant::now();

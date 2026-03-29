@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 全局运行时资源：共享 [`Registry`]（Session + UDF 表），与连接器协议无关。
 
 mod session_registry;
 

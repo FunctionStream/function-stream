@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Kafka Sink：实现 [`crate::runtime::streaming::api::operator::MessageOperator`]，支持 At-Least-Once 与 Exactly-Once（事务 + 二阶段提交）。
 
 use anyhow::{anyhow, bail, Result};
 use arrow_array::cast::AsArray;
@@ -34,7 +33,6 @@ use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::constants::factory_operator_name;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
 // ============================================================================
-// 1. 领域模型：一致性级别与事务状态机
 // ============================================================================
 
 #[derive(Debug, Clone)]
@@ -50,7 +48,6 @@ struct TransactionalState {
 }
 
 // ============================================================================
-// 2. 核心算子外壳
 // ============================================================================
 
 pub struct KafkaSinkOperator {
@@ -205,7 +202,6 @@ fn row_key_bytes(batch: &RecordBatch, row: usize, col: usize) -> Option<Vec<u8>>
 }
 
 // ============================================================================
-// 3. 实现 MessageOperator 协议
 // ============================================================================
 
 #[async_trait]

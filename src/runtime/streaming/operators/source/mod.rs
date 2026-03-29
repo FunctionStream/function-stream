@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 与外部系统对接的源实现（Kafka 等）。
 
 pub mod kafka;
 

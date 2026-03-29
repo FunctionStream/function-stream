@@ -18,7 +18,6 @@ use tokio::sync::mpsc;
 use crate::runtime::streaming::protocol::tracked::TrackedEvent;
 
 pub struct EdgeManager {
-    // PipelineID -> (输入 Receiver, 输出 Sender 列表)
     endpoints: HashMap<u32, (Option<mpsc::Receiver<TrackedEvent>>, Vec<mpsc::Sender<TrackedEvent>>)>,
 }
 

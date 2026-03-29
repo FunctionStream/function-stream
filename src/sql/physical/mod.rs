@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 流式物理执行扩展：元数据列、UDF、内存/无界 Reader、CDC 与 proto 编解码。
 
 mod cdc;
 mod codec;

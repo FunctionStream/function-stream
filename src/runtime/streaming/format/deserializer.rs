@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! 数据反序列化器：将外界收到的字节流转化为结构化 [`RecordBatch`]。
 
 use anyhow::{anyhow, Result};
 use arrow_array::builder::StringBuilder;
@@ -36,7 +35,6 @@ impl DataDeserializer {
         }
     }
 
-    /// 工业级反序列化：包含完整的脏数据容错兜底
     pub fn deserialize_batch(&self, messages: &[&[u8]]) -> Result<RecordBatch> {
         match &self.format {
             Format::Json(_) => self.deserialize_json(messages),

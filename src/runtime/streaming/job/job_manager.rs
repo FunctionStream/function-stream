@@ -61,9 +61,7 @@ impl JobManager {
             .ok_or_else(|| anyhow!("JobManager not initialized. Call init() first."))
     }
 
-    /// 核心主干：从逻辑计划点火物理流水线。
     ///
-    /// `job_id` 由调用方指定（须全局唯一），用于线程命名、`PhysicalExecutionGraph` 与 [`Self::stop_job`] 等。
     pub async fn submit_job(&self, job_id: String, program: FsProgram) -> anyhow::Result<String> {
         let mut edge_manager = EdgeManager::build(&program.nodes, &program.edges);
         let mut pipelines = HashMap::new();
@@ -150,7 +148,6 @@ impl JobManager {
     }
 
     // ========================================================================
-    // 内部私有方法
     // ========================================================================
 
     fn build_operator_chain(
