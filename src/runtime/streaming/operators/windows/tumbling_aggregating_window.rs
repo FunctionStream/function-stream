@@ -39,7 +39,7 @@ use tracing::warn;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::MessageOperator;
 use async_trait::async_trait;
-use crate::runtime::streaming::api::operator::Registry;
+use crate::runtime::streaming::factory::Registry;
 use protocol::grpc::api::TumblingWindowAggregateOperator;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, Watermark};

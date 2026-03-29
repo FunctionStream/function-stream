@@ -31,6 +31,7 @@ use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::MessageOperator;
 use crate::runtime::streaming::format::DataSerializer;
 use crate::runtime::streaming::StreamOutput;
+use crate::sql::common::constants::factory_operator_name;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
 // ============================================================================
 // 1. 领域模型：一致性级别与事务状态机
@@ -210,7 +211,7 @@ fn row_key_bytes(batch: &RecordBatch, row: usize, col: usize) -> Option<Vec<u8>>
 #[async_trait]
 impl MessageOperator for KafkaSinkOperator {
     fn name(&self) -> &str {
-        "KafkaSink"
+        factory_operator_name::KAFKA_SINK
     }
 
     async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {

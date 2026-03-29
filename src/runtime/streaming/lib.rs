@@ -14,7 +14,6 @@
 //! Streaming actor runtime (vendored from Arroyo `arroyo-actor-runtime`).
 
 pub mod api;
-pub mod arrow;
 pub mod error;
 pub mod execution;
 pub mod factory;

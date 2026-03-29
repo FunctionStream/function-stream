@@ -10,19 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-use crate::sql::logical_node::logical::LogicalProgram;
+//! 运行时跨子系统复用的工具函数（物理计划 proto 解码等）。
 
-/// Plan node representing a fully resolved streaming table (DDL).
-#[derive(Debug)]
-pub struct StreamingTable {
-    pub name: String,
-    pub comment: Option<String>,
-    pub program: LogicalProgram,
-}
+mod physical_aggregate;
 
-impl PlanNode for StreamingTable {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_table(self, context)
-    }
-}
+pub use physical_aggregate::decode_aggregate;

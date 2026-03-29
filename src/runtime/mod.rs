@@ -15,6 +15,7 @@
 pub mod buffer_and_event;
 pub mod common;
 pub mod streaming;
+pub mod util;
 pub mod task;
 pub mod taskexecutor;
 pub mod wasm;

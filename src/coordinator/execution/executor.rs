@@ -284,8 +284,9 @@ impl PlanVisitor for Executor {
             let fs_program: FsProgram = plan.program.clone().into();
             let job_manager: Arc<JobManager> = Arc::clone(&self.job_manager);
 
+            let job_id = plan.name.clone();
             let job_id = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(job_manager.submit_job(fs_program))
+                tokio::runtime::Handle::current().block_on(job_manager.submit_job(job_id, fs_program))
             })
             .map_err(|e| ExecuteError::Internal(format!("Failed to submit streaming job: {e}")))?;
 

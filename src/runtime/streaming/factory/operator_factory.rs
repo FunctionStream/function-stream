@@ -10,15 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! 全局算子工厂：内置窗口 / Join / KeyBy 等 Bridge。
+
 use anyhow::{anyhow, Result};
 use prost::Message;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::sql::common::constants::connector_type;
-use crate::runtime::streaming::api::operator::Registry;
-
+use super::operator_constructor::OperatorConstructor;
 use crate::runtime::streaming::api::operator::ConstructedOperator;
+use crate::runtime::streaming::factory::global::Registry;
 use crate::runtime::streaming::operators::PassthroughOperator;
 use crate::runtime::streaming::operators::grouping::IncrementalAggregatingConstructor;
 use crate::runtime::streaming::operators::joins::{
@@ -31,33 +32,12 @@ use crate::runtime::streaming::operators::windows::{
     TumblingAggregateWindowConstructor, WindowFunctionConstructor,
 };
 
-pub mod kafka_factory;
-
-use kafka_factory::{register_kafka_plugins, KafkaSinkDispatcher, KafkaSourceDispatcher};
-
 use protocol::grpc::api::{
-    ConnectorOp, ExpressionWatermarkConfig,
-    JoinOperator as JoinOperatorProto,
-    KeyPlanOperator as KeyByProto,
-    SessionWindowAggregateOperator, SlidingWindowAggregateOperator,
+    ExpressionWatermarkConfig, JoinOperator as JoinOperatorProto,
+    KeyPlanOperator as KeyByProto, SessionWindowAggregateOperator, SlidingWindowAggregateOperator,
     TumblingWindowAggregateOperator, UpdatingAggregateOperator,
     WindowFunctionOperator as WindowFunctionProto,
 };
-
-// ---------------------------------------------------------------------------
-// 1. Core Trait (工厂契约)
-// ---------------------------------------------------------------------------
-
-/// 算子构造器 trait：每个实现者负责从 protobuf 字节流反序列化配置并构造 [`ConstructedOperator`]。
-///
-/// 外部插件可实现此 trait 并通过 [`OperatorFactory::register`] 注入。
-pub trait OperatorConstructor: Send + Sync {
-    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator>;
-}
-
-// ---------------------------------------------------------------------------
-// 2. 工业级工厂注册表
-// ---------------------------------------------------------------------------
 
 /// 持有 `name → OperatorConstructor` 映射与共享 [`Registry`]。
 ///
@@ -126,22 +106,15 @@ impl OperatorFactory {
         // ─── 物理网络路由 ───
         self.register("KeyBy", Box::new(KeyByBridge));
 
-        // ─── 连接器 Source / Sink（分发器模式，不硬编码具体连接器） ───
-        self.register("ConnectorSource", Box::new(ConnectorSourceDispatcher));
-        self.register("ConnectorSink", Box::new(ConnectorSinkDispatcher));
-
         // ─── 透传类算子 ───
         self.register("Projection", Box::new(PassthroughConstructor("Projection")));
         self.register("ArrowValue", Box::new(PassthroughConstructor("ArrowValue")));
         self.register("ArrowKey", Box::new(PassthroughConstructor("ArrowKey")));
 
-        register_kafka_plugins(self);
+        crate::runtime::streaming::factory::register_builtin_connectors(self);
+        crate::runtime::streaming::factory::register_kafka_connector_plugins(self);
     }
 }
-
-// ---------------------------------------------------------------------------
-// 3. 构造器适配 — 解码 protobuf 后委托给各算子模块的 Constructor
-// ---------------------------------------------------------------------------
 
 struct TumblingWindowBridge;
 impl OperatorConstructor for TumblingWindowBridge {
@@ -239,46 +212,6 @@ impl OperatorConstructor for KeyByBridge {
         Ok(ConstructedOperator::Operator(Box::new(op)))
     }
 }
-
-// ---------------------------------------------------------------------------
-// 4. 连接器分发抽象 (Connector Dispatcher) — 不硬编码具体连接器
-// ---------------------------------------------------------------------------
-
-pub struct ConnectorSourceDispatcher;
-
-impl OperatorConstructor for ConnectorSourceDispatcher {
-    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        let op = ConnectorOp::decode(config)
-            .map_err(|e| anyhow!("decode ConnectorOp (source): {e}"))?;
-
-        match op.connector.as_str() {
-            ct if ct == connector_type::KAFKA => KafkaSourceDispatcher.with_config(config, registry),
-            ct if ct == connector_type::REDIS => Err(anyhow!(
-                "ConnectorSource '{}' factory wiring not yet implemented",
-                op.connector
-            )),
-            other => Err(anyhow!("Unsupported source connector type: {}", other)),
-        }
-    }
-}
-
-pub struct ConnectorSinkDispatcher;
-
-impl OperatorConstructor for ConnectorSinkDispatcher {
-    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        let op = ConnectorOp::decode(config)
-            .map_err(|e| anyhow!("decode ConnectorOp (sink): {e}"))?;
-
-        match op.connector.as_str() {
-            ct if ct == connector_type::KAFKA => KafkaSinkDispatcher.with_config(config, registry),
-            other => Err(anyhow!("Unsupported sink connector type: {}", other)),
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 5. 透传类算子
-// ---------------------------------------------------------------------------
 
 pub struct PassthroughConstructor(pub &'static str);
 

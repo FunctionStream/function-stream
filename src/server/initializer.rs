@@ -152,7 +152,7 @@ fn initialize_python_service(config: &GlobalConfig) -> Result<()> {
 }
 
 fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
-    use crate::runtime::streaming::api::operator::Registry;
+    use crate::runtime::streaming::factory::Registry;
     use crate::runtime::streaming::factory::OperatorFactory;
     use crate::runtime::streaming::job::JobManager;
     use std::sync::Arc;

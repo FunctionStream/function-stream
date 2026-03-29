@@ -10,19 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-use crate::sql::logical_node::logical::LogicalProgram;
+//! 全局运行时资源：共享 [`Registry`]（Session + UDF 表），与连接器协议无关。
 
-/// Plan node representing a fully resolved streaming table (DDL).
-#[derive(Debug)]
-pub struct StreamingTable {
-    pub name: String,
-    pub comment: Option<String>,
-    pub program: LogicalProgram,
-}
+mod session_registry;
 
-impl PlanNode for StreamingTable {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_table(self, context)
-    }
-}
+pub use session_registry::Registry;

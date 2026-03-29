@@ -98,6 +98,15 @@ pub mod runtime_operator_kind {
     pub const STREAMING_WINDOW_EVALUATOR: &str = "streaming_window_evaluator";
 }
 
+// ── Worker [`OperatorFactory`] 注册键（须与任务包 `operator_name`、`OperatorName::Display` 一致）──
+
+pub mod factory_operator_name {
+    pub const CONNECTOR_SOURCE: &str = "ConnectorSource";
+    pub const CONNECTOR_SINK: &str = "ConnectorSink";
+    pub const KAFKA_SOURCE: &str = "KafkaSource";
+    pub const KAFKA_SINK: &str = "KafkaSink";
+}
+
 // ── Debezium CDC 信封字段 ───────────────────────────────────────────────────
 
 pub mod cdc {

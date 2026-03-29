@@ -10,19 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
-use crate::sql::logical_node::logical::LogicalProgram;
+//! Source / Sink 连接器：`ConnectorOp` 分发与各连接器实现（如 Kafka）。
 
-/// Plan node representing a fully resolved streaming table (DDL).
-#[derive(Debug)]
-pub struct StreamingTable {
-    pub name: String,
-    pub comment: Option<String>,
-    pub program: LogicalProgram,
-}
+mod dispatchers;
+pub mod kafka;
 
-impl PlanNode for StreamingTable {
-    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
-        visitor.visit_streaming_table(self, context)
-    }
-}
+pub use dispatchers::{ConnectorSinkDispatcher, ConnectorSourceDispatcher};
+pub use kafka::{KafkaSinkDispatcher, KafkaSourceDispatcher};

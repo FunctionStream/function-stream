@@ -38,9 +38,6 @@ protocol = { path = "./protocol" }
 prost = "0.13"
 rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi"] }
 crossbeam-channel = "0.5"
-pest = "2.7"
-pest_derive = "2.7"
-clap = { version = "4.5", features = ["derive"] }
 wasmtime = { version = "41.0.3", features = ["component-model", "async"] }
 base64 = "0.22"
 wasmtime-wasi = "41.0.3"
@@ -63,7 +60,6 @@ petgraph = "0.7"
 rand = { version = "0.8", features = ["small_rng"] }
 itertools = "0.14"
 strum = { version = "0.26", features = ["derive"] }
-datafusion-functions-aggregate = {git = 'https://github.com/ArroyoSystems/arrow-datafusion', branch = '48.0.1/arroyo'}
 
 typify = { git = 'https://github.com/ArroyoSystems/typify.git', branch = 'arroyo' }
 parquet = {git = 'https://github.com/ArroyoSystems/arrow-rs', branch = '55.2.0/parquet'}

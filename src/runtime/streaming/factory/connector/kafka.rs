@@ -21,9 +21,10 @@ use std::sync::Arc;
 use protocol::grpc::api::ConnectorOp;
 use tracing::{info, warn};
 
-use super::OperatorConstructor;
-use crate::runtime::streaming::api::operator::{ConstructedOperator, Registry};
+use crate::runtime::streaming::api::operator::ConstructedOperator;
 use crate::runtime::streaming::api::source::SourceOffset;
+use crate::runtime::streaming::factory::global::Registry;
+use crate::runtime::streaming::factory::operator_constructor::OperatorConstructor;
 use crate::runtime::streaming::format::{
     BadDataPolicy, DataSerializer, DecimalEncoding as RtDecimalEncoding, Format as RuntimeFormat,
     JsonFormat as RuntimeJsonFormat, TimestampFormat as RtTimestampFormat,
@@ -331,11 +332,4 @@ impl OperatorConstructor for KafkaSinkDispatcher {
 
         Ok(ConstructedOperator::Operator(Box::new(sink_op)))
     }
-}
-
-/// 注册 `KafkaSource` / `KafkaSink` 构造器（由 [`super::OperatorFactory::register_builtins`] 调用）。
-pub fn register_kafka_plugins(factory: &mut super::OperatorFactory) {
-    factory.register("KafkaSource", Box::new(KafkaSourceDispatcher));
-    factory.register("KafkaSink", Box::new(KafkaSinkDispatcher));
-    info!("Registered Kafka connector plugins (KafkaSource, KafkaSink)");
 }

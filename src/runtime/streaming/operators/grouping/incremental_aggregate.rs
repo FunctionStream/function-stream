@@ -44,8 +44,9 @@ use protocol::grpc::api::UpdatingAggregateOperator;
 // 引入全新的 Actor 框架核心协议 (取代了老旧的 ArrowOperator 和 Collector)
 // =========================================================================
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::{MessageOperator, Registry};
-use crate::runtime::streaming::arrow::decode_aggregate;
+use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::factory::Registry;
+use crate::runtime::util::decode_aggregate;
 use crate::runtime::streaming::operators::{Key, UpdatingCache};
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{to_nanos, CheckpointBarrier, FsSchema, Watermark, TIMESTAMP_FIELD, UPDATING_META_FIELD};

@@ -17,5 +17,5 @@ pub mod operator;
 pub mod source;
 
 pub use context::TaskContext;
-pub use operator::{ConstructedOperator, MessageOperator, Registry};
+pub use operator::{ConstructedOperator, MessageOperator};
 pub use source::{SourceEvent, SourceOffset, SourceOperator};

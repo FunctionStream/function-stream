@@ -155,7 +155,6 @@ impl LogicalPlanVisitor {
         Ok(StreamingTable {
             name: sink_table_name,
             comment: comment.clone(),
-            source_table: sink_definition,
             program: validated_program,
         })
     }

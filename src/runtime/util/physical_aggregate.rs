@@ -10,9 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Arrow / DataFusion 辅助：聚合表达式解码等。
-//!
-//! `UpdatingCache` 位于 [`crate::runtime::streaming::operators::updating_cache`]。
+//! 从 DataFusion proto 物理表达式节点解码聚合（UDAF）表达式。
+
+use std::sync::Arc;
 
 use arrow::datatypes::SchemaRef;
 use datafusion::common::internal_err;
@@ -25,9 +25,8 @@ use datafusion_proto::physical_plan::{DefaultPhysicalExtensionCodec, PhysicalExt
 use datafusion_proto::protobuf::physical_aggregate_expr_node::AggregateFunction;
 use datafusion_proto::protobuf::physical_expr_node::ExprType;
 use datafusion_proto::protobuf::{PhysicalExprNode, proto_error};
-use std::sync::Arc;
 
-/// 从 `PhysicalExprNode` 解码 UDAF 聚合表达式（与 worker `arrow/mod` 一致）。
+/// 从 `PhysicalExprNode` 解码 UDAF 聚合表达式（与 worker `arrow/mod` 历史路径语义一致）。
 pub fn decode_aggregate(
     schema: &SchemaRef,
     name: &str,

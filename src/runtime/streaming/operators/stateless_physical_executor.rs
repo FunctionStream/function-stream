@@ -26,7 +26,7 @@ use datafusion_proto::protobuf::PhysicalPlanNode;
 use futures::StreamExt;
 use prost::Message;
 
-use crate::runtime::streaming::api::operator::Registry;
+use crate::runtime::streaming::factory::Registry;
 use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 
 pub struct StatelessPhysicalExecutor {

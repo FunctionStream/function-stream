@@ -30,7 +30,8 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tracing::warn;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::{MessageOperator, Registry};
+use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::factory::Registry;
 use async_trait::async_trait;
 use protocol::grpc::api::JoinOperator;
 use crate::runtime::streaming::StreamOutput;
