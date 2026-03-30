@@ -113,13 +113,15 @@ fn pipeline_summary_short(program: &LogicalProgram) -> String {
 pub fn stream_table_row_detail(table: &StreamTable) -> String {
     match table {
         StreamTable::Source {
+            connector,
             event_time_field,
             watermark_field,
             with_options,
             ..
         } => {
             format!(
-                "event_time={:?}, watermark={:?}, with_options={}",
+                "connector={}, event_time={:?}, watermark={:?}, with_options={}",
+                connector,
                 event_time_field,
                 watermark_field,
                 with_options.len()
@@ -165,6 +167,7 @@ pub fn show_create_stream_table(table: &StreamTable) -> String {
     match table {
         StreamTable::Source {
             name,
+            connector,
             schema,
             event_time_field,
             watermark_field,
@@ -178,7 +181,11 @@ pub fn show_create_stream_table(table: &StreamTable) -> String {
             if let Some(w) = watermark_field {
                 ddl.push_str(&format!("/* WATERMARK: {w} */\n"));
             }
-            ddl.push_str(&format_with_clause(with_options));
+            let mut merged_opts = with_options.clone();
+            merged_opts
+                .entry("connector".to_string())
+                .or_insert_with(|| connector.clone());
+            ddl.push_str(&format_with_clause(&merged_opts));
             ddl
         }
         StreamTable::Sink { name, program } => {

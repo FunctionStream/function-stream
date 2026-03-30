@@ -161,6 +161,7 @@ impl CatalogManager {
     fn encode_table(&self, table: &StreamTable) -> DFResult<pb::TableDefinition> {
         let table_type = match table {
             StreamTable::Source {
+                connector,
                 schema,
                 event_time_field,
                 watermark_field,
@@ -173,10 +174,15 @@ impl CatalogManager {
                     .as_ref()
                     .filter(|w| *w != sql_field::COMPUTED_WATERMARK)
                     .cloned(),
-                with_options: with_options
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect(),
+                with_options: {
+                    let mut opts: std::collections::BTreeMap<String, String> = with_options
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    opts.entry("connector".to_string())
+                        .or_insert_with(|| connector.clone());
+                    opts.into_iter().collect()
+                },
             }),
             StreamTable::Sink { program, .. } => {
                 let logical_program_bincode = CatalogCodec::encode_logical_program(program)?;
@@ -208,6 +214,11 @@ impl CatalogManager {
         match table_type {
             table_definition::TableType::Source(src) => Ok(StreamTable::Source {
                 name: proto_def.table_name,
+                connector: src
+                    .with_options
+                    .get("connector")
+                    .cloned()
+                    .unwrap_or_else(|| "stream_catalog".to_string()),
                 schema: CatalogCodec::decode_schema(&src.arrow_schema_ipc)?,
                 event_time_field: src.event_time_field,
                 watermark_field: src
@@ -307,6 +318,7 @@ mod tests {
 
         let table = StreamTable::Source {
             name: "t1".into(),
+            connector: "stream_catalog".into(),
             schema: Arc::clone(&schema),
             event_time_field: Some("ts".into()),
             watermark_field: None,
@@ -344,6 +356,7 @@ mod tests {
 
         let table = StreamTable::Source {
             name: "t_with".into(),
+            connector: "kafka".into(),
             schema,
             event_time_field: None,
             watermark_field: None,
@@ -369,6 +382,7 @@ mod tests {
 
         mgr.add_table(StreamTable::Source {
             name: "t_drop".into(),
+            connector: "stream_catalog".into(),
             schema,
             event_time_field: None,
             watermark_field: None,

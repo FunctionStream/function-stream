@@ -69,6 +69,7 @@ impl CoordinatorRuntimeContext {
         for (name, stream) in provider.tables.streams.clone() {
             let StreamTable::Source {
                 name: source_name,
+                connector,
                 schema,
                 event_time_field,
                 watermark_field,
@@ -77,12 +78,11 @@ impl CoordinatorRuntimeContext {
             else {
                 continue;
             };
-
-            let connector = with_options
-                .get("connector")
-                .cloned()
-                .unwrap_or_else(|| "stream_catalog".to_string());
-            let mut source = SourceTable::new(source_name.clone(), connector, ConnectionType::Source);
+            let mut source = SourceTable::new(
+                source_name.clone(),
+                connector.clone(),
+                ConnectionType::Source,
+            );
             source.schema_specs = schema
                 .fields()
                 .iter()

@@ -42,6 +42,7 @@ fn object_name(s: impl Into<String>) -> ObjectName {
 pub enum StreamTable {
     Source {
         name: String,
+        connector: String,
         schema: Arc<Schema>,
         event_time_field: Option<String>,
         watermark_field: Option<String>,
@@ -201,6 +202,7 @@ impl StreamPlanningContext {
     ) {
         self.register_stream_table(StreamTable::Source {
             name,
+            connector: "stream_catalog".to_string(),
             schema,
             event_time_field,
             watermark_field,

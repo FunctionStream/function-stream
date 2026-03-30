@@ -293,6 +293,7 @@ impl PlanVisitor for Executor {
                     let schema = Arc::new(source_table.produce_physical_schema());
                     let table_instance = StreamTable::Source {
                         name: table_name.clone(),
+                        connector: source_table.connector().to_string(),
                         schema,
                         event_time_field: source_table.event_time_field().map(str::to_string),
                         watermark_field: source_table.stream_catalog_watermark_field(),
