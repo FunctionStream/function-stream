@@ -29,7 +29,8 @@ use crate::coordinator::plan::{
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::streaming::job::JobManager;
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::schema::{show_create_stream_table, StreamTable};
+use crate::sql::schema::table::Table as CatalogTable;
+use crate::sql::schema::show_create_catalog_table;
 use crate::storage::stream_catalog::CatalogManager;
 
 #[derive(Error, Debug)]
@@ -201,7 +202,10 @@ impl PlanVisitor for Executor {
         _plan: &ShowCatalogTablesPlan,
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
-        let tables = self.catalog_manager.list_stream_tables();
+        let tables = match self.catalog_manager.list_catalog_tables() {
+            Ok(tables) => tables,
+            Err(e) => return PlanVisitorResult::Execute(Err(ExecuteError::Internal(e.to_string()))),
+        };
         let n = tables.len();
         let result = ExecuteResult::ok_with_data(
             format!("{n} stream catalog table(s)"),
@@ -218,14 +222,15 @@ impl PlanVisitor for Executor {
         let execute = || -> Result<ExecuteResult, ExecuteError> {
             let t = self
                 .catalog_manager
-                .get_stream_table(&plan.table_name)
+                .get_catalog_table(&plan.table_name)
+                .map_err(|e| ExecuteError::Internal(e.to_string()))?
                 .ok_or_else(|| {
                     ExecuteError::Validation(format!(
                         "Table '{}' not found in stream catalog",
                         plan.table_name
                     ))
                 })?;
-            let ddl = show_create_stream_table(t.as_ref());
+            let ddl = show_create_catalog_table(t.as_ref());
             Ok(ExecuteResult::ok_with_data(
                 format!("SHOW CREATE TABLE {}", plan.table_name),
                 ShowCreateTableResult::new(plan.table_name.clone(), ddl),
@@ -284,21 +289,13 @@ impl PlanVisitor for Executor {
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
         let execute = || -> Result<ExecuteResult, ExecuteError> {
-            let (table_name, if_not_exists, stream_table) = match &plan.body {
+            let (table_name, if_not_exists, catalog_table) = match &plan.body {
                 CreateTablePlanBody::ConnectorSource {
                     source_table,
                     if_not_exists,
                 } => {
                     let table_name = source_table.name().to_string();
-                    let schema = Arc::new(source_table.produce_physical_schema());
-                    let table_instance = StreamTable::Source {
-                        name: table_name.clone(),
-                        connector: source_table.connector().to_string(),
-                        schema,
-                        event_time_field: source_table.event_time_field().map(str::to_string),
-                        watermark_field: source_table.stream_catalog_watermark_field(),
-                        with_options: source_table.catalog_with_options().clone(),
-                    };
+                    let table_instance = CatalogTable::ConnectorTable(source_table.clone());
                     (table_name, *if_not_exists, table_instance)
                 }
                 CreateTablePlanBody::DataFusion(_) => {
@@ -309,14 +306,14 @@ impl PlanVisitor for Executor {
                 }
             };
 
-            if if_not_exists && self.catalog_manager.has_stream_table(&table_name) {
+            if if_not_exists && self.catalog_manager.has_catalog_table(&table_name) {
                 return Ok(ExecuteResult::ok(format!(
                     "Table '{table_name}' already exists (skipped)"
                 )));
             }
 
             self.catalog_manager
-                .add_table(stream_table)
+                .add_catalog_table(catalog_table)
                 .map_err(|e| {
                     ExecuteError::Internal(format!(
                         "Failed to register connector source table '{}': {}",
@@ -338,15 +335,6 @@ impl PlanVisitor for Executor {
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
         let execute = || -> Result<ExecuteResult, ExecuteError> {
-            let sink = StreamTable::Sink {
-                name: plan.name.clone(),
-                program: plan.program.clone(),
-            };
-
-            self.catalog_manager
-                .add_table(sink)
-                .map_err(|e| ExecuteError::Internal(e.to_string()))?;
-
             let fs_program: FsProgram = plan.program.clone().into();
             let job_manager: Arc<JobManager> = Arc::clone(&self.job_manager);
 
@@ -359,7 +347,7 @@ impl PlanVisitor for Executor {
             info!(
                 job_id = %job_id,
                 table = %plan.name,
-                "Streaming table registered and job submitted"
+                "Streaming job submitted"
             );
 
             Ok(ExecuteResult::ok_with_data(
@@ -398,7 +386,7 @@ impl PlanVisitor for Executor {
     ) -> PlanVisitorResult {
         let execute = || -> Result<ExecuteResult, ExecuteError> {
             self.catalog_manager
-                .drop_table(&plan.table_name, plan.if_exists)
+                .drop_catalog_table(&plan.table_name, plan.if_exists)
                 .map_err(|e| ExecuteError::Internal(e.to_string()))?;
 
             Ok(ExecuteResult::ok(format!(

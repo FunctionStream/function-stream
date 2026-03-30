@@ -14,9 +14,11 @@ use std::sync::Arc;
 
 use arrow_array::{Int32Array, StringArray};
 use arrow_schema::{DataType, Field, Schema};
+use datafusion::arrow::datatypes::Schema as DfSchema;
 
 use super::DataSet;
-use crate::sql::schema::{schema_columns_one_line, stream_table_row_detail, StreamTable};
+use crate::sql::schema::table::Table as CatalogTable;
+use crate::sql::schema::{catalog_table_row_detail, schema_columns_one_line};
 
 #[derive(Clone, Debug)]
 pub struct ShowCatalogTablesResult {
@@ -28,7 +30,7 @@ pub struct ShowCatalogTablesResult {
 }
 
 impl ShowCatalogTablesResult {
-    pub fn from_tables(tables: &[Arc<StreamTable>]) -> Self {
+    pub fn from_tables(tables: &[Arc<CatalogTable>]) -> Self {
         let mut names = Vec::with_capacity(tables.len());
         let mut kinds = Vec::with_capacity(tables.len());
         let mut column_counts = Vec::with_capacity(tables.len());
@@ -36,17 +38,23 @@ impl ShowCatalogTablesResult {
         let mut details = Vec::with_capacity(tables.len());
 
         for t in tables {
-            let schema = t.schema();
+            let schema = match t.as_ref() {
+                CatalogTable::ConnectorTable(source) | CatalogTable::LookupTable(source) => {
+                    source.produce_physical_schema()
+                }
+                CatalogTable::TableFromQuery { .. } => DfSchema::new(t.get_fields()),
+            };
             let ncols = schema.fields().len() as i32;
             names.push(t.name().to_string());
             kinds.push(match t.as_ref() {
-                StreamTable::Source { .. } => "SOURCE",
-                StreamTable::Sink { .. } => "SINK",
+                CatalogTable::ConnectorTable(_) => "SOURCE",
+                CatalogTable::LookupTable(_) => "LOOKUP",
+                CatalogTable::TableFromQuery { .. } => "QUERY",
             }
             .to_string());
             column_counts.push(ncols);
             schema_lines.push(schema_columns_one_line(&schema));
-            details.push(stream_table_row_detail(t.as_ref()));
+            details.push(catalog_table_row_detail(t.as_ref()));
         }
 
         Self {

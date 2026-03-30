@@ -18,11 +18,7 @@ use anyhow::Result;
 
 use crate::runtime::streaming::job::JobManager;
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::schema::column_descriptor::ColumnDescriptor;
-use crate::sql::schema::connection_type::ConnectionType;
-use crate::sql::schema::source_table::SourceTable;
-use crate::sql::schema::table::Table as CatalogTable;
-use crate::sql::schema::{StreamSchemaProvider, StreamTable};
+use crate::sql::schema::StreamSchemaProvider;
 use crate::storage::stream_catalog::CatalogManager;
 
 /// Dependencies shared by analyze / plan / execute, analogous to installing globals in
@@ -32,7 +28,6 @@ pub struct CoordinatorRuntimeContext {
     pub task_manager: Arc<TaskManager>,
     pub catalog_manager: Arc<CatalogManager>,
     pub job_manager: Arc<JobManager>,
-    planning_schema_override: Option<StreamSchemaProvider>,
 }
 
 impl CoordinatorRuntimeContext {
@@ -44,7 +39,6 @@ impl CoordinatorRuntimeContext {
                 .map_err(|e| anyhow::anyhow!("Failed to get CatalogManager: {}", e))?,
             job_manager: JobManager::global()
                 .map_err(|e| anyhow::anyhow!("Failed to get JobManager: {}", e))?,
-            planning_schema_override: None,
         })
     }
 
@@ -52,53 +46,16 @@ impl CoordinatorRuntimeContext {
         task_manager: Arc<TaskManager>,
         catalog_manager: Arc<CatalogManager>,
         job_manager: Arc<JobManager>,
-        planning_schema_override: Option<StreamSchemaProvider>,
     ) -> Self {
         Self {
             task_manager,
             catalog_manager,
             job_manager,
-            planning_schema_override,
         }
     }
 
-    /// Schema provider for [`LogicalPlanVisitor`] / [`SqlToRel`]: override if set, else catalog snapshot.
+    /// Schema provider for [`LogicalPlanVisitor`] / [`SqlToRel`].
     pub fn planning_schema_provider(&self) -> StreamSchemaProvider {
-        let mut provider = self.catalog_manager.acquire_planning_context();
-
-        for (name, stream) in provider.tables.streams.clone() {
-            let StreamTable::Source {
-                name: source_name,
-                connector,
-                schema,
-                event_time_field,
-                watermark_field,
-                with_options,
-            } = stream.as_ref()
-            else {
-                continue;
-            };
-            let mut source = SourceTable::new(
-                source_name.clone(),
-                connector.clone(),
-                ConnectionType::Source,
-            );
-            source.schema_specs = schema
-                .fields()
-                .iter()
-                .map(|f| ColumnDescriptor::new_physical((**f).clone()))
-                .collect();
-            source.inferred_fields = Some(schema.fields().iter().cloned().collect());
-            source.temporal_config.event_column = event_time_field.clone();
-            source.temporal_config.watermark_strategy_column = watermark_field.clone();
-            source.catalog_with_options = with_options.clone();
-
-            provider
-                .tables
-                .catalogs
-                .insert(name, Arc::new(CatalogTable::ConnectorTable(source)));
-        }
-
-        provider
+        self.catalog_manager.acquire_planning_context()
     }
 }

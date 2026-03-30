@@ -23,7 +23,10 @@ pub mod table_role;
 pub mod temporal_pipeline_config;
 pub mod utils;
 
-pub use catalog_ddl::{schema_columns_one_line, show_create_stream_table, stream_table_row_detail};
+pub use catalog_ddl::{
+    catalog_table_row_detail, schema_columns_one_line, show_create_catalog_table,
+    show_create_stream_table, stream_table_row_detail,
+};
 pub use column_descriptor::ColumnDescriptor;
 pub use connection_type::ConnectionType;
 pub use source_table::{SourceOperator, SourceTable};

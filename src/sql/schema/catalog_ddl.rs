@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 use datafusion::arrow::datatypes::{DataType, TimeUnit};
 
 use super::schema_provider::StreamTable;
+use super::table::Table as CatalogTable;
 use crate::sql::logical_node::logical::LogicalProgram;
 
 fn data_type_sql(dt: &DataType) -> String {
@@ -201,6 +202,52 @@ pub fn show_create_stream_table(table: &StreamTable) -> String {
             ddl.push_str(&pipeline_text(program));
             ddl.push('\n');
             ddl
+        }
+    }
+}
+
+/// Extra fields for `SHOW TABLES` result grid for persisted catalog rows.
+pub fn catalog_table_row_detail(table: &CatalogTable) -> String {
+    match table {
+        CatalogTable::ConnectorTable(source) => format!(
+            "kind=connector, connector={}, event_time={:?}, watermark={:?}, with_options={}",
+            source.connector(),
+            source.event_time_field(),
+            source.temporal_config.watermark_strategy_column,
+            source.catalog_with_options().len()
+        ),
+        CatalogTable::LookupTable(source) => format!(
+            "kind=lookup, connector={}, event_time={:?}, watermark={:?}, with_options={}",
+            source.connector(),
+            source.event_time_field(),
+            source.temporal_config.watermark_strategy_column,
+            source.catalog_with_options().len()
+        ),
+        CatalogTable::TableFromQuery { .. } => "kind=query".to_string(),
+    }
+}
+
+/// Human-readable `SHOW CREATE TABLE` text for persisted catalog rows.
+pub fn show_create_catalog_table(table: &CatalogTable) -> String {
+    match table {
+        CatalogTable::ConnectorTable(source) | CatalogTable::LookupTable(source) => {
+            let schema = source.produce_physical_schema();
+            let cols = format_columns(&schema);
+            let mut ddl = format!("CREATE TABLE {} (\n{}\n)", source.name(), cols.join(",\n"));
+            if let Some(e) = source.event_time_field() {
+                ddl.push_str(&format!("\n/* EVENT TIME COLUMN: {e} */\n"));
+            }
+            if let Some(w) = source.temporal_config.watermark_strategy_column.as_deref() {
+                ddl.push_str(&format!("/* WATERMARK: {w} */\n"));
+            }
+            let mut opts = source.catalog_with_options().clone();
+            opts.entry("connector".to_string())
+                .or_insert_with(|| source.connector().to_string());
+            ddl.push_str(&format_with_clause(&opts));
+            ddl
+        }
+        CatalogTable::TableFromQuery { name, .. } => {
+            format!("CREATE TABLE {name} AS SELECT ...;\n/* logical query text is not persisted */\n")
         }
     }
 }

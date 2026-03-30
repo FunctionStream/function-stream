@@ -10,30 +10,30 @@ syntax = "proto3";
 package function_stream.storage;
 
 // =============================================================================
-// Stream catalog (coordinator stream tables: source / sink)
+// Catalog table storage (coordinator SQL catalog)
 // =============================================================================
 
-// Top-level persisted record for one stream table.
+// Top-level persisted record for one catalog table.
 message TableDefinition {
   string table_name = 1;
   int64 updated_at_millis = 2;
   oneof table_type {
-    StreamSource source = 3;
-    StreamSink sink = 4;
+    // Connector-backed ingestion/egress table definition.
+    CatalogSourceTable connector_table = 3;
+    // Connector-backed lookup table definition.
+    CatalogSourceTable lookup_table = 5;
   }
 }
 
-message StreamSource {
+// Shared connector-backed table payload for connector/lookup entries.
+message CatalogSourceTable {
   bytes arrow_schema_ipc = 1;
   optional string event_time_field = 2;
   optional string watermark_field = 3;
   // Original CREATE TABLE ... WITH ('k'='v', ...) pairs (best-effort; keys sorted in DDL).
   map<string, string> with_options = 4;
-}
-
-message StreamSink {
-  bytes arrow_schema_ipc = 1;
-  bytes logical_program_bincode = 2;
+  // Canonical connector identifier (e.g. kafka, postgres-cdc).
+  string connector = 5;
 }
 
 // =============================================================================

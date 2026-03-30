@@ -10,44 +10,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use anyhow::{anyhow, bail, Context};
-use datafusion::arrow::datatypes::Schema;
 use datafusion::common::{internal_err, plan_err, Result as DFResult};
-use parking_lot::RwLock;
 use prost::Message;
 use protocol::storage::{self as pb, table_definition};
 use tracing::{info, warn};
 use unicase::UniCase;
 
 use crate::sql::common::constants::sql_field;
-use crate::sql::schema::{ObjectName, StreamPlanningContext, StreamTable};
+use crate::sql::schema::column_descriptor::ColumnDescriptor;
+use crate::sql::schema::connection_type::ConnectionType;
+use crate::sql::schema::source_table::SourceTable;
+use crate::sql::schema::table::Table as CatalogTable;
+use crate::sql::schema::{StreamPlanningContext, StreamTable};
 
 use super::codec::CatalogCodec;
 use super::meta_store::MetaStore;
 
 const CATALOG_KEY_PREFIX: &str = "catalog:stream_table:";
 
-#[derive(Clone, Default, Debug)]
-pub struct StreamTableCatalogCache {
-    pub streams: HashMap<ObjectName, Arc<StreamTable>>,
-}
-
 pub struct CatalogManager {
     store: Arc<dyn MetaStore>,
-    cache: RwLock<StreamTableCatalogCache>,
 }
 
 static GLOBAL_CATALOG: OnceLock<Arc<CatalogManager>> = OnceLock::new();
 
 impl CatalogManager {
     pub fn new(store: Arc<dyn MetaStore>) -> Self {
-        Self {
-            store,
-            cache: RwLock::new(StreamTableCatalogCache::default()),
-        }
+        Self { store }
     }
 
     pub fn init_global_in_memory() -> anyhow::Result<()> {
@@ -80,120 +72,185 @@ impl CatalogManager {
         format!("{CATALOG_KEY_PREFIX}{}", table_name.to_lowercase())
     }
 
-    pub fn add_table(&self, table: StreamTable) -> DFResult<()> {
-        let proto_def = self.encode_table(&table)?;
+    pub fn add_catalog_table(&self, table: CatalogTable) -> DFResult<()> {
+        let proto_def = self.encode_catalog_table(&table)?;
         let payload = proto_def.encode_to_vec();
         let key = Self::build_store_key(table.name());
 
         self.store.put(&key, payload)?;
-
-        let object_name = UniCase::new(table.name().to_string());
-        self.cache.write().streams.insert(object_name, Arc::new(table));
-
         Ok(())
     }
 
-    pub fn has_stream_table(&self, name: &str) -> bool {
-        let object_name = UniCase::new(name.to_string());
-        self.cache.read().streams.contains_key(&object_name)
+    pub fn has_catalog_table(&self, name: &str) -> bool {
+        let key = Self::build_store_key(name);
+        self.store.get(&key).ok().flatten().is_some()
     }
 
-    pub fn drop_table(&self, table_name: &str, if_exists: bool) -> DFResult<()> {
-        let object_name = UniCase::new(table_name.to_string());
-
-        let exists = self.cache.read().streams.contains_key(&object_name);
-
+    pub fn drop_catalog_table(&self, table_name: &str, if_exists: bool) -> DFResult<()> {
+        let key = Self::build_store_key(table_name);
+        let exists = self.store.get(&key)?.is_some();
         if !exists {
             if if_exists {
                 return Ok(());
             }
             return plan_err!("Table '{table_name}' not found");
         }
-
-        let key = Self::build_store_key(table_name);
         self.store.delete(&key)?;
-
-        self.cache.write().streams.remove(&object_name);
-
         Ok(())
     }
 
     pub fn restore_from_store(&self) -> DFResult<()> {
-        let records = self.store.scan_prefix(CATALOG_KEY_PREFIX)?;
-        let mut restored = StreamTableCatalogCache::default();
-
-        for (_key, payload) in records {
-            let proto_def = pb::TableDefinition::decode(payload.as_slice()).map_err(|e| {
-                datafusion::common::DataFusionError::Execution(format!(
-                    "Failed to decode stream catalog protobuf: {e}"
-                ))
-            })?;
-
-            let table = self.decode_table(proto_def)?;
-            let object_name = UniCase::new(table.name().to_string());
-            restored.streams.insert(object_name, Arc::new(table));
-        }
-
-        *self.cache.write() = restored;
-
+        // No-op by design: the catalog is read-through from storage.
         Ok(())
     }
 
     pub fn acquire_planning_context(&self) -> StreamPlanningContext {
         let mut ctx = StreamPlanningContext::new();
-        ctx.tables.streams = self.cache.read().streams.clone();
+        let catalogs = self.load_catalog_tables_map().unwrap_or_default();
+        ctx.tables.catalogs = catalogs.clone();
+
+        for (name, table) in catalogs {
+            let source = match table.as_ref() {
+                CatalogTable::ConnectorTable(s) | CatalogTable::LookupTable(s) => s,
+                CatalogTable::TableFromQuery { .. } => continue,
+            };
+
+            let schema = Arc::new(source.produce_physical_schema());
+            ctx.tables.streams.insert(
+                name,
+                Arc::new(StreamTable::Source {
+                    name: source.name().to_string(),
+                    connector: source.connector().to_string(),
+                    schema,
+                    event_time_field: source.event_time_field().map(str::to_string),
+                    watermark_field: source.stream_catalog_watermark_field(),
+                    with_options: source.catalog_with_options().clone(),
+                }),
+            );
+        }
         ctx
     }
 
-    /// All stream catalog entries (connector sources + streaming sinks), sorted by table name.
-    pub fn list_stream_tables(&self) -> Vec<Arc<StreamTable>> {
-        let guard = self.cache.read();
-        let mut out: Vec<Arc<StreamTable>> = guard.streams.values().cloned().collect();
+    /// All persisted catalog tables, sorted by table name.
+    pub fn list_catalog_tables(&self) -> DFResult<Vec<Arc<CatalogTable>>> {
+        let mut out: Vec<Arc<CatalogTable>> =
+            self.load_catalog_tables_map()?.into_values().collect();
         out.sort_by(|a, b| a.name().cmp(b.name()));
-        out
+        Ok(out)
     }
 
-    pub fn get_stream_table(&self, name: &str) -> Option<Arc<StreamTable>> {
+    pub fn get_catalog_table(&self, name: &str) -> DFResult<Option<Arc<CatalogTable>>> {
         let key = UniCase::new(name.to_string());
-        self.cache.read().streams.get(&key).cloned()
+        Ok(self.load_catalog_tables_map()?.get(&key).cloned())
     }
 
-    fn encode_table(&self, table: &StreamTable) -> DFResult<pb::TableDefinition> {
-        let table_type = match table {
+    pub fn add_table(&self, table: StreamTable) -> DFResult<()> {
+        match table {
             StreamTable::Source {
+                name,
                 connector,
                 schema,
                 event_time_field,
                 watermark_field,
                 with_options,
-                ..
-            } => table_definition::TableType::Source(pb::StreamSource {
-                arrow_schema_ipc: CatalogCodec::encode_schema(schema)?,
-                event_time_field: event_time_field.clone(),
-                watermark_field: watermark_field
-                    .as_ref()
-                    .filter(|w| *w != sql_field::COMPUTED_WATERMARK)
-                    .cloned(),
-                with_options: {
-                    let mut opts: std::collections::BTreeMap<String, String> = with_options
-                        .iter()
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect();
-                    opts.entry("connector".to_string())
-                        .or_insert_with(|| connector.clone());
-                    opts.into_iter().collect()
-                },
-            }),
-            StreamTable::Sink { program, .. } => {
-                let logical_program_bincode = CatalogCodec::encode_logical_program(program)?;
-                let schema = program
-                    .egress_arrow_schema()
-                    .unwrap_or_else(|| Arc::new(Schema::empty()));
-                table_definition::TableType::Sink(pb::StreamSink {
-                    arrow_schema_ipc: CatalogCodec::encode_schema(&schema)?,
-                    logical_program_bincode,
-                })
+            } => {
+                let mut source = SourceTable::new(name, connector, ConnectionType::Source);
+                source.schema_specs = schema
+                    .fields()
+                    .iter()
+                    .map(|f| ColumnDescriptor::new_physical((**f).clone()))
+                    .collect();
+                source.inferred_fields = Some(schema.fields().iter().cloned().collect());
+                source.temporal_config.event_column = event_time_field;
+                source.temporal_config.watermark_strategy_column = watermark_field;
+                source.catalog_with_options = with_options;
+                self.add_catalog_table(CatalogTable::ConnectorTable(source))
             }
+            StreamTable::Sink { name, .. } => plan_err!(
+                "Persisting streaming sink '{name}' in stream catalog is no longer supported"
+            ),
+        }
+    }
+
+    pub fn has_stream_table(&self, name: &str) -> bool {
+        self.has_catalog_table(name)
+    }
+
+    pub fn drop_table(&self, table_name: &str, if_exists: bool) -> DFResult<()> {
+        self.drop_catalog_table(table_name, if_exists)
+    }
+
+    pub fn list_stream_tables(&self) -> Vec<Arc<StreamTable>> {
+        self.list_catalog_tables()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|t| match t.as_ref() {
+                CatalogTable::ConnectorTable(s) | CatalogTable::LookupTable(s) => {
+                    Some(Arc::new(StreamTable::Source {
+                        name: s.name().to_string(),
+                        connector: s.connector().to_string(),
+                        schema: Arc::new(s.produce_physical_schema()),
+                        event_time_field: s.event_time_field().map(str::to_string),
+                        watermark_field: s.stream_catalog_watermark_field(),
+                        with_options: s.catalog_with_options().clone(),
+                    }))
+                }
+                CatalogTable::TableFromQuery { .. } => None,
+            })
+            .collect()
+    }
+
+    pub fn get_stream_table(&self, name: &str) -> Option<Arc<StreamTable>> {
+        self.get_catalog_table(name)
+            .ok()
+            .flatten()
+            .and_then(|t| match t.as_ref() {
+                CatalogTable::ConnectorTable(s) | CatalogTable::LookupTable(s) => {
+                    Some(Arc::new(StreamTable::Source {
+                        name: s.name().to_string(),
+                        connector: s.connector().to_string(),
+                        schema: Arc::new(s.produce_physical_schema()),
+                        event_time_field: s.event_time_field().map(str::to_string),
+                        watermark_field: s.stream_catalog_watermark_field(),
+                        with_options: s.catalog_with_options().clone(),
+                    }))
+                }
+                CatalogTable::TableFromQuery { .. } => None,
+            })
+    }
+
+    fn encode_catalog_table(&self, table: &CatalogTable) -> DFResult<pb::TableDefinition> {
+        let table_type = match table {
+            CatalogTable::ConnectorTable(source) | CatalogTable::LookupTable(source) => {
+                let mut opts = source.catalog_with_options().clone();
+                opts.entry("connector".to_string())
+                    .or_insert_with(|| source.connector().to_string());
+                if matches!(table, CatalogTable::LookupTable(_)) {
+                    table_definition::TableType::LookupTable(pb::CatalogSourceTable {
+                        arrow_schema_ipc: CatalogCodec::encode_schema(&Arc::new(
+                            source.produce_physical_schema(),
+                        ))?,
+                        event_time_field: source.event_time_field().map(str::to_string),
+                        watermark_field: source.stream_catalog_watermark_field(),
+                        with_options: opts.into_iter().collect(),
+                        connector: source.connector().to_string(),
+                    })
+                } else {
+                    table_definition::TableType::ConnectorTable(pb::CatalogSourceTable {
+                        arrow_schema_ipc: CatalogCodec::encode_schema(&Arc::new(
+                            source.produce_physical_schema(),
+                        ))?,
+                        event_time_field: source.event_time_field().map(str::to_string),
+                        watermark_field: source.stream_catalog_watermark_field(),
+                        with_options: opts.into_iter().collect(),
+                        connector: source.connector().to_string(),
+                    })
+                }
+            }
+            CatalogTable::TableFromQuery { name, .. } => return plan_err!(
+                "Persisting query-defined table '{}' is not supported by stream catalog storage",
+                name
+            ),
         };
 
         Ok(pb::TableDefinition {
@@ -203,7 +260,43 @@ impl CatalogManager {
         })
     }
 
-    fn decode_table(&self, proto_def: pb::TableDefinition) -> DFResult<StreamTable> {
+    fn decode_catalog_source_table(
+        &self,
+        table_name: String,
+        source_row: pb::CatalogSourceTable,
+        as_lookup: bool,
+    ) -> DFResult<CatalogTable> {
+        let connector = if source_row.connector.is_empty() {
+            source_row
+                .with_options
+                .get("connector")
+                .cloned()
+                .unwrap_or_else(|| "stream_catalog".to_string())
+        } else {
+            source_row.connector.clone()
+        };
+        let mut source = SourceTable::new(table_name, connector, ConnectionType::Source);
+        let schema = CatalogCodec::decode_schema(&source_row.arrow_schema_ipc)?;
+        source.schema_specs = schema
+            .fields()
+            .iter()
+            .map(|f| ColumnDescriptor::new_physical((**f).clone()))
+            .collect();
+        source.inferred_fields = Some(schema.fields().iter().cloned().collect());
+        source.temporal_config.event_column = source_row.event_time_field;
+        source.temporal_config.watermark_strategy_column = source_row
+            .watermark_field
+            .filter(|w| w != sql_field::COMPUTED_WATERMARK);
+        source.catalog_with_options = source_row.with_options.into_iter().collect();
+
+        if as_lookup {
+            Ok(CatalogTable::LookupTable(source))
+        } else {
+            Ok(CatalogTable::ConnectorTable(source))
+        }
+    }
+
+    fn decode_catalog_table(&self, proto_def: pb::TableDefinition) -> DFResult<CatalogTable> {
         let Some(table_type) = proto_def.table_type else {
             return internal_err!(
                 "Corrupted catalog row: missing table_type for {}",
@@ -212,34 +305,47 @@ impl CatalogManager {
         };
 
         match table_type {
-            table_definition::TableType::Source(src) => Ok(StreamTable::Source {
-                name: proto_def.table_name,
-                connector: src
-                    .with_options
-                    .get("connector")
-                    .cloned()
-                    .unwrap_or_else(|| "stream_catalog".to_string()),
-                schema: CatalogCodec::decode_schema(&src.arrow_schema_ipc)?,
-                event_time_field: src.event_time_field,
-                watermark_field: src
-                    .watermark_field
-                    .filter(|w| w != sql_field::COMPUTED_WATERMARK),
-                with_options: src.with_options.into_iter().collect(),
-            }),
-            table_definition::TableType::Sink(sink) => {
-                if sink.logical_program_bincode.is_empty() {
-                    return internal_err!(
-                        "Corrupted catalog row: sink '{}' missing logical_program_bincode",
-                        proto_def.table_name
-                    );
-                }
-                let program = CatalogCodec::decode_logical_program(&sink.logical_program_bincode)?;
-                Ok(StreamTable::Sink {
-                    name: proto_def.table_name,
-                    program,
-                })
+            table_definition::TableType::ConnectorTable(src) => {
+                self.decode_catalog_source_table(proto_def.table_name, src, false)
+            }
+            table_definition::TableType::LookupTable(src) => {
+                self.decode_catalog_source_table(proto_def.table_name, src, true)
             }
         }
+    }
+
+    fn load_catalog_tables_map(
+        &self,
+    ) -> DFResult<std::collections::HashMap<crate::sql::schema::ObjectName, Arc<CatalogTable>>> {
+        let mut out = std::collections::HashMap::new();
+        let records = self.store.scan_prefix(CATALOG_KEY_PREFIX)?;
+        for (key, payload) in records {
+            let proto_def = match pb::TableDefinition::decode(payload.as_slice()) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(
+                        catalog_key = %key,
+                        error = %e,
+                        "Skipping corrupted stream catalog row: protobuf decode failed"
+                    );
+                    continue;
+                }
+            };
+            let table = match self.decode_catalog_table(proto_def) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(
+                        catalog_key = %key,
+                        error = %e,
+                        "Skipping unsupported/corrupted stream catalog row"
+                    );
+                    continue;
+                }
+            };
+            let object_name = UniCase::new(table.name().to_string());
+            out.insert(object_name, Arc::new(table));
+        }
+        Ok(out)
     }
 }
 
@@ -249,8 +355,8 @@ pub fn restore_global_catalog_from_store() {
     };
     match mgr.restore_from_store() {
         Ok(()) => {
-            let n = mgr.list_stream_tables().len();
-            info!(stream_tables = n, "Stream catalog loaded from durable store");
+            let n = mgr.list_catalog_tables().map(|t| t.len()).unwrap_or(0);
+            info!(catalog_tables = n, "Catalog loaded from durable store");
         }
         Err(e) => warn!("Stream catalog restore_from_store failed: {e:#}"),
     }
@@ -296,13 +402,14 @@ pub fn planning_schema_provider() -> StreamPlanningContext {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::sync::Arc;
 
-    use datafusion::arrow::datatypes::{DataType, Field, Schema};
+    use datafusion::arrow::datatypes::{DataType, Field};
 
-    use crate::sql::logical_node::logical::LogicalProgram;
-    use crate::sql::schema::StreamTable;
+    use crate::sql::schema::column_descriptor::ColumnDescriptor;
+    use crate::sql::schema::connection_type::ConnectionType;
+    use crate::sql::schema::source_table::SourceTable;
+    use crate::sql::schema::table::Table as CatalogTable;
     use crate::storage::stream_catalog::{InMemoryMetaStore, MetaStore};
 
     use super::CatalogManager;
@@ -314,107 +421,41 @@ mod tests {
     #[test]
     fn add_table_roundtrip_snapshot() {
         let mgr = create_test_manager();
-        let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int32, false)]));
+        let mut source = SourceTable::new("t1", "kafka", ConnectionType::Source);
+        source.schema_specs = vec![ColumnDescriptor::new_physical(Field::new(
+            "a",
+            DataType::Int32,
+            false,
+        ))];
+        source.temporal_config.event_column = Some("ts".into());
+        let table = CatalogTable::ConnectorTable(source);
 
-        let table = StreamTable::Source {
-            name: "t1".into(),
-            connector: "stream_catalog".into(),
-            schema: Arc::clone(&schema),
-            event_time_field: Some("ts".into()),
-            watermark_field: None,
-            with_options: BTreeMap::new(),
-        };
+        mgr.add_catalog_table(table).unwrap();
 
-        mgr.add_table(table).unwrap();
-
-        let ctx = mgr.acquire_planning_context();
-        let got = ctx.get_stream_table("t1").expect("table present");
-
+        let got = mgr
+            .get_catalog_table("t1")
+            .unwrap()
+            .expect("table present");
         assert_eq!(got.name(), "t1");
-
-        if let StreamTable::Source {
-            event_time_field,
-            watermark_field,
-            ..
-        } = got.as_ref()
-        {
-            assert_eq!(event_time_field.as_deref(), Some("ts"));
-            assert!(watermark_field.is_none());
-        } else {
-            panic!("expected Source");
-        }
-    }
-
-    #[test]
-    fn add_table_roundtrip_with_options() {
-        let mgr = create_test_manager();
-        let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int32, false)]));
-
-        let mut opts = BTreeMap::new();
-        opts.insert("connector".to_string(), "kafka".to_string());
-        opts.insert("topic".to_string(), "my-topic".to_string());
-
-        let table = StreamTable::Source {
-            name: "t_with".into(),
-            connector: "kafka".into(),
-            schema,
-            event_time_field: None,
-            watermark_field: None,
-            with_options: opts.clone(),
-        };
-
-        mgr.add_table(table).unwrap();
-
-        let ctx = mgr.acquire_planning_context();
-        let got = ctx.get_stream_table("t_with").expect("table present");
-
-        if let StreamTable::Source { with_options, .. } = got.as_ref() {
-            assert_eq!(with_options, &opts);
-        } else {
-            panic!("expected Source");
-        }
     }
 
     #[test]
     fn drop_table_if_exists() {
         let mgr = create_test_manager();
-        let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int32, false)]));
-
-        mgr.add_table(StreamTable::Source {
-            name: "t_drop".into(),
-            connector: "stream_catalog".into(),
-            schema,
-            event_time_field: None,
-            watermark_field: None,
-            with_options: BTreeMap::new(),
-        })
-        .unwrap();
-
-        mgr.drop_table("t_drop", false).unwrap();
-        assert!(!mgr.has_stream_table("t_drop"));
-
-        mgr.drop_table("t_drop", true).unwrap();
-        assert!(mgr.drop_table("nope", false).is_err());
-        mgr.drop_table("nope", true).unwrap();
-    }
-
-    #[test]
-    fn restore_from_store_rebuilds_cache() {
-        let store: Arc<dyn MetaStore> = Arc::new(InMemoryMetaStore::new());
-
-        let mgr_a = CatalogManager::new(Arc::clone(&store));
-
-        mgr_a
-            .add_table(StreamTable::Sink {
-                name: "sink1".into(),
-                program: LogicalProgram::default(),
-            })
+        let mut source = SourceTable::new("t_drop", "kafka", ConnectionType::Source);
+        source.schema_specs = vec![ColumnDescriptor::new_physical(Field::new(
+            "a",
+            DataType::Int32,
+            false,
+        ))];
+        mgr.add_catalog_table(CatalogTable::ConnectorTable(source))
             .unwrap();
 
-        let mgr_b = CatalogManager::new(store);
-        mgr_b.restore_from_store().unwrap();
+        mgr.drop_catalog_table("t_drop", false).unwrap();
+        assert!(!mgr.has_catalog_table("t_drop"));
 
-        let ctx = mgr_b.acquire_planning_context();
-        assert!(ctx.get_stream_table("sink1").is_some());
+        mgr.drop_catalog_table("t_drop", true).unwrap();
+        assert!(mgr.drop_catalog_table("nope", false).is_err());
+        mgr.drop_catalog_table("nope", true).unwrap();
     }
 }
