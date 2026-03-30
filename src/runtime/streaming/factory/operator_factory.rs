@@ -18,6 +18,9 @@ use std::sync::Arc;
 
 use super::operator_constructor::OperatorConstructor;
 use crate::runtime::streaming::api::operator::ConstructedOperator;
+use crate::runtime::streaming::factory::connector::{
+    ConnectorSinkDispatcher, ConnectorSourceDispatcher,
+};
 use crate::runtime::streaming::factory::global::Registry;
 use crate::runtime::streaming::operators::grouping::IncrementalAggregatingConstructor;
 use crate::runtime::streaming::operators::joins::{
@@ -109,6 +112,8 @@ impl OperatorFactory {
 
         self.register_named(OperatorName::Projection, Box::new(ProjectionBridge));
         self.register_named(OperatorName::Value, Box::new(ValueBridge));
+        self.register_named(OperatorName::ConnectorSource, Box::new(ConnectorSourceBridge));
+        self.register_named(OperatorName::ConnectorSink, Box::new(ConnectorSinkBridge));
 
         crate::runtime::streaming::factory::register_builtin_connectors(self);
         crate::runtime::streaming::factory::register_kafka_connector_plugins(self);
@@ -229,6 +234,22 @@ impl OperatorConstructor for ValueBridge {
             .map_err(|e| anyhow!("Decode ValuePlanOperator failed: {e}"))?;
         let op = ValueExecutionConstructor.with_config(proto, registry)?;
         Ok(ConstructedOperator::Operator(Box::new(op)))
+    }
+}
+
+/// Generic connector source constructor: decodes `ConnectorOp` and dispatches by connector type.
+struct ConnectorSourceBridge;
+impl OperatorConstructor for ConnectorSourceBridge {
+    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
+        ConnectorSourceDispatcher.with_config(config, registry)
+    }
+}
+
+/// Generic connector sink constructor: decodes `ConnectorOp` and dispatches by connector type.
+struct ConnectorSinkBridge;
+impl OperatorConstructor for ConnectorSinkBridge {
+    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
+        ConnectorSinkDispatcher.with_config(config, registry)
     }
 }
 
