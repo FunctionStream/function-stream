@@ -18,7 +18,11 @@ use anyhow::Result;
 
 use crate::runtime::streaming::job::JobManager;
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::schema::StreamSchemaProvider;
+use crate::sql::schema::column_descriptor::ColumnDescriptor;
+use crate::sql::schema::connection_type::ConnectionType;
+use crate::sql::schema::source_table::SourceTable;
+use crate::sql::schema::table::Table as CatalogTable;
+use crate::sql::schema::{StreamSchemaProvider, StreamTable};
 use crate::storage::stream_catalog::CatalogManager;
 
 /// Dependencies shared by analyze / plan / execute, analogous to installing globals in
@@ -60,9 +64,41 @@ impl CoordinatorRuntimeContext {
 
     /// Schema provider for [`LogicalPlanVisitor`] / [`SqlToRel`]: override if set, else catalog snapshot.
     pub fn planning_schema_provider(&self) -> StreamSchemaProvider {
-        if let Some(ref p) = self.planning_schema_override {
-            return p.clone();
+        let mut provider = self.catalog_manager.acquire_planning_context();
+
+        for (name, stream) in provider.tables.streams.clone() {
+            let StreamTable::Source {
+                name: source_name,
+                schema,
+                event_time_field,
+                watermark_field,
+                with_options,
+            } = stream.as_ref()
+            else {
+                continue;
+            };
+
+            let connector = with_options
+                .get("connector")
+                .cloned()
+                .unwrap_or_else(|| "stream_catalog".to_string());
+            let mut source = SourceTable::new(source_name.clone(), connector, ConnectionType::Source);
+            source.schema_specs = schema
+                .fields()
+                .iter()
+                .map(|f| ColumnDescriptor::new_physical((**f).clone()))
+                .collect();
+            source.inferred_fields = Some(schema.fields().iter().cloned().collect());
+            source.temporal_config.event_column = event_time_field.clone();
+            source.temporal_config.watermark_strategy_column = watermark_field.clone();
+            source.catalog_with_options = with_options.clone();
+
+            provider
+                .tables
+                .catalogs
+                .insert(name, Arc::new(CatalogTable::ConnectorTable(source)));
         }
-        self.catalog_manager.acquire_planning_context()
+
+        provider
     }
 }

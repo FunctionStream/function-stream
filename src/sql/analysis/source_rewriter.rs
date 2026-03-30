@@ -27,11 +27,17 @@ use crate::sql::schema::table::Table;
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::schema::StreamTable;
 use crate::sql::common::constants::sql_field;
+use crate::sql::common::UPDATING_META_FIELD;
+use crate::sql::extensions::debezium::UnrollDebeziumPayloadNode;
 use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::extensions::table_source::StreamIngestionNode;
 use crate::sql::extensions::watermark_node::EventTimeWatermarkNode;
 use crate::sql::types::TIMESTAMP_FIELD;
 
-/// Rewrites table scans into proper source nodes with projections and watermarks.
+/// Rewrites table scans: projections are lifted out of scans into a dedicated projection node
+/// (including virtual fields), using a connector table-source extension instead of a bare
+/// `TableScan`, optionally with Debezium unrolling for updating sources, then remote boundary and
+/// watermark.
 pub struct SourceRewriter<'a> {
     pub(crate) schema_provider: &'a StreamSchemaProvider,
 }
@@ -172,144 +178,50 @@ impl SourceRewriter<'_> {
             )));
         }
 
+        if table.is_updating() {
+            expressions.push(Expr::Column(Column::new(
+                Some(qualifier.clone()),
+                UPDATING_META_FIELD,
+            )));
+        }
+
         Ok(expressions)
     }
 
-    /// Stream catalog [`StreamTable::Source`] (Kafka/… registered via coordinator): inject `_timestamp`
-    /// from `event_time_field` when the physical schema uses another name (e.g. `impression_time`).
-    fn mutate_stream_catalog_source(
-        &self,
-        table_scan: &TableScan,
-        st: &StreamTable,
-    ) -> DFResult<Transformed<LogicalPlan>> {
-        let StreamTable::Source {
-            schema,
-            event_time_field,
-            watermark_field,
-            ..
-        } = st
-        else {
-            return Ok(Transformed::no(LogicalPlan::TableScan(table_scan.clone())));
-        };
 
-        let qualifier = table_scan.table_name.clone();
-
-        let mut expressions: Vec<Expr> = schema
-            .fields()
-            .iter()
-            .map(|f| {
-                Expr::Column(Column {
-                    relation: Some(qualifier.clone()),
-                    name: f.name().to_string(),
-                    spans: Default::default(),
-                })
-            })
-            .collect();
-
-        let has_physical_ts = schema.fields().iter().any(|f| f.name() == TIMESTAMP_FIELD);
-
-        match event_time_field.as_deref() {
-            Some(et) if et != TIMESTAMP_FIELD => {
-                if !schema.fields().iter().any(|f| f.name().as_str() == et) {
-                    return Err(DataFusionError::Plan(format!(
-                        "Stream source `{}`: event_time_field `{et}` is not in the table schema",
-                        table_scan.table_name.table()
-                    )));
-                }
-                expressions.push(
-                    Expr::Column(Column {
-                        relation: Some(qualifier.clone()),
-                        name: et.to_string(),
-                        spans: Default::default(),
-                    })
-                    .alias_qualified(Some(qualifier.clone()), TIMESTAMP_FIELD.to_string()),
-                );
-            }
-            None if !has_physical_ts => {
-                return plan_err!(
-                    "Stream source `{}` has no `{}` column; declare WATERMARK FOR <event_time> AS ... on CREATE TABLE, or add a `{}` column",
-                    table_scan.table_name.table(),
-                    TIMESTAMP_FIELD,
-                    TIMESTAMP_FIELD
-                );
-            }
-            _ => {}
-        }
-
-        let source_input = LogicalPlan::TableScan(table_scan.clone());
-        let projection = LogicalPlan::Projection(Projection::try_new(
-            expressions,
-            Arc::new(source_input),
-        )?);
-
-        let schema_ref = projection.schema().clone();
-        let remote = LogicalPlan::Extension(Extension {
-            node: Arc::new(RemoteTableBoundaryNode {
-                upstream_plan: projection,
-                table_identifier: table_scan.table_name.to_owned(),
-                resolved_schema: schema_ref,
-                requires_materialization: true,
-            }),
-        });
-
-        let projected = Self::stream_source_projected_column_names(
-            schema.as_ref(),
-            event_time_field.as_deref(),
-        );
-        let wf = Self::stream_source_effective_watermark_field(
-            watermark_field.as_deref(),
-            &projected,
-        );
-        let wm_expr = Self::watermark_expression_for_stream_source(wf, &qualifier)?;
-
-        let watermark_node = EventTimeWatermarkNode::try_new(
-            remote,
-            table_scan.table_name.clone(),
-            wm_expr,
-        )
-        .map_err(|err| {
-            DataFusionError::Internal(format!("failed to create watermark node: {err}"))
-        })?;
-
-        Ok(Transformed::yes(LogicalPlan::Extension(Extension {
-            node: Arc::new(watermark_node),
-        })))
-    }
-
-    fn watermark_expression_for_stream_source(
-        watermark_field: Option<&str>,
-        qualifier: &TableReference,
-    ) -> DFResult<Expr> {
-        match watermark_field {
-            Some(wf) => Ok(Expr::Column(Column {
-                relation: Some(qualifier.clone()),
-                name: wf.to_string(),
-                spans: Default::default(),
-            })),
-            None => Ok(Expr::BinaryExpr(BinaryExpr {
-                left: Box::new(Expr::Column(Column {
-                    relation: Some(qualifier.clone()),
-                    name: TIMESTAMP_FIELD.to_string(),
-                    spans: Default::default(),
-                })),
-                op: logical_expr::Operator::Minus,
-                right: Box::new(Expr::Literal(
-                    ScalarValue::DurationNanosecond(Some(Duration::from_secs(1).as_nanos() as i64)),
-                    None,
-                )),
-            })),
-        }
-    }
-
+    /// Connector path: `StreamIngestionNode` (table source) → optional `UnrollDebeziumPayloadNode`
+    /// → `Projection`, mirroring Arroyo `TableSourceExtension` + Debezium unroll + projection.
     fn projection(&self, table_scan: &TableScan, table: &SourceTable) -> DFResult<LogicalPlan> {
         let qualifier = table_scan.table_name.clone();
 
-        // TODO: replace with StreamIngestionNode when available
-        let source_input = LogicalPlan::TableScan(table_scan.clone());
+        let table_source = LogicalPlan::Extension(Extension {
+            node: Arc::new(StreamIngestionNode::try_new(
+                qualifier.clone(),
+                table.clone(),
+            )?),
+        });
+
+        let (projection_input, scan_projection) = if table.is_updating() {
+            if table.key_constraints.is_empty() {
+                return plan_err!(
+                    "Updating connector table `{}` requires at least one PRIMARY KEY for CDC unrolling",
+                    table.table_identifier
+                );
+            }
+            let unrolled = LogicalPlan::Extension(Extension {
+                node: Arc::new(UnrollDebeziumPayloadNode::try_new(
+                    table_source,
+                    Arc::new(table.key_constraints.clone()),
+                )?),
+            });
+            (unrolled, None)
+        } else {
+            (table_source, table_scan.projection.clone())
+        };
 
         Ok(LogicalPlan::Projection(Projection::try_new(
-            Self::projection_expressions(table, &qualifier, &table_scan.projection)?,
-            Arc::new(source_input),
+            Self::projection_expressions(table, &qualifier, &scan_projection)?,
+            Arc::new(projection_input),
         )?))
     }
 
@@ -399,25 +311,21 @@ impl TreeNodeRewriter for SourceRewriter<'_> {
         };
 
         let table_name = table_scan.table_name.table();
+        let table = self
+            .schema_provider
+            .get_catalog_table(table_name)
+            .ok_or_else(|| DataFusionError::Plan(format!("Table {table_name} not found")))?;
 
-        if let Some(table) = self.schema_provider.get_catalog_table(table_name) {
-            return match table {
-                Table::ConnectorTable(table) => self.mutate_connector_table(&table_scan, table),
-                Table::LookupTable(_table) => {
-                    // TODO: implement LookupSource extension
-                    plan_err!("Lookup tables are not yet supported")
-                }
-                Table::TableFromQuery {
-                    name: _,
-                    logical_plan,
-                } => self.mutate_table_from_query(&table_scan, logical_plan),
-            };
+        match table {
+            Table::ConnectorTable(table) => self.mutate_connector_table(&table_scan, table),
+            Table::LookupTable(_table) => {
+                // TODO: implement LookupSource extension
+                plan_err!("Lookup tables are not yet supported")
+            }
+            Table::TableFromQuery {
+                name: _,
+                logical_plan,
+            } => self.mutate_table_from_query(&table_scan, logical_plan),
         }
-
-        if let Some(st) = self.schema_provider.get_stream_table(table_name) {
-            return self.mutate_stream_catalog_source(&table_scan, st.as_ref());
-        }
-
-        Ok(Transformed::no(LogicalPlan::TableScan(table_scan.clone())))
     }
 }

@@ -28,8 +28,6 @@ pub use connector::{
 pub use global::Registry;
 pub use operator_constructor::OperatorConstructor;
 pub use operator_factory::OperatorFactory;
-#[allow(unused_imports)]
-pub use operator_factory::PassthroughConstructor;
 
 fn register_builtin_connectors(factory: &mut OperatorFactory) {
     factory.register(

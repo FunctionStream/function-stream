@@ -116,7 +116,7 @@ impl StreamingOperatorBlueprint for RemoteTableBoundaryNode {
         let logical_node = LogicalNode::single(
             node_index as u32,
             format!("value_{node_index}"),
-            OperatorName::ArrowValue,
+            OperatorName::Value,
             operator_payload,
             self.table_identifier.to_string(),
             1,

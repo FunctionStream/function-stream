@@ -20,8 +20,8 @@ use crate::sql::common::constants::operator_feature;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, Display, IntoStaticStr)]
 pub enum OperatorName {
     ExpressionWatermark,
-    ArrowValue,
-    ArrowKey,
+    Value,
+    KeyBy,
     Projection,
     AsyncUdf,
     Join,
@@ -32,7 +32,6 @@ pub enum OperatorName {
     SlidingWindowAggregate,
     SessionWindowAggregate,
     UpdatingAggregate,
-    KeyBy,
     ConnectorSource,
     ConnectorSink,
 }
@@ -46,7 +45,7 @@ impl OperatorName {
 
     pub fn feature_tag(self) -> Option<&'static str> {
         match self {
-            Self::ExpressionWatermark | Self::ArrowValue | Self::ArrowKey | Self::Projection => None,
+            Self::ExpressionWatermark | Self::Value | Self::KeyBy | Self::Projection => None,
             Self::AsyncUdf => Some(operator_feature::ASYNC_UDF),
             Self::Join => Some(operator_feature::JOIN_WITH_EXPIRATION),
             Self::InstantJoin => Some(operator_feature::WINDOWED_JOIN),

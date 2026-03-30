@@ -107,7 +107,7 @@ impl KeyExtractionNode {
             key_fields: indices.iter().map(|&idx| idx as u64).collect(),
         };
 
-        (operator_config.encode_to_vec(), OperatorName::ArrowKey)
+        (operator_config.encode_to_vec(), OperatorName::KeyBy)
     }
 
     fn compile_expression_router(

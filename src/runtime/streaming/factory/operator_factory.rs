@@ -19,7 +19,6 @@ use std::sync::Arc;
 use super::operator_constructor::OperatorConstructor;
 use crate::runtime::streaming::api::operator::ConstructedOperator;
 use crate::runtime::streaming::factory::global::Registry;
-use crate::runtime::streaming::operators::PassthroughOperator;
 use crate::runtime::streaming::operators::grouping::IncrementalAggregatingConstructor;
 use crate::runtime::streaming::operators::joins::{
     InstantJoinConstructor, JoinWithExpirationConstructor,
@@ -30,12 +29,18 @@ use crate::runtime::streaming::operators::windows::{
     SessionAggregatingWindowConstructor, SlidingAggregatingWindowConstructor,
     TumblingAggregateWindowConstructor, WindowFunctionConstructor,
 };
-
+use crate::runtime::streaming::operators::{
+    ProjectionOperator, StatelessPhysicalExecutor, ValueExecutionOperator,
+};
+use crate::sql::common::FsSchema;
+use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
+use datafusion_proto::physical_plan::from_proto::parse_physical_expr;
+use datafusion_proto::protobuf::PhysicalExprNode;
 use protocol::grpc::api::{
     ExpressionWatermarkConfig, JoinOperator as JoinOperatorProto,
-    KeyPlanOperator as KeyByProto, SessionWindowAggregateOperator, SlidingWindowAggregateOperator,
-    TumblingWindowAggregateOperator, UpdatingAggregateOperator,
-    WindowFunctionOperator as WindowFunctionProto,
+    KeyPlanOperator as KeyByProto, ProjectionOperator as ProjectionOperatorProto,
+    SessionWindowAggregateOperator, SlidingWindowAggregateOperator, TumblingWindowAggregateOperator,
+    UpdatingAggregateOperator, ValuePlanOperator, WindowFunctionOperator as WindowFunctionProto,
 };
 
 use crate::sql::logical_node::logical::OperatorName;
@@ -102,18 +107,8 @@ impl OperatorFactory {
 
         self.register_named(OperatorName::KeyBy, Box::new(KeyByBridge));
 
-        self.register_named(
-            OperatorName::Projection,
-            Box::new(PassthroughConstructor(OperatorName::Projection)),
-        );
-        self.register_named(
-            OperatorName::ArrowValue,
-            Box::new(PassthroughConstructor(OperatorName::ArrowValue)),
-        );
-        self.register_named(
-            OperatorName::ArrowKey,
-            Box::new(PassthroughConstructor(OperatorName::ArrowKey)),
-        );
+        self.register_named(OperatorName::Projection, Box::new(ProjectionBridge));
+        self.register_named(OperatorName::Value, Box::new(ValueBridge));
 
         crate::runtime::streaming::factory::register_builtin_connectors(self);
         crate::runtime::streaming::factory::register_kafka_connector_plugins(self);
@@ -217,12 +212,81 @@ impl OperatorConstructor for KeyByBridge {
     }
 }
 
-pub struct PassthroughConstructor(pub OperatorName);
+struct ProjectionBridge;
+impl OperatorConstructor for ProjectionBridge {
+    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
+        let proto = ProjectionOperatorProto::decode(config)
+            .map_err(|e| anyhow!("Decode ProjectionOperator failed: {e}"))?;
+        let op = ProjectionExecutionConstructor.with_config(proto, registry)?;
+        Ok(ConstructedOperator::Operator(Box::new(op)))
+    }
+}
 
-impl OperatorConstructor for PassthroughConstructor {
-    fn with_config(&self, _config: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        Ok(ConstructedOperator::Operator(Box::new(
-            PassthroughOperator::new(self.0.as_registry_key()),
-        )))
+struct ValueBridge;
+impl OperatorConstructor for ValueBridge {
+    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
+        let proto = ValuePlanOperator::decode(config)
+            .map_err(|e| anyhow!("Decode ValuePlanOperator failed: {e}"))?;
+        let op = ValueExecutionConstructor.with_config(proto, registry)?;
+        Ok(ConstructedOperator::Operator(Box::new(op)))
+    }
+}
+
+struct ProjectionExecutionConstructor;
+impl ProjectionExecutionConstructor {
+    fn with_config(
+        &self,
+        config: ProjectionOperatorProto,
+        registry: Arc<Registry>,
+    ) -> Result<ProjectionOperator> {
+        let input_schema: FsSchema = config
+            .input_schema
+            .ok_or_else(|| anyhow!("missing projection input_schema"))?
+            .try_into()
+            .map_err(|e| anyhow!("projection input_schema: {e}"))?;
+        let output_schema: FsSchema = config
+            .output_schema
+            .ok_or_else(|| anyhow!("missing projection output_schema"))?
+            .try_into()
+            .map_err(|e| anyhow!("projection output_schema: {e}"))?;
+
+        let exprs = config
+            .exprs
+            .iter()
+            .map(|raw| {
+                let expr_node = PhysicalExprNode::decode(&mut raw.as_slice())
+                    .map_err(|e| anyhow!("decode projection expr: {e}"))?;
+                parse_physical_expr(
+                    &expr_node,
+                    registry.as_ref(),
+                    &input_schema.schema,
+                    &DefaultPhysicalExtensionCodec {},
+                )
+                .map_err(|e| anyhow!("parse projection expr: {e}"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(ProjectionOperator::new(
+            if config.name.is_empty() {
+                OperatorName::Projection.as_registry_key().to_string()
+            } else {
+                config.name
+            },
+            Arc::new(output_schema),
+            exprs,
+        ))
+    }
+}
+
+struct ValueExecutionConstructor;
+impl ValueExecutionConstructor {
+    fn with_config(
+        &self,
+        config: ValuePlanOperator,
+        registry: Arc<Registry>,
+    ) -> Result<ValueExecutionOperator> {
+        let executor = StatelessPhysicalExecutor::new(&config.physical_plan, registry.as_ref())
+            .map_err(|e| anyhow!("build value execution plan '{}': {e}", config.name))?;
+        Ok(ValueExecutionOperator::new(config.name, executor))
     }
 }
