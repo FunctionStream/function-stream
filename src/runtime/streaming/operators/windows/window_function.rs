@@ -29,7 +29,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tracing::warn;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use async_trait::async_trait;
 use crate::runtime::streaming::StreamOutput;
@@ -153,7 +153,7 @@ impl WindowFunctionOperator {
 }
 
 #[async_trait]
-impl MessageOperator for WindowFunctionOperator {
+impl Operator for WindowFunctionOperator {
     fn name(&self) -> &str {
         "WindowFunction"
     }

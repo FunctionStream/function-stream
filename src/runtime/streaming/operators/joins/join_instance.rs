@@ -29,7 +29,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tracing::warn;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use async_trait::async_trait;
 use protocol::grpc::api::JoinOperator;
@@ -197,7 +197,7 @@ impl InstantJoinOperator {
 }
 
 #[async_trait]
-impl MessageOperator for InstantJoinOperator {
+impl Operator for InstantJoinOperator {
     fn name(&self) -> &str {
         "InstantJoin"
     }

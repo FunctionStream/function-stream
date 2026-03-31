@@ -27,7 +27,7 @@ use std::time::{Duration, SystemTime};
 use tracing::{debug, info};
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use async_trait::async_trait;
 use protocol::grpc::api::ExpressionWatermarkConfig;
@@ -103,7 +103,7 @@ impl WatermarkGeneratorOperator {
 }
 
 #[async_trait]
-impl MessageOperator for WatermarkGeneratorOperator {
+impl Operator for WatermarkGeneratorOperator {
     fn name(&self) -> &str {
         "ExpressionWatermarkGenerator"
     }

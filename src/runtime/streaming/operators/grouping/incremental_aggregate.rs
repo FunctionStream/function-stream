@@ -43,7 +43,7 @@ use protocol::grpc::api::UpdatingAggregateOperator;
 // =========================================================================
 // =========================================================================
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::util::decode_aggregate;
 use crate::runtime::streaming::operators::{Key, UpdatingCache};
@@ -657,7 +657,7 @@ fn set_retract_metadata(metadata: ArrayRef, is_retract: Arc<BooleanArray>) -> Ar
 // =========================================================================
 
 #[async_trait::async_trait]
-impl MessageOperator for IncrementalAggregatingFunc {
+impl Operator for IncrementalAggregatingFunc {
     fn name(&self) -> &str {
         "UpdatingAggregatingFunc"
     }

@@ -21,8 +21,10 @@ use tracing::{error, info, warn};
 use protocol::grpc::api::{ChainedOperator, FsProgram};
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::{ConstructedOperator, MessageOperator};
-use crate::runtime::streaming::execution::runner::Pipeline;
+use crate::runtime::streaming::api::operator::{ConstructedOperator, Operator};
+use crate::runtime::streaming::api::source::SourceOperator;
+use crate::runtime::streaming::execution::runner::{ChainedDriver, Pipeline};
+use crate::runtime::streaming::execution::source::SourceRunner;
 use crate::runtime::streaming::factory::OperatorFactory;
 use crate::runtime::streaming::job::edge_manager::EdgeManager;
 use crate::runtime::streaming::job::models::{PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus};
@@ -36,6 +38,11 @@ pub struct JobManager {
     active_jobs: Arc<RwLock<HashMap<String, PhysicalExecutionGraph>>>,
     operator_factory: Arc<OperatorFactory>,
     memory_pool: Arc<MemoryPool>,
+}
+
+struct PreparedChain {
+    source: Option<Box<dyn SourceOperator>>,
+    operators: Vec<Box<dyn Operator>>,
 }
 
 impl JobManager {
@@ -76,20 +83,44 @@ impl JobManager {
                 .map(|rx| Box::pin(ReceiverStream::new(rx)) as _)
                 .collect();
 
-            let operators = self.build_operator_chain(&node.operators)?;
+            let chain = self.build_operator_chain(&node.operators)?;
+            if chain.source.is_none() && physical_inboxes.is_empty() {
+                anyhow::bail!(
+                    "Topology Error: pipeline '{}' contains no source operator and has no upstream inputs.",
+                    pipeline_id
+                );
+            }
+            if chain.source.is_some() && !physical_inboxes.is_empty() {
+                anyhow::bail!(
+                    "Topology Error: source pipeline '{}' should not have upstream inputs.",
+                    pipeline_id
+                );
+            }
 
             let (control_tx, control_rx) = mpsc::channel(64);
             let status = Arc::new(RwLock::new(PipelineStatus::Initializing));
 
-            let handle = self.spawn_pipeline_thread(
-                job_id.clone(),
-                pipeline_id,
-                operators,
-                physical_inboxes,
-                physical_outboxes,
-                control_rx,
-                Arc::clone(&status),
-            )?;
+            let handle = if let Some(source) = chain.source {
+                self.spawn_source_pipeline_thread(
+                    job_id.clone(),
+                    pipeline_id,
+                    source,
+                    chain.operators,
+                    physical_outboxes,
+                    control_rx,
+                    Arc::clone(&status),
+                )?
+            } else {
+                self.spawn_pipeline_thread(
+                    job_id.clone(),
+                    pipeline_id,
+                    chain.operators,
+                    physical_inboxes,
+                    physical_outboxes,
+                    control_rx,
+                    Arc::clone(&status),
+                )?
+            };
 
             pipelines.insert(
                 pipeline_id,
@@ -153,7 +184,8 @@ impl JobManager {
     fn build_operator_chain(
         &self,
         operator_configs: &[ChainedOperator],
-    ) -> anyhow::Result<Vec<Box<dyn MessageOperator>>> {
+    ) -> anyhow::Result<PreparedChain> {
+        let mut source: Option<Box<dyn SourceOperator>> = None;
         let mut chain = Vec::with_capacity(operator_configs.len());
 
         for op_config in operator_configs {
@@ -162,22 +194,33 @@ impl JobManager {
 
             match constructed {
                 ConstructedOperator::Operator(msg_op) => chain.push(msg_op),
-                ConstructedOperator::Source(_) => {
-                    anyhow::bail!(
-                        "Topology Error: Source operator '{}' cannot be scheduled inside a MessageOperator physical chain.",
-                        op_config.operator_name
-                    );
+                ConstructedOperator::Source(src_op) => {
+                    if source.is_some() {
+                        anyhow::bail!(
+                            "Topology Error: Multiple source operators detected in one physical chain."
+                        );
+                    }
+                    if !chain.is_empty() {
+                        anyhow::bail!(
+                            "Topology Error: Source operator '{}' cannot be scheduled inside a MessageOperator physical chain.",
+                            op_config.operator_name
+                        );
+                    }
+                    source = Some(src_op);
                 }
             }
         }
-        Ok(chain)
+        Ok(PreparedChain {
+            source,
+            operators: chain,
+        })
     }
 
     fn spawn_pipeline_thread(
         &self,
         job_id: String,
         pipeline_id: u32,
-        operators: Vec<Box<dyn MessageOperator>>,
+        operators: Vec<Box<dyn Operator>>,
         inboxes: Vec<BoxedEventStream>,
         outboxes: Vec<PhysicalSender>,
         control_rx: mpsc::Receiver<ControlCommand>,
@@ -212,6 +255,57 @@ impl JobManager {
                             .map_err(|e| anyhow::anyhow!("Pipeline init failed: {e}"))?;
 
                         pipeline.run().await.map_err(|e| anyhow::anyhow!("Pipeline execution failed: {e}"))
+                    })
+                }));
+
+                Self::handle_pipeline_exit(&job_id, pipeline_id, execution_result, &status);
+            })?;
+
+        Ok(handle)
+    }
+
+    fn spawn_source_pipeline_thread(
+        &self,
+        job_id: String,
+        pipeline_id: u32,
+        source: Box<dyn SourceOperator>,
+        operators: Vec<Box<dyn Operator>>,
+        outboxes: Vec<PhysicalSender>,
+        control_rx: mpsc::Receiver<ControlCommand>,
+        status: Arc<RwLock<PipelineStatus>>,
+    ) -> anyhow::Result<std::thread::JoinHandle<()>> {
+        let memory_pool = Arc::clone(&self.memory_pool);
+        let thread_name = format!("Task-{job_id}-{pipeline_id}");
+
+        let handle = std::thread::Builder::new()
+            .name(thread_name)
+            .spawn(move || {
+                *status.write().unwrap() = PipelineStatus::Running;
+
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("Failed to build current-thread Tokio runtime for source pipeline");
+
+                let job_id_inner = job_id.clone();
+                let execution_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    rt.block_on(async move {
+                        let ctx = TaskContext::new(
+                            job_id_inner,
+                            pipeline_id,
+                            0,
+                            1,
+                            outboxes,
+                            memory_pool,
+                        );
+
+                        let chain_head = ChainedDriver::build_chain(operators);
+                        let runner = SourceRunner::new(source, chain_head, ctx, control_rx);
+
+                        runner
+                            .run()
+                            .await
+                            .map_err(|e| anyhow::anyhow!("Source pipeline execution failed: {e}"))
                     })
                 }));
 

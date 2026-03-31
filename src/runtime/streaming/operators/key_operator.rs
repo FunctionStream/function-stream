@@ -23,7 +23,7 @@ use futures::StreamExt;
 use std::sync::Arc;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::operators::StatelessPhysicalExecutor;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, Watermark};
@@ -47,7 +47,7 @@ impl KeyByOperator {
 }
 
 #[async_trait]
-impl MessageOperator for KeyByOperator {
+impl Operator for KeyByOperator {
     fn name(&self) -> &str {
         &self.name
     }
@@ -192,7 +192,7 @@ impl KeyExecutionOperator {
 }
 
 #[async_trait]
-impl MessageOperator for KeyExecutionOperator {
+impl Operator for KeyExecutionOperator {
     fn name(&self) -> &str {
         &self.name
     }

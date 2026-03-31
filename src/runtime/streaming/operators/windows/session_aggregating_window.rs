@@ -35,7 +35,7 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use async_trait::async_trait;
 use crate::runtime::streaming::factory::Registry;
 use protocol::grpc::api::SessionWindowAggregateOperator;
@@ -603,7 +603,7 @@ impl SessionWindowOperator {
 }
 
 #[async_trait]
-impl MessageOperator for SessionWindowOperator {
+impl Operator for SessionWindowOperator {
     fn name(&self) -> &str {
         "SessionWindow"
     }

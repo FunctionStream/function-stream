@@ -19,7 +19,7 @@ pub mod source;
 pub mod watermark;
 pub mod windows;
 mod key_operator;
-mod projection;
+pub mod projection;
 mod stateless_physical_executor;
 mod value_execution;
 

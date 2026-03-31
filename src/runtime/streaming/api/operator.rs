@@ -24,11 +24,11 @@ use crate::sql::common::{CheckpointBarrier, Watermark};
 
 pub enum ConstructedOperator {
     Source(Box<dyn SourceOperator>),
-    Operator(Box<dyn MessageOperator>),
+    Operator(Box<dyn Operator>),
 }
 
 #[async_trait]
-pub trait MessageOperator: Send + 'static {
+pub trait Operator: Send + 'static {
     fn name(&self) -> &str;
 
     async fn on_start(&mut self, _ctx: &mut TaskContext) -> anyhow::Result<()> {

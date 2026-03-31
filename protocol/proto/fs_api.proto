@@ -8,8 +8,131 @@ package fs_api;
 
 message ConnectorOp {
   string connector = 1;
-  string config = 2;
-  string description = 3;
+  reserved 2;  // removed: map<string, string> config_map
+  optional FsSchema fs_schema = 3;
+  string name = 4;
+  string description = 5;
+
+  oneof config {
+    KafkaSourceConfig kafka_source = 6;
+    KafkaSinkConfig kafka_sink = 7;
+    GenericConnectorConfig generic = 8;
+  }
+}
+
+// ─────────────────────── Kafka Connector Configs ───────────────────────
+
+message KafkaSourceConfig {
+  string topic = 1;
+  string bootstrap_servers = 2;
+  optional string group_id = 3;
+  optional string group_id_prefix = 4;
+  KafkaOffsetMode offset_mode = 5;
+  KafkaReadMode read_mode = 6;
+  KafkaAuthConfig auth = 7;
+  map<string, string> client_configs = 8;
+  FormatConfig format = 9;
+  BadDataPolicy bad_data_policy = 10;
+  uint32 rate_limit_msgs_per_sec = 11;
+  optional string value_subject = 12;
+}
+
+message KafkaSinkConfig {
+  string topic = 1;
+  string bootstrap_servers = 2;
+  KafkaSinkCommitMode commit_mode = 3;
+  optional string key_field = 4;
+  optional string timestamp_field = 5;
+  KafkaAuthConfig auth = 6;
+  map<string, string> client_configs = 7;
+  FormatConfig format = 8;
+  optional string value_subject = 9;
+}
+
+// Fallback for non-Kafka connectors that are not yet strongly typed.
+message GenericConnectorConfig {
+  map<string, string> properties = 1;
+}
+
+// ─────────────────────── Kafka Auth ───────────────────────
+
+message KafkaAuthConfig {
+  oneof auth {
+    KafkaAuthNone none = 1;
+    KafkaAuthSasl sasl = 2;
+    KafkaAuthAwsMskIam aws_msk_iam = 3;
+  }
+}
+
+message KafkaAuthNone {}
+
+message KafkaAuthSasl {
+  string protocol = 1;
+  string mechanism = 2;
+  string username = 3;
+  string password = 4;
+}
+
+message KafkaAuthAwsMskIam {
+  string region = 1;
+}
+
+// ─────────────────────── Format & Data-Quality ───────────────────────
+
+message FormatConfig {
+  oneof format {
+    JsonFormatConfig json = 1;
+    RawStringFormatConfig raw_string = 2;
+    RawBytesFormatConfig raw_bytes = 3;
+  }
+}
+
+message JsonFormatConfig {
+  TimestampFormatProto timestamp_format = 1;
+  DecimalEncodingProto decimal_encoding = 2;
+  bool include_schema = 3;
+  bool confluent_schema_registry = 4;
+  optional uint32 schema_id = 5;
+  bool debezium = 6;
+  bool unstructured = 7;
+}
+
+message RawStringFormatConfig {}
+message RawBytesFormatConfig {}
+
+// ─────────────────────── Kafka Enums ───────────────────────
+
+enum TimestampFormatProto {
+  TIMESTAMP_RFC3339 = 0;
+  TIMESTAMP_UNIX_MILLIS = 1;
+}
+
+enum DecimalEncodingProto {
+  DECIMAL_NUMBER = 0;
+  DECIMAL_STRING = 1;
+  DECIMAL_BYTES = 2;
+}
+
+enum BadDataPolicy {
+  BAD_DATA_FAIL = 0;
+  BAD_DATA_DROP = 1;
+}
+
+enum KafkaOffsetMode {
+  KAFKA_OFFSET_EARLIEST = 0;
+  KAFKA_OFFSET_LATEST = 1;
+  KAFKA_OFFSET_GROUP = 2;
+}
+
+enum KafkaReadMode {
+  KAFKA_READ_DEFAULT = 0;
+  KAFKA_READ_COMMITTED = 1;
+  KAFKA_READ_UNCOMMITTED = 2;
+}
+
+enum KafkaSinkCommitMode {
+  KAFKA_SINK_AT_LEAST_ONCE = 0;
+  KAFKA_SINK_EXACTLY_ONCE = 1;
 }
 
 message ValuePlanOperator {

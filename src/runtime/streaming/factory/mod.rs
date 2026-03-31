@@ -43,11 +43,11 @@ fn register_builtin_connectors(factory: &mut OperatorFactory) {
 fn register_kafka_connector_plugins(factory: &mut OperatorFactory) {
     factory.register(
         factory_operator_name::KAFKA_SOURCE,
-        Box::new(connector::KafkaSourceDispatcher),
+        Box::new(connector::kafka::ConnectorDispatcher),
     );
     factory.register(
         factory_operator_name::KAFKA_SINK,
-        Box::new(connector::KafkaSinkDispatcher),
+        Box::new(connector::kafka::ConnectorDispatcher),
     );
     info!(
         "Registered Kafka connector plugins ({}, {})",

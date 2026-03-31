@@ -225,26 +225,20 @@ impl CatalogManager {
                 let mut opts = source.catalog_with_options().clone();
                 opts.entry("connector".to_string())
                     .or_insert_with(|| source.connector().to_string());
+                let catalog_row = pb::CatalogSourceTable {
+                    arrow_schema_ipc: CatalogCodec::encode_schema(&Arc::new(
+                        source.produce_physical_schema(),
+                    ))?,
+                    event_time_field: source.event_time_field().map(str::to_string),
+                    watermark_field: source.stream_catalog_watermark_field(),
+                    with_options: opts.into_iter().collect(),
+                    connector: source.connector().to_string(),
+                    description: source.description.clone(),
+                };
                 if matches!(table, CatalogTable::LookupTable(_)) {
-                    table_definition::TableType::LookupTable(pb::CatalogSourceTable {
-                        arrow_schema_ipc: CatalogCodec::encode_schema(&Arc::new(
-                            source.produce_physical_schema(),
-                        ))?,
-                        event_time_field: source.event_time_field().map(str::to_string),
-                        watermark_field: source.stream_catalog_watermark_field(),
-                        with_options: opts.into_iter().collect(),
-                        connector: source.connector().to_string(),
-                    })
+                    table_definition::TableType::LookupTable(catalog_row)
                 } else {
-                    table_definition::TableType::ConnectorTable(pb::CatalogSourceTable {
-                        arrow_schema_ipc: CatalogCodec::encode_schema(&Arc::new(
-                            source.produce_physical_schema(),
-                        ))?,
-                        event_time_field: source.event_time_field().map(str::to_string),
-                        watermark_field: source.stream_catalog_watermark_field(),
-                        with_options: opts.into_iter().collect(),
-                        connector: source.connector().to_string(),
-                    })
+                    table_definition::TableType::ConnectorTable(catalog_row)
                 }
             }
             CatalogTable::TableFromQuery { name, .. } => return plan_err!(
@@ -275,7 +269,15 @@ impl CatalogManager {
         } else {
             source_row.connector.clone()
         };
-        let mut source = SourceTable::new(table_name, connector, ConnectionType::Source);
+        let mut source = SourceTable::new(
+            table_name,
+            connector,
+            if as_lookup {
+                ConnectionType::Lookup
+            } else {
+                ConnectionType::Source
+            },
+        );
         let schema = CatalogCodec::decode_schema(&source_row.arrow_schema_ipc)?;
         source.schema_specs = schema
             .fields()
@@ -288,6 +290,34 @@ impl CatalogManager {
             .watermark_field
             .filter(|w| w != sql_field::COMPUTED_WATERMARK);
         source.catalog_with_options = source_row.with_options.into_iter().collect();
+        source.description = source_row.description;
+
+        // Rebuild strongly-typed ConnectorConfig from persisted WITH options.
+        if source.connector().eq_ignore_ascii_case("kafka") {
+            use crate::sql::schema::kafka_operator_config::build_kafka_proto_config_from_string_map;
+            use crate::sql::schema::ConnectorConfig;
+            let opts_map: std::collections::HashMap<String, String> =
+                source.catalog_with_options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let physical = source.produce_physical_schema();
+            if let Ok(proto_cfg) = build_kafka_proto_config_from_string_map(opts_map, &physical) {
+                source.connector_config = match proto_cfg {
+                    protocol::grpc::api::connector_op::Config::KafkaSource(cfg) => {
+                        ConnectorConfig::KafkaSource(cfg)
+                    }
+                    protocol::grpc::api::connector_op::Config::KafkaSink(cfg) => {
+                        ConnectorConfig::KafkaSink(cfg)
+                    }
+                    protocol::grpc::api::connector_op::Config::Generic(g) => {
+                        ConnectorConfig::Generic(g.properties)
+                    }
+                };
+            }
+        } else {
+            use crate::sql::schema::ConnectorConfig;
+            source.connector_config = ConnectorConfig::Generic(
+                source.catalog_with_options.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            );
+        }
 
         if as_lookup {
             Ok(CatalogTable::LookupTable(source))

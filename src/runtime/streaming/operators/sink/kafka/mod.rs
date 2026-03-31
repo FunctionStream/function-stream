@@ -27,7 +27,7 @@ use tokio::time::sleep;
 use tracing::{info, warn};
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::format::DataSerializer;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::constants::factory_operator_name;
@@ -205,7 +205,7 @@ fn row_key_bytes(batch: &RecordBatch, row: usize, col: usize) -> Option<Vec<u8>>
 // ============================================================================
 
 #[async_trait]
-impl MessageOperator for KafkaSinkOperator {
+impl Operator for KafkaSinkOperator {
     fn name(&self) -> &str {
         factory_operator_name::KAFKA_SINK
     }

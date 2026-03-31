@@ -16,7 +16,7 @@ use tokio_stream::{StreamExt, StreamMap};
 use tracing::{info, info_span, Instrument};
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::error::RunError;
 use crate::runtime::streaming::network::endpoint::BoxedEventStream;
 use crate::runtime::streaming::protocol::{
@@ -52,16 +52,16 @@ pub trait OperatorDrive: Send {
 }
 
 pub struct ChainedDriver {
-    operator: Box<dyn MessageOperator>,
+    operator: Box<dyn Operator>,
     next: Option<Box<dyn OperatorDrive>>,
 }
 
 impl ChainedDriver {
-    pub fn new(operator: Box<dyn MessageOperator>, next: Option<Box<dyn OperatorDrive>>) -> Self {
+    pub fn new(operator: Box<dyn Operator>, next: Option<Box<dyn OperatorDrive>>) -> Self {
         Self { operator, next }
     }
 
-    pub fn build_chain(mut operators: Vec<Box<dyn MessageOperator>>) -> Option<Box<dyn OperatorDrive>> {
+    pub fn build_chain(mut operators: Vec<Box<dyn Operator>>) -> Option<Box<dyn OperatorDrive>> {
         if operators.is_empty() {
             return None;
         }
@@ -240,7 +240,7 @@ pub struct Pipeline {
 
 impl Pipeline {
     pub fn new(
-        operators: Vec<Box<dyn MessageOperator>>,
+        operators: Vec<Box<dyn Operator>>,
         ctx: TaskContext,
         inboxes: Vec<BoxedEventStream>,
         control_rx: Receiver<ControlCommand>,

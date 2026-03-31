@@ -30,10 +30,13 @@ message CatalogSourceTable {
   bytes arrow_schema_ipc = 1;
   optional string event_time_field = 2;
   optional string watermark_field = 3;
-  // Original CREATE TABLE ... WITH ('k'='v', ...) pairs (best-effort; keys sorted in DDL).
+  // Original CREATE TABLE ... WITH ('k'='v', ...) pairs — single source of truth.
   map<string, string> with_options = 4;
   // Canonical connector identifier (e.g. kafka, postgres-cdc).
   string connector = 5;
+  reserved 6;  // removed: string opaque_config (JSON blob no longer needed)
+  // Human-readable note from DDL (ConnectorOp.description).
+  string description = 7;
 }
 
 // =============================================================================

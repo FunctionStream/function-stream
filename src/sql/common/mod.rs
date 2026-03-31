@@ -58,7 +58,7 @@ pub use kafka_catalog::{
 };
 pub use errors::{DataflowError, DataflowResult};
 pub use formats::{BadData, Format, Framing, JsonCompression, JsonFormat};
-pub use operator_config::{MetadataField, OperatorConfig, RateLimit};
+pub use operator_config::MetadataField;
 
 // ── Well-known column names ──
 pub use constants::sql_field::{TIMESTAMP_FIELD, UPDATING_META_FIELD};

@@ -25,7 +25,7 @@ pub mod operators;
 pub mod protocol;
 
 pub use api::{
-    ConstructedOperator, MessageOperator, SourceEvent, SourceOffset, SourceOperator, TaskContext,
+    ConstructedOperator, Operator, SourceEvent, SourceOffset, SourceOperator, TaskContext,
 };
 pub use error::RunError;
 pub use execution::{SOURCE_IDLE_SLEEP, SourceRunner, SubtaskRunner};

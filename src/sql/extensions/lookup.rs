@@ -10,6 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::sync::Arc;
 
@@ -21,7 +22,7 @@ use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use prost::Message;
 
 use protocol::grpc::api;
-use protocol::grpc::api::{ConnectorOp, LookupJoinCondition, LookupJoinOperator};
+use protocol::grpc::api::{ConnectorOp, GenericConnectorConfig, LookupJoinCondition, LookupJoinOperator};
 
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::extension_node;
@@ -156,13 +157,24 @@ impl StreamReferenceJoinNode {
         let lookup_fs_schema =
             FsSchema::from_schema_unkeyed(add_timestamp_field_arrow(dictionary_physical_schema))?;
 
+        let properties: HashMap<String, String> = self
+            .external_dictionary
+            .catalog_with_options
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
         Ok(LookupJoinOperator {
             input_schema: Some(internal_input_schema.into()),
-            lookup_schema: Some(lookup_fs_schema.into()),
+            lookup_schema: Some(lookup_fs_schema.clone().into()),
             connector: Some(ConnectorOp {
                 connector: self.external_dictionary.adapter_type.clone(),
-                config: self.external_dictionary.opaque_config.clone(),
+                fs_schema: Some(lookup_fs_schema.into()),
+                name: self.external_dictionary.table_identifier.clone(),
                 description: self.external_dictionary.description.clone(),
+                config: Some(protocol::grpc::api::connector_op::Config::Generic(
+                    GenericConnectorConfig { properties },
+                )),
             }),
             key_exprs: self.compile_join_conditions(planner)?,
             join_type: self.map_api_join_type()?,

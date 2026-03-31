@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::operators::StatelessPhysicalExecutor;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, Watermark};
@@ -34,7 +34,7 @@ impl ValueExecutionOperator {
 }
 
 #[async_trait]
-impl MessageOperator for ValueExecutionOperator {
+impl Operator for ValueExecutionOperator {
     fn name(&self) -> &str {
         &self.name
     }

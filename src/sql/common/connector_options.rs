@@ -48,6 +48,21 @@ fn sql_expr_to_catalog_string(e: &Expr) -> String {
 }
 
 impl ConnectorOptions {
+    /// Build options from persisted catalog string maps (same semantics as SQL `WITH` literals).
+    pub fn from_flat_string_map(map: HashMap<String, String>) -> DFResult<Self> {
+        let mut options = HashMap::with_capacity(map.len());
+        for (k, v) in map {
+            options.insert(
+                k,
+                Expr::Value(SqlValue::SingleQuotedString(v).with_empty_span()),
+            );
+        }
+        Ok(Self {
+            options,
+            partitions: Vec::new(),
+        })
+    }
+
     pub fn new(sql_opts: &[SqlOption], partition_by: &Option<Vec<Expr>>) -> DFResult<Self> {
         let mut options = HashMap::new();
 

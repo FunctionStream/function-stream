@@ -48,7 +48,7 @@ pub use control::{
 pub use fs_schema::{FsSchema, FsSchemaRef};
 pub use errors::DataflowError;
 pub use formats::{BadData, Format, Framing, JsonFormat};
-pub use operator_config::{MetadataField, OperatorConfig, RateLimit};
+pub use operator_config::MetadataField;
 
 // ── Well-known column names ──
 pub const TIMESTAMP_FIELD: &str = "_timestamp";

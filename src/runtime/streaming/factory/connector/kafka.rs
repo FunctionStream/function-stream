@@ -10,137 +10,221 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use prost::Message;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use protocol::grpc::api::ConnectorOp;
-use tracing::{info, warn};
+use protocol::grpc::api::connector_op::Config;
+use protocol::grpc::api::{
+    BadDataPolicy, ConnectorOp, DecimalEncodingProto, FormatConfig,
+    KafkaAuthConfig, KafkaOffsetMode, KafkaReadMode, KafkaSinkCommitMode, KafkaSinkConfig,
+    KafkaSourceConfig, TimestampFormatProto,
+};
+use tracing::info;
 
 use crate::runtime::streaming::api::operator::ConstructedOperator;
 use crate::runtime::streaming::api::source::SourceOffset;
 use crate::runtime::streaming::factory::global::Registry;
 use crate::runtime::streaming::factory::operator_constructor::OperatorConstructor;
 use crate::runtime::streaming::format::{
-    BadDataPolicy, DataSerializer, DecimalEncoding as RtDecimalEncoding, Format as RuntimeFormat,
-    JsonFormat as RuntimeJsonFormat, TimestampFormat as RtTimestampFormat,
+    BadDataPolicy as RtBadDataPolicy, DataSerializer, DecimalEncoding as RtDecimalEncoding,
+    Format as RuntimeFormat, JsonFormat as RuntimeJsonFormat,
+    TimestampFormat as RtTimestampFormat,
 };
 use crate::runtime::streaming::operators::sink::kafka::{ConsistencyMode, KafkaSinkOperator};
-use crate::runtime::streaming::operators::source::kafka::{BufferedDeserializer, KafkaSourceOperator};
-use crate::sql::common::constants::connector_type;
-use crate::sql::common::formats::{
-    BadData, DecimalEncoding as SqlDecimalEncoding, Format as SqlFormat, JsonFormat as SqlJsonFormat,
-    TimestampFormat as SqlTimestampFormat,
+use crate::runtime::streaming::operators::source::kafka::{
+    BufferedDeserializer, KafkaSourceOperator,
 };
-use crate::sql::common::kafka_catalog::{
-    KafkaConfig, KafkaConfigAuthentication, KafkaTable, ReadMode, SinkCommitMode, TableType,
-};
-use crate::sql::common::{FsSchema, OperatorConfig};
+use crate::sql::common::FsSchema;
 
 const DEFAULT_SOURCE_BATCH_SIZE: usize = 1024;
 
-pub fn build_client_configs(config: &KafkaConfig, table: &KafkaTable) -> Result<HashMap<String, String>> {
-    let mut client_configs = HashMap::new();
+// ─────────────── Proto → Runtime type conversions ───────────────
 
-    match &config.authentication {
-        KafkaConfigAuthentication::None => {}
-        KafkaConfigAuthentication::Sasl {
-            protocol,
-            mechanism,
-            username,
-            password,
-        } => {
-            client_configs.insert("security.protocol".to_string(), protocol.clone());
-            client_configs.insert("sasl.mechanism".to_string(), mechanism.clone());
-            client_configs.insert("sasl.username".to_string(), username.clone());
-            client_configs.insert("sasl.password".to_string(), password.clone());
+fn proto_format_to_runtime(fmt: &Option<FormatConfig>) -> Result<RuntimeFormat> {
+    let cfg = fmt.as_ref().context("FormatConfig is required")?;
+    match &cfg.format {
+        Some(protocol::grpc::api::format_config::Format::Json(j)) => {
+            Ok(RuntimeFormat::Json(RuntimeJsonFormat {
+                timestamp_format: match j.timestamp_format() {
+                    TimestampFormatProto::TimestampRfc3339 => RtTimestampFormat::RFC3339,
+                    TimestampFormatProto::TimestampUnixMillis => RtTimestampFormat::UnixMillis,
+                },
+                decimal_encoding: match j.decimal_encoding() {
+                    DecimalEncodingProto::DecimalNumber => RtDecimalEncoding::Number,
+                    DecimalEncodingProto::DecimalString => RtDecimalEncoding::String,
+                    DecimalEncodingProto::DecimalBytes => RtDecimalEncoding::Bytes,
+                },
+                include_schema: j.include_schema,
+            }))
         }
-        KafkaConfigAuthentication::AwsMskIam { region } => {
-            client_configs.insert("security.protocol".to_string(), "SASL_SSL".to_string());
-            client_configs.insert("sasl.mechanism".to_string(), "OAUTHBEARER".to_string());
-            client_configs.insert(
+        Some(protocol::grpc::api::format_config::Format::RawString(_)) => {
+            Ok(RuntimeFormat::RawString)
+        }
+        Some(protocol::grpc::api::format_config::Format::RawBytes(_)) => {
+            Ok(RuntimeFormat::RawBytes)
+        }
+        None => bail!("FormatConfig has no format variant set"),
+    }
+}
+
+fn proto_bad_data_to_runtime(policy: i32) -> RtBadDataPolicy {
+    match BadDataPolicy::try_from(policy) {
+        Ok(BadDataPolicy::BadDataDrop) => RtBadDataPolicy::Drop,
+        _ => RtBadDataPolicy::Fail,
+    }
+}
+
+fn proto_offset_to_runtime(mode: i32) -> SourceOffset {
+    match KafkaOffsetMode::try_from(mode) {
+        Ok(KafkaOffsetMode::KafkaOffsetLatest) => SourceOffset::Latest,
+        Ok(KafkaOffsetMode::KafkaOffsetEarliest) => SourceOffset::Earliest,
+        _ => SourceOffset::Group,
+    }
+}
+
+fn build_auth_client_configs(auth: &Option<KafkaAuthConfig>) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let Some(auth) = auth else { return out };
+    match &auth.auth {
+        Some(protocol::grpc::api::kafka_auth_config::Auth::Sasl(sasl)) => {
+            out.insert("security.protocol".to_string(), sasl.protocol.clone());
+            out.insert("sasl.mechanism".to_string(), sasl.mechanism.clone());
+            out.insert("sasl.username".to_string(), sasl.username.clone());
+            out.insert("sasl.password".to_string(), sasl.password.clone());
+        }
+        Some(protocol::grpc::api::kafka_auth_config::Auth::AwsMskIam(iam)) => {
+            out.insert("security.protocol".to_string(), "SASL_SSL".to_string());
+            out.insert("sasl.mechanism".to_string(), "OAUTHBEARER".to_string());
+            out.insert(
                 "sasl.oauthbearer.extensions".to_string(),
-                format!("logicalCluster=aws_msk;aws_region={region}"),
+                format!("logicalCluster=aws_msk;aws_region={}", iam.region),
             );
         }
+        _ => {}
     }
+    out
+}
 
-    for (k, v) in &config.connection_properties {
-        client_configs.insert(k.clone(), v.clone());
+fn merge_client_configs(
+    auth: &Option<KafkaAuthConfig>,
+    extra: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    let mut configs = build_auth_client_configs(auth);
+    for (k, v) in extra {
+        configs.insert(k.clone(), v.clone());
     }
+    configs
+}
 
-    for (k, v) in &table.client_configs {
-        if client_configs.contains_key(k) {
-            warn!(
-                "Kafka config key '{}' is defined in both connection and table; using table value",
-                k
-            );
+// ─────────────── Unified Connector Dispatcher ───────────────
+
+pub struct ConnectorDispatcher;
+
+impl OperatorConstructor for ConnectorDispatcher {
+    fn with_config(&self, payload: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
+        let op = ConnectorOp::decode(payload)
+            .context("Failed to decode ConnectorOp protobuf")?;
+
+        let fs_schema = op
+            .fs_schema
+            .as_ref()
+            .map(|fs| FsSchema::try_from(fs.clone()))
+            .transpose()
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        match op.config {
+            Some(Config::KafkaSource(ref cfg)) => {
+                Self::build_kafka_source(&op.name, cfg, fs_schema)
+            }
+            Some(Config::KafkaSink(ref cfg)) => {
+                Self::build_kafka_sink(&op.name, cfg, fs_schema)
+            }
+            Some(Config::Generic(_)) => bail!(
+                "ConnectorOp '{}': GenericConnectorConfig dispatch not yet implemented",
+                op.name
+            ),
+            None => bail!("ConnectorOp '{}' has no configuration payload", op.name),
         }
-        client_configs.insert(k.clone(), v.clone());
-    }
-
-    Ok(client_configs)
-}
-
-fn bad_data_policy(b: Option<BadData>) -> BadDataPolicy {
-    match b.unwrap_or_default() {
-        BadData::Fail {} => BadDataPolicy::Fail,
-        BadData::Drop {} => BadDataPolicy::Drop,
     }
 }
 
-fn sql_timestamp_format(t: SqlTimestampFormat) -> RtTimestampFormat {
-    match t {
-        SqlTimestampFormat::RFC3339 => RtTimestampFormat::RFC3339,
-        SqlTimestampFormat::UnixMillis => RtTimestampFormat::UnixMillis,
-    }
-}
+impl ConnectorDispatcher {
+    fn build_kafka_source(
+        _name: &str,
+        cfg: &KafkaSourceConfig,
+        fs_schema: Option<FsSchema>,
+    ) -> Result<ConstructedOperator> {
+        info!(topic = %cfg.topic, "Constructing Kafka Source");
 
-fn sql_decimal_encoding(d: SqlDecimalEncoding) -> RtDecimalEncoding {
-    match d {
-        SqlDecimalEncoding::Number => RtDecimalEncoding::Number,
-        SqlDecimalEncoding::String => RtDecimalEncoding::String,
-        SqlDecimalEncoding::Bytes => RtDecimalEncoding::Bytes,
-    }
-}
+        let fs = fs_schema.context("fs_schema is required for Kafka Source")?;
+        let client_configs = merge_client_configs(&cfg.auth, &cfg.client_configs);
 
-fn sql_json_format_to_runtime(j: &SqlJsonFormat) -> RuntimeJsonFormat {
-    RuntimeJsonFormat {
-        timestamp_format: sql_timestamp_format(j.timestamp_format),
-        decimal_encoding: sql_decimal_encoding(j.decimal_encoding),
-        include_schema: j.include_schema,
-    }
-}
+        let mut final_configs = client_configs;
+        if cfg.read_mode() == KafkaReadMode::KafkaReadCommitted {
+            final_configs.insert("isolation.level".to_string(), "read_committed".to_string());
+        }
 
-fn sql_format_to_runtime(f: SqlFormat) -> Result<RuntimeFormat> {
-    match f {
-        SqlFormat::Json(j) => Ok(RuntimeFormat::Json(sql_json_format_to_runtime(&j))),
-        SqlFormat::RawString(_) => Ok(RuntimeFormat::RawString),
-        SqlFormat::RawBytes(_) => Ok(RuntimeFormat::RawBytes),
-        other => bail!(
-            "Kafka connector: format '{}' is not supported for runtime deserializer/serializer yet",
-            other.name()
-        ),
-    }
-}
+        let runtime_format = proto_format_to_runtime(&cfg.format)?;
+        let bad_data = proto_bad_data_to_runtime(cfg.bad_data_policy);
 
-fn kafka_table_offset_to_runtime(o: crate::sql::common::KafkaTableSourceOffset) -> SourceOffset {
-    use crate::sql::common::KafkaTableSourceOffset as KOff;
-    match o {
-        KOff::Latest => SourceOffset::Latest,
-        KOff::Earliest => SourceOffset::Earliest,
-        KOff::Group => SourceOffset::Group,
-    }
-}
+        let deserializer = Box::new(BufferedDeserializer::new(
+            runtime_format,
+            fs.schema.clone(),
+            bad_data,
+            DEFAULT_SOURCE_BATCH_SIZE,
+        ));
 
-fn non_zero_rate_per_second(op: &OperatorConfig) -> NonZeroU32 {
-    op.rate_limit
-        .as_ref()
-        .and_then(|r| NonZeroU32::new(r.messages_per_second.max(1)))
-        .unwrap_or_else(|| NonZeroU32::new(1_000_000).expect("nonzero"))
+        let rate = NonZeroU32::new(cfg.rate_limit_msgs_per_sec.max(1))
+            .unwrap_or_else(|| NonZeroU32::new(1_000_000).expect("nonzero"));
+
+        let source_op = KafkaSourceOperator::new(
+            cfg.topic.clone(),
+            cfg.bootstrap_servers.clone(),
+            cfg.group_id.clone(),
+            cfg.group_id_prefix.clone(),
+            proto_offset_to_runtime(cfg.offset_mode),
+            final_configs,
+            rate,
+            vec![],
+            deserializer,
+        );
+
+        Ok(ConstructedOperator::Source(Box::new(source_op)))
+    }
+
+    fn build_kafka_sink(
+        _name: &str,
+        cfg: &KafkaSinkConfig,
+        fs_schema: Option<FsSchema>,
+    ) -> Result<ConstructedOperator> {
+        info!(topic = %cfg.topic, "Constructing Kafka Sink");
+
+        let fs_in = fs_schema.context("fs_schema is required for Kafka Sink")?;
+        let client_configs = merge_client_configs(&cfg.auth, &cfg.client_configs);
+
+        let consistency = match cfg.commit_mode() {
+            KafkaSinkCommitMode::KafkaSinkExactlyOnce => ConsistencyMode::ExactlyOnce,
+            KafkaSinkCommitMode::KafkaSinkAtLeastOnce => ConsistencyMode::AtLeastOnce,
+        };
+
+        let runtime_format = proto_format_to_runtime(&cfg.format)?;
+        let fs = sink_fs_schema_adjusted(fs_in, &cfg.key_field, &cfg.timestamp_field)?;
+        let serializer = DataSerializer::new(runtime_format, fs.schema.clone());
+
+        let sink_op = KafkaSinkOperator::new(
+            cfg.topic.clone(),
+            cfg.bootstrap_servers.clone(),
+            consistency,
+            client_configs,
+            fs,
+            serializer,
+        );
+
+        Ok(ConstructedOperator::Operator(Box::new(sink_op)))
+    }
 }
 
 fn sink_fs_schema_adjusted(
@@ -155,7 +239,7 @@ fn sink_fs_schema_adjusted(
     let ts = if let Some(name) = timestamp_field {
         schema
             .column_with_name(name)
-            .ok_or_else(|| anyhow!("timestamp column '{name}' not found in schema"))?
+            .ok_or_else(|| anyhow::anyhow!("timestamp column '{name}' not found in schema"))?
             .0
     } else {
         fs.timestamp_index
@@ -164,7 +248,7 @@ fn sink_fs_schema_adjusted(
     let routing = if let Some(name) = key_field {
         let k = schema
             .column_with_name(name)
-            .ok_or_else(|| anyhow!("key column '{name}' not found in schema"))?
+            .ok_or_else(|| anyhow::anyhow!("key column '{name}' not found in schema"))?
             .0;
         Some(vec![k])
     } else {
@@ -173,159 +257,6 @@ fn sink_fs_schema_adjusted(
     Ok(FsSchema::new(schema, ts, keys, routing))
 }
 
-fn decode_operator_config(op: &ConnectorOp) -> Result<OperatorConfig> {
-    serde_json::from_str(&op.config).with_context(|| {
-        format!(
-            "Invalid OperatorConfig JSON for connector '{}'",
-            op.connector
-        )
-    })
-}
-
-pub struct KafkaSourceDispatcher;
-
-impl OperatorConstructor for KafkaSourceDispatcher {
-    fn with_config(&self, payload: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        let op = ConnectorOp::decode(payload)
-            .context("Failed to decode ConnectorOp protobuf for Kafka Source")?;
-
-        if op.connector != connector_type::KAFKA {
-            bail!(
-                "KafkaSourceDispatcher: expected connector 'kafka', got '{}'",
-                op.connector
-            );
-        }
-
-        let op_config = decode_operator_config(&op)?;
-
-        let kafka_config: KafkaConfig = serde_json::from_value(op_config.connection.clone())
-            .context("Failed to parse Kafka connection configuration")?;
-
-        let kafka_table: KafkaTable = serde_json::from_value(op_config.table.clone())
-            .context("Failed to parse Kafka table configuration")?;
-
-        let TableType::Source {
-            offset,
-            read_mode,
-            group_id,
-            group_id_prefix,
-        } = &kafka_table.kind
-        else {
-            bail!(
-                "Expected Kafka Source, got Sink configuration for topic '{}'",
-                kafka_table.topic
-            );
-        };
-
-        info!("Constructing Kafka Source for topic: {}", kafka_table.topic);
-
-        let mut client_configs = build_client_configs(&kafka_config, &kafka_table)?;
-        if let Some(ReadMode::ReadCommitted) = read_mode {
-            client_configs.insert("isolation.level".to_string(), "read_committed".to_string());
-        }
-
-        let sql_format = op_config
-            .format
-            .clone()
-            .context("Format must be specified for Kafka Source")?;
-        let runtime_format = sql_format_to_runtime(sql_format)?;
-        let fs = op_config
-            .input_schema
-            .clone()
-            .context("input_schema is required for Kafka Source")?;
-        let bad = bad_data_policy(op_config.bad_data.clone());
-
-        let deserializer: std::boxed::Box<
-            dyn crate::runtime::streaming::operators::source::kafka::BatchDeserializer,
-        > = Box::new(BufferedDeserializer::new(
-            runtime_format,
-            fs.schema.clone(),
-            bad,
-            DEFAULT_SOURCE_BATCH_SIZE,
-        ));
-
-        let source_op = KafkaSourceOperator::new(
-            kafka_table.topic.clone(),
-            kafka_config.bootstrap_servers.clone(),
-            group_id.clone(),
-            group_id_prefix.clone(),
-            kafka_table_offset_to_runtime(*offset),
-            client_configs,
-            non_zero_rate_per_second(&op_config),
-            op_config.metadata_fields,
-            deserializer,
-        );
-
-        Ok(ConstructedOperator::Source(Box::new(source_op)))
-    }
-}
-
-pub struct KafkaSinkDispatcher;
-
-impl OperatorConstructor for KafkaSinkDispatcher {
-    fn with_config(&self, payload: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        let op = ConnectorOp::decode(payload)
-            .context("Failed to decode ConnectorOp protobuf for Kafka Sink")?;
-
-        if op.connector != connector_type::KAFKA {
-            bail!(
-                "KafkaSinkDispatcher: expected connector 'kafka', got '{}'",
-                op.connector
-            );
-        }
-
-        let op_config = decode_operator_config(&op)?;
-
-        let kafka_config: KafkaConfig = serde_json::from_value(op_config.connection.clone())
-            .context("Failed to parse Kafka connection configuration")?;
-
-        let kafka_table: KafkaTable = serde_json::from_value(op_config.table.clone())
-            .context("Failed to parse Kafka table configuration")?;
-
-        let TableType::Sink {
-            commit_mode,
-            key_field,
-            timestamp_field,
-        } = &kafka_table.kind
-        else {
-            bail!(
-                "Expected Kafka Sink, got Source configuration for topic '{}'",
-                kafka_table.topic
-            );
-        };
-
-        info!("Constructing Kafka Sink for topic: {}", kafka_table.topic);
-
-        let client_configs = build_client_configs(&kafka_config, &kafka_table)?;
-
-        let consistency = match commit_mode {
-            SinkCommitMode::ExactlyOnce => ConsistencyMode::ExactlyOnce,
-            SinkCommitMode::AtLeastOnce => ConsistencyMode::AtLeastOnce,
-        };
-
-        let sql_format = op_config
-            .format
-            .clone()
-            .context("Format must be specified for Kafka Sink")?;
-        let runtime_format = sql_format_to_runtime(sql_format)?;
-
-        let fs_in = op_config
-            .input_schema
-            .clone()
-            .context("input_schema is required for Kafka Sink")?;
-        let fs = sink_fs_schema_adjusted(fs_in, key_field, timestamp_field)?;
-
-        let serializer = DataSerializer::new(runtime_format, fs.schema.clone());
-
-        let sink_op = KafkaSinkOperator::new(
-            kafka_table.topic.clone(),
-            kafka_config.bootstrap_servers.clone(),
-            consistency,
-            client_configs,
-            fs,
-            serializer,
-        );
-
-        Ok(ConstructedOperator::Operator(Box::new(sink_op)))
-    }
-}
+// Legacy dispatcher aliases kept for backward compatibility with factory registration.
+pub type KafkaSourceDispatcher = ConnectorDispatcher;
+pub type KafkaSinkDispatcher = ConnectorDispatcher;

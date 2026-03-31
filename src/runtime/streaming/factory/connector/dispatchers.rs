@@ -10,35 +10,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
-use prost::Message;
 use std::sync::Arc;
 
-use protocol::grpc::api::ConnectorOp;
+use anyhow::Result;
 
 use crate::runtime::streaming::api::operator::ConstructedOperator;
 use crate::runtime::streaming::factory::global::Registry;
 use crate::runtime::streaming::factory::operator_constructor::OperatorConstructor;
-use crate::sql::common::constants::connector_type;
 
-use super::kafka::{KafkaSinkDispatcher, KafkaSourceDispatcher};
+use super::kafka::ConnectorDispatcher;
 
 pub struct ConnectorSourceDispatcher;
 
 impl OperatorConstructor for ConnectorSourceDispatcher {
     fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        let op = ConnectorOp::decode(config)
-            .map_err(|e| anyhow!("decode ConnectorOp (source): {e}"))?;
-
-        match op.connector.as_str() {
-            ct if ct == connector_type::KAFKA => KafkaSourceDispatcher.with_config(config, registry),
-            ct if ct == connector_type::REDIS => Err(anyhow!(
-                "ConnectorSource '{}' factory wiring not yet implemented",
-                op.connector
-            )),
-            other => Err(anyhow!("Unsupported source connector type: {}", other)),
-        }
+        ConnectorDispatcher.with_config(config, registry)
     }
 }
 
@@ -46,12 +32,6 @@ pub struct ConnectorSinkDispatcher;
 
 impl OperatorConstructor for ConnectorSinkDispatcher {
     fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        let op = ConnectorOp::decode(config)
-            .map_err(|e| anyhow!("decode ConnectorOp (sink): {e}"))?;
-
-        match op.connector.as_str() {
-            ct if ct == connector_type::KAFKA => KafkaSinkDispatcher.with_config(config, registry),
-            other => Err(anyhow!("Unsupported sink connector type: {}", other)),
-        }
+        ConnectorDispatcher.with_config(config, registry)
     }
 }

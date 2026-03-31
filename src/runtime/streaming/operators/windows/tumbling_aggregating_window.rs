@@ -36,7 +36,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tracing::warn;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::MessageOperator;
+use crate::runtime::streaming::api::operator::Operator;
 use async_trait::async_trait;
 use crate::runtime::streaming::factory::Registry;
 use protocol::grpc::api::TumblingWindowAggregateOperator;
@@ -145,7 +145,7 @@ impl TumblingWindowOperator {
 }
 
 #[async_trait]
-impl MessageOperator for TumblingWindowOperator {
+impl Operator for TumblingWindowOperator {
     fn name(&self) -> &str {
         "TumblingWindow"
     }

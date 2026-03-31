@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,6 +26,7 @@ use protocol::grpc::api::ConnectorOp;
 use tracing::warn;
 
 use super::column_descriptor::ColumnDescriptor;
+use super::connector_config::ConnectorConfig;
 use super::data_encoding_format::DataEncodingFormat;
 use super::schema_context::SchemaContext;
 use super::table_execution_unit::{EngineDescriptor, SyncMode, TableExecutionUnit};
@@ -36,19 +37,16 @@ use super::table_role::{
 use super::temporal_pipeline_config::{resolve_temporal_logic, TemporalPipelineConfig, TemporalSpec};
 use super::StreamSchemaProvider;
 use crate::multifield_partial_ord;
-use crate::sql::api::{ConnectionProfile, ConnectionSchema, SourceField};
+use crate::sql::api::ConnectionProfile;
 use crate::sql::common::constants::{
-    connection_table_role, connector_type, kafka_with_value, sql_field,
+    connection_table_role, connector_type, sql_field,
 };
 use crate::sql::common::connector_options::ConnectorOptions;
-use crate::sql::common::kafka_catalog::{
-    KafkaConfig, KafkaConfigAuthentication, KafkaTable, KafkaTableSourceOffset, ReadMode,
-    SinkCommitMode, TableType as KafkaTableType,
-};
 use crate::sql::common::with_option_keys as opt;
 use crate::sql::common::{
-    BadData, Format, Framing, FsSchema, JsonCompression, JsonFormat, OperatorConfig, RateLimit,
+    BadData, Format, Framing, FsSchema, JsonCompression, JsonFormat,
 };
+use crate::sql::schema::kafka_operator_config::build_kafka_proto_config;
 use crate::sql::schema::ConnectionType;
 use crate::sql::schema::table::SqlSource;
 use crate::sql::types::ProcessingMode;
@@ -61,8 +59,8 @@ pub struct SourceTable {
     pub table_identifier: String,
     pub role: TableRole,
     pub schema_specs: Vec<ColumnDescriptor>,
-    /// Serialized runtime payload (e.g. JSON: connector + `connection_schema` + options).
-    pub opaque_config: String,
+    /// Strongly-typed connector runtime configuration — replaces the legacy `opaque_config: String`.
+    pub connector_config: ConnectorConfig,
     pub temporal_config: TemporalPipelineConfig,
     pub key_constraints: Vec<String>,
     pub payload_format: Option<DataEncodingFormat>,
@@ -73,7 +71,7 @@ pub struct SourceTable {
     pub lookup_cache_max_bytes: Option<u64>,
     pub lookup_cache_ttl: Option<Duration>,
     pub inferred_fields: Option<Vec<FieldRef>>,
-    /// Original `WITH` options for catalog / `SHOW CREATE TABLE` (snapshot at DDL parse time).
+    /// Original `WITH` options for catalog persistence / `SHOW CREATE TABLE`.
     pub catalog_with_options: BTreeMap<String, String>,
 }
 
@@ -83,7 +81,6 @@ multifield_partial_ord!(
     adapter_type,
     table_identifier,
     role,
-    opaque_config,
     description,
     key_constraints,
     connection_format,
@@ -107,7 +104,7 @@ impl SourceTable {
             table_identifier: table_identifier.into(),
             role: connection_type.into(),
             schema_specs: Vec::new(),
-            opaque_config: String::new(),
+            connector_config: ConnectorConfig::Generic(HashMap::new()),
             temporal_config: TemporalPipelineConfig::default(),
             key_constraints: Vec::new(),
             payload_format: None,
@@ -181,7 +178,7 @@ impl SourceTable {
         refined_columns = encoding.apply_envelope(refined_columns)?;
 
         let temporal_settings = resolve_temporal_logic(&refined_columns, time_meta)?;
-        let finalized_config = serialize_backend_params(adapter, options)?;
+        let _finalized_config = serialize_backend_params(adapter, options)?;
         let role = deduce_role(options)?;
 
         if role == TableRole::Ingestion && encoding.supports_delta_updates() && pk_list.is_empty() {
@@ -194,7 +191,7 @@ impl SourceTable {
             table_identifier: id.to_string(),
             role,
             schema_specs: refined_columns,
-            opaque_config: finalized_config,
+            connector_config: ConnectorConfig::Generic(catalog_with_options.clone().into_iter().collect()),
             temporal_config: temporal_settings,
             key_constraints: pk_list,
             payload_format: Some(encoding),
@@ -242,7 +239,7 @@ impl SourceTable {
             label: self.table_identifier.clone(),
             engine_meta: EngineDescriptor {
                 engine_type: self.adapter_type.clone(),
-                raw_payload: self.opaque_config.clone(),
+                raw_payload: String::new(),
             },
             sync_mode: mode,
             temporal_offset: self.temporal_config.clone(),
@@ -288,7 +285,6 @@ impl SourceTable {
 
         validate_adapter_availability(connector_name)?;
 
-        let inferred_empty = fields.is_empty();
         let mut columns = fields;
         columns = apply_adapter_specific_rules(connector_name, columns);
 
@@ -302,7 +298,7 @@ impl SourceTable {
             return plan_err!("'json.compression' is only supported for the filesystem connector");
         }
 
-        let framing = Framing::from_opts(options)
+        let _framing = Framing::from_opts(options)
             .map_err(|e| DataFusionError::Plan(format!("invalid framing: '{e}'")))?;
 
         if temporary
@@ -318,37 +314,8 @@ impl SourceTable {
         let encoding = payload_format.unwrap_or(DataEncodingFormat::Raw);
         columns = encoding.apply_envelope(columns)?;
 
-        let schema_fields: Vec<SourceField> = columns
-            .iter()
-            .filter(|c| !c.is_computed())
-            .map(|c| {
-                let mut sf: SourceField = c.arrow_field().clone().try_into().map_err(|_| {
-                    DataFusionError::Plan(format!(
-                        "field '{}' has a type '{:?}' that cannot be used in a connection table",
-                        c.arrow_field().name(),
-                        c.arrow_field().data_type()
-                    ))
-                })?;
-                if let Some(key) = c.system_meta_key() {
-                    sf.metadata_key = Some(key.to_string());
-                }
-                Ok(sf)
-            })
-            .collect::<Result<_>>()?;
-
         let bad_data = BadData::from_opts(options)
             .map_err(|e| DataFusionError::Plan(format!("Invalid bad_data: '{e}'")))?;
-
-        let connection_schema = ConnectionSchema::try_new(
-            format.clone(),
-            Some(bad_data.clone()),
-            framing.clone(),
-            schema_fields,
-            None,
-            Some(inferred_empty),
-            primary_keys.iter().cloned().collect::<HashSet<_>>(),
-        )
-        .map_err(|e| DataFusionError::Plan(format!("could not create connection schema: {e}")))?;
 
         let role = if let Some(t) = connection_type_override {
             t.into()
@@ -369,7 +336,7 @@ impl SourceTable {
             table_identifier: table_identifier.to_string(),
             role,
             schema_specs: columns,
-            opaque_config: String::new(),
+            connector_config: ConnectorConfig::Generic(HashMap::new()),
             temporal_config: TemporalPipelineConfig::default(),
             key_constraints: Vec::new(),
             payload_format,
@@ -466,36 +433,21 @@ impl SourceTable {
         table.lookup_cache_ttl = options.pull_opt_duration(opt::LOOKUP_CACHE_TTL)?;
 
         if connector_name.eq_ignore_ascii_case(connector_type::KAFKA) {
-            let physical = table.produce_physical_schema();
-            let op_cfg = wire_kafka_operator_config(
-                options,
-                role,
-                &physical,
-                &format,
-                bad_data,
-                framing,
-            )?;
-            table.opaque_config = serde_json::to_string(&op_cfg).map_err(|e| {
-                DataFusionError::Plan(format!("failed to serialize Kafka OperatorConfig: {e}"))
-            })?;
+            let proto_cfg = build_kafka_proto_config(options, role, &format, bad_data)?;
+            table.connector_config = match proto_cfg {
+                protocol::grpc::api::connector_op::Config::KafkaSource(cfg) => {
+                    ConnectorConfig::KafkaSource(cfg)
+                }
+                protocol::grpc::api::connector_op::Config::KafkaSink(cfg) => {
+                    ConnectorConfig::KafkaSink(cfg)
+                }
+                protocol::grpc::api::connector_op::Config::Generic(g) => {
+                    ConnectorConfig::Generic(g.properties)
+                }
+            };
         } else {
             let extra_opts = options.drain_remaining_string_values()?;
-            let mut map = serde_json::Map::new();
-            map.insert(
-                opt::CONNECTOR.to_string(),
-                serde_json::Value::String(connector_name.to_string()),
-            );
-            let schema_val = serde_json::to_value(&connection_schema).map_err(|e| {
-                DataFusionError::Plan(format!("failed to serialize connection schema: {e}"))
-            })?;
-            map.insert(opt::CONNECTION_SCHEMA.to_string(), schema_val);
-            for (k, v) in extra_opts {
-                map.insert(k, serde_json::Value::String(v));
-            }
-            let config_root = serde_json::Value::Object(map);
-            table.opaque_config = serde_json::to_string(&config_root).map_err(|e| {
-                DataFusionError::Plan(format!("failed to serialize connector config: {e}"))
-            })?;
+            table.connector_config = ConnectorConfig::Generic(extra_opts);
         }
 
         if role == TableRole::Ingestion && encoding.supports_delta_updates() && primary_keys.is_empty()
@@ -519,11 +471,25 @@ impl SourceTable {
             || self.payload_format == Some(DataEncodingFormat::DebeziumJson)
     }
 
+    /// Build strongly-typed `ConnectorOp` protobuf for runtime operator construction.
+    ///
+    /// Directly maps the in-memory [`ConnectorConfig`] to the proto `oneof config` — zero JSON,
+    /// zero re-parsing.
     pub fn connector_op(&self) -> ConnectorOp {
+        let physical = self.produce_physical_schema();
+        let fields: Vec<Field> = physical
+            .fields()
+            .iter()
+            .map(|f| f.as_ref().clone())
+            .collect();
+        let fs_schema = FsSchema::from_fields(fields);
+
         ConnectorOp {
             connector: self.adapter_type.clone(),
-            config: self.opaque_config.clone(),
+            fs_schema: Some(fs_schema.into()),
+            name: self.table_identifier.clone(),
             description: self.description.clone(),
+            config: Some(self.connector_config.to_proto_config()),
         }
     }
 
@@ -605,168 +571,6 @@ impl SourceTable {
             watermark_column,
         })
     }
-}
-
-/// Kafka: runtime [`KafkaSourceDispatcher`] / [`KafkaSinkDispatcher`] expect [`OperatorConfig`] JSON,
-/// not the legacy `{ connector, connection_schema, ... }` blob used by other adapters.
-fn wire_kafka_operator_config(
-    options: &mut ConnectorOptions,
-    role: TableRole,
-    physical_schema: &Schema,
-    format: &Option<Format>,
-    bad_data: BadData,
-    framing: Option<Framing>,
-) -> Result<OperatorConfig> {
-    let bootstrap_servers = match options.pull_opt_str(opt::KAFKA_BOOTSTRAP_SERVERS)? {
-        Some(s) => s,
-        None => options
-            .pull_opt_str(opt::KAFKA_BOOTSTRAP_SERVERS_LEGACY)?
-            .ok_or_else(|| {
-                plan_datafusion_err!(
-                    "Kafka connector requires 'bootstrap.servers' in the WITH clause"
-                )
-            })?,
-    };
-
-    let topic = options
-        .pull_opt_str(opt::KAFKA_TOPIC)?
-        .ok_or_else(|| plan_datafusion_err!("Kafka connector requires 'topic' in the WITH clause"))?;
-
-    let sql_format = format.clone().ok_or_else(|| {
-        plan_datafusion_err!(
-            "Kafka connector requires 'format' in the WITH clause (e.g. format = 'json')"
-        )
-    })?;
-
-    let rate_limit = options
-        .pull_opt_u64(opt::KAFKA_RATE_LIMIT_MESSAGES_PER_SECOND)?
-        .map(|v| RateLimit {
-            messages_per_second: v.clamp(1, u32::MAX as u64) as u32,
-        });
-
-    let value_subject = options.pull_opt_str(opt::KAFKA_VALUE_SUBJECT)?;
-
-    let kind = match role {
-        TableRole::Ingestion => {
-            let offset = match options.pull_opt_str(opt::KAFKA_SCAN_STARTUP_MODE)?.as_deref() {
-                Some(s) if s == kafka_with_value::SCAN_LATEST => KafkaTableSourceOffset::Latest,
-                Some(s) if s == kafka_with_value::SCAN_EARLIEST => KafkaTableSourceOffset::Earliest,
-                Some(s)
-                    if s == kafka_with_value::SCAN_GROUP_OFFSETS
-                        || s == kafka_with_value::SCAN_GROUP =>
-                {
-                    KafkaTableSourceOffset::Group
-                }
-                None => KafkaTableSourceOffset::Group,
-                Some(other) => {
-                    return plan_err!(
-                        "invalid scan.startup.mode '{other}'; expected latest, earliest, or group-offsets"
-                    );
-                }
-            };
-            let read_mode = match options.pull_opt_str(opt::KAFKA_ISOLATION_LEVEL)?.as_deref() {
-                Some(s) if s == kafka_with_value::ISOLATION_READ_COMMITTED => {
-                    Some(ReadMode::ReadCommitted)
-                }
-                Some(s) if s == kafka_with_value::ISOLATION_READ_UNCOMMITTED => {
-                    Some(ReadMode::ReadUncommitted)
-                }
-                None => None,
-                Some(other) => {
-                    return plan_err!("invalid isolation.level '{other}'");
-                }
-            };
-            let group_id = match options.pull_opt_str(opt::KAFKA_GROUP_ID)? {
-                Some(s) => Some(s),
-                None => options.pull_opt_str(opt::KAFKA_GROUP_ID_LEGACY)?,
-            };
-            let group_id_prefix = options.pull_opt_str(opt::KAFKA_GROUP_ID_PREFIX)?;
-            KafkaTableType::Source {
-                offset,
-                read_mode,
-                group_id,
-                group_id_prefix,
-            }
-        }
-        TableRole::Egress => {
-            let commit_mode = match options.pull_opt_str(opt::KAFKA_SINK_COMMIT_MODE)?.as_deref() {
-                Some(s)
-                    if s == kafka_with_value::SINK_COMMIT_EXACTLY_ONCE_HYPHEN
-                        || s == kafka_with_value::SINK_COMMIT_EXACTLY_ONCE_UNDERSCORE =>
-                {
-                    SinkCommitMode::ExactlyOnce
-                }
-                None => SinkCommitMode::AtLeastOnce,
-                Some(s)
-                    if s == kafka_with_value::SINK_COMMIT_AT_LEAST_ONCE_HYPHEN
-                        || s == kafka_with_value::SINK_COMMIT_AT_LEAST_ONCE_UNDERSCORE =>
-                {
-                    SinkCommitMode::AtLeastOnce
-                }
-                Some(other) => {
-                    return plan_err!("invalid sink.commit.mode '{other}'");
-                }
-            };
-            let key_field = match options.pull_opt_str(opt::KAFKA_SINK_KEY_FIELD)? {
-                Some(s) => Some(s),
-                None => options.pull_opt_str(opt::KAFKA_KEY_FIELD_LEGACY)?,
-            };
-            let timestamp_field = match options.pull_opt_str(opt::KAFKA_SINK_TIMESTAMP_FIELD)? {
-                Some(s) => Some(s),
-                None => options.pull_opt_str(opt::KAFKA_TIMESTAMP_FIELD_LEGACY)?,
-            };
-            KafkaTableType::Sink {
-                commit_mode,
-                key_field,
-                timestamp_field,
-            }
-        }
-        TableRole::Reference => {
-            return plan_err!("Kafka connector cannot be used as a lookup table in this path");
-        }
-    };
-
-    // Role already decided; keep these out of librdkafka `connection_properties`.
-    let _ = options.pull_opt_str(opt::TYPE)?;
-    let _ = options.pull_opt_str(opt::CONNECTOR)?;
-
-    let connection_properties = options.drain_remaining_string_values()?;
-
-    let kafka_connection = KafkaConfig {
-        bootstrap_servers,
-        authentication: KafkaConfigAuthentication::None,
-        schema_registry_enum: None,
-        connection_properties,
-    };
-
-    let kafka_table = KafkaTable {
-        topic,
-        kind,
-        client_configs: HashMap::new(),
-        value_subject,
-    };
-
-    let fields: Vec<Field> = physical_schema
-        .fields()
-        .iter()
-        .map(|f| f.as_ref().clone())
-        .collect();
-    let input_schema = FsSchema::from_fields(fields);
-
-    Ok(OperatorConfig {
-        connection: serde_json::to_value(&kafka_connection).map_err(|e| {
-            DataFusionError::Plan(format!("Kafka connection serialization failed: {e}"))
-        })?,
-        table: serde_json::to_value(&kafka_table).map_err(|e| {
-            DataFusionError::Plan(format!("Kafka table serialization failed: {e}"))
-        })?,
-        format: Some(sql_format),
-        bad_data: Some(bad_data),
-        framing,
-        rate_limit,
-        metadata_fields: vec![],
-        input_schema: Some(input_schema),
-    })
 }
 
 /// Plan a SQL scalar expression against a table-qualified schema (e.g. watermark `AS` clause).

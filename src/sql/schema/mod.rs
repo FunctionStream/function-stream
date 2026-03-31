@@ -13,6 +13,8 @@
 pub mod catalog_ddl;
 pub mod column_descriptor;
 pub mod connection_type;
+pub mod connector_config;
+pub mod kafka_operator_config;
 pub mod source_table;
 pub mod data_encoding_format;
 pub mod schema_context;
@@ -29,6 +31,7 @@ pub use catalog_ddl::{
 };
 pub use column_descriptor::ColumnDescriptor;
 pub use connection_type::ConnectionType;
+pub use connector_config::ConnectorConfig;
 pub use source_table::{SourceOperator, SourceTable};
 
 /// Back-compat alias for [`SourceTable`].
