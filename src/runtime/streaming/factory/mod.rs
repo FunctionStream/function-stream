@@ -26,7 +26,6 @@ pub use connector::{
     ConnectorSinkDispatcher, ConnectorSourceDispatcher, KafkaSinkDispatcher, KafkaSourceDispatcher,
 };
 pub use global::Registry;
-pub use operator_constructor::OperatorConstructor;
 pub use operator_factory::OperatorFactory;
 
 fn register_builtin_connectors(factory: &mut OperatorFactory) {

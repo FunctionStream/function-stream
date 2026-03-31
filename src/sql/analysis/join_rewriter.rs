@@ -19,7 +19,7 @@ use crate::sql::common::constants::mem_exec_join_side;
 use crate::sql::common::TIMESTAMP_FIELD;
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
 use datafusion::common::{
-    Column, DataFusionError, JoinConstraint, JoinType, Result, ScalarValue, Spans, TableReference,
+    JoinConstraint, JoinType, Result, ScalarValue, TableReference,
     not_impl_err, plan_err,
 };
 use datafusion::logical_expr::{

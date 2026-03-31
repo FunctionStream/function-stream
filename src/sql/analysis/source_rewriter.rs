@@ -25,7 +25,6 @@ use crate::sql::schema::source_table::SourceTable;
 use crate::sql::schema::ColumnDescriptor;
 use crate::sql::schema::table::Table;
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::schema::StreamTable;
 use crate::sql::common::constants::sql_field;
 use crate::sql::common::UPDATING_META_FIELD;
 use crate::sql::extensions::debezium::UnrollDebeziumPayloadNode;

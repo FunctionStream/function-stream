@@ -45,7 +45,7 @@ impl OperatorName {
 
     pub fn feature_tag(self) -> Option<&'static str> {
         match self {
-            Self::ExpressionWatermark | Self::Value | Self::KeyBy | Self::Projection => None,
+            Self::ExpressionWatermark | Self::Value | Self::Projection => None,
             Self::AsyncUdf => Some(operator_feature::ASYNC_UDF),
             Self::Join => Some(operator_feature::JOIN_WITH_EXPIRATION),
             Self::InstantJoin => Some(operator_feature::WINDOWED_JOIN),

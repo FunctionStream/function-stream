@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use arrow::compute::max_array;
 use arrow::row::{RowConverter, SortField};
 use arrow_array::builder::{
@@ -19,7 +19,7 @@ use arrow_array::builder::{
 use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
 use arrow_array::{
-    Array, ArrayRef, BinaryArray, BooleanArray, RecordBatch, StructArray, UInt32Array, UInt64Array,
+    Array, ArrayRef, BooleanArray, RecordBatch, StructArray,
 };
 use arrow_schema::{DataType, Field, FieldRef, Schema, SchemaBuilder, TimeUnit};
 use datafusion::common::{Result as DFResult, ScalarValue};
@@ -31,7 +31,6 @@ use datafusion_proto::physical_plan::from_proto::parse_physical_expr;
 use datafusion_proto::protobuf::PhysicalExprNode;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use datafusion_proto::protobuf::physical_plan_node::PhysicalPlanType;
-use futures::StreamExt;
 use itertools::Itertools;
 use prost::Message;
 use std::collections::HashSet;
@@ -482,95 +481,6 @@ impl IncrementalAggregatingFunc {
     }
 
     async fn initialize(&mut self, _ctx: &mut TaskContext) -> Result<()> {
-        // let table = tm
-        //     .get_uncached_key_value_view("a")
-        //     .await
-        //     .map_err(|e| anyhow!("state table a: {e}"))?;
-        // let mut stream = Box::pin(table.get_all());
-        // let key_converter = RowConverter::new(self.sliding_state_schema.sort_fields(false))?;
-        //
-        // while let Some(batch) = stream.next().await {
-        //     let batch = batch?;
-        //     if batch.num_rows() == 0 { continue; }
-        //
-        //     let key_cols: Vec<_> = self.sliding_state_schema.sort_columns(&batch, false).into_iter().map(|c| c.values).collect();
-        //     let aggregate_states = self.aggregates.iter().map(|agg| {
-        //         agg.state_cols.iter().map(|idx| batch.column(*idx).clone()).collect_vec()
-        //     }).collect_vec();
-        //     let generations = batch.columns().last().unwrap().as_primitive::<UInt64Type>();
-        //     let now = Instant::now();
-        //
-        //     if key_cols.is_empty() {
-        //         self.restore_sliding(
-        //             GLOBAL_KEY.as_ref().as_slice(),
-        //             now,
-        //             0,
-        //             &aggregate_states,
-        //             generations.value(0),
-        //         )?;
-        //     } else {
-        //         let key_rows = key_converter.convert_columns(&key_cols)?;
-        //         for (i, row) in key_rows.iter().enumerate() {
-        //             if generations.is_null(i) {
-        //                 bail!("generation is null at row {i}");
-        //             }
-        //             let generation = generations.value(i);
-        //             self.restore_sliding(
-        //                 row.as_ref(),
-        //                 now,
-        //                 i,
-        //                 &aggregate_states,
-        //                 generation,
-        //             )?;
-        //         }
-        //     }
-        // }
-        // drop(stream);
-
-        //
-        // if self.aggregates.iter().any(|agg| agg.accumulator_type == AccumulatorType::Batch) {
-        //     let table = tm
-        //         .get_uncached_key_value_view("b")
-        //         .await
-        //         .map_err(|e| anyhow!("state table b: {e}"))?;
-        //     let mut stream = Box::pin(table.get_all());
-        //     while let Some(batch) = stream.next().await {
-        //         let batch = batch?;
-        //         if batch.num_rows() == 0 { continue; }
-        //
-        //         let key_cols: Vec<_> = self.sliding_state_schema.sort_columns(&batch, false).into_iter().map(|c| c.values).collect();
-        //         let count_column = batch.column(self.batch_state_schema.schema.index_of("count").unwrap()).as_any().downcast_ref::<UInt64Array>().unwrap();
-        //         let accumulator_column = batch.column(self.batch_state_schema.schema.index_of("accumulator").unwrap()).as_any().downcast_ref::<UInt32Array>().unwrap();
-        //         let args_row_column = batch.column(self.batch_state_schema.schema.index_of("args_row").unwrap()).as_any().downcast_ref::<BinaryArray>().unwrap();
-        //         let generations = batch.columns().last().unwrap().as_primitive::<UInt64Type>();
-        //
-        //         let key_rows = if key_cols.is_empty() {
-        //             vec![GLOBAL_KEY.as_ref().clone()]
-        //         } else {
-        //             self.key_converter
-        //                 .convert_columns(&key_cols)?
-        //                 .iter()
-        //                 .map(|k| k.as_ref().to_vec())
-        //                 .collect()
-        //         };
-        //
-        //         for (i, row) in key_rows.iter().enumerate() {
-        //             let Some(accumulators) = self.accumulators.get_mut(row.as_ref()) else { continue; };
-        //             let count = count_column.value(i);
-        //             let accumulator_idx = accumulator_column.value(i) as usize;
-        //             let args_row = args_row_column.value(i);
-        //             let generation = generations.value(i);
-        //
-        //             let IncrementalState::Batch { data, .. } = &mut accumulators[accumulator_idx] else { bail!("expected batch accumulator"); };
-        //
-        //             if let Some(existing) = data.get_mut(args_row) {
-        //                 if existing.generation < generation { existing.count = count; existing.generation = generation; }
-        //             } else {
-        //                 data.insert(Key(Arc::new(args_row.to_vec())), BatchData { count, generation });
-        //             }
-        //         }
-        //     }
-        // }
 
         let mut deleted_keys = vec![];
         for (k, v) in self.accumulators.iter_mut() {
@@ -697,34 +607,8 @@ impl Operator for IncrementalAggregatingFunc {
     async fn snapshot_state(
         &mut self,
         _barrier: CheckpointBarrier,
-        ctx: &mut TaskContext,
+        _ctx: &mut TaskContext,
     ) -> Result<()> {
-        // let mut tm = ctx.table_manager_guard().await?;
-        //
-        // if let Some(sliding) = self.checkpoint_sliding()? {
-        //     let table = tm
-        //         .get_uncached_key_value_view("a")
-        //         .await
-        //         .map_err(|e| anyhow!("state table a: {e}"))?;
-        //     table
-        //         .insert_batch(sliding)
-        //         .await
-        //         .map_err(|e| anyhow!("insert_batch a: {e}"))?;
-        // }
-        //
-        // if let Some(batch) = self.checkpoint_batch()? {
-        //     let table = tm
-        //         .get_uncached_key_value_view("b")
-        //         .await
-        //         .map_err(|e| anyhow!("state table b: {e}"))?;
-        //     table
-        //         .insert_batch(batch)
-        //         .await
-        //         .map_err(|e| anyhow!("insert_batch b: {e}"))?;
-        // }
-        //
-        //
-        // self.updated_keys.clear();
          Ok(())
     }
 

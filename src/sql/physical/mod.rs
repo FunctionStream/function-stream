@@ -21,4 +21,4 @@ pub use cdc::{DebeziumUnrollingExec, ToDebeziumExec};
 pub use codec::{DecodingContext, FsPhysicalExtensionCodec};
 pub use meta::{updating_meta_field, updating_meta_fields};
 pub use readers::FsMemExec;
-pub use udfs::{WindowFunctionUdf, window};
+pub use udfs::window;

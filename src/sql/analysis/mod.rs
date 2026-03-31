@@ -26,41 +26,27 @@ pub mod source_rewriter;
 pub mod time_window;
 pub mod unnest_rewriter;
 
-pub use async_udf_rewriter::{AsyncOptions, AsyncUdfRewriter};
+pub use async_udf_rewriter::AsyncOptions;
 pub use sink_input_rewriter::SinkInputRewriter;
-pub use source_metadata_visitor::SourceMetadataVisitor;
-pub use source_rewriter::SourceRewriter;
-pub use time_window::{TimeWindowNullCheckRemover, TimeWindowUdfChecker, is_time_window};
-pub use unnest_rewriter::{UNNESTED_COL, UnnestRewriter};
+pub use time_window::{TimeWindowNullCheckRemover, TimeWindowUdfChecker};
+pub use unnest_rewriter::UNNESTED_COL;
 
-pub use crate::sql::schema::schema_provider::{
-    LogicalBatchInput, StreamSchemaProvider, StreamTable,
-};
+pub use crate::sql::schema::schema_provider::StreamSchemaProvider;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use datafusion::common::tree_node::{Transformed, TreeNode};
 use datafusion::common::{Result, plan_err};
 use datafusion::error::DataFusionError;
-use datafusion::execution::SessionStateBuilder;
 use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore};
-use datafusion::prelude::SessionConfig;
-use datafusion::sql::TableReference;
-use datafusion::sql::sqlparser::ast::{OneOrManyWithParens, Statement};
-use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
-use datafusion::sql::sqlparser::parser::Parser;
 use tracing::{debug, info, instrument};
 
-use crate::sql::logical_planner::optimizers::ChainingOptimizer;
-use crate::sql::schema::table::Table as CatalogTable;
-use crate::sql::functions::{is_json_union, serialize_outgoing_json};
 use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
 use crate::sql::extensions::projection::StreamProjectionNode;
 use crate::sql::extensions::sink::StreamEgressNode;
 use crate::sql::extensions::StreamingOperatorBlueprint;
 use crate::sql::logical_planner::planner::NamedNode;
-use crate::sql::types::SqlConfig;
 
 fn duration_from_sql_expr(
     expr: &datafusion::sql::sqlparser::ast::Expr,

@@ -15,6 +15,3 @@ pub mod context;
 pub mod operator;
 pub mod source;
 
-pub use context::TaskContext;
-pub use operator::{ConstructedOperator, Operator};
-pub use source::{SourceEvent, SourceOffset, SourceOperator};

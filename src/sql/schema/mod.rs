@@ -27,25 +27,15 @@ pub mod utils;
 
 pub use catalog_ddl::{
     catalog_table_row_detail, schema_columns_one_line, show_create_catalog_table,
-    show_create_stream_table, stream_table_row_detail,
 };
 pub use column_descriptor::ColumnDescriptor;
 pub use connection_type::ConnectionType;
 pub use connector_config::ConnectorConfig;
-pub use source_table::{SourceOperator, SourceTable};
+pub use source_table::SourceTable;
 
 /// Back-compat alias for [`SourceTable`].
 pub type ConnectorTable = SourceTable;
-pub use data_encoding_format::DataEncodingFormat;
-pub use schema_context::{DfSchemaContext, SchemaContext};
 pub use schema_provider::{
-    FunctionCatalog, LogicalBatchInput, ObjectName, StreamPlanningContext,
-    StreamPlanningContextBuilder, StreamSchemaProvider, StreamTable, TableCatalog,
+    ObjectName, StreamPlanningContext, StreamSchemaProvider, StreamTable,
 };
 pub use table::Table;
-pub use table_execution_unit::{EngineDescriptor, SyncMode, TableExecutionUnit};
-pub use table_role::{
-    apply_adapter_specific_rules, deduce_role, serialize_backend_params, validate_adapter_availability,
-    TableRole,
-};
-pub use temporal_pipeline_config::{resolve_temporal_logic, TemporalPipelineConfig, TemporalSpec};

@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
 use datafusion::physical_expr::PhysicalExpr;
@@ -23,7 +23,7 @@ use std::sync::Arc;
 use protocol::grpc::api::ProjectionOperator as ProjectionOperatorProto;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::{ConstructedOperator, Operator};
+use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::global::Registry;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};

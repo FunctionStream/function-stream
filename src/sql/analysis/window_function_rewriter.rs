@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use datafusion::common::tree_node::Transformed;
-use datafusion::common::{Column, Result as DFResult, plan_err, tree_node::TreeNodeRewriter};
+use datafusion::common::{Result as DFResult, plan_err, tree_node::TreeNodeRewriter};
 use datafusion::logical_expr::{
     self, Expr, Extension, LogicalPlan, Projection, Sort, Window, expr::WindowFunction,
     expr::WindowFunctionParams,

@@ -13,4 +13,3 @@
 
 pub mod kafka;
 
-pub use kafka::{ConsistencyMode, KafkaSinkOperator};

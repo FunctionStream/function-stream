@@ -20,14 +20,12 @@ use std::time::Duration;
 
 use crate::sql::common::constants::sql_planning_default;
 
-pub use data_type::convert_data_type;
 pub use df_field::{
     DFField, fields_with_qualifiers, schema_from_df_fields, schema_from_df_fields_with_metadata,
 };
 pub(crate) use placeholder_udf::PlaceholderUdf;
-pub use stream_schema::StreamSchema;
 pub(crate) use window::WindowBehavior;
-pub use window::{WindowType, find_window, get_duration};
+pub use window::{WindowType, find_window};
 
 pub use crate::sql::common::constants::sql_field::TIMESTAMP_FIELD;
 

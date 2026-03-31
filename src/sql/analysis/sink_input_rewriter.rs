@@ -28,7 +28,7 @@ pub struct SinkInputRewriter<'a> {
 }
 
 impl<'a> SinkInputRewriter<'a> {
-    pub fn new(sink_inputs: &'a mut SinkInputs) -> Self {
+    pub(crate) fn new(sink_inputs: &'a mut SinkInputs) -> Self {
         Self {
             sink_inputs,
             was_removed: false,

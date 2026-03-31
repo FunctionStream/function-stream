@@ -24,15 +24,4 @@ pub mod network;
 pub mod operators;
 pub mod protocol;
 
-pub use api::{
-    ConstructedOperator, Operator, SourceEvent, SourceOffset, SourceOperator, TaskContext,
-};
-pub use error::RunError;
-pub use execution::{SOURCE_IDLE_SLEEP, SourceRunner, SubtaskRunner};
-pub use factory::{OperatorConstructor, OperatorFactory};
-pub use memory::{MemoryPool, MemoryTicket};
-pub use network::{BoxedEventStream, NetworkEnvironment, PhysicalSender, RemoteSenderStub};
-pub use protocol::{
-    CheckpointBarrierWire, ControlCommand, StopMode, StreamEvent, StreamOutput,
-    control_channel, merge_watermarks, watermark_strictly_advances,
-};
+pub use protocol::StreamOutput;

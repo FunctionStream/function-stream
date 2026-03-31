@@ -23,7 +23,5 @@ pub mod analysis;
 pub(crate) mod extensions;
 pub mod types;
 
-pub use schema::{StreamPlanningContext, StreamSchemaProvider};
-pub use parse::parse_sql;
 pub use analysis::rewrite_plan;
 
