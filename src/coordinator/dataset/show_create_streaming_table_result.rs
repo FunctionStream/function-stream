@@ -22,7 +22,7 @@ pub struct ShowCreateStreamingTableResult {
     table_name: String,
     status: String,
     pipeline_detail: String,
-    program_json: String,
+    topology: String,
 }
 
 impl ShowCreateStreamingTableResult {
@@ -30,13 +30,13 @@ impl ShowCreateStreamingTableResult {
         table_name: String,
         status: String,
         pipeline_detail: String,
-        program_json: String,
+        topology: String,
     ) -> Self {
         Self {
             table_name,
             status,
             pipeline_detail,
-            program_json,
+            topology,
         }
     }
 }
@@ -47,7 +47,7 @@ impl DataSet for ShowCreateStreamingTableResult {
             Field::new("Streaming Table", DataType::Utf8, false),
             Field::new("Status", DataType::Utf8, false),
             Field::new("Pipelines", DataType::Utf8, false),
-            Field::new("Program", DataType::Utf8, false),
+            Field::new("Topology", DataType::Utf8, false),
         ]));
 
         arrow_array::RecordBatch::try_new(
@@ -56,7 +56,7 @@ impl DataSet for ShowCreateStreamingTableResult {
                 Arc::new(StringArray::from(vec![self.table_name.as_str()])),
                 Arc::new(StringArray::from(vec![self.status.as_str()])),
                 Arc::new(StringArray::from(vec![self.pipeline_detail.as_str()])),
-                Arc::new(StringArray::from(vec![self.program_json.as_str()])),
+                Arc::new(StringArray::from(vec![self.topology.as_str()])),
             ],
         )
         .unwrap_or_else(|_| arrow_array::RecordBatch::new_empty(Arc::new(Schema::empty())))

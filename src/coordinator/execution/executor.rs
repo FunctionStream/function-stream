@@ -445,22 +445,13 @@ impl PlanVisitor for Executor {
                 pipeline_lines.join("\n")
             };
 
-            let mut program_json = serde_json::Value::String(detail.program_json.clone());
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&detail.program_json) {
-                let mut cleaned = parsed;
-                strip_noisy_fields(&mut cleaned);
-                program_json = cleaned;
-            }
-            let program_display =
-                serde_json::to_string_pretty(&program_json).unwrap_or(detail.program_json);
-
             Ok(ExecuteResult::ok_with_data(
                 format!("SHOW CREATE STREAMING TABLE {}", plan.table_name),
                 ShowCreateStreamingTableResult::new(
                     plan.table_name.clone(),
                     detail.status,
                     pipeline_detail,
-                    program_display,
+                    detail.topology,
                 ),
             ))
         };

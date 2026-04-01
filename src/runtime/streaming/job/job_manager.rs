@@ -20,6 +20,8 @@ use tracing::{error, info, warn};
 
 use protocol::grpc::api::{ChainedOperator, FsProgram};
 
+use crate::sql::common::render_program_topology;
+
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::{ConstructedOperator, Operator};
 use crate::runtime::streaming::api::source::SourceOperator;
@@ -53,7 +55,7 @@ pub struct StreamingJobDetail {
     pub pipeline_count: i32,
     pub uptime_secs: u64,
     pub pipelines: Vec<PipelineDetail>,
-    pub program_json: String,
+    pub topology: String,
 }
 
 static GLOBAL_JOB_MANAGER: OnceLock<Arc<JobManager>> = OnceLock::new();
@@ -239,9 +241,7 @@ impl JobManager {
             })
             .collect();
 
-        let program_json = serde_json::to_string_pretty(&graph.program).unwrap_or_else(|e| {
-            format!("{{\"error\": \"Failed to serialize program: {e}\"}}")
-        });
+        let topology = render_program_topology(&graph.program);
 
         Some(StreamingJobDetail {
             job_id: graph.job_id.clone(),
@@ -249,7 +249,7 @@ impl JobManager {
             pipeline_count: graph.pipelines.len() as i32,
             uptime_secs,
             pipelines: pipeline_details,
-            program_json,
+            topology,
         })
     }
 

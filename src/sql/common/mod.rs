@@ -34,6 +34,7 @@ pub mod task_info;
 pub mod time_utils;
 pub mod worker;
 pub mod converter;
+pub mod topology;
 
 // ── Re-exports from existing modules ──
 pub use arrow_ext::FsExtensionType;
@@ -48,6 +49,7 @@ pub use operator_config::MetadataField;
 
 // ── Well-known column names ──
 pub use constants::sql_field::{TIMESTAMP_FIELD, UPDATING_META_FIELD};
+pub use topology::render_program_topology;
 
 // ── Environment variables ──
 pub const JOB_ID_ENV: &str = "JOB_ID";
