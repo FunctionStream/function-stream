@@ -20,6 +20,7 @@ mod rocksdb_meta_store;
 pub use manager::{
     CatalogManager, initialize_stream_catalog,
     restore_global_catalog_from_store,
+    restore_streaming_jobs_from_store,
 };
 pub use meta_store::{InMemoryMetaStore, MetaStore};
 pub use rocksdb_meta_store::RocksDbMetaStore;

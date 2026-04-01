@@ -15,6 +15,7 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{anyhow, bail, Context};
 use datafusion::common::{internal_err, plan_err, Result as DFResult};
 use prost::Message;
+use protocol::grpc::api::FsProgram;
 use protocol::storage::{self as pb, table_definition};
 use tracing::{info, warn};
 use unicase::UniCase;
@@ -30,6 +31,7 @@ use super::codec::CatalogCodec;
 use super::meta_store::MetaStore;
 
 const CATALOG_KEY_PREFIX: &str = "catalog:stream_table:";
+const STREAMING_JOB_KEY_PREFIX: &str = "streaming_job:";
 
 pub struct CatalogManager {
     store: Arc<dyn MetaStore>,
@@ -71,6 +73,79 @@ impl CatalogManager {
     fn build_store_key(table_name: &str) -> String {
         format!("{CATALOG_KEY_PREFIX}{}", table_name.to_lowercase())
     }
+
+    #[inline]
+    fn build_streaming_job_key(table_name: &str) -> String {
+        format!("{STREAMING_JOB_KEY_PREFIX}{}", table_name.to_lowercase())
+    }
+
+    // ========================================================================
+    // Streaming job persistence (CREATE STREAMING TABLE / DROP STREAMING TABLE)
+    // ========================================================================
+
+    pub fn persist_streaming_job(
+        &self,
+        table_name: &str,
+        fs_program: &FsProgram,
+        comment: &str,
+    ) -> DFResult<()> {
+        let program_bytes = fs_program.encode_to_vec();
+        let def = pb::StreamingTableDefinition {
+            table_name: table_name.to_string(),
+            created_at_millis: chrono::Utc::now().timestamp_millis(),
+            fs_program_bytes: program_bytes,
+            comment: comment.to_string(),
+        };
+        let payload = def.encode_to_vec();
+        let key = Self::build_streaming_job_key(table_name);
+        self.store.put(&key, payload)?;
+        info!(table = %table_name, "Streaming job definition persisted");
+        Ok(())
+    }
+
+    pub fn remove_streaming_job(&self, table_name: &str) -> DFResult<()> {
+        let key = Self::build_streaming_job_key(table_name);
+        self.store.delete(&key)?;
+        info!(table = %table_name, "Streaming job definition removed from store");
+        Ok(())
+    }
+
+    pub fn load_streaming_job_definitions(
+        &self,
+    ) -> DFResult<Vec<(String, FsProgram)>> {
+        let records = self.store.scan_prefix(STREAMING_JOB_KEY_PREFIX)?;
+        let mut out = Vec::with_capacity(records.len());
+        for (key, payload) in records {
+            let def = match pb::StreamingTableDefinition::decode(payload.as_slice()) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(
+                        key = %key,
+                        error = %e,
+                        "Skipping corrupted streaming job record"
+                    );
+                    continue;
+                }
+            };
+            let program = match FsProgram::decode(def.fs_program_bytes.as_slice()) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(
+                        table = %def.table_name,
+                        error = %e,
+                        "Skipping streaming job with corrupted FsProgram"
+                    );
+                    continue;
+                }
+            };
+            out.push((def.table_name, program));
+        }
+        Ok(out)
+    }
+
+    // ========================================================================
+    // Catalog table persistence (CREATE TABLE / DROP TABLE)
+    // ========================================================================
 
     pub fn add_catalog_table(&self, table: CatalogTable) -> DFResult<()> {
         let proto_def = self.encode_catalog_table(&table)?;
@@ -392,6 +467,64 @@ pub fn restore_global_catalog_from_store() {
     }
 }
 
+pub fn restore_streaming_jobs_from_store() {
+    use crate::runtime::streaming::job::JobManager;
+
+    let Some(catalog) = CatalogManager::try_global() else {
+        warn!("CatalogManager not available; skipping streaming job restore");
+        return;
+    };
+    let job_manager = match JobManager::global() {
+        Ok(jm) => jm,
+        Err(e) => {
+            warn!(error = %e, "JobManager not available; skipping streaming job restore");
+            return;
+        }
+    };
+
+    let definitions = match catalog.load_streaming_job_definitions() {
+        Ok(defs) => defs,
+        Err(e) => {
+            warn!(error = %e, "Failed to load streaming job definitions from store");
+            return;
+        }
+    };
+
+    if definitions.is_empty() {
+        info!("No persisted streaming jobs to restore");
+        return;
+    }
+
+    let total = definitions.len();
+    info!(count = total, "Restoring persisted streaming jobs");
+
+    let rt = tokio::runtime::Handle::current();
+    let mut restored = 0usize;
+    let mut failed = 0usize;
+
+    for (table_name, fs_program) in definitions {
+        let jm = job_manager.clone();
+        let name = table_name.clone();
+        match rt.block_on(jm.submit_job(name.clone(), fs_program)) {
+            Ok(job_id) => {
+                info!(table = %table_name, job_id = %job_id, "Streaming job restored");
+                restored += 1;
+            }
+            Err(e) => {
+                warn!(table = %table_name, error = %e, "Failed to restore streaming job");
+                failed += 1;
+            }
+        }
+    }
+
+    info!(
+        restored = restored,
+        failed = failed,
+        total = total,
+        "Streaming job restore complete"
+    );
+}
+
 pub fn initialize_stream_catalog(config: &crate::config::GlobalConfig) -> anyhow::Result<()> {
     if !config.stream_catalog.persist {
         return CatalogManager::init_global_in_memory()
@@ -440,7 +573,7 @@ mod tests {
     use crate::sql::schema::connection_type::ConnectionType;
     use crate::sql::schema::source_table::SourceTable;
     use crate::sql::schema::table::Table as CatalogTable;
-    use crate::storage::stream_catalog::{InMemoryMetaStore, MetaStore};
+    use crate::storage::stream_catalog::InMemoryMetaStore;
 
     use super::CatalogManager;
 

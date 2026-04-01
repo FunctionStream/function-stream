@@ -114,6 +114,7 @@ pub fn bootstrap_system(config: &GlobalConfig) -> Result<()> {
     registry.initialize_all(config)?;
 
     crate::storage::stream_catalog::restore_global_catalog_from_store();
+    crate::storage::stream_catalog::restore_streaming_jobs_from_store();
 
     info!("System bootstrap finished. Node is ready to accept traffic.");
     Ok(())

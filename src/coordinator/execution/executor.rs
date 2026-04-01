@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use protocol::grpc::api::FsProgram;
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::coordinator::dataset::{
     empty_record_batch, ExecuteResult, ShowCatalogTablesResult,
@@ -323,14 +323,28 @@ impl PlanVisitor for Executor {
 
             let job_id = plan.name.clone();
             let job_id = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(job_manager.submit_job(job_id, fs_program))
+                tokio::runtime::Handle::current()
+                    .block_on(job_manager.submit_job(job_id, fs_program.clone()))
             })
             .map_err(|e| ExecuteError::Internal(format!("Failed to submit streaming job: {e}")))?;
+
+            self.catalog_manager
+                .persist_streaming_job(
+                    &plan.name,
+                    &fs_program,
+                    plan.comment.as_deref().unwrap_or(""),
+                )
+                .map_err(|e| {
+                    ExecuteError::Internal(format!(
+                        "Streaming job '{}' submitted but persistence failed: {e}",
+                        plan.name
+                    ))
+                })?;
 
             info!(
                 job_id = %job_id,
                 table = %plan.name,
-                "Streaming job submitted"
+                "Streaming job submitted and persisted"
             );
 
             Ok(ExecuteResult::ok_with_data(
@@ -469,6 +483,14 @@ impl PlanVisitor for Executor {
                 info!(
                     table = %plan.table_name,
                     "Streaming job stopped and removed"
+                );
+            }
+
+            if let Err(e) = self.catalog_manager.remove_streaming_job(&plan.table_name) {
+                warn!(
+                    table = %plan.table_name,
+                    error = %e,
+                    "Failed to remove streaming job persisted definition (non-fatal)"
                 );
             }
 

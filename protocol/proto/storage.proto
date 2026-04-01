@@ -40,6 +40,21 @@ message CatalogSourceTable {
 }
 
 // =============================================================================
+// Streaming table storage (CREATE STREAMING TABLE persistence)
+// =============================================================================
+
+// Persisted record for one streaming table (CREATE STREAMING TABLE).
+// On restart, the engine re-submits each record to JobManager to resume the pipeline.
+message StreamingTableDefinition {
+  string table_name = 1;
+  int64  created_at_millis = 2;
+  // Serialized function_stream.api.FsProgram — the full execution graph.
+  // Stored as opaque bytes to avoid coupling storage schema with runtime API protos.
+  bytes  fs_program_bytes = 3;
+  string comment = 4;
+}
+
+// =============================================================================
 // Task storage (RocksDB metadata + module payload)
 // =============================================================================
 
