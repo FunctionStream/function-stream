@@ -13,10 +13,11 @@
 use super::Analysis;
 use crate::coordinator::execution_context::ExecutionContext;
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropTableStatement,
-    ShowCatalogTables, ShowCreateTable, ShowFunctions, StartFunction, Statement,
-    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
-    StreamingTableStatement,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction,
+    DropStreamingTableStatement, DropTableStatement, ShowCatalogTables,
+    ShowCreateStreamingTable, ShowCreateTable, ShowFunctions, ShowStreamingTables,
+    StartFunction, Statement, StatementVisitor, StatementVisitorContext,
+    StatementVisitorResult, StopFunction, StreamingTableStatement,
 };
 use std::fmt;
 
@@ -158,5 +159,29 @@ impl StatementVisitor for Analyzer<'_> {
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(DropTableStatement::new(stmt.statement.clone())))
+    }
+
+    fn visit_show_streaming_tables(
+        &self,
+        stmt: &ShowStreamingTables,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_show_create_streaming_table(
+        &self,
+        stmt: &ShowCreateStreamingTable,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_drop_streaming_table(
+        &self,
+        stmt: &DropStreamingTableStatement,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
     }
 }

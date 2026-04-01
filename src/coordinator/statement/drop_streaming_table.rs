@@ -1,0 +1,40 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use super::{Statement, StatementVisitor, StatementVisitorContext, StatementVisitorResult};
+
+/// `DROP STREAMING TABLE [IF EXISTS] <name>` — stops and removes the streaming
+/// job from `JobManager`, then drops the corresponding catalog entry if present.
+#[derive(Debug, Clone)]
+pub struct DropStreamingTableStatement {
+    pub table_name: String,
+    pub if_exists: bool,
+}
+
+impl DropStreamingTableStatement {
+    pub fn new(table_name: String, if_exists: bool) -> Self {
+        Self {
+            table_name,
+            if_exists,
+        }
+    }
+}
+
+impl Statement for DropStreamingTableStatement {
+    fn accept(
+        &self,
+        visitor: &dyn StatementVisitor,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        visitor.visit_drop_streaming_table(self, context)
+    }
+}

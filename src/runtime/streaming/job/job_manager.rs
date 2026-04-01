@@ -32,6 +32,30 @@ use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
 use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
 
+#[derive(Debug, Clone)]
+pub struct StreamingJobSummary {
+    pub job_id: String,
+    pub status: String,
+    pub pipeline_count: i32,
+    pub uptime_secs: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PipelineDetail {
+    pub pipeline_id: u32,
+    pub status: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamingJobDetail {
+    pub job_id: String,
+    pub status: String,
+    pub pipeline_count: i32,
+    pub uptime_secs: u64,
+    pub pipelines: Vec<PipelineDetail>,
+    pub program_json: String,
+}
+
 static GLOBAL_JOB_MANAGER: OnceLock<Arc<JobManager>> = OnceLock::new();
 
 pub struct JobManager {
@@ -178,7 +202,114 @@ impl JobManager {
         )
     }
 
-    // ========================================================================
+    pub fn list_jobs(&self) -> Vec<StreamingJobSummary> {
+        let jobs_guard = self.active_jobs.read().unwrap();
+        jobs_guard
+            .values()
+            .map(|graph| {
+                let pipeline_count = graph.pipelines.len() as i32;
+                let uptime_secs = graph.start_time.elapsed().as_secs();
+                let status = Self::aggregate_pipeline_status(&graph.pipelines);
+                StreamingJobSummary {
+                    job_id: graph.job_id.clone(),
+                    status,
+                    pipeline_count,
+                    uptime_secs,
+                }
+            })
+            .collect()
+    }
+
+    pub fn get_job_detail(&self, job_id: &str) -> Option<StreamingJobDetail> {
+        let jobs_guard = self.active_jobs.read().unwrap();
+        let graph = jobs_guard.get(job_id)?;
+
+        let uptime_secs = graph.start_time.elapsed().as_secs();
+        let overall_status = Self::aggregate_pipeline_status(&graph.pipelines);
+
+        let pipeline_details: Vec<PipelineDetail> = graph
+            .pipelines
+            .iter()
+            .map(|(id, pipeline)| {
+                let status = pipeline.status.read().unwrap().clone();
+                PipelineDetail {
+                    pipeline_id: *id,
+                    status: format!("{status:?}"),
+                }
+            })
+            .collect();
+
+        let program_json = serde_json::to_string_pretty(&graph.program).unwrap_or_else(|e| {
+            format!("{{\"error\": \"Failed to serialize program: {e}\"}}")
+        });
+
+        Some(StreamingJobDetail {
+            job_id: graph.job_id.clone(),
+            status: overall_status,
+            pipeline_count: graph.pipelines.len() as i32,
+            uptime_secs,
+            pipelines: pipeline_details,
+            program_json,
+        })
+    }
+
+    pub fn has_job(&self, job_id: &str) -> bool {
+        self.active_jobs.read().unwrap().contains_key(job_id)
+    }
+
+    pub async fn remove_job(&self, job_id: &str, mode: StopMode) -> anyhow::Result<()> {
+        {
+            let jobs_guard = self.active_jobs.read().unwrap();
+            if !jobs_guard.contains_key(job_id) {
+                anyhow::bail!("Job not found: {job_id}");
+            }
+            let graph = &jobs_guard[job_id];
+            let control_senders: Vec<_> =
+                graph.pipelines.values().map(|p| p.control_tx.clone()).collect();
+
+            drop(jobs_guard);
+
+            for tx in control_senders {
+                let _ = tx.send(ControlCommand::Stop { mode: mode.clone() }).await;
+            }
+        }
+
+        self.active_jobs.write().unwrap().remove(job_id);
+        info!(job_id = %job_id, "Job stopped and removed.");
+        Ok(())
+    }
+
+    fn aggregate_pipeline_status(
+        pipelines: &HashMap<u32, PhysicalPipeline>,
+    ) -> String {
+        let mut running = 0u32;
+        let mut failed = 0u32;
+        let mut finished = 0u32;
+        let mut initializing = 0u32;
+
+        for pipeline in pipelines.values() {
+            match &*pipeline.status.read().unwrap() {
+                PipelineStatus::Running => running += 1,
+                PipelineStatus::Failed { .. } => failed += 1,
+                PipelineStatus::Finished => finished += 1,
+                PipelineStatus::Initializing => initializing += 1,
+                PipelineStatus::Stopping => {}
+            }
+        }
+
+        if failed > 0 {
+            "DEGRADED".to_string()
+        } else if running > 0 && running == pipelines.len() as u32 {
+            "RUNNING".to_string()
+        } else if finished == pipelines.len() as u32 {
+            "FINISHED".to_string()
+        } else if initializing > 0 {
+            "INITIALIZING".to_string()
+        } else {
+            "PARTIAL".to_string()
+        }
+    }
+
     // ========================================================================
 
     fn build_operator_chain(

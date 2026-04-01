@@ -17,17 +17,21 @@ use thiserror::Error;
 use tracing::{debug, info};
 
 use crate::coordinator::dataset::{
-    empty_record_batch, ExecuteResult, ShowCatalogTablesResult, ShowCreateTableResult,
-    ShowFunctionsResult,
+    empty_record_batch, ExecuteResult, ShowCatalogTablesResult,
+    ShowCreateStreamingTableResult, ShowCreateTableResult, ShowFunctionsResult,
+    ShowStreamingTablesResult,
 };
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, CreateTablePlanBody,
-    DropFunctionPlan, DropTablePlan, LookupTablePlan, PlanNode, PlanVisitor, PlanVisitorContext,
-    PlanVisitorResult, ShowCatalogTablesPlan, ShowCreateTablePlan, ShowFunctionsPlan,
-    StartFunctionPlan, StopFunctionPlan, StreamingTable, StreamingTableConnectorPlan,
+    DropFunctionPlan, DropStreamingTablePlan, DropTablePlan, LookupTablePlan, PlanNode,
+    PlanVisitor, PlanVisitorContext, PlanVisitorResult, ShowCatalogTablesPlan,
+    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan,
+    ShowStreamingTablesPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
+    StreamingTableConnectorPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::streaming::job::JobManager;
+use crate::runtime::streaming::protocol::control::StopMode;
 use crate::runtime::taskexecutor::TaskManager;
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::sql::schema::show_create_catalog_table;
@@ -393,6 +397,126 @@ impl PlanVisitor for Executor {
                 "Dropped table '{}'",
                 plan.table_name
             )))
+        };
+
+        PlanVisitorResult::Execute(execute())
+    }
+
+    fn visit_show_streaming_tables(
+        &self,
+        _plan: &ShowStreamingTablesPlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
+            let jobs = self.job_manager.list_jobs();
+            let n = jobs.len();
+            Ok(ExecuteResult::ok_with_data(
+                format!("{n} streaming table(s)"),
+                ShowStreamingTablesResult::new(jobs),
+            ))
+        };
+        PlanVisitorResult::Execute(execute())
+    }
+
+    fn visit_show_create_streaming_table(
+        &self,
+        plan: &ShowCreateStreamingTablePlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
+            let detail = self
+                .job_manager
+                .get_job_detail(&plan.table_name)
+                .ok_or_else(|| {
+                    ExecuteError::Validation(format!(
+                        "Streaming table '{}' not found in active jobs",
+                        plan.table_name
+                    ))
+                })?;
+
+            let pipeline_lines: Vec<String> = detail
+                .pipelines
+                .iter()
+                .map(|p| format!("  pipeline[{}]: {}", p.pipeline_id, p.status))
+                .collect();
+            let pipeline_detail = if pipeline_lines.is_empty() {
+                "(no pipelines)".to_string()
+            } else {
+                pipeline_lines.join("\n")
+            };
+
+            let mut program_json = serde_json::Value::String(detail.program_json.clone());
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&detail.program_json) {
+                let mut cleaned = parsed;
+                strip_noisy_fields(&mut cleaned);
+                program_json = cleaned;
+            }
+            let program_display =
+                serde_json::to_string_pretty(&program_json).unwrap_or(detail.program_json);
+
+            Ok(ExecuteResult::ok_with_data(
+                format!("SHOW CREATE STREAMING TABLE {}", plan.table_name),
+                ShowCreateStreamingTableResult::new(
+                    plan.table_name.clone(),
+                    detail.status,
+                    pipeline_detail,
+                    program_display,
+                ),
+            ))
+        };
+        PlanVisitorResult::Execute(execute())
+    }
+
+    fn visit_drop_streaming_table(
+        &self,
+        plan: &DropStreamingTablePlan,
+        _context: &PlanVisitorContext,
+    ) -> PlanVisitorResult {
+        let execute = || -> Result<ExecuteResult, ExecuteError> {
+            let job_exists = self.job_manager.has_job(&plan.table_name);
+
+            if !job_exists && !plan.if_exists {
+                return Err(ExecuteError::Validation(format!(
+                    "Streaming table '{}' not found in active jobs",
+                    plan.table_name
+                )));
+            }
+
+            if job_exists {
+                let job_manager = Arc::clone(&self.job_manager);
+                let table_name = plan.table_name.clone();
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current()
+                        .block_on(job_manager.remove_job(&table_name, StopMode::Graceful))
+                })
+                .map_err(|e| {
+                    ExecuteError::Internal(format!(
+                        "Failed to stop streaming job '{}': {}",
+                        plan.table_name, e
+                    ))
+                })?;
+
+                info!(
+                    table = %plan.table_name,
+                    "Streaming job stopped and removed"
+                );
+            }
+
+            let _ = self
+                .catalog_manager
+                .drop_catalog_table(&plan.table_name, true);
+
+            if job_exists {
+                Ok(ExecuteResult::ok(format!(
+                    "Dropped streaming table '{}'",
+                    plan.table_name
+                )))
+            } else {
+                Ok(ExecuteResult::ok(format!(
+                    "Streaming table '{}' does not exist (skipped)",
+                    plan.table_name
+                )))
+            }
         };
 
         PlanVisitorResult::Execute(execute())

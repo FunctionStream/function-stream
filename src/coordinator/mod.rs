@@ -24,7 +24,8 @@ mod tool;
 pub use coordinator::Coordinator;
 pub use dataset::{DataSet, ShowFunctionsResult};
 pub use statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropTableStatement,
-    PythonModule, ShowCatalogTables, ShowCreateTable, ShowFunctions, StartFunction, Statement,
-    StopFunction, StreamingTableStatement,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction,
+    DropStreamingTableStatement, DropTableStatement, PythonModule, ShowCatalogTables,
+    ShowCreateStreamingTable, ShowCreateTable, ShowFunctions, ShowStreamingTables,
+    StartFunction, Statement, StopFunction, StreamingTableStatement,
 };

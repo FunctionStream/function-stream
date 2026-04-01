@@ -10,8 +10,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod edge_manager;
-pub mod job_manager;
-pub mod models;
+use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
-pub use job_manager::{JobManager, StreamingJobSummary};
+#[derive(Debug, Clone)]
+pub struct ShowCreateStreamingTablePlan {
+    pub table_name: String,
+}
+
+impl ShowCreateStreamingTablePlan {
+    pub fn new(table_name: String) -> Self {
+        Self { table_name }
+    }
+}
+
+impl PlanNode for ShowCreateStreamingTablePlan {
+    fn accept(&self, visitor: &dyn PlanVisitor, context: &PlanVisitorContext) -> PlanVisitorResult {
+        visitor.visit_show_create_streaming_table(self, context)
+    }
+}

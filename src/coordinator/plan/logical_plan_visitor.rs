@@ -26,14 +26,17 @@ use tracing::debug;
 
 use crate::coordinator::analyze::analysis::Analysis;
 use crate::coordinator::plan::{
-    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan, DropTablePlan,
-    PlanNode, ShowCatalogTablesPlan, ShowCreateTablePlan, ShowFunctionsPlan, StartFunctionPlan,
-    StopFunctionPlan, StreamingTable,
+    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
+    DropStreamingTablePlan, DropTablePlan, PlanNode, ShowCatalogTablesPlan,
+    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan,
+    ShowStreamingTablesPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
 };
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropTableStatement,
-    ShowCatalogTables, ShowCreateTable, ShowFunctions, StartFunction, StatementVisitor,
-    StatementVisitorContext, StatementVisitorResult, StopFunction, StreamingTableStatement,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction,
+    DropStreamingTableStatement, DropTableStatement, ShowCatalogTables,
+    ShowCreateStreamingTable, ShowCreateTable, ShowFunctions, ShowStreamingTables,
+    StartFunction, StatementVisitor, StatementVisitorContext, StatementVisitorResult,
+    StopFunction, StreamingTableStatement,
 };
 use crate::coordinator::tool::ConnectorOptions;
 use crate::sql::analysis::{
@@ -457,6 +460,35 @@ impl StatementVisitor for LogicalPlanVisitor {
         StatementVisitorResult::Plan(Box::new(DropTablePlan::new(
             names[0].to_string(),
             *if_exists,
+        )))
+    }
+
+    fn visit_show_streaming_tables(
+        &self,
+        _stmt: &ShowStreamingTables,
+        _ctx: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Plan(Box::new(ShowStreamingTablesPlan::new()))
+    }
+
+    fn visit_show_create_streaming_table(
+        &self,
+        stmt: &ShowCreateStreamingTable,
+        _ctx: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Plan(Box::new(ShowCreateStreamingTablePlan::new(
+            stmt.table_name.clone(),
+        )))
+    }
+
+    fn visit_drop_streaming_table(
+        &self,
+        stmt: &DropStreamingTableStatement,
+        _ctx: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Plan(Box::new(DropStreamingTablePlan::new(
+            stmt.table_name.clone(),
+            stmt.if_exists,
         )))
     }
 }

@@ -38,24 +38,65 @@ use datafusion::sql::sqlparser::dialect::FunctionStreamDialect;
 use datafusion::sql::sqlparser::parser::Parser;
 
 use crate::coordinator::{
-    CreateFunction, CreateTable, DropFunction, DropTableStatement, ShowCatalogTables,
-    ShowCreateTable, ShowFunctions, StartFunction, Statement as CoordinatorStatement, StopFunction,
+    CreateFunction, CreateTable, DropFunction, DropStreamingTableStatement, DropTableStatement,
+    ShowCatalogTables, ShowCreateStreamingTable, ShowCreateTable, ShowFunctions,
+    ShowStreamingTables, StartFunction, Statement as CoordinatorStatement, StopFunction,
     StreamingTableStatement,
 };
 
-/// `DROP STREAMING TABLE t` is accepted as sugar for `DROP TABLE t` against the same catalog.
-fn rewrite_drop_streaming_table(sql: &str) -> String {
-    let trimmed = sql.trim_start();
-    let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+/// Streaming-specific SQL that the sqlparser dialect does not natively handle.
+///
+/// Returns `Some(statement)` if the SQL was intercepted, `None` otherwise so
+/// the caller falls through to the normal sqlparser pipeline.
+fn try_parse_streaming_statement(sql: &str) -> Option<Box<dyn CoordinatorStatement>> {
+    let tokens: Vec<&str> = sql.split_whitespace().collect();
+    if tokens.is_empty() {
+        return None;
+    }
+
+    // SHOW STREAMING TABLES
+    if tokens.len() == 3
+        && tokens[0].eq_ignore_ascii_case("show")
+        && tokens[1].eq_ignore_ascii_case("streaming")
+        && tokens[2].eq_ignore_ascii_case("tables")
+    {
+        return Some(Box::new(ShowStreamingTables::new()));
+    }
+
+    // SHOW CREATE STREAMING TABLE <name>
+    if tokens.len() == 5
+        && tokens[0].eq_ignore_ascii_case("show")
+        && tokens[1].eq_ignore_ascii_case("create")
+        && tokens[2].eq_ignore_ascii_case("streaming")
+        && tokens[3].eq_ignore_ascii_case("table")
+    {
+        let name = tokens[4].trim_end_matches(';').to_string();
+        return Some(Box::new(ShowCreateStreamingTable::new(name)));
+    }
+
+    // DROP STREAMING TABLE [IF EXISTS] <name>
     if tokens.len() >= 4
         && tokens[0].eq_ignore_ascii_case("drop")
         && tokens[1].eq_ignore_ascii_case("streaming")
         && tokens[2].eq_ignore_ascii_case("table")
     {
-        let rest = tokens[3..].join(" ");
-        return format!("DROP TABLE {rest}");
+        let (if_exists, name_idx) = if tokens.len() >= 6
+            && tokens[3].eq_ignore_ascii_case("if")
+            && tokens[4].eq_ignore_ascii_case("exists")
+        {
+            (true, 5)
+        } else {
+            (false, 3)
+        };
+
+        if name_idx >= tokens.len() {
+            return None;
+        }
+        let name = tokens[name_idx].trim_end_matches(';').to_string();
+        return Some(Box::new(DropStreamingTableStatement::new(name, if_exists)));
     }
-    sql.to_string()
+
+    None
 }
 
 pub fn parse_sql(query: &str) -> Result<Vec<Box<dyn CoordinatorStatement>>> {
@@ -64,9 +105,12 @@ pub fn parse_sql(query: &str) -> Result<Vec<Box<dyn CoordinatorStatement>>> {
         return plan_err!("Query is empty");
     }
 
+    if let Some(stmt) = try_parse_streaming_statement(trimmed) {
+        return Ok(vec![stmt]);
+    }
+
     let dialect = FunctionStreamDialect {};
-    let to_parse = rewrite_drop_streaming_table(trimmed);
-    let statements = Parser::parse_sql(&dialect, &to_parse)
+    let statements = Parser::parse_sql(&dialect, trimmed)
         .map_err(|e| DataFusionError::Plan(format!("SQL parse error: {e}")))?;
 
     if statements.is_empty() {
@@ -242,9 +286,27 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_drop_streaming_table_rewritten() {
+    fn test_parse_drop_streaming_table() {
         let stmt = first_stmt("DROP STREAMING TABLE my_sink");
-        assert!(is_type(stmt.as_ref(), "DropTableStatement"));
+        assert!(is_type(stmt.as_ref(), "DropStreamingTableStatement"));
+    }
+
+    #[test]
+    fn test_parse_drop_streaming_table_if_exists() {
+        let stmt = first_stmt("DROP STREAMING TABLE IF EXISTS my_sink");
+        assert!(is_type(stmt.as_ref(), "DropStreamingTableStatement"));
+    }
+
+    #[test]
+    fn test_parse_show_streaming_tables() {
+        let stmt = first_stmt("SHOW STREAMING TABLES");
+        assert!(is_type(stmt.as_ref(), "ShowStreamingTables"));
+    }
+
+    #[test]
+    fn test_parse_show_create_streaming_table() {
+        let stmt = first_stmt("SHOW CREATE STREAMING TABLE my_sink");
+        assert!(is_type(stmt.as_ref(), "ShowCreateStreamingTable"));
     }
 
     /// `CREATE STREAMING TABLE` is the sink DDL supported by FunctionStream (not `CREATE STREAM TABLE`).
