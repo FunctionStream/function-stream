@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -25,7 +24,6 @@ use crate::sql::schema::source_table::SourceTable;
 use crate::sql::schema::ColumnDescriptor;
 use crate::sql::schema::table::Table;
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::common::constants::sql_field;
 use crate::sql::common::UPDATING_META_FIELD;
 use crate::sql::extensions::debezium::UnrollDebeziumPayloadNode;
 use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
@@ -48,35 +46,6 @@ impl<'a> SourceRewriter<'a> {
 }
 
 impl SourceRewriter<'_> {
-    /// Output column names after stream-catalog source projection (physical fields plus optional
-    /// `_timestamp` alias when event time is renamed).
-    fn stream_source_projected_column_names(
-        schema: &datafusion::arrow::datatypes::Schema,
-        event_time_field: Option<&str>,
-    ) -> HashSet<String> {
-        let mut names: HashSet<String> =
-            schema.fields().iter().map(|f| f.name().clone()).collect();
-        if let Some(et) = event_time_field {
-            if et != TIMESTAMP_FIELD {
-                names.insert(TIMESTAMP_FIELD.to_string());
-            }
-        }
-        names
-    }
-
-    /// Resolves watermark column for [`StreamTable::Source`]: drop computed `__watermark` and any
-    /// name not present in the projected schema (defaults to `_timestamp` − delay).
-    fn stream_source_effective_watermark_field<'b>(
-        watermark_field: Option<&'b str>,
-        projected: &HashSet<String>,
-    ) -> Option<&'b str> {
-        let w = watermark_field?;
-        if w == sql_field::COMPUTED_WATERMARK {
-            return None;
-        }
-        projected.contains(w).then_some(w)
-    }
-
     fn projection_expr_for_column(col: &ColumnDescriptor, qualifier: &TableReference) -> Expr {
         if let Some(logic) = col.computation_logic() {
             logic
