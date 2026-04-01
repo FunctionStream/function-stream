@@ -26,13 +26,10 @@ pub mod fs_schema;
 pub mod errors;
 pub mod format_from_opts;
 pub mod formats;
-pub mod hash;
 pub mod kafka_catalog;
 pub mod message;
 pub mod operator_config;
-pub mod task_info;
 pub mod time_utils;
-pub mod worker;
 pub mod converter;
 pub mod topology;
 
