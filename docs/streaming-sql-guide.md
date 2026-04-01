@@ -34,7 +34,8 @@ Function Stream provides a declarative SQL interface for building real-time stre
 - [Part 2: Building Real-Time Pipelines (STREAMING TABLE)](#part-2-building-real-time-pipelines-streaming-table)
   - [Tumbling Window](#scenario-1-tumbling-window)
   - [Hopping Window](#scenario-2-hopping-window)
-  - [Window Join](#scenario-3-window-join)
+  - [Session Window](#scenario-3-session-window)
+  - [Window Join](#scenario-4-window-join)
 - [Part 3: Lifecycle & Pipeline Management](#part-3-lifecycle--pipeline-management)
   - [Data Source Management](#1-data-source--metadata-management)
   - [Pipeline Monitoring](#2-real-time-pipeline-monitoring--troubleshooting)
@@ -150,7 +151,29 @@ GROUP BY
     ad_id;
 ```
 
-### Scenario 3: Window Join
+### Scenario 3: Session Window
+
+A session window groups events that arrive within a specified gap of inactivity. If no new event arrives within the gap duration, the window closes and emits results. Session windows are ideal for user-session analysis.
+
+```sql
+-- Detect ad-impression sessions per user; a session ends after 30 seconds of inactivity
+CREATE STREAMING TABLE metric_session_impressions WITH (
+    'connector' = 'kafka',
+    'topic' = 'sink_session_impressions',
+    'format' = 'json',
+    'bootstrap.servers' = 'localhost:9092'
+) AS
+SELECT
+    SESSION(INTERVAL '30' SECOND) AS time_window,
+    user_id,
+    COUNT(*) AS impressions_in_session
+FROM ad_impressions
+GROUP BY
+    1,
+    user_id;
+```
+
+### Scenario 4: Window Join
 
 Join two streams within exactly the same time window. Because state is bounded by the window, memory is automatically reclaimed once the watermark advances past the window boundary — eliminating the risk of OOM.
 
