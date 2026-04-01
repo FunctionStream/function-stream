@@ -129,7 +129,69 @@ DROP FUNCTION go_processor_demo;
 
 ---
 
-## 3. REPL Built-in Auxiliary Commands
+## 3. Streaming SQL: TABLE & STREAMING TABLE
+
+In addition to Function management, the CLI supports a full set of **Streaming SQL** commands for declaring data sources and building real-time pipelines. For a comprehensive guide with examples, see [Streaming SQL Guide](streaming-sql-guide.md).
+
+### 3.1 Register Data Source: CREATE TABLE
+
+Declare an external data source (e.g. Kafka) with schema, event time, and watermark strategy. This creates a **static catalog entry** that consumes no compute resources.
+
+```sql
+CREATE TABLE ad_impressions (
+    impression_id VARCHAR,
+    ad_id BIGINT,
+    campaign_id BIGINT,
+    user_id VARCHAR,
+    impression_time TIMESTAMP NOT NULL,
+    WATERMARK FOR impression_time AS impression_time - INTERVAL '2' SECOND
+) WITH (
+    'connector' = 'kafka',
+    'topic' = 'raw_ad_impressions',
+    'format' = 'json',
+    'bootstrap.servers' = 'localhost:9092'
+);
+```
+
+### 3.2 Create Streaming Pipeline: CREATE STREAMING TABLE
+
+Launch a continuous, distributed compute pipeline using CTAS syntax. Results are written to the target connector in append-only mode.
+
+```sql
+CREATE STREAMING TABLE metric_tumble_impressions_1m WITH (
+    'connector' = 'kafka',
+    'topic' = 'sink_impressions_1m',
+    'format' = 'json',
+    'bootstrap.servers' = 'localhost:9092'
+) AS
+SELECT
+    TUMBLE(INTERVAL '1' MINUTE) AS time_window,
+    campaign_id,
+    COUNT(*) AS total_impressions
+FROM ad_impressions
+GROUP BY 1, campaign_id;
+```
+
+### 3.3 Inspect & Monitor
+
+| Command | Description |
+|---------|-------------|
+| `SHOW TABLES` | List all registered source tables. |
+| `SHOW CREATE TABLE <name>` | Display the DDL of a registered table. |
+| `SHOW STREAMING TABLES` | List all running streaming pipelines with status. |
+| `SHOW CREATE STREAMING TABLE <name>` | Inspect the physical execution graph (ASCII topology). |
+
+### 3.4 Destroy Streaming Pipeline: DROP STREAMING TABLE
+
+Stop and release all resources for a streaming pipeline:
+
+```sql
+DROP STREAMING TABLE metric_tumble_impressions_1m;
+```
+
+---
+
+## 4. REPL Built-in Auxiliary Commands
 
 At the `function-stream>` prompt, the following convenient commands are supported:
 
@@ -141,7 +203,7 @@ At the `function-stream>` prompt, the following convenient commands are supporte
 
 ---
 
-## 4. Technical Constraints and Notes
+## 5. Technical Constraints and Notes
 
 - **Path Isolation**: The SQL CLI itself is not responsible for uploading files. The file pointed to by function_path must pre-exist on the **Server machine's** disk. If remote upload packaging is required, please use the Python SDK.
 - **Python Function Limitations**: Since Python functions involve dynamic dependency analysis and code packaging, they are currently **not supported** for creation via SQL CLI; only lifecycle management such as START / STOP / SHOW via CLI is supported.
