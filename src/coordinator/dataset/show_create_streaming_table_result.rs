@@ -14,6 +14,9 @@ use std::sync::Arc;
 
 use arrow_array::StringArray;
 use arrow_schema::{DataType, Field, Schema};
+use protocol::grpc::api::FsProgram;
+
+use crate::sql::common::render_program_topology;
 
 use super::DataSet;
 
@@ -22,7 +25,7 @@ pub struct ShowCreateStreamingTableResult {
     table_name: String,
     status: String,
     pipeline_detail: String,
-    topology: String,
+    program: FsProgram,
 }
 
 impl ShowCreateStreamingTableResult {
@@ -30,19 +33,21 @@ impl ShowCreateStreamingTableResult {
         table_name: String,
         status: String,
         pipeline_detail: String,
-        topology: String,
+        program: FsProgram,
     ) -> Self {
         Self {
             table_name,
             status,
             pipeline_detail,
-            topology,
+            program,
         }
     }
 }
 
 impl DataSet for ShowCreateStreamingTableResult {
     fn to_record_batch(&self) -> arrow_array::RecordBatch {
+        let topology = render_program_topology(&self.program);
+
         let schema = Arc::new(Schema::new(vec![
             Field::new("Streaming Table", DataType::Utf8, false),
             Field::new("Status", DataType::Utf8, false),
@@ -56,7 +61,7 @@ impl DataSet for ShowCreateStreamingTableResult {
                 Arc::new(StringArray::from(vec![self.table_name.as_str()])),
                 Arc::new(StringArray::from(vec![self.status.as_str()])),
                 Arc::new(StringArray::from(vec![self.pipeline_detail.as_str()])),
-                Arc::new(StringArray::from(vec![self.topology.as_str()])),
+                Arc::new(StringArray::from(vec![topology.as_str()])),
             ],
         )
         .unwrap_or_else(|_| arrow_array::RecordBatch::new_empty(Arc::new(Schema::empty())))

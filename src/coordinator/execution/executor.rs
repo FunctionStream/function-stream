@@ -88,27 +88,6 @@ impl Executor {
 }
 
 
-fn strip_noisy_fields(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(map) => {
-            // 兼容 camelCase 和 snake_case，直接把配置项连根拔起
-            map.remove("operatorConfig");
-            map.remove("operator_config");
-
-            // 继续向子节点递归
-            for (_, v) in map.iter_mut() {
-                strip_noisy_fields(v);
-            }
-        }
-        serde_json::Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                strip_noisy_fields(v);
-            }
-        }
-        _ => {}
-    }
-}
-
 impl PlanVisitor for Executor {
     fn visit_create_function(
         &self,
@@ -451,7 +430,7 @@ impl PlanVisitor for Executor {
                     plan.table_name.clone(),
                     detail.status,
                     pipeline_detail,
-                    detail.topology,
+                    detail.program,
                 ),
             ))
         };
