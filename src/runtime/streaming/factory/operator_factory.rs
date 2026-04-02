@@ -216,11 +216,6 @@ impl OperatorConstructor for KeyByBridge {
             proto.name.clone()
         };
         let key_indices: Vec<usize> = proto.key_fields.iter().map(|&f| f as usize).collect();
-        info!(
-            operator = %name,
-            key_field_indices = ?key_indices,
-            "KeyBy constructing KeyExecutionOperator"
-        );
         let op = KeyExecutionOperator::new(name, executor, key_indices);
         Ok(ConstructedOperator::Operator(Box::new(op)))
     }
