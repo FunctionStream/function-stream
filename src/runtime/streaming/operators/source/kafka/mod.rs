@@ -59,6 +59,8 @@ pub trait BatchDeserializer: Send + 'static {
 pub struct BufferedDeserializer {
     inner: DataDeserializer,
     buffer: Vec<Vec<u8>>,
+    /// Parallel to `buffer`: Kafka message timestamp (ms) per row for filling `_timestamp`.
+    kafka_timestamps_ms: Vec<u64>,
     batch_size: usize,
 }
 
@@ -67,6 +69,7 @@ impl BufferedDeserializer {
         Self {
             inner: DataDeserializer::new(format, schema, bad_data_policy),
             buffer: Vec::with_capacity(batch_size),
+            kafka_timestamps_ms: Vec::with_capacity(batch_size),
             batch_size,
         }
     }
@@ -76,10 +79,11 @@ impl BatchDeserializer for BufferedDeserializer {
     fn deserialize_slice(
         &mut self,
         payload: &[u8],
-        _timestamp: u64,
+        timestamp: u64,
         _metadata: Option<HashMap<&str, FieldValueType<'_>>>,
     ) -> Result<()> {
         self.buffer.push(payload.to_vec());
+        self.kafka_timestamps_ms.push(timestamp);
         Ok(())
     }
 
@@ -93,8 +97,11 @@ impl BatchDeserializer for BufferedDeserializer {
         }
 
         let refs: Vec<&[u8]> = self.buffer.iter().map(|v| v.as_slice()).collect();
-        let batch = self.inner.deserialize_batch(&refs)?;
+        let batch = self
+            .inner
+            .deserialize_batch_with_kafka_timestamps(&refs, &self.kafka_timestamps_ms)?;
         self.buffer.clear();
+        self.kafka_timestamps_ms.clear();
         Ok(Some(batch))
     }
 
@@ -277,7 +284,11 @@ impl SourceOperator for KafkaSourceOperator {
             Ok(Ok(msg)) => {
                 let partition = msg.partition();
                 let offset = msg.offset();
-                let timestamp = msg.timestamp().to_millis().unwrap_or(0);
+                let timestamp = msg.timestamp().to_millis().ok_or_else(|| {
+                    anyhow!(
+                        "Failed to read timestamp from Kafka record: message has no timestamp"
+                    )
+                })?;
 
                 self.current_offsets.insert(partition, offset);
 

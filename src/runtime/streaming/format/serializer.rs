@@ -18,6 +18,8 @@ use arrow_json::EncoderOptions;
 use arrow_schema::{DataType, Field, SchemaRef};
 use std::sync::Arc;
 
+use crate::sql::common::TIMESTAMP_FIELD;
+
 use super::config::{Format, JsonFormat};
 use super::json_encoder::CustomEncoderFactory;
 
@@ -32,7 +34,7 @@ impl DataSerializer {
             .fields()
             .iter()
             .enumerate()
-            .filter(|(_, f)| !f.name().starts_with('_'))
+            .filter(|(_, f)| f.name() != TIMESTAMP_FIELD)
             .map(|(i, _)| i)
             .collect();
 
