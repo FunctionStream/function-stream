@@ -13,7 +13,6 @@
 
 use anyhow::{anyhow, Result};
 use prost::Message;
-use tracing::info;
 use std::collections::HashMap;
 use std::sync::Arc;
 use protocol::grpc::api::ProjectionOperator as ProjectionOperatorProto;
