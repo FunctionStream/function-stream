@@ -498,7 +498,19 @@ pub fn restore_streaming_jobs_from_store() {
     let total = definitions.len();
     info!(count = total, "Restoring persisted streaming jobs");
 
-    let rt = tokio::runtime::Handle::current();
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            warn!(
+                error = %e,
+                "Failed to create Tokio runtime for streaming job restore"
+            );
+            return;
+        }
+    };
     let mut restored = 0usize;
     let mut failed = 0usize;
 
