@@ -13,6 +13,7 @@
 
 use anyhow::{anyhow, Result};
 use prost::Message;
+use tracing::info;
 use std::collections::HashMap;
 use std::sync::Arc;
 use protocol::grpc::api::ProjectionOperator as ProjectionOperatorProto;
@@ -26,13 +27,15 @@ use crate::runtime::streaming::operators::grouping::IncrementalAggregatingConstr
 use crate::runtime::streaming::operators::joins::{
     InstantJoinConstructor, JoinWithExpirationConstructor,
 };
-use crate::runtime::streaming::operators::key_by::KeyByConstructor;
+
 use crate::runtime::streaming::operators::watermark::WatermarkGeneratorConstructor;
 use crate::runtime::streaming::operators::windows::{
     SessionAggregatingWindowConstructor, SlidingAggregatingWindowConstructor,
     TumblingAggregateWindowConstructor, WindowFunctionConstructor,
 };
-use crate::runtime::streaming::operators::{ProjectionOperator, StatelessPhysicalExecutor, ValueExecutionOperator};
+use crate::runtime::streaming::operators::{
+    KeyExecutionOperator, ProjectionOperator, StatelessPhysicalExecutor, ValueExecutionOperator,
+};
 use protocol::grpc::api::{
     ExpressionWatermarkConfig, JoinOperator as JoinOperatorProto,
     KeyPlanOperator as KeyByProto,
@@ -202,10 +205,23 @@ impl OperatorConstructor for IncrementalAggregateBridge {
 
 struct KeyByBridge;
 impl OperatorConstructor for KeyByBridge {
-    fn with_config(&self, config: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
+    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
         let proto = KeyByProto::decode(config)
             .map_err(|e| anyhow!("Decode KeyPlanOperator failed: {e}"))?;
-        let op = KeyByConstructor.with_config(proto)?;
+        let executor = StatelessPhysicalExecutor::new(&proto.physical_plan, registry.as_ref())
+            .map_err(|e| anyhow!("build key execution plan '{}': {e}", proto.name))?;
+        let name = if proto.name.is_empty() {
+            OperatorName::KeyBy.to_string()
+        } else {
+            proto.name.clone()
+        };
+        let key_indices: Vec<usize> = proto.key_fields.iter().map(|&f| f as usize).collect();
+        info!(
+            operator = %name,
+            key_field_indices = ?key_indices,
+            "KeyBy constructing KeyExecutionOperator"
+        );
+        let op = KeyExecutionOperator::new(name, executor, key_indices);
         Ok(ConstructedOperator::Operator(Box::new(op)))
     }
 }

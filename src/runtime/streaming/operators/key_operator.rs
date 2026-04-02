@@ -16,155 +16,13 @@ use anyhow::{anyhow, Result};
 use arrow_array::{Array, ArrayRef, RecordBatch, UInt64Array};
 use arrow::compute::{sort_to_indices, take};
 use async_trait::async_trait;
-use datafusion::physical_expr::PhysicalExpr;
-use datafusion_physical_expr::expressions::Column;
-use datafusion_common::hash_utils::create_hashes;
 use futures::StreamExt;
-use std::sync::Arc;
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::operators::StatelessPhysicalExecutor;
 use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, Watermark};
-
-use protocol::grpc::api::KeyPlanOperator;
-
-pub struct KeyByOperator {
-    name: String,
-    key_extractors: Vec<Arc<dyn PhysicalExpr>>,
-    random_state: ahash::RandomState,
-}
-
-impl KeyByOperator {
-    pub fn new(name: String, key_extractors: Vec<Arc<dyn PhysicalExpr>>) -> Self {
-        Self {
-            name,
-            key_extractors,
-            random_state: ahash::RandomState::new(),
-        }
-    }
-}
-
-#[async_trait]
-impl Operator for KeyByOperator {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
-        Ok(())
-    }
-
-    async fn process_data(
-        &mut self,
-        _input_idx: usize,
-        batch: RecordBatch,
-        _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        let num_rows = batch.num_rows();
-        if num_rows == 0 {
-            return Ok(vec![]);
-        }
-
-        let mut key_columns = Vec::with_capacity(self.key_extractors.len());
-        for expr in &self.key_extractors {
-            let column_array = expr
-                .evaluate(&batch)
-                .map_err(|e| anyhow!("Failed to evaluate key expr: {}", e))?
-                .into_array(num_rows)
-                .map_err(|e| anyhow!("Failed to convert into array: {}", e))?;
-            key_columns.push(column_array);
-        }
-
-        let mut hash_buffer = vec![0u64; num_rows];
-        create_hashes(&key_columns, &self.random_state, &mut hash_buffer)
-            .map_err(|e| anyhow!("Failed to compute hashes: {}", e))?;
-
-        let hash_array = UInt64Array::from(hash_buffer);
-
-        let sorted_indices = sort_to_indices(&hash_array, None, None)
-            .map_err(|e| anyhow!("Failed to sort hashes: {}", e))?;
-
-        let sorted_hashes_ref = take(&hash_array, &sorted_indices, None)?;
-        let sorted_hashes = sorted_hashes_ref
-            .as_any()
-            .downcast_ref::<UInt64Array>()
-            .unwrap();
-
-        let sorted_columns: std::result::Result<Vec<_>, _> = batch
-            .columns()
-            .iter()
-            .map(|col| take(col, &sorted_indices, None))
-            .collect();
-        let sorted_batch = RecordBatch::try_new(batch.schema(), sorted_columns?)?;
-
-        let mut outputs = Vec::new();
-        let mut start_idx = 0;
-
-        while start_idx < num_rows {
-            let current_hash = sorted_hashes.value(start_idx);
-            let mut end_idx = start_idx + 1;
-            while end_idx < num_rows && sorted_hashes.value(end_idx) == current_hash {
-                end_idx += 1;
-            }
-
-            let sub_batch = sorted_batch.slice(start_idx, end_idx - start_idx);
-            outputs.push(StreamOutput::Keyed(current_hash, sub_batch));
-            start_idx = end_idx;
-        }
-
-        Ok(outputs)
-    }
-
-    async fn process_watermark(
-        &mut self,
-        watermark: Watermark,
-        _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        Ok(vec![StreamOutput::Watermark(watermark)])
-    }
-
-    async fn snapshot_state(
-        &mut self,
-        _barrier: CheckpointBarrier,
-        _ctx: &mut TaskContext,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    async fn on_close(&mut self, _ctx: &mut TaskContext) -> Result<Vec<StreamOutput>> {
-        Ok(vec![])
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Constructor
-// ---------------------------------------------------------------------------
-
-pub struct KeyByConstructor;
-
-impl KeyByConstructor {
-    pub fn with_config(&self, config: KeyPlanOperator) -> Result<KeyByOperator> {
-        let mut key_extractors: Vec<Arc<dyn PhysicalExpr>> =
-            Vec::with_capacity(config.key_fields.len());
-
-        for field_idx in &config.key_fields {
-            let idx = *field_idx as usize;
-            let expr = Arc::new(Column::new(&format!("col_{}", idx), idx))
-                as Arc<dyn PhysicalExpr>;
-            key_extractors.push(expr);
-        }
-
-        let name = if config.name.is_empty() {
-            "KeyBy".to_string()
-        } else {
-            config.name.clone()
-        };
-
-        Ok(KeyByOperator::new(name, key_extractors))
-    }
-}
 
 // ===========================================================================
 // ===========================================================================
@@ -173,7 +31,6 @@ pub struct KeyExecutionOperator {
     name: String,
     executor: StatelessPhysicalExecutor,
     key_fields: Vec<usize>,
-    random_state: ahash::RandomState,
 }
 
 impl KeyExecutionOperator {
@@ -186,7 +43,6 @@ impl KeyExecutionOperator {
             name,
             executor,
             key_fields,
-            random_state: ahash::RandomState::new(),
         }
     }
 }
@@ -214,19 +70,28 @@ impl Operator for KeyExecutionOperator {
                 continue;
             }
 
-            let key_columns: Vec<ArrayRef> = self
-                .key_fields
-                .iter()
-                .map(|&idx| out_batch.column(idx).clone())
-                .collect();
+            let mut final_hashes = vec![0u64; num_rows];
 
-            let mut hash_buffer = vec![0u64; num_rows];
-            create_hashes(&key_columns, &self.random_state, &mut hash_buffer)
-                .map_err(|e| anyhow!("hash compute: {e}"))?;
-            let hash_array = UInt64Array::from(hash_buffer);
+            for &col_idx in &self.key_fields {
+                let col = out_batch.column(col_idx);
+                let int64_array = col
+                    .as_any()
+                    .downcast_ref::<arrow_array::Int64Array>()
+                    .ok_or_else(|| anyhow!("Column at index {} must be Int64Array", col_idx))?;
 
+                for i in 0..num_rows {
+                    let val = int64_array.value(i) as u64;
+                    if self.key_fields.len() == 1 {
+                        final_hashes[i] = val;
+                    } else {
+                        final_hashes[i] ^= val;
+                    }
+                }
+            }
+
+            let hash_array = UInt64Array::from(final_hashes);
             let sorted_indices = sort_to_indices(&hash_array, None, None)
-                .map_err(|e| anyhow!("sort hashes: {e}"))?;
+                .map_err(|e| anyhow!("Failed to sort by key: {e}"))?;
 
             let sorted_hashes_ref = take(&hash_array, &sorted_indices, None)?;
             let sorted_hashes = sorted_hashes_ref
@@ -234,29 +99,30 @@ impl Operator for KeyExecutionOperator {
                 .downcast_ref::<UInt64Array>()
                 .unwrap();
 
-            let sorted_columns: std::result::Result<Vec<_>, _> = out_batch
+            let sorted_columns: std::result::Result<Vec<ArrayRef>, _> = out_batch
                 .columns()
                 .iter()
                 .map(|col| take(col, &sorted_indices, None))
                 .collect();
-            let sorted_batch =
-                RecordBatch::try_new(out_batch.schema(), sorted_columns?)?;
+            let sorted_batch = RecordBatch::try_new(out_batch.schema(), sorted_columns?)?;
 
             let mut start_idx = 0;
             while start_idx < num_rows {
                 let current_hash = sorted_hashes.value(start_idx);
                 let mut end_idx = start_idx + 1;
-                while end_idx < num_rows
-                    && sorted_hashes.value(end_idx) == current_hash
-                {
+
+                while end_idx < num_rows && sorted_hashes.value(end_idx) == current_hash {
                     end_idx += 1;
                 }
 
                 let sub_batch = sorted_batch.slice(start_idx, end_idx - start_idx);
+
                 outputs.push(StreamOutput::Keyed(current_hash, sub_batch));
+
                 start_idx = end_idx;
             }
         }
+
         Ok(outputs)
     }
 

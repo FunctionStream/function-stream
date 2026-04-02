@@ -24,6 +24,7 @@ mod stateless_physical_executor;
 mod value_execution;
 
 pub use stateless_physical_executor::StatelessPhysicalExecutor;
+pub use key_operator::KeyExecutionOperator;
 pub use projection::ProjectionOperator;
 pub use value_execution::ValueExecutionOperator;
 
