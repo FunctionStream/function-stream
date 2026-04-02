@@ -18,9 +18,10 @@ use arrow::compute::{
 use arrow::row::{RowConverter, SortField};
 use arrow_array::types::TimestampNanosecondType;
 use arrow_array::{
-    Array, BooleanArray, PrimitiveArray, RecordBatch, StructArray, TimestampNanosecondArray,
+    Array, ArrayRef, BooleanArray, PrimitiveArray, RecordBatch, StructArray,
+    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
 };
-use arrow_schema::{DataType, Field, FieldRef, Schema};
+use arrow_schema::{DataType, Field, FieldRef, Schema, TimeUnit};
 use datafusion::execution::context::SessionContext;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use datafusion::execution::SendableRecordBatchStream;
@@ -30,6 +31,7 @@ use datafusion_proto::protobuf::PhysicalPlanNode;
 use futures::StreamExt;
 use prost::Message;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use tracing::info;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -315,6 +317,53 @@ fn start_time_for_sorted_batch(batch: &RecordBatch, schema: &FsSchema) -> System
     from_nanos(timestamp_array.value(0) as u128)
 }
 
+/// Appends the stream `_timestamp` column (see [`build_session_output_schema`]) using each
+/// session's `window_end` as the row event time.
+fn append_output_timestamp_column(
+    columns: &mut Vec<ArrayRef>,
+    session_results: &[SessionWindowResult],
+    ts_field: &Field,
+) -> Result<()> {
+    let nanos = |r: &SessionWindowResult| to_nanos(r.window_end)as i64 - 1;
+    match ts_field.data_type() {
+        DataType::Timestamp(TimeUnit::Second, tz) => {
+            let v: Vec<i64> = session_results
+                .iter()
+                .map(|r| (nanos(r) / 1_000_000_000))
+                .collect();
+            columns.push(Arc::new(
+                TimestampSecondArray::from(v).with_timezone_opt(tz.clone()),
+            ));
+        }
+        DataType::Timestamp(TimeUnit::Millisecond, tz) => {
+            let v: Vec<i64> = session_results
+                .iter()
+                .map(|r| (nanos(r) / 1_000_000))
+                .collect();
+            columns.push(Arc::new(
+                TimestampMillisecondArray::from(v).with_timezone_opt(tz.clone()),
+            ));
+        }
+        DataType::Timestamp(TimeUnit::Microsecond, tz) => {
+            let v: Vec<i64> = session_results
+                .iter()
+                .map(|r| (nanos(r) / 1000))
+                .collect();
+            columns.push(Arc::new(
+                TimestampMicrosecondArray::from(v).with_timezone_opt(tz.clone()),
+            ));
+        }
+        DataType::Timestamp(TimeUnit::Nanosecond, tz) => {
+            let v: Vec<i64> = session_results.iter().map(|r| nanos(r)).collect();
+            columns.push(Arc::new(
+                TimestampNanosecondArray::from(v).with_timezone_opt(tz.clone()),
+            ));
+        }
+        dt => bail!("unsupported timestamp type for session window output: {dt}"),
+    }
+    Ok(())
+}
+
 fn build_session_output_schema(
     input: &FsSchema,
     window_field: FieldRef,
@@ -589,6 +638,9 @@ impl SessionWindowOperator {
         let mut columns = key_columns;
         columns.insert(self.config.window_index, Arc::new(window_struct_array));
         columns.extend_from_slice(merged_batch.columns());
+
+        let ts_field = self.config.input_schema_ref.schema.field(self.config.input_schema_ref.timestamp_index);
+        append_output_timestamp_column(&mut columns, &session_results, ts_field)?;
 
         RecordBatch::try_new(self.config.output_schema.clone(), columns)
             .context("failed to create session window output batch")

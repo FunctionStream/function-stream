@@ -10,13 +10,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
+//! Key-by over the physical plan output: key column(s) are **values** projected by the plan
+//! (e.g. `_key_user_id`); **shuffle / `StreamOutput::Keyed` uses `u64` hashes** computed by
+//! [`datafusion_common::hash_utils::create_hashes`] on those columns — same mechanism as
+//! [`crate::runtime::streaming::operators::key_by::KeyByOperator`].
 
 use anyhow::{anyhow, Result};
-use arrow_array::{Array, ArrayRef, RecordBatch, UInt64Array};
+use ahash::RandomState;
 use arrow::compute::{sort_to_indices, take};
+use arrow_array::{Array, ArrayRef, RecordBatch, UInt64Array};
 use async_trait::async_trait;
+use datafusion_common::hash_utils::create_hashes;
+use datafusion_common::ScalarValue;
 use futures::StreamExt;
+use tracing::info;
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
@@ -31,6 +38,7 @@ pub struct KeyExecutionOperator {
     name: String,
     executor: StatelessPhysicalExecutor,
     key_fields: Vec<usize>,
+    random_state: RandomState
 }
 
 impl KeyExecutionOperator {
@@ -39,10 +47,18 @@ impl KeyExecutionOperator {
         executor: StatelessPhysicalExecutor,
         key_fields: Vec<usize>,
     ) -> Self {
+        let deterministic_random_state = RandomState::with_seeds(
+            0x1234567890ABCDEF,
+            0x0FEDCBA987654321,
+            0x1357924680135792,
+            0x2468013579246801
+        );
+
         Self {
             name,
             executor,
             key_fields,
+            random_state: deterministic_random_state,
         }
     }
 }
@@ -70,28 +86,20 @@ impl Operator for KeyExecutionOperator {
                 continue;
             }
 
-            let mut final_hashes = vec![0u64; num_rows];
+            let key_arrays: Vec<ArrayRef> = self
+                .key_fields
+                .iter()
+                .map(|&i| out_batch.column(i).clone())
+                .collect();
 
-            for &col_idx in &self.key_fields {
-                let col = out_batch.column(col_idx);
-                let int64_array = col
-                    .as_any()
-                    .downcast_ref::<arrow_array::Int64Array>()
-                    .ok_or_else(|| anyhow!("Column at index {} must be Int64Array", col_idx))?;
+            let mut hash_buffer = vec![0u64; num_rows];
+            create_hashes(&key_arrays, &self.random_state, &mut hash_buffer)
+                .map_err(|e| anyhow!("KeyExecution failed to hash columns: {e}"))?;
 
-                for i in 0..num_rows {
-                    let val = int64_array.value(i) as u64;
-                    if self.key_fields.len() == 1 {
-                        final_hashes[i] = val;
-                    } else {
-                        final_hashes[i] ^= val;
-                    }
-                }
-            }
+            let hash_array = UInt64Array::from(hash_buffer);
 
-            let hash_array = UInt64Array::from(final_hashes);
             let sorted_indices = sort_to_indices(&hash_array, None, None)
-                .map_err(|e| anyhow!("Failed to sort by key: {e}"))?;
+                .map_err(|e| anyhow!("Failed to sort by hash: {e}"))?;
 
             let sorted_hashes_ref = take(&hash_array, &sorted_indices, None)?;
             let sorted_hashes = sorted_hashes_ref
@@ -99,7 +107,7 @@ impl Operator for KeyExecutionOperator {
                 .downcast_ref::<UInt64Array>()
                 .unwrap();
 
-            let sorted_columns: std::result::Result<Vec<ArrayRef>, _> = out_batch
+            let sorted_columns: Result<Vec<ArrayRef>, _> = out_batch
                 .columns()
                 .iter()
                 .map(|col| take(col, &sorted_indices, None))
@@ -116,13 +124,11 @@ impl Operator for KeyExecutionOperator {
                 }
 
                 let sub_batch = sorted_batch.slice(start_idx, end_idx - start_idx);
-
                 outputs.push(StreamOutput::Keyed(current_hash, sub_batch));
 
                 start_idx = end_idx;
             }
         }
-
         Ok(outputs)
     }
 
@@ -146,4 +152,3 @@ impl Operator for KeyExecutionOperator {
         Ok(vec![])
     }
 }
-
