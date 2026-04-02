@@ -31,7 +31,6 @@ use datafusion_proto::protobuf::PhysicalPlanNode;
 use futures::StreamExt;
 use prost::Message;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use tracing::info;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -329,7 +328,7 @@ fn append_output_timestamp_column(
         DataType::Timestamp(TimeUnit::Second, tz) => {
             let v: Vec<i64> = session_results
                 .iter()
-                .map(|r| (nanos(r) / 1_000_000_000))
+                .map(|r| nanos(r) / 1_000_000_000)
                 .collect();
             columns.push(Arc::new(
                 TimestampSecondArray::from(v).with_timezone_opt(tz.clone()),
@@ -338,7 +337,7 @@ fn append_output_timestamp_column(
         DataType::Timestamp(TimeUnit::Millisecond, tz) => {
             let v: Vec<i64> = session_results
                 .iter()
-                .map(|r| (nanos(r) / 1_000_000))
+                .map(|r| nanos(r) / 1_000_000)
                 .collect();
             columns.push(Arc::new(
                 TimestampMillisecondArray::from(v).with_timezone_opt(tz.clone()),
@@ -347,7 +346,7 @@ fn append_output_timestamp_column(
         DataType::Timestamp(TimeUnit::Microsecond, tz) => {
             let v: Vec<i64> = session_results
                 .iter()
-                .map(|r| (nanos(r) / 1000))
+                .map(|r| nanos(r) / 1000)
                 .collect();
             columns.push(Arc::new(
                 TimestampMicrosecondArray::from(v).with_timezone_opt(tz.clone()),

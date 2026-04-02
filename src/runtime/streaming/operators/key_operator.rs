@@ -21,10 +21,7 @@ use arrow::compute::{sort_to_indices, take};
 use arrow_array::{Array, ArrayRef, RecordBatch, UInt64Array};
 use async_trait::async_trait;
 use datafusion_common::hash_utils::create_hashes;
-use datafusion_common::ScalarValue;
 use futures::StreamExt;
-use tracing::info;
-
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::operators::StatelessPhysicalExecutor;
