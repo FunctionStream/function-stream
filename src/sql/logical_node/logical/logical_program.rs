@@ -133,10 +133,7 @@ impl LogicalProgram {
                 .iter()
                 .any(|op| op.operator_name == OperatorName::ConnectorSink)
             {
-                let e = self
-                    .graph
-                    .edges_directed(idx, Direction::Incoming)
-                    .next()?;
+                let e = self.graph.edges_directed(idx, Direction::Incoming).next()?;
                 return Some(Arc::clone(&e.weight().schema.schema));
             }
         }

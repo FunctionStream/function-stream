@@ -25,9 +25,7 @@ use protocol::grpc::api::JoinOperator;
 use crate::sql::common::constants::{extension_node, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
-use crate::sql::logical_node::logical::{
-    LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName,
-};
+use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::physical::FsPhysicalExtensionCodec;
 
@@ -134,7 +132,11 @@ impl UserDefinedLogicalNodeCore for StreamingJoinNode {
         )
     }
 
-    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(
+        &self,
+        _exprs: Vec<Expr>,
+        mut inputs: Vec<LogicalPlan>,
+    ) -> Result<Self> {
         if inputs.len() != 1 {
             return plan_err!(
                 "StreamingJoinNode expects exactly 1 underlying logical plan during recreation"

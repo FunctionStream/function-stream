@@ -61,7 +61,10 @@ impl ComponentRegistry {
         }
 
         let total = self.components.len();
-        info!(total_components = total, "Commencing system initialization sequence");
+        info!(
+            total_components = total,
+            "Commencing system initialization sequence"
+        );
 
         for (index, component) in self.components.iter().enumerate() {
             let start_time = Instant::now();
@@ -153,17 +156,19 @@ fn initialize_python_service(config: &GlobalConfig) -> Result<()> {
 }
 
 fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
-    use crate::runtime::streaming::factory::Registry;
     use crate::runtime::streaming::factory::OperatorFactory;
+    use crate::runtime::streaming::factory::Registry;
     use crate::runtime::streaming::job::JobManager;
     use std::sync::Arc;
 
     let registry = Arc::new(Registry::new());
     let factory = Arc::new(OperatorFactory::new(registry));
-    let max_memory_bytes = config.streaming.max_memory_bytes.unwrap_or(256 * 1024 * 1024);
+    let max_memory_bytes = config
+        .streaming
+        .max_memory_bytes
+        .unwrap_or(256 * 1024 * 1024);
 
-    JobManager::init(factory, max_memory_bytes)
-        .context("JobManager service failed to start")?;
+    JobManager::init(factory, max_memory_bytes).context("JobManager service failed to start")?;
 
     Ok(())
 }

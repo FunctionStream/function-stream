@@ -10,17 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::schema::StreamSchemaProvider;
+use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
+use crate::sql::common::TIMESTAMP_FIELD;
+use crate::sql::common::constants::mem_exec_join_side;
 use crate::sql::extensions::join::StreamingJoinNode;
 use crate::sql::extensions::key_calculation::KeyExtractionNode;
-use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
+use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields_with_metadata};
-use crate::sql::common::constants::mem_exec_join_side;
-use crate::sql::common::TIMESTAMP_FIELD;
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
 use datafusion::common::{
-    JoinConstraint, JoinType, Result, ScalarValue, TableReference,
-    not_impl_err, plan_err,
+    JoinConstraint, JoinType, Result, ScalarValue, TableReference, not_impl_err, plan_err,
 };
 use datafusion::logical_expr::{
     self, BinaryExpr, Case, Expr, Extension, Join, LogicalPlan, Projection, build_join_schema,
@@ -223,12 +222,10 @@ impl TreeNodeRewriter for JoinRewriter<'_> {
         let plan_with_timestamp = self.apply_timestamp_resolution(rewritten_join)?;
 
         // 5. Wrap in StreamingJoinNode for physical planning
-        let state_retention_ttl = (!is_instant).then_some(self.schema_provider.planning_options.ttl);
-        let extension = StreamingJoinNode::new(
-            plan_with_timestamp,
-            is_instant,
-            state_retention_ttl,
-        );
+        let state_retention_ttl =
+            (!is_instant).then_some(self.schema_provider.planning_options.ttl);
+        let extension =
+            StreamingJoinNode::new(plan_with_timestamp, is_instant, state_retention_ttl);
 
         Ok(Transformed::yes(LogicalPlan::Extension(Extension {
             node: Arc::new(extension),

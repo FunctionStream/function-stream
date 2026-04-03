@@ -421,9 +421,9 @@ fn parse_interval_to_duration(s: &str) -> Result<Duration, DataFusionError> {
         interval_duration_unit::HOUR
         | interval_duration_unit::HOURS
         | interval_duration_unit::H => Duration::from_secs(value * 3600),
-        interval_duration_unit::DAY
-        | interval_duration_unit::DAYS
-        | interval_duration_unit::D => Duration::from_secs(value * 86400),
+        interval_duration_unit::DAY | interval_duration_unit::DAYS | interval_duration_unit::D => {
+            Duration::from_secs(value * 86400)
+        }
         unit => {
             return Err(DataFusionError::Plan(format!(
                 "unsupported interval unit '{unit}'"

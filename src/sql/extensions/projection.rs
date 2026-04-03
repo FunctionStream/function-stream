@@ -115,10 +115,8 @@ impl StreamProjectionNode {
                     .create_physical_expr(logical_expr, input_df_schema)
                     .map_err(|e| e.context("Failed to compile physical projection expression"))?;
 
-                let serialized_expr = serialize_physical_expr(
-                    &physical_expr,
-                    &DefaultPhysicalExtensionCodec {},
-                )?;
+                let serialized_expr =
+                    serialize_physical_expr(&physical_expr, &DefaultPhysicalExtensionCodec {})?;
 
                 Ok(serialized_expr.encode_to_vec())
             })
@@ -142,10 +140,12 @@ impl StreamingOperatorBlueprint for StreamProjectionNode {
         input_schemas: Vec<FsSchemaRef>,
     ) -> Result<CompiledTopologyNode> {
         let unified_input_schema = Self::validate_uniform_schemas(&input_schemas)?;
-        let input_df_schema =
-            Arc::new(DFSchema::try_from(unified_input_schema.schema.as_ref().clone())?);
+        let input_df_schema = Arc::new(DFSchema::try_from(
+            unified_input_schema.schema.as_ref().clone(),
+        )?);
 
-        let compiled_expr_payloads = self.compile_physical_expressions(planner, &input_df_schema)?;
+        let compiled_expr_payloads =
+            self.compile_physical_expressions(planner, &input_df_schema)?;
 
         let operator_config = ProjectionOperator {
             name: self
@@ -219,8 +219,7 @@ impl UserDefinedLogicalNodeCore for StreamProjectionNode {
         write!(
             f,
             "StreamProjectionNode: RequiresShuffle={}, Schema={}",
-            self.requires_shuffle,
-            self.resolved_schema
+            self.requires_shuffle, self.resolved_schema
         )
     }
 

@@ -36,8 +36,14 @@ pub fn render_program_topology(program: &FsProgram) -> String {
         return "(empty topology)".to_string();
     }
 
-    struct EdgeInfo { target: i32, edge_type: i32 }
-    struct InputInfo { source: i32, edge_type: i32 }
+    struct EdgeInfo {
+        target: i32,
+        edge_type: i32,
+    }
+    struct InputInfo {
+        source: i32,
+        edge_type: i32,
+    }
 
     let node_map: BTreeMap<i32, &protocol::grpc::api::FsNode> =
         program.nodes.iter().map(|n| (n.node_index, n)).collect();
@@ -181,7 +187,9 @@ pub fn render_program_topology(program: &FsProgram) -> String {
             let next_idx = topo_order.get(pos + 1).copied();
             let is_direct = single_out
                 && next_idx.map_or(false, |n| {
-                    downstream.get(&node_idx).map_or(false, |v| v[0].target == n)
+                    downstream
+                        .get(&node_idx)
+                        .map_or(false, |v| v[0].target == n)
                 });
             let next_single_in = next_idx
                 .and_then(|n| upstream.get(&n))
@@ -204,7 +212,12 @@ mod tests {
     use super::*;
     use protocol::grpc::api::{ChainedOperator, FsEdge, FsNode, FsProgram};
 
-    fn make_node(node_index: i32, operators: Vec<(&str, &str)>, desc: &str, parallelism: u32) -> FsNode {
+    fn make_node(
+        node_index: i32,
+        operators: Vec<(&str, &str)>,
+        desc: &str,
+        parallelism: u32,
+    ) -> FsNode {
         FsNode {
             node_index,
             node_id: node_index as u32,
@@ -223,12 +236,21 @@ mod tests {
     }
 
     fn make_edge(source: i32, target: i32, edge_type: i32) -> FsEdge {
-        FsEdge { source, target, schema: None, edge_type }
+        FsEdge {
+            source,
+            target,
+            schema: None,
+            edge_type,
+        }
     }
 
     #[test]
     fn empty_program_renders_placeholder() {
-        let program = FsProgram { nodes: vec![], edges: vec![], program_config: None };
+        let program = FsProgram {
+            nodes: vec![],
+            edges: vec![],
+            program_config: None,
+        };
         assert_eq!(render_program_topology(&program), "(empty topology)");
     }
 
@@ -237,13 +259,15 @@ mod tests {
         let program = FsProgram {
             nodes: vec![
                 make_node(0, vec![("src_0", "ConnectorSource")], "", 1),
-                make_node(1, vec![("val_1", "Value"), ("wm_2", "ExpressionWatermark")], "source -> watermark", 1),
+                make_node(
+                    1,
+                    vec![("val_1", "Value"), ("wm_2", "ExpressionWatermark")],
+                    "source -> watermark",
+                    1,
+                ),
                 make_node(2, vec![("sink_3", "ConnectorSink")], "sink (kafka)", 1),
             ],
-            edges: vec![
-                make_edge(0, 1, 1),
-                make_edge(1, 2, 1),
-            ],
+            edges: vec![make_edge(0, 1, 1), make_edge(1, 2, 1)],
             program_config: None,
         };
         let result = render_program_topology(&program);

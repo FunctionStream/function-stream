@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use std::sync::Arc;
 
 use datafusion::arrow::array::RecordBatch;
@@ -30,11 +29,11 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::sql::analysis::UNNESTED_COL;
 use crate::sql::common::constants::{mem_exec_join_side, window_function_udf};
-use crate::sql::physical::udfs::window;
 use crate::sql::physical::cdc::{DebeziumUnrollingExec, ToDebeziumExec};
 use crate::sql::physical::readers::{
     FsMemExec, RecordBatchVecReader, RwLockRecordBatchReader, UnboundedRecordBatchReader,
 };
+use crate::sql::physical::udfs::window;
 
 #[derive(Debug)]
 pub struct FsPhysicalExtensionCodec {
@@ -169,21 +168,19 @@ impl FsPhysicalExtensionCodec {
             DecodingContext::None => Err(DataFusionError::Internal(
                 "Need an internal context to decode".into(),
             )),
-            DecodingContext::LockedJoinPair { left, right } => {
-                match mem_exec.table_name.as_str() {
-                    mem_exec_join_side::LEFT => {
-                        Ok(Arc::new(RwLockRecordBatchReader::new(schema, left.clone())))
-                    }
-                    mem_exec_join_side::RIGHT => Ok(Arc::new(RwLockRecordBatchReader::new(
-                        schema,
-                        right.clone(),
-                    ))),
-                    _ => Err(DataFusionError::Internal(format!(
-                        "unknown table name {}",
-                        mem_exec.table_name
-                    ))),
+            DecodingContext::LockedJoinPair { left, right } => match mem_exec.table_name.as_str() {
+                mem_exec_join_side::LEFT => {
+                    Ok(Arc::new(RwLockRecordBatchReader::new(schema, left.clone())))
                 }
-            }
+                mem_exec_join_side::RIGHT => Ok(Arc::new(RwLockRecordBatchReader::new(
+                    schema,
+                    right.clone(),
+                ))),
+                _ => Err(DataFusionError::Internal(format!(
+                    "unknown table name {}",
+                    mem_exec.table_name
+                ))),
+            },
             DecodingContext::LockedJoinStream { left, right } => {
                 match mem_exec.table_name.as_str() {
                     mem_exec_join_side::LEFT => Ok(Arc::new(UnboundedRecordBatchReader::new(
@@ -208,9 +205,8 @@ fn decode_unnest_exec(
     unnest: UnnestExecNode,
     inputs: &[Arc<dyn ExecutionPlan>],
 ) -> Result<Arc<dyn ExecutionPlan>> {
-    let schema: Schema = serde_json::from_str(&unnest.schema).map_err(|e| {
-        DataFusionError::Internal(format!("invalid schema in exec codec: {e:?}"))
-    })?;
+    let schema: Schema = serde_json::from_str(&unnest.schema)
+        .map_err(|e| DataFusionError::Internal(format!("invalid schema in exec codec: {e:?}")))?;
 
     let column = schema.index_of(UNNESTED_COL).map_err(|_| {
         DataFusionError::Internal(format!(
@@ -237,9 +233,11 @@ fn decode_debezium_decode(
     debezium: DebeziumDecodeNode,
     inputs: &[Arc<dyn ExecutionPlan>],
 ) -> Result<Arc<dyn ExecutionPlan>> {
-    let schema = Arc::new(serde_json::from_str::<Schema>(&debezium.schema).map_err(|e| {
-        DataFusionError::Internal(format!("invalid schema in exec codec: {e:?}"))
-    })?);
+    let schema = Arc::new(
+        serde_json::from_str::<Schema>(&debezium.schema).map_err(|e| {
+            DataFusionError::Internal(format!("invalid schema in exec codec: {e:?}"))
+        })?,
+    );
     let input = inputs
         .first()
         .ok_or_else(|| DataFusionError::Internal("no input for debezium node".to_string()))?
@@ -260,9 +258,11 @@ fn decode_debezium_encode(
     debezium: DebeziumEncodeNode,
     inputs: &[Arc<dyn ExecutionPlan>],
 ) -> Result<Arc<dyn ExecutionPlan>> {
-    let schema = Arc::new(serde_json::from_str::<Schema>(&debezium.schema).map_err(|e| {
-        DataFusionError::Internal(format!("invalid schema in exec codec: {e:?}"))
-    })?);
+    let schema = Arc::new(
+        serde_json::from_str::<Schema>(&debezium.schema).map_err(|e| {
+            DataFusionError::Internal(format!("invalid schema in exec codec: {e:?}"))
+        })?,
+    );
     let input = inputs
         .first()
         .ok_or_else(|| DataFusionError::Internal("no input for debezium node".to_string()))?

@@ -10,24 +10,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use std::sync::{Arc, OnceLock};
 
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
 
-use crate::sql::common::constants::updating_state_field;
 use crate::sql::common::UPDATING_META_FIELD;
+use crate::sql::common::constants::updating_state_field;
 
 pub fn updating_meta_fields() -> Fields {
     static FIELDS: OnceLock<Fields> = OnceLock::new();
     FIELDS
         .get_or_init(|| {
             Fields::from(vec![
-                Field::new(
-                    updating_state_field::IS_RETRACT,
-                    DataType::Boolean,
-                    true,
-                ),
+                Field::new(updating_state_field::IS_RETRACT, DataType::Boolean, true),
                 Field::new(
                     updating_state_field::ID,
                     DataType::FixedSizeBinary(16),

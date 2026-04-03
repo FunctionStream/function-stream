@@ -16,7 +16,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct KafkaTable {
     pub topic: String,
@@ -74,7 +73,6 @@ pub enum SinkCommitMode {
     AtLeastOnce,
     ExactlyOnce,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

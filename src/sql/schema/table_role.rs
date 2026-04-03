@@ -19,7 +19,7 @@ use datafusion::error::DataFusionError;
 use super::column_descriptor::ColumnDescriptor;
 use super::connection_type::ConnectionType;
 use crate::sql::common::constants::{
-    connection_table_role, connector_type, SUPPORTED_CONNECTOR_ADAPTERS,
+    SUPPORTED_CONNECTOR_ADAPTERS, connection_table_role, connector_type,
 };
 use crate::sql::common::with_option_keys as opt;
 
@@ -53,12 +53,17 @@ impl From<ConnectionType> for TableRole {
 
 pub fn validate_adapter_availability(adapter: &str) -> Result<()> {
     if !SUPPORTED_CONNECTOR_ADAPTERS.contains(&adapter) {
-        return Err(DataFusionError::Plan(format!("Unknown adapter '{adapter}'")));
+        return Err(DataFusionError::Plan(format!(
+            "Unknown adapter '{adapter}'"
+        )));
     }
     Ok(())
 }
 
-pub fn apply_adapter_specific_rules(adapter: &str, mut cols: Vec<ColumnDescriptor>) -> Vec<ColumnDescriptor> {
+pub fn apply_adapter_specific_rules(
+    adapter: &str,
+    mut cols: Vec<ColumnDescriptor>,
+) -> Vec<ColumnDescriptor> {
     match adapter {
         a if a == connector_type::DELTA || a == connector_type::ICEBERG => {
             for c in &mut cols {
@@ -81,7 +86,10 @@ pub fn deduce_role(options: &HashMap<String, String>) -> Result<TableRole> {
     }
 }
 
-pub fn serialize_backend_params(adapter: &str, options: &HashMap<String, String>) -> Result<String> {
+pub fn serialize_backend_params(
+    adapter: &str,
+    options: &HashMap<String, String>,
+) -> Result<String> {
     let mut payload = serde_json::Map::new();
     payload.insert(
         opt::ADAPTER.to_string(),

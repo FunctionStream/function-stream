@@ -21,12 +21,12 @@ use datafusion::logical_expr::expr_rewriter::FunctionRewrite;
 use datafusion::logical_expr::planner::ExprPlanner;
 use datafusion::logical_expr::{AggregateUDF, Expr, ScalarUDF, TableSource, WindowUDF};
 use datafusion::optimizer::Analyzer;
-use datafusion::sql::planner::ContextProvider;
 use datafusion::sql::TableReference;
+use datafusion::sql::planner::ContextProvider;
 use unicase::UniCase;
 
-use crate::sql::logical_node::logical::{DylibUdfConfig, LogicalProgram};
 use crate::sql::common::constants::{planning_placeholder_udf, window_fn};
+use crate::sql::logical_node::logical::{DylibUdfConfig, LogicalProgram};
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::sql::schema::utils::window_arrow_struct;
 use crate::sql::types::{PlaceholderUdf, PlanningOptions};
@@ -168,7 +168,10 @@ impl StreamPlanningContext {
     }
 
     pub fn get_stream_table(&self, name: &str) -> Option<Arc<StreamTable>> {
-        self.tables.streams.get(&object_name(name.to_string())).cloned()
+        self.tables
+            .streams
+            .get(&object_name(name.to_string()))
+            .cloned()
     }
 
     pub fn register_catalog_table(&mut self, table: CatalogTable) {
@@ -242,7 +245,10 @@ impl StreamPlanningContext {
     }
 
     fn create_table_source(name: String, schema: Arc<Schema>) -> Arc<dyn TableSource> {
-        let provider = LogicalBatchInput { table_name: name, schema };
+        let provider = LogicalBatchInput {
+            table_name: name,
+            schema,
+        };
         Arc::new(DefaultTableSource::new(Arc::new(provider)))
     }
 }

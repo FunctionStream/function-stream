@@ -15,8 +15,8 @@ use protocol::grpc::api::{
     KafkaSourceConfig, RawBytesFormatConfig, RawStringFormatConfig, TimestampFormatProto,
 };
 
-use crate::sql::common::constants::{connection_table_role, kafka_with_value};
 use crate::sql::common::connector_options::ConnectorOptions;
+use crate::sql::common::constants::{connection_table_role, kafka_with_value};
 use crate::sql::common::formats::{
     BadData, DecimalEncoding as SqlDecimalEncoding, Format as SqlFormat,
     TimestampFormat as SqlTimestampFormat,
@@ -30,7 +30,9 @@ fn sql_format_to_proto(fmt: &SqlFormat) -> DFResult<FormatConfig> {
             format: Some(protocol::grpc::api::format_config::Format::Json(
                 JsonFormatConfig {
                     timestamp_format: match j.timestamp_format {
-                        SqlTimestampFormat::RFC3339 => TimestampFormatProto::TimestampRfc3339 as i32,
+                        SqlTimestampFormat::RFC3339 => {
+                            TimestampFormatProto::TimestampRfc3339 as i32
+                        }
                         SqlTimestampFormat::UnixMillis => {
                             TimestampFormatProto::TimestampUnixMillis as i32
                         }
@@ -80,8 +82,9 @@ pub fn build_kafka_proto_config_from_string_map(
     let mut options = ConnectorOptions::from_flat_string_map(map)?;
     let format = crate::sql::common::formats::Format::from_opts(&mut options)
         .map_err(|e| datafusion::error::DataFusionError::Plan(format!("invalid format: {e}")))?;
-    let bad_data = BadData::from_opts(&mut options)
-        .map_err(|e| datafusion::error::DataFusionError::Plan(format!("Invalid bad_data: '{e}'")))?;
+    let bad_data = BadData::from_opts(&mut options).map_err(|e| {
+        datafusion::error::DataFusionError::Plan(format!("Invalid bad_data: '{e}'"))
+    })?;
     let _framing = crate::sql::common::formats::Framing::from_opts(&mut options)
         .map_err(|e| datafusion::error::DataFusionError::Plan(format!("invalid framing: '{e}'")))?;
 
@@ -115,9 +118,9 @@ pub fn build_kafka_proto_config(
             })?,
     };
 
-    let topic = options
-        .pull_opt_str(opt::KAFKA_TOPIC)?
-        .ok_or_else(|| plan_datafusion_err!("Kafka connector requires 'topic' in the WITH clause"))?;
+    let topic = options.pull_opt_str(opt::KAFKA_TOPIC)?.ok_or_else(|| {
+        plan_datafusion_err!("Kafka connector requires 'topic' in the WITH clause")
+    })?;
 
     let sql_format = format.clone().ok_or_else(|| {
         plan_datafusion_err!(
@@ -144,7 +147,10 @@ pub fn build_kafka_proto_config(
 
     match role {
         TableRole::Ingestion => {
-            let offset_mode = match options.pull_opt_str(opt::KAFKA_SCAN_STARTUP_MODE)?.as_deref() {
+            let offset_mode = match options
+                .pull_opt_str(opt::KAFKA_SCAN_STARTUP_MODE)?
+                .as_deref()
+            {
                 Some(s) if s == kafka_with_value::SCAN_LATEST => {
                     KafkaOffsetMode::KafkaOffsetLatest as i32
                 }
@@ -202,7 +208,10 @@ pub fn build_kafka_proto_config(
             }))
         }
         TableRole::Egress => {
-            let commit_mode = match options.pull_opt_str(opt::KAFKA_SINK_COMMIT_MODE)?.as_deref() {
+            let commit_mode = match options
+                .pull_opt_str(opt::KAFKA_SINK_COMMIT_MODE)?
+                .as_deref()
+            {
                 Some(s)
                     if s == kafka_with_value::SINK_COMMIT_EXACTLY_ONCE_HYPHEN
                         || s == kafka_with_value::SINK_COMMIT_EXACTLY_ONCE_UNDERSCORE =>

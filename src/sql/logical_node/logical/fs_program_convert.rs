@@ -21,7 +21,8 @@ use datafusion::common::{DataFusionError, Result as DFResult};
 use petgraph::graph::DiGraph;
 use petgraph::prelude::EdgeRef;
 use protocol::grpc::api::{
-    ChainedOperator, EdgeType as ProtoEdgeType, FsEdge, FsNode, FsProgram, FsSchema as ProtoFsSchema,
+    ChainedOperator, EdgeType as ProtoEdgeType, FsEdge, FsNode, FsProgram,
+    FsSchema as ProtoFsSchema,
 };
 
 use crate::sql::api::pipelines::{PipelineEdge, PipelineGraph, PipelineNode};
@@ -86,9 +87,9 @@ impl TryFrom<FsProgram> for LogicalProgram {
             let target = *id_map.get(&edge.target).ok_or_else(|| {
                 DataFusionError::Plan("Graph integrity error: Missing target node".into())
             })?;
-            let schema = edge
-                .schema
-                .ok_or_else(|| DataFusionError::Plan("Graph integrity error: Missing edge schema".into()))?;
+            let schema = edge.schema.ok_or_else(|| {
+                DataFusionError::Plan("Graph integrity error: Missing edge schema".into())
+            })?;
             let edge_type = logical_edge_type_from_proto_i32(edge.edge_type)?;
 
             graph.add_edge(

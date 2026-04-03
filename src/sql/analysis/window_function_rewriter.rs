@@ -20,9 +20,9 @@ use datafusion_common::DataFusionError;
 use std::sync::Arc;
 use tracing::debug;
 
+use crate::sql::analysis::streaming_window_analzer::{StreamingWindowAnalzer, extract_column};
 use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
 use crate::sql::extensions::windows_function::StreamingWindowFunctionNode;
-use crate::sql::analysis::streaming_window_analzer::{StreamingWindowAnalzer, extract_column};
 use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields};
 
 /// WindowFunctionRewriter transforms standard SQL Window functions into streaming-compatible

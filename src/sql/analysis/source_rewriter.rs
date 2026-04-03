@@ -20,15 +20,15 @@ use datafusion::logical_expr::{
     self, BinaryExpr, Expr, Extension, LogicalPlan, Projection, TableScan,
 };
 
-use crate::sql::schema::source_table::SourceTable;
-use crate::sql::schema::ColumnDescriptor;
-use crate::sql::schema::table::Table;
-use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::common::UPDATING_META_FIELD;
 use crate::sql::extensions::debezium::UnrollDebeziumPayloadNode;
 use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
 use crate::sql::extensions::table_source::StreamIngestionNode;
 use crate::sql::extensions::watermark_node::EventTimeWatermarkNode;
+use crate::sql::schema::ColumnDescriptor;
+use crate::sql::schema::StreamSchemaProvider;
+use crate::sql::schema::source_table::SourceTable;
+use crate::sql::schema::table::Table;
 use crate::sql::types::TIMESTAMP_FIELD;
 
 /// Rewrites table scans: projections are lifted out of scans into a dedicated projection node
@@ -48,9 +48,10 @@ impl<'a> SourceRewriter<'a> {
 impl SourceRewriter<'_> {
     fn projection_expr_for_column(col: &ColumnDescriptor, qualifier: &TableReference) -> Expr {
         if let Some(logic) = col.computation_logic() {
-            logic
-                .clone()
-                .alias_qualified(Some(qualifier.clone()), col.arrow_field().name().to_string())
+            logic.clone().alias_qualified(
+                Some(qualifier.clone()),
+                col.arrow_field().name().to_string(),
+            )
         } else {
             Expr::Column(Column {
                 relation: Some(qualifier.clone()),
@@ -155,7 +156,6 @@ impl SourceRewriter<'_> {
 
         Ok(expressions)
     }
-
 
     /// Connector path: `StreamIngestionNode` (table source) → optional `UnrollDebeziumPayloadNode`
     /// → `Projection`, mirroring Arroyo `TableSourceExtension` + Debezium unroll + projection.

@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
 use datafusion::physical_expr::PhysicalExpr;
@@ -22,10 +22,10 @@ use std::sync::Arc;
 
 use protocol::grpc::api::ProjectionOperator as ProjectionOperatorProto;
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::global::Registry;
-use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
 use crate::sql::logical_node::logical::OperatorName;
 
@@ -48,10 +48,7 @@ impl ProjectionOperator {
         }
     }
 
-    pub fn from_proto(
-        config: ProjectionOperatorProto,
-        registry: Arc<Registry>,
-    ) -> Result<Self> {
+    pub fn from_proto(config: ProjectionOperatorProto, registry: Arc<Registry>) -> Result<Self> {
         let input_schema: FsSchema = config
             .input_schema
             .ok_or_else(|| anyhow!("missing projection input_schema"))?
@@ -76,7 +73,7 @@ impl ProjectionOperator {
                     &input_schema.schema,
                     &DefaultPhysicalExtensionCodec {},
                 )
-                    .map_err(|e| anyhow!("parse projection expr: {e}"))
+                .map_err(|e| anyhow!("parse projection expr: {e}"))
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -87,7 +84,6 @@ impl ProjectionOperator {
         };
 
         Ok(Self::new(name, Arc::new(output_schema), exprs))
-
     }
 }
 
@@ -116,8 +112,7 @@ impl Operator for ProjectionOperator {
             })
             .collect::<datafusion::common::Result<Vec<_>>>()?;
 
-        let out_batch =
-            RecordBatch::try_new(self.output_schema.schema.clone(), projected_columns)?;
+        let out_batch = RecordBatch::try_new(self.output_schema.schema.clone(), projected_columns)?;
 
         Ok(vec![StreamOutput::Forward(out_batch)])
     }

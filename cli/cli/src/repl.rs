@@ -69,10 +69,7 @@ impl From<tonic::Status> for ReplError {
     fn from(s: tonic::Status) -> Self {
         let msg = s.message();
         if msg.is_empty() {
-            ReplError::Rpc(format!(
-                "gRPC {} (server returned no message)",
-                s.code()
-            ))
+            ReplError::Rpc(format!("gRPC {} (server returned no message)", s.code()))
         } else {
             ReplError::Rpc(msg.to_string())
         }

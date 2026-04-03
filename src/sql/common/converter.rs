@@ -10,10 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
 use arrow::row::{OwnedRow, RowConverter, RowParser, Rows, SortField};
 use arrow_array::{Array, ArrayRef, BooleanArray};
 use arrow_schema::{ArrowError, DataType};
+use std::sync::Arc;
 
 // need to handle the empty case as a row converter without sort fields emits empty Rows.
 #[derive(Debug)]

@@ -22,7 +22,9 @@ use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use prost::Message;
 
 use protocol::grpc::api;
-use protocol::grpc::api::{ConnectorOp, GenericConnectorConfig, LookupJoinCondition, LookupJoinOperator};
+use protocol::grpc::api::{
+    ConnectorOp, GenericConnectorConfig, LookupJoinCondition, LookupJoinOperator,
+};
 
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::extension_node;
@@ -74,11 +76,7 @@ impl UserDefinedLogicalNodeCore for ReferenceTableSourceNode {
         write!(f, "ReferenceTableSource: Schema={}", self.resolved_schema)
     }
 
-    fn with_exprs_and_inputs(
-        &self,
-        _exprs: Vec<Expr>,
-        inputs: Vec<LogicalPlan>,
-    ) -> Result<Self> {
+    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
         if !inputs.is_empty() {
             return internal_err!(
                 "ReferenceTableSource is a leaf node and cannot accept upstream inputs"
@@ -150,9 +148,8 @@ impl StreamReferenceJoinNode {
         planner: &Planner,
         _upstream_schema: &FsSchemaRef,
     ) -> Result<LookupJoinOperator> {
-        let internal_input_schema = FsSchema::from_schema_unkeyed(Arc::new(
-            self.output_schema.as_ref().into(),
-        ))?;
+        let internal_input_schema =
+            FsSchema::from_schema_unkeyed(Arc::new(self.output_schema.as_ref().into()))?;
         let dictionary_physical_schema = self.external_dictionary.produce_physical_schema();
         let lookup_fs_schema =
             FsSchema::from_schema_unkeyed(add_timestamp_field_arrow(dictionary_physical_schema))?;
@@ -199,9 +196,7 @@ impl StreamingOperatorBlueprint for StreamReferenceJoinNode {
         mut input_schemas: Vec<FsSchemaRef>,
     ) -> Result<CompiledTopologyNode> {
         if input_schemas.len() != 1 {
-            return plan_err!(
-                "StreamReferenceJoinNode requires exactly one upstream stream input"
-            );
+            return plan_err!("StreamReferenceJoinNode requires exactly one upstream stream input");
         }
         let upstream_schema = input_schemas.remove(0);
 
@@ -212,14 +207,15 @@ impl StreamingOperatorBlueprint for StreamReferenceJoinNode {
             format!("lookup_join_{node_index}"),
             OperatorName::LookupJoin,
             operator_config.encode_to_vec(),
-            format!("DictionaryJoin<{}>", self.external_dictionary.table_identifier),
+            format!(
+                "DictionaryJoin<{}>",
+                self.external_dictionary.table_identifier
+            ),
             1,
         );
 
-        let incoming_edge = LogicalEdge::project_all(
-            LogicalEdgeType::Shuffle,
-            (*upstream_schema).clone(),
-        );
+        let incoming_edge =
+            LogicalEdge::project_all(LogicalEdgeType::Shuffle, (*upstream_schema).clone());
 
         Ok(CompiledTopologyNode {
             execution_unit: logical_node,
@@ -262,8 +258,7 @@ impl UserDefinedLogicalNodeCore for StreamReferenceJoinNode {
         write!(
             f,
             "StreamReferenceJoin: join_type={:?} | {}",
-            self.join_semantics,
-            self.output_schema
+            self.join_semantics, self.output_schema
         )
     }
 

@@ -17,13 +17,13 @@ use std::time::Duration;
 use arrow_array::types::IntervalMonthDayNanoType;
 use datafusion::common::{Column, DFSchemaRef, Result, ScalarValue, internal_err};
 use datafusion::logical_expr::{
-    self, expr::ScalarFunction, BinaryExpr, Expr, Extension, LogicalPlan,
-    UserDefinedLogicalNodeCore,
+    self, BinaryExpr, Expr, Extension, LogicalPlan, UserDefinedLogicalNodeCore,
+    expr::ScalarFunction,
 };
-use datafusion_common::{plan_err, DFSchema, DataFusionError};
+use datafusion_common::{DFSchema, DataFusionError, plan_err};
 use datafusion_expr::Aggregate;
-use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionCodec};
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
+use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionCodec};
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
 use protocol::grpc::api::{
@@ -38,7 +38,7 @@ use crate::sql::extensions::{
 };
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner, SplitPlanOutput};
-use crate::sql::physical::{window, FsPhysicalExtensionCodec};
+use crate::sql::physical::{FsPhysicalExtensionCodec, window};
 use crate::sql::types::{
     DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers,
     schema_from_df_fields, schema_from_df_fields_with_metadata,
@@ -254,10 +254,10 @@ impl StreamWindowAggregateNode {
         input_schema: DFSchemaRef,
         apply_final_projection: bool,
     ) -> Result<LogicalNode> {
-        let ts_column_expr =
-            Expr::Column(Column::new_unqualified(TIMESTAMP_FIELD.to_string()));
+        let ts_column_expr = Expr::Column(Column::new_unqualified(TIMESTAMP_FIELD.to_string()));
         let binning_expr = planner.create_physical_expr(&ts_column_expr, &input_schema)?;
-        let binning_proto = serialize_physical_expr(&binning_expr, &DefaultPhysicalExtensionCodec {})?;
+        let binning_proto =
+            serialize_physical_expr(&binning_expr, &DefaultPhysicalExtensionCodec {})?;
 
         let final_projection_payload = if apply_final_projection {
             let physical_plan = planner.sync_plan(&self.post_aggregation_plan)?;
@@ -323,7 +323,9 @@ impl StreamingOperatorBlueprint for StreamWindowAggregateNode {
         let df_schema = Arc::new(DFSchema::try_from(raw_schema.schema.as_ref().clone())?);
 
         let logical_operator = match &self.window_spec {
-            WindowBehavior::FromOperator { window, is_nested, .. } => {
+            WindowBehavior::FromOperator {
+                window, is_nested, ..
+            } => {
                 if *is_nested {
                     self.build_instant_operator(planner, node_id, df_schema, true)?
                 } else {
@@ -331,9 +333,8 @@ impl StreamingOperatorBlueprint for StreamWindowAggregateNode {
                         WindowType::Tumbling { width } => {
                             self.build_tumbling_operator(planner, node_id, df_schema, *width)?
                         }
-                        WindowType::Sliding { width, slide } => {
-                            self.build_sliding_operator(planner, node_id, df_schema, *width, *slide)?
-                        }
+                        WindowType::Sliding { width, slide } => self
+                            .build_sliding_operator(planner, node_id, df_schema, *width, *slide)?,
                         WindowType::Session { .. } => {
                             self.build_session_operator(planner, node_id, df_schema)?
                         }
@@ -359,9 +360,8 @@ impl StreamingOperatorBlueprint for StreamWindowAggregateNode {
 
     fn yielded_schema(&self) -> FsSchema {
         let schema_ref = (*self.output_schema).clone().into();
-        FsSchema::from_schema_unkeyed(Arc::new(schema_ref)).expect(
-            "StreamWindowAggregateNode output schema must contain timestamp column",
-        )
+        FsSchema::from_schema_unkeyed(Arc::new(schema_ref))
+            .expect("StreamWindowAggregateNode output schema must contain timestamp column")
     }
 }
 
@@ -416,9 +416,9 @@ struct WindowBoundaryMath;
 impl WindowBoundaryMath {
     fn interval_nanos(nanos: i64) -> Expr {
         Expr::Literal(
-            ScalarValue::IntervalMonthDayNano(Some(
-                IntervalMonthDayNanoType::make_value(0, 0, nanos),
-            )),
+            ScalarValue::IntervalMonthDayNano(Some(IntervalMonthDayNanoType::make_value(
+                0, 0, nanos,
+            ))),
             None,
         )
     }
@@ -506,11 +506,13 @@ impl WindowBoundaryMath {
         });
         projections.push(bin_end_expr);
 
-        Ok(LogicalPlan::Projection(logical_expr::Projection::try_new_with_schema(
-            projections,
-            Arc::new(plan_with_ts),
-            Arc::new(schema_from_df_fields(&output_fields)?),
-        )?))
+        Ok(LogicalPlan::Projection(
+            logical_expr::Projection::try_new_with_schema(
+                projections,
+                Arc::new(plan_with_ts),
+                Arc::new(schema_from_df_fields(&output_fields)?),
+            )?,
+        ))
     }
 
     fn build_nested_projection(
@@ -554,11 +556,13 @@ impl WindowBoundaryMath {
             win_func_expr.alias_qualified(win_field.qualifier().cloned(), win_field.name()),
         );
 
-        Ok(LogicalPlan::Projection(logical_expr::Projection::try_new_with_schema(
-            projections,
-            Arc::new(plan),
-            Arc::new(schema_from_df_fields(&output_fields)?),
-        )?))
+        Ok(LogicalPlan::Projection(
+            logical_expr::Projection::try_new_with_schema(
+                projections,
+                Arc::new(plan),
+                Arc::new(schema_from_df_fields(&output_fields)?),
+            )?,
+        ))
     }
 }
 

@@ -42,10 +42,10 @@ use datafusion::error::DataFusionError;
 use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore};
 use tracing::{debug, info, instrument};
 
+use crate::sql::extensions::StreamingOperatorBlueprint;
 use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
 use crate::sql::extensions::projection::StreamProjectionNode;
 use crate::sql::extensions::sink::StreamEgressNode;
-use crate::sql::extensions::StreamingOperatorBlueprint;
 use crate::sql::logical_planner::planner::NamedNode;
 
 fn duration_from_sql_expr(
@@ -178,7 +178,6 @@ pub fn rewrite_sinks(extensions: Vec<LogicalPlan>) -> Result<Vec<LogicalPlan>> {
         .into_iter()
         .map(maybe_add_key_extension_to_sink)
         .collect()
-
 }
 
 /// Entry point for transforming a standard DataFusion LogicalPlan into a
@@ -193,9 +192,8 @@ pub fn rewrite_plan(
 ) -> Result<LogicalPlan> {
     info!("Starting streaming plan rewrite pipeline");
 
-    let Transformed {
-        data: plan, ..
-    } = plan.rewrite_with_subqueries(&mut source_rewriter::SourceRewriter::new(schema_provider))?;
+    let Transformed { data: plan, .. } =
+        plan.rewrite_with_subqueries(&mut source_rewriter::SourceRewriter::new(schema_provider))?;
 
     let mut rewriter = stream_rewriter::StreamRewriter::new(schema_provider);
     let Transformed {

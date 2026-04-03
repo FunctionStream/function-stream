@@ -13,21 +13,19 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc::Receiver;
 use tokio_stream::{StreamExt, StreamMap};
-use tracing::{info, info_span, Instrument};
+use tracing::{Instrument, info, info_span};
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::error::RunError;
-use crate::runtime::streaming::network::endpoint::BoxedEventStream;
-use crate::runtime::streaming::protocol::{
-    control::{ControlCommand, StopMode},
-    event::StreamEvent,
-    stream_out::StreamOutput,
-    tracked::TrackedEvent,
-};
 use crate::runtime::streaming::execution::tracker::{
     barrier_aligner::{AlignmentStatus, BarrierAligner},
     watermark_tracker::WatermarkTracker,
+};
+use crate::runtime::streaming::network::endpoint::BoxedEventStream;
+use crate::runtime::streaming::protocol::{
+    control::{ControlCommand, StopMode},
+    event::{StreamEvent, StreamOutput, TrackedEvent},
 };
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
@@ -129,7 +127,8 @@ impl ChainedDriver {
         ctx: &mut TaskContext,
     ) -> Result<(), RunError> {
         if let Some(next) = &mut self.next {
-            next.process_event(0, TrackedEvent::control(event), ctx).await?;
+            next.process_event(0, TrackedEvent::control(event), ctx)
+                .await?;
         } else {
             match event {
                 StreamEvent::Watermark(wm) => ctx.broadcast(StreamEvent::Watermark(wm)).await?,
@@ -171,7 +170,8 @@ impl OperatorDrive for ChainedDriver {
             }
             StreamEvent::Barrier(barrier) => {
                 self.operator.snapshot_state(barrier.clone(), ctx).await?;
-                self.forward_signal(StreamEvent::Barrier(barrier), ctx).await?;
+                self.forward_signal(StreamEvent::Barrier(barrier), ctx)
+                    .await?;
             }
             StreamEvent::EndOfStream => {
                 should_stop = true;
@@ -200,7 +200,9 @@ impl OperatorDrive for ChainedDriver {
                     stop = true;
                 }
             }
-            ControlCommand::DropState | ControlCommand::Start | ControlCommand::UpdateConfig { .. } => {}
+            ControlCommand::DropState
+            | ControlCommand::Start
+            | ControlCommand::UpdateConfig { .. } => {}
         }
 
         if let Some(next) = &mut self.next {

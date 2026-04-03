@@ -19,9 +19,9 @@ use tracing::{debug, error, info, warn};
 
 use protocol::service::FunctionInfo as ProtoFunctionInfo;
 use protocol::service::{
-    function_stream_service_server::FunctionStreamService, CreateFunctionRequest,
-    CreatePythonFunctionRequest, DropFunctionRequest, Response, ShowFunctionsRequest,
-    ShowFunctionsResponse, SqlRequest, StartFunctionRequest, StatusCode, StopFunctionRequest,
+    CreateFunctionRequest, CreatePythonFunctionRequest, DropFunctionRequest, Response,
+    ShowFunctionsRequest, ShowFunctionsResponse, SqlRequest, StartFunctionRequest, StatusCode,
+    StopFunctionRequest, function_stream_service_server::FunctionStreamService,
 };
 
 use crate::coordinator::{
@@ -91,7 +91,11 @@ impl FunctionStreamServiceImpl {
         }
     }
 
-    async fn execute_statement(&self, stmt: &dyn Statement, success_status: StatusCode) -> Response {
+    async fn execute_statement(
+        &self,
+        stmt: &dyn Statement,
+        success_status: StatusCode,
+    ) -> Response {
         let result = self.coordinator.execute_with_stream_catalog(stmt).await;
 
         if result.success {
@@ -163,7 +167,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
 
         let response = self.execute_statement(&stmt, StatusCode::Created).await;
 
-        info!("create_function completed in {}ms", timer.elapsed().as_millis());
+        info!(
+            "create_function completed in {}ms",
+            timer.elapsed().as_millis()
+        );
         Ok(TonicResponse::new(response))
     }
 
@@ -210,7 +217,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let stmt = DropFunction::new(req.function_name);
         let response = self.execute_statement(&stmt, StatusCode::Ok).await;
 
-        info!("drop_function completed in {}ms", timer.elapsed().as_millis());
+        info!(
+            "drop_function completed in {}ms",
+            timer.elapsed().as_millis()
+        );
         Ok(TonicResponse::new(response))
     }
 
@@ -221,10 +231,7 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let timer = Instant::now();
         let stmt = ShowFunctions::new();
 
-        let result = self
-            .coordinator
-            .execute_with_stream_catalog(&stmt)
-            .await;
+        let result = self.coordinator.execute_with_stream_catalog(&stmt).await;
 
         if !result.success {
             error!("show_functions execution failed: {}", result.message);
@@ -253,7 +260,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
             })
             .unwrap_or_default();
 
-        info!("show_functions completed in {}ms", timer.elapsed().as_millis());
+        info!(
+            "show_functions completed in {}ms",
+            timer.elapsed().as_millis()
+        );
         Ok(TonicResponse::new(ShowFunctionsResponse {
             status_code: StatusCode::Ok as i32,
             message: result.message,
@@ -271,7 +281,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let stmt = StartFunction::new(req.function_name);
         let response = self.execute_statement(&stmt, StatusCode::Ok).await;
 
-        info!("start_function completed in {}ms", timer.elapsed().as_millis());
+        info!(
+            "start_function completed in {}ms",
+            timer.elapsed().as_millis()
+        );
         Ok(TonicResponse::new(response))
     }
 
@@ -285,7 +298,10 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         let stmt = StopFunction::new(req.function_name);
         let response = self.execute_statement(&stmt, StatusCode::Ok).await;
 
-        info!("stop_function completed in {}ms", timer.elapsed().as_millis());
+        info!(
+            "stop_function completed in {}ms",
+            timer.elapsed().as_millis()
+        );
         Ok(TonicResponse::new(response))
     }
 }

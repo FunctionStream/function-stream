@@ -10,8 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use arrow::compute::{
     concat_batches, filter_record_batch, kernels::cmp::gt_eq, lexsort_to_indices, partition, take,
 };
@@ -19,12 +18,13 @@ use arrow::row::{RowConverter, SortField};
 use arrow_array::types::TimestampNanosecondType;
 use arrow_array::{
     Array, ArrayRef, BooleanArray, PrimitiveArray, RecordBatch, StructArray,
-    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
+    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+    TimestampSecondArray,
 };
 use arrow_schema::{DataType, Field, FieldRef, Schema, TimeUnit};
+use datafusion::execution::SendableRecordBatchStream;
 use datafusion::execution::context::SessionContext;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::execution::SendableRecordBatchStream;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion_proto::physical_plan::AsExecutionPlan;
 use datafusion_proto::protobuf::PhysicalPlanNode;
@@ -33,18 +33,20 @@ use prost::Message;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
-use async_trait::async_trait;
 use crate::runtime::streaming::factory::Registry;
-use protocol::grpc::api::SessionWindowAggregateOperator;
-use crate::runtime::streaming::StreamOutput;
-use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
 use crate::sql::common::converter::Converter;
+use crate::sql::common::{
+    CheckpointBarrier, FsSchema, FsSchemaRef, Watermark, from_nanos, to_nanos,
+};
 use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 use crate::sql::schema::utils::window_arrow_struct;
+use async_trait::async_trait;
+use protocol::grpc::api::SessionWindowAggregateOperator;
 // ============================================================================
 // ============================================================================
 
@@ -212,7 +214,10 @@ impl KeySessionState {
             })
     }
 
-    async fn advance_by_watermark(&mut self, watermark: SystemTime) -> Result<Vec<SessionWindowResult>> {
+    async fn advance_by_watermark(
+        &mut self,
+        watermark: SystemTime,
+    ) -> Result<Vec<SessionWindowResult>> {
         let mut results = vec![];
 
         loop {
@@ -240,12 +245,8 @@ impl KeySessionState {
                 *self.config.receiver_hook.write().unwrap() = Some(rx);
 
                 self.active_session = Some(
-                    ActiveSession::new(
-                        self.config.final_physical_exec.clone(),
-                        *initial_ts,
-                        tx,
-                    )
-                    .await?,
+                    ActiveSession::new(self.config.final_physical_exec.clone(), *initial_ts, tx)
+                        .await?,
                 );
 
                 self.drain_buffer_to_active_session()?;
@@ -300,7 +301,9 @@ impl KeySessionState {
         if let Some(wm) = watermark {
             let flushed = self.advance_by_watermark(wm).await?;
             if !flushed.is_empty() {
-                bail!("unexpected flush during data ingestion; session watermark invariant violated");
+                bail!(
+                    "unexpected flush during data ingestion; session watermark invariant violated"
+                );
             }
         }
         Ok(())
@@ -323,7 +326,7 @@ fn append_output_timestamp_column(
     session_results: &[SessionWindowResult],
     ts_field: &Field,
 ) -> Result<()> {
-    let nanos = |r: &SessionWindowResult| to_nanos(r.window_end)as i64 - 1;
+    let nanos = |r: &SessionWindowResult| to_nanos(r.window_end) as i64 - 1;
     match ts_field.data_type() {
         DataType::Timestamp(TimeUnit::Second, tz) => {
             let v: Vec<i64> = session_results
@@ -344,10 +347,7 @@ fn append_output_timestamp_column(
             ));
         }
         DataType::Timestamp(TimeUnit::Microsecond, tz) => {
-            let v: Vec<i64> = session_results
-                .iter()
-                .map(|r| nanos(r) / 1000)
-                .collect();
+            let v: Vec<i64> = session_results.iter().map(|r| nanos(r) / 1000).collect();
             columns.push(Arc::new(
                 TimestampMicrosecondArray::from(v).with_timezone_opt(tz.clone()),
             ));
@@ -392,7 +392,11 @@ pub struct SessionWindowOperator {
 }
 
 impl SessionWindowOperator {
-    fn filter_batch_by_time(&self, batch: RecordBatch, watermark: Option<SystemTime>) -> Result<RecordBatch> {
+    fn filter_batch_by_time(
+        &self,
+        batch: RecordBatch,
+        watermark: Option<SystemTime>,
+    ) -> Result<RecordBatch> {
         let Some(watermark) = watermark else {
             return Ok(batch);
         };
@@ -474,11 +478,10 @@ impl SessionWindowOperator {
             let initial_action = state.next_watermark_action_time();
             let initial_start = state.earliest_data_time();
 
-            let batch_start = start_time_for_sorted_batch(&key_batch, &self.config.input_schema_ref);
+            let batch_start =
+                start_time_for_sorted_batch(&key_batch, &self.config.input_schema_ref);
 
-            state
-                .add_data(batch_start, key_batch, watermark)
-                .await?;
+            state.add_data(batch_start, key_batch, watermark).await?;
 
             let new_action = state
                 .next_watermark_action_time()
@@ -561,9 +564,7 @@ impl SessionWindowOperator {
                 if state.is_empty() {
                     self.session_states.remove(&key);
                 } else {
-                    let new_start = state
-                        .earliest_data_time()
-                        .expect("earliest after advance");
+                    let new_start = state.earliest_data_time().expect("earliest after advance");
                     self.pq_start_times
                         .entry(new_start)
                         .or_default()
@@ -575,7 +576,8 @@ impl SessionWindowOperator {
                     if new_next_action == popped_action_time {
                         bail!(
                             "processed watermark at {:?} but next watermark action stayed at {:?}",
-                            watermark, popped_action_time
+                            watermark,
+                            popped_action_time
                         );
                     }
                     self.pq_watermark_actions
@@ -593,18 +595,18 @@ impl SessionWindowOperator {
         Ok(vec![self.format_to_arrow(emit_results)?])
     }
 
-    fn format_to_arrow(&self, results: Vec<(Vec<u8>, Vec<SessionWindowResult>)>) -> Result<RecordBatch> {
+    fn format_to_arrow(
+        &self,
+        results: Vec<(Vec<u8>, Vec<SessionWindowResult>)>,
+    ) -> Result<RecordBatch> {
         let (rows, session_results): (Vec<_>, Vec<_>) = results
             .into_iter()
             .flat_map(|(row, s_results)| s_results.into_iter().map(move |res| (row.clone(), res)))
             .unzip();
 
         let key_columns = if let Some(parser) = self.row_converter.parser() {
-            self.row_converter.convert_rows(
-                rows.iter()
-                    .map(|row| parser.parse(row.as_ref()))
-                    .collect(),
-            )?
+            self.row_converter
+                .convert_rows(rows.iter().map(|row| parser.parse(row.as_ref())).collect())?
         } else {
             vec![]
         };
@@ -620,8 +622,9 @@ impl SessionWindowOperator {
 
         let window_start_array = PrimitiveArray::<TimestampNanosecondType>::from(start_times);
         let window_end_array = PrimitiveArray::<TimestampNanosecondType>::from(end_times.clone());
-        
-        let result_batches: Vec<&RecordBatch> = session_results.iter().map(|res| &res.batch).collect();
+
+        let result_batches: Vec<&RecordBatch> =
+            session_results.iter().map(|res| &res.batch).collect();
         let merged_batch = concat_batches(&session_results[0].batch.schema(), result_batches)?;
 
         let DataType::Struct(window_fields) = self.config.window_field.data_type() else {
@@ -638,7 +641,11 @@ impl SessionWindowOperator {
         columns.insert(self.config.window_index, Arc::new(window_struct_array));
         columns.extend_from_slice(merged_batch.columns());
 
-        let ts_field = self.config.input_schema_ref.schema.field(self.config.input_schema_ref.timestamp_index);
+        let ts_field = self
+            .config
+            .input_schema_ref
+            .schema
+            .field(self.config.input_schema_ref.timestamp_index);
         append_output_timestamp_column(&mut columns, &session_results, ts_field)?;
 
         RecordBatch::try_new(self.config.output_schema.clone(), columns)
@@ -678,7 +685,8 @@ impl Operator for SessionWindowOperator {
 
         let sorted_batch = self.sort_batch(&filtered_batch)?;
 
-        self.ingest_sorted_batch(sorted_batch, watermark_time).await?;
+        self.ingest_sorted_batch(sorted_batch, watermark_time)
+            .await?;
 
         Ok(vec![])
     }
@@ -699,7 +707,11 @@ impl Operator for SessionWindowOperator {
             .collect())
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
+    async fn snapshot_state(
+        &mut self,
+        _barrier: CheckpointBarrier,
+        _ctx: &mut TaskContext,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -788,4 +800,3 @@ impl SessionAggregatingWindowConstructor {
         })
     }
 }
-

@@ -42,19 +42,20 @@ use datafusion_common::TableReference;
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 
+use crate::sql::common::{FsSchema, FsSchemaRef};
+use crate::sql::extensions::debezium::{
+    PACK_NODE_NAME, UNROLL_NODE_NAME, UnrollDebeziumPayloadNode,
+};
+use crate::sql::extensions::key_calculation::KeyExtractionNode;
+use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalGraph, LogicalNode};
 use crate::sql::physical::{
     DebeziumUnrollingExec, DecodingContext, FsMemExec, FsPhysicalExtensionCodec, ToDebeziumExec,
 };
-use crate::sql::extensions::debezium::{PACK_NODE_NAME, UNROLL_NODE_NAME, UnrollDebeziumPayloadNode};
-use crate::sql::extensions::key_calculation::KeyExtractionNode;
-use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
-use crate::sql::schema::utils::add_timestamp_field_arrow;
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::common::{FsSchema, FsSchemaRef};
+use crate::sql::schema::utils::add_timestamp_field_arrow;
 
-#[derive(Eq, Hash, PartialEq)]
-#[derive(Debug)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub(crate) enum NamedNode {
     Source(TableReference),
     Watermark(TableReference),
@@ -270,12 +271,11 @@ impl ExtensionPlanner for FsExtensionPlanner {
                 }
             }
         };
-        let name =
-            if let Some(key_extension) = node.as_any().downcast_ref::<KeyExtractionNode>() {
-                key_extension.operator_label.clone()
-            } else {
-                None
-            };
+        let name = if let Some(key_extension) = node.as_any().downcast_ref::<KeyExtractionNode>() {
+            key_extension.operator_label.clone()
+        } else {
+            None
+        };
         Ok(Some(Arc::new(FsMemExec::new(
             name.unwrap_or("memory".to_string()),
             Arc::new(schema),

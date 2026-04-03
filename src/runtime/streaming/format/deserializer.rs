@@ -10,8 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arrow_array::builder::{BinaryBuilder, StringBuilder, TimestampNanosecondBuilder};
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_json::reader::ReaderBuilder;
@@ -57,7 +56,11 @@ impl DataDeserializer {
         }
     }
 
-    fn deserialize_json(&self, messages: &[&[u8]], kafka_timestamps_ms: &[u64]) -> Result<RecordBatch> {
+    fn deserialize_json(
+        &self,
+        messages: &[&[u8]],
+        kafka_timestamps_ms: &[u64],
+    ) -> Result<RecordBatch> {
         let mut buffer = Vec::with_capacity(messages.len() * 256);
         for msg in messages {
             buffer.extend_from_slice(msg);
@@ -93,7 +96,11 @@ impl DataDeserializer {
         self.rebuild_with_timestamp(batch, kafka_timestamps_ms, &valid_indices)
     }
 
-    fn deserialize_raw_string(&self, messages: &[&[u8]], kafka_timestamps_ms: &[u64]) -> Result<RecordBatch> {
+    fn deserialize_raw_string(
+        &self,
+        messages: &[&[u8]],
+        kafka_timestamps_ms: &[u64],
+    ) -> Result<RecordBatch> {
         let value_idx = self
             .decoder_schema
             .index_of("value")
@@ -116,7 +123,11 @@ impl DataDeserializer {
         self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &valid_indices)
     }
 
-    fn deserialize_raw_bytes(&self, messages: &[&[u8]], kafka_timestamps_ms: &[u64]) -> Result<RecordBatch> {
+    fn deserialize_raw_bytes(
+        &self,
+        messages: &[&[u8]],
+        kafka_timestamps_ms: &[u64],
+    ) -> Result<RecordBatch> {
         let value_idx = self
             .decoder_schema
             .index_of("value")

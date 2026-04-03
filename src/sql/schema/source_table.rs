@@ -18,36 +18,34 @@ use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Schema};
 use datafusion::common::{Column, DFSchema, Result, plan_datafusion_err, plan_err};
 use datafusion::error::DataFusionError;
 use datafusion::logical_expr::Expr;
-use datafusion_expr::ExprSchemable;
+use datafusion::sql::TableReference;
 use datafusion::sql::planner::{PlannerContext, SqlToRel};
 use datafusion::sql::sqlparser::ast;
-use datafusion::sql::TableReference;
+use datafusion_expr::ExprSchemable;
 use protocol::grpc::api::ConnectorOp;
 use tracing::warn;
 
+use super::StreamSchemaProvider;
 use super::column_descriptor::ColumnDescriptor;
 use super::connector_config::ConnectorConfig;
 use super::data_encoding_format::DataEncodingFormat;
 use super::schema_context::SchemaContext;
 use super::table_execution_unit::{EngineDescriptor, SyncMode, TableExecutionUnit};
 use super::table_role::{
-    apply_adapter_specific_rules, deduce_role, serialize_backend_params,
-    validate_adapter_availability, TableRole,
+    TableRole, apply_adapter_specific_rules, deduce_role, serialize_backend_params,
+    validate_adapter_availability,
 };
-use super::temporal_pipeline_config::{resolve_temporal_logic, TemporalPipelineConfig, TemporalSpec};
-use super::StreamSchemaProvider;
+use super::temporal_pipeline_config::{
+    TemporalPipelineConfig, TemporalSpec, resolve_temporal_logic,
+};
 use crate::multifield_partial_ord;
 use crate::sql::api::ConnectionProfile;
-use crate::sql::common::constants::{
-    connection_table_role, connector_type, sql_field,
-};
 use crate::sql::common::connector_options::ConnectorOptions;
+use crate::sql::common::constants::{connection_table_role, connector_type, sql_field};
 use crate::sql::common::with_option_keys as opt;
-use crate::sql::common::{
-    BadData, Format, Framing, FsSchema, JsonCompression, JsonFormat,
-};
-use crate::sql::schema::kafka_operator_config::build_kafka_proto_config;
+use crate::sql::common::{BadData, Format, Framing, FsSchema, JsonCompression, JsonFormat};
 use crate::sql::schema::ConnectionType;
+use crate::sql::schema::kafka_operator_config::build_kafka_proto_config;
 use crate::sql::schema::table::SqlSource;
 use crate::sql::types::ProcessingMode;
 
@@ -191,7 +189,9 @@ impl SourceTable {
             table_identifier: id.to_string(),
             role,
             schema_specs: refined_columns,
-            connector_config: ConnectorConfig::Generic(catalog_with_options.clone().into_iter().collect()),
+            connector_config: ConnectorConfig::Generic(
+                catalog_with_options.clone().into_iter().collect(),
+            ),
             temporal_config: temporal_settings,
             key_constraints: pk_list,
             payload_format: Some(encoding),
@@ -310,7 +310,9 @@ impl SourceTable {
             );
         }
 
-        let payload_format = format.as_ref().map(DataEncodingFormat::from_connection_format);
+        let payload_format = format
+            .as_ref()
+            .map(DataEncodingFormat::from_connection_format);
         let encoding = payload_format.unwrap_or(DataEncodingFormat::Raw);
         columns = encoding.apply_envelope(columns)?;
 
@@ -371,7 +373,10 @@ impl SourceTable {
                     )
                 })?;
 
-            if !matches!(field.arrow_field().data_type(), DataType::Timestamp(_, None)) {
+            if !matches!(
+                field.arrow_field().data_type(),
+                DataType::Timestamp(_, None)
+            ) {
                 return plan_err!(
                     "WATERMARK FOR field `{time_field}` has type {}, but expected TIMESTAMP",
                     field.arrow_field().data_type()
@@ -450,7 +455,9 @@ impl SourceTable {
             table.connector_config = ConnectorConfig::Generic(extra_opts);
         }
 
-        if role == TableRole::Ingestion && encoding.supports_delta_updates() && primary_keys.is_empty()
+        if role == TableRole::Ingestion
+            && encoding.supports_delta_updates()
+            && primary_keys.is_empty()
         {
             return plan_err!("Debezium source must have at least one PRIMARY KEY field");
         }
@@ -521,9 +528,7 @@ impl SourceTable {
                     && matches!(c.arrow_field().data_type(), DataType::Timestamp(..))
             })
             .ok_or_else(|| {
-                DataFusionError::Plan(format!(
-                    "field {field_name} not found or not a timestamp"
-                ))
+                DataFusionError::Plan(format!("field {field_name} not found or not a timestamp"))
             })
     }
 

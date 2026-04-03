@@ -10,18 +10,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod common;
 pub mod api;
+pub mod common;
 
-pub mod schema;
-pub mod functions;
-pub mod parse;
-pub mod logical_node;
-pub mod logical_planner;
-pub mod physical;
 pub mod analysis;
 pub(crate) mod extensions;
+pub mod functions;
+pub mod logical_node;
+pub mod logical_planner;
+pub mod parse;
+pub mod physical;
+pub mod schema;
 pub mod types;
 
 pub use analysis::rewrite_plan;
-

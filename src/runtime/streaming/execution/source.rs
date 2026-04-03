@@ -10,19 +10,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::source::{SourceEvent, SourceOperator};
 use crate::runtime::streaming::error::RunError;
 use crate::runtime::streaming::execution::runner::OperatorDrive;
 use crate::runtime::streaming::protocol::control::ControlCommand;
 use crate::runtime::streaming::protocol::event::StreamEvent;
-use crate::runtime::streaming::protocol::tracked::TrackedEvent;
+use crate::runtime::streaming::protocol::event::TrackedEvent;
 use crate::sql::common::CheckpointBarrier;
 use std::time::Duration;
 use tokio::sync::mpsc::Receiver;
-use tokio::time::{interval, MissedTickBehavior};
-use tracing::{info, info_span, warn, Instrument};
+use tokio::time::{MissedTickBehavior, interval};
+use tracing::{Instrument, info, info_span, warn};
 
 pub const SOURCE_IDLE_SLEEP: Duration = Duration::from_millis(50);
 pub const WATERMARK_EMIT_INTERVAL: Duration = Duration::from_millis(200);
@@ -154,7 +153,9 @@ impl SourceRunner {
         match cmd {
             ControlCommand::TriggerCheckpoint { barrier } => {
                 let b: CheckpointBarrier = barrier.into();
-                self.operator.snapshot_state(b.clone(), &mut self.ctx).await?;
+                self.operator
+                    .snapshot_state(b.clone(), &mut self.ctx)
+                    .await?;
                 self.dispatch_event(StreamEvent::Barrier(b)).await?;
             }
             ControlCommand::Stop { .. } => return Ok(true),

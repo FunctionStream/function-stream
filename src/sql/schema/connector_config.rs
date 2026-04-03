@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use protocol::grpc::api::{
-    connector_op, GenericConnectorConfig, KafkaSinkConfig, KafkaSourceConfig,
+    GenericConnectorConfig, KafkaSinkConfig, KafkaSourceConfig, connector_op,
 };
 
 /// Strongly-typed connector configuration stored in [`super::SourceTable`].
@@ -27,12 +27,8 @@ impl ConnectorConfig {
     /// Convert to the proto `ConnectorOp.oneof config` representation — zero JSON involved.
     pub fn to_proto_config(&self) -> connector_op::Config {
         match self {
-            ConnectorConfig::KafkaSource(cfg) => {
-                connector_op::Config::KafkaSource(cfg.clone())
-            }
-            ConnectorConfig::KafkaSink(cfg) => {
-                connector_op::Config::KafkaSink(cfg.clone())
-            }
+            ConnectorConfig::KafkaSource(cfg) => connector_op::Config::KafkaSource(cfg.clone()),
+            ConnectorConfig::KafkaSink(cfg) => connector_op::Config::KafkaSink(cfg.clone()),
             ConnectorConfig::Generic(props) => {
                 connector_op::Config::Generic(GenericConnectorConfig {
                     properties: props.clone(),

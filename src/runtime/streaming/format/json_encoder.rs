@@ -13,14 +13,14 @@
 //!
 
 use arrow_array::{
-    Array, Decimal128Array, TimestampMicrosecondArray,
-    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
+    Array, Decimal128Array, TimestampMicrosecondArray, TimestampMillisecondArray,
+    TimestampNanosecondArray, TimestampSecondArray,
 };
 use arrow_json::writer::NullableEncoder;
 use arrow_json::{Encoder, EncoderFactory, EncoderOptions};
 use arrow_schema::{ArrowError, DataType, FieldRef, TimeUnit};
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 
 use super::config::{DecimalEncoding, TimestampFormat};
 

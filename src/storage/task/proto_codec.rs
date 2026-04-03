@@ -92,9 +92,7 @@ pub fn encode_task_metadata_bytes(
         checkpoint_id,
     };
     let mut out = TASK_STORAGE_PROTO_MAGIC.to_vec();
-    proto
-        .encode(&mut out)
-        .context("encode TaskMetadataProto")?;
+    proto.encode(&mut out).context("encode TaskMetadataProto")?;
     Ok(out)
 }
 
@@ -125,11 +123,9 @@ pub fn decode_task_metadata_bytes(raw: &[u8]) -> Result<DecodedTaskMetadata> {
         });
     }
 
-    let (legacy, _): (LegacyTaskMetadata, _) = bincode::serde::decode_from_slice(
-        raw,
-        bincode::config::standard(),
-    )
-    .map_err(|e| anyhow!("legacy task metadata bincode decode failed: {e}"))?;
+    let (legacy, _): (LegacyTaskMetadata, _) =
+        bincode::serde::decode_from_slice(raw, bincode::config::standard())
+            .map_err(|e| anyhow!("legacy task metadata bincode decode failed: {e}"))?;
     Ok(DecodedTaskMetadata {
         task_type: legacy.task_type,
         state: legacy.state,
@@ -150,11 +146,13 @@ fn module_to_proto(module: &TaskModuleBytes) -> TaskModulePayloadProto {
             module,
             bytes,
         } => TaskModulePayloadProto {
-            payload: Some(task_module_payload_proto::Payload::Python(TaskModulePython {
-                class_name: class_name.clone(),
-                module_path: module.clone(),
-                embedded_code: bytes.clone(),
-            })),
+            payload: Some(task_module_payload_proto::Payload::Python(
+                TaskModulePython {
+                    class_name: class_name.clone(),
+                    module_path: module.clone(),
+                    embedded_code: bytes.clone(),
+                },
+            )),
         },
     }
 }
@@ -179,11 +177,9 @@ pub fn decode_task_module_bytes(raw: &[u8]) -> Result<TaskModuleBytes> {
         return proto.try_into_task_module();
     }
 
-    let (legacy, _): (TaskModuleBytes, _) = bincode::serde::decode_from_slice(
-        raw,
-        bincode::config::standard(),
-    )
-    .map_err(|e| anyhow!("legacy task module bincode decode failed: {e}"))?;
+    let (legacy, _): (TaskModuleBytes, _) =
+        bincode::serde::decode_from_slice(raw, bincode::config::standard())
+            .map_err(|e| anyhow!("legacy task module bincode decode failed: {e}"))?;
     Ok(legacy)
 }
 
@@ -213,13 +209,8 @@ mod tests {
 
     #[test]
     fn metadata_roundtrip_proto() {
-        let enc = encode_task_metadata_bytes(
-            "wasm",
-            &ComponentState::Running,
-            42,
-            Some(7),
-        )
-        .unwrap();
+        let enc =
+            encode_task_metadata_bytes("wasm", &ComponentState::Running, 42, Some(7)).unwrap();
         let dec = decode_task_metadata_bytes(&enc).unwrap();
         assert_eq!(dec.task_type, "wasm");
         assert_eq!(dec.state, ComponentState::Running);

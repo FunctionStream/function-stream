@@ -10,13 +10,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use datafusion::common::Result as DfResult;
-use datafusion::execution::context::SessionContext;
 use datafusion::execution::FunctionRegistry;
+use datafusion::execution::context::SessionContext;
 use datafusion::logical_expr::planner::ExprPlanner;
 use datafusion::logical_expr::{AggregateUDF, ScalarUDF, WindowUDF};
 

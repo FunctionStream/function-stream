@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use datafusion::arrow::datatypes::{DataType, Schema};
-use datafusion::common::{Result, DFSchema};
+use datafusion::common::{DFSchema, Result};
 use datafusion::logical_expr::Expr;
 use datafusion_expr::ExprSchemable;
 

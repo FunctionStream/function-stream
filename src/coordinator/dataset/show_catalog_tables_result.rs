@@ -46,12 +46,14 @@ impl ShowCatalogTablesResult {
             };
             let ncols = schema.fields().len() as i32;
             names.push(t.name().to_string());
-            kinds.push(match t.as_ref() {
-                CatalogTable::ConnectorTable(_) => "SOURCE",
-                CatalogTable::LookupTable(_) => "LOOKUP",
-                CatalogTable::TableFromQuery { .. } => "QUERY",
-            }
-            .to_string());
+            kinds.push(
+                match t.as_ref() {
+                    CatalogTable::ConnectorTable(_) => "SOURCE",
+                    CatalogTable::LookupTable(_) => "LOOKUP",
+                    CatalogTable::TableFromQuery { .. } => "QUERY",
+                }
+                .to_string(),
+            );
             column_counts.push(ncols);
             schema_lines.push(schema_columns_one_line(&schema));
             details.push(catalog_table_row_detail(t.as_ref()));
@@ -88,7 +90,10 @@ impl DataSet for ShowCatalogTablesResult {
                 )),
                 Arc::new(Int32Array::from(self.column_counts.clone())),
                 Arc::new(StringArray::from(
-                    self.schema_lines.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                    self.schema_lines
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>(),
                 )),
                 Arc::new(StringArray::from(
                     self.details.iter().map(|s| s.as_str()).collect::<Vec<_>>(),

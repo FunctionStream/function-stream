@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use prost::Message;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -18,9 +18,9 @@ use std::sync::Arc;
 
 use protocol::grpc::api::connector_op::Config;
 use protocol::grpc::api::{
-    BadDataPolicy, ConnectorOp, DecimalEncodingProto, FormatConfig,
-    KafkaAuthConfig, KafkaOffsetMode, KafkaReadMode, KafkaSinkCommitMode, KafkaSinkConfig,
-    KafkaSourceConfig, TimestampFormatProto,
+    BadDataPolicy, ConnectorOp, DecimalEncodingProto, FormatConfig, KafkaAuthConfig,
+    KafkaOffsetMode, KafkaReadMode, KafkaSinkCommitMode, KafkaSinkConfig, KafkaSourceConfig,
+    TimestampFormatProto,
 };
 use tracing::info;
 
@@ -30,8 +30,7 @@ use crate::runtime::streaming::factory::global::Registry;
 use crate::runtime::streaming::factory::operator_constructor::OperatorConstructor;
 use crate::runtime::streaming::format::{
     BadDataPolicy as RtBadDataPolicy, DataSerializer, DecimalEncoding as RtDecimalEncoding,
-    Format as RuntimeFormat, JsonFormat as RuntimeJsonFormat,
-    TimestampFormat as RtTimestampFormat,
+    Format as RuntimeFormat, JsonFormat as RuntimeJsonFormat, TimestampFormat as RtTimestampFormat,
 };
 use crate::runtime::streaming::operators::sink::kafka::{ConsistencyMode, KafkaSinkOperator};
 use crate::runtime::streaming::operators::source::kafka::{
@@ -125,8 +124,7 @@ pub struct ConnectorDispatcher;
 
 impl OperatorConstructor for ConnectorDispatcher {
     fn with_config(&self, payload: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        let op = ConnectorOp::decode(payload)
-            .context("Failed to decode ConnectorOp protobuf")?;
+        let op = ConnectorOp::decode(payload).context("Failed to decode ConnectorOp protobuf")?;
 
         let fs_schema = op
             .fs_schema
@@ -139,9 +137,7 @@ impl OperatorConstructor for ConnectorDispatcher {
             Some(Config::KafkaSource(ref cfg)) => {
                 Self::build_kafka_source(&op.name, cfg, fs_schema)
             }
-            Some(Config::KafkaSink(ref cfg)) => {
-                Self::build_kafka_sink(&op.name, cfg, fs_schema)
-            }
+            Some(Config::KafkaSink(ref cfg)) => Self::build_kafka_sink(&op.name, cfg, fs_schema),
             Some(Config::Generic(_)) => bail!(
                 "ConnectorOp '{}': GenericConnectorConfig dispatch not yet implemented",
                 op.name

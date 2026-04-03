@@ -14,11 +14,11 @@ pub mod catalog_ddl;
 pub mod column_descriptor;
 pub mod connection_type;
 pub mod connector_config;
-pub mod kafka_operator_config;
-pub mod source_table;
 pub mod data_encoding_format;
+pub mod kafka_operator_config;
 pub mod schema_context;
 pub mod schema_provider;
+pub mod source_table;
 pub mod table;
 pub mod table_execution_unit;
 pub mod table_role;
@@ -35,7 +35,5 @@ pub use source_table::SourceTable;
 
 /// Back-compat alias for [`SourceTable`].
 pub type ConnectorTable = SourceTable;
-pub use schema_provider::{
-    ObjectName, StreamPlanningContext, StreamSchemaProvider, StreamTable,
-};
+pub use schema_provider::{ObjectName, StreamPlanningContext, StreamSchemaProvider, StreamTable};
 pub use table::Table;

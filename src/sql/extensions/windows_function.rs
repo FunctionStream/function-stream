@@ -24,8 +24,8 @@ use protocol::grpc::api::WindowFunctionOperator;
 use crate::sql::common::constants::{extension_node, proto_operator_name, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
-use crate::sql::physical::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
+use crate::sql::physical::FsPhysicalExtensionCodec;
 use crate::sql::types::TIMESTAMP_FIELD;
 
 use super::{CompiledTopologyNode, StreamingOperatorBlueprint};
@@ -48,10 +48,7 @@ pub(crate) struct StreamingWindowFunctionNode {
 }
 
 impl StreamingWindowFunctionNode {
-    pub fn new(
-        underlying_evaluation_plan: LogicalPlan,
-        partition_key_indices: Vec<usize>,
-    ) -> Self {
+    pub fn new(underlying_evaluation_plan: LogicalPlan, partition_key_indices: Vec<usize>) -> Self {
         Self {
             underlying_evaluation_plan,
             partition_key_indices,
@@ -108,11 +105,7 @@ impl UserDefinedLogicalNodeCore for StreamingWindowFunctionNode {
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "StreamingWindowFunction: Schema={}",
-            self.schema()
-        )
+        write!(f, "StreamingWindowFunction: Schema={}", self.schema())
     }
 
     fn with_exprs_and_inputs(
@@ -179,10 +172,8 @@ impl StreamingOperatorBlueprint for StreamingWindowFunctionNode {
             1,
         );
 
-        let routing_edge = LogicalEdge::project_all(
-            LogicalEdgeType::Shuffle,
-            (*input_schema).clone(),
-        );
+        let routing_edge =
+            LogicalEdge::project_all(LogicalEdgeType::Shuffle, (*input_schema).clone());
 
         Ok(CompiledTopologyNode {
             execution_unit: logical_node,

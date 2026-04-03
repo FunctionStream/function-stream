@@ -146,7 +146,7 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
                 );
             }
             Ok(Box::new(ShowCreateTable::new(obj_name.to_string())))
-        },
+        }
         s @ DFStatement::CreateTable(_) => Ok(Box::new(CreateTable::new(s))),
         s @ DFStatement::CreateStreamingTable { .. } => {
             Ok(Box::new(StreamingTableStatement::new(s)))
@@ -154,9 +154,7 @@ fn classify_statement(stmt: DFStatement) -> Result<Box<dyn CoordinatorStatement>
         stmt @ DFStatement::Drop { .. } => {
             {
                 let DFStatement::Drop {
-                    object_type,
-                    names,
-                    ..
+                    object_type, names, ..
                 } = &stmt
                 else {
                     unreachable!()

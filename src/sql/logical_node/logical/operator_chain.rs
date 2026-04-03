@@ -58,10 +58,12 @@ impl ChainedLogicalOperator {
                 Some("sql-session-window-aggregate".to_string())
             }
             OperatorName::UpdatingAggregate => Some("sql-updating-aggregate".to_string()),
-            OperatorName::ConnectorSource => self
-                .extract_connector_name()
-                .map(|c| format!("{c}-source")),
-            OperatorName::ConnectorSink => self.extract_connector_name().map(|c| format!("{c}-sink")),
+            OperatorName::ConnectorSource => {
+                self.extract_connector_name().map(|c| format!("{c}-source"))
+            }
+            OperatorName::ConnectorSink => {
+                self.extract_connector_name().map(|c| format!("{c}-sink"))
+            }
             _ => None,
         }
     }
@@ -81,14 +83,15 @@ impl OperatorChain {
         }
     }
 
-    pub fn iter(
-        &self,
-    ) -> impl Iterator<Item = (&ChainedLogicalOperator, Option<&Arc<FsSchema>>)> {
-        self.operators.iter().zip_longest(&self.edges).filter_map(|e| match e {
-            EitherOrBoth::Both(op, edge) => Some((op, Some(edge))),
-            EitherOrBoth::Left(op) => Some((op, None)),
-            EitherOrBoth::Right(_) => None,
-        })
+    pub fn iter(&self) -> impl Iterator<Item = (&ChainedLogicalOperator, Option<&Arc<FsSchema>>)> {
+        self.operators
+            .iter()
+            .zip_longest(&self.edges)
+            .filter_map(|e| match e {
+                EitherOrBoth::Both(op, edge) => Some((op, Some(edge))),
+                EitherOrBoth::Left(op) => Some((op, None)),
+                EitherOrBoth::Right(_) => None,
+            })
     }
 
     pub fn iter_mut(

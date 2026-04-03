@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::runtime::streaming::protocol::watermark::{merge_watermarks, watermark_strictly_advances};
+use crate::runtime::streaming::protocol::event::{merge_watermarks, watermark_strictly_advances};
 use crate::sql::common::Watermark;
 
 #[derive(Debug)]
@@ -84,7 +84,10 @@ mod tests {
         let t1 = SystemTime::UNIX_EPOCH + Duration::from_secs(1);
         let t5 = SystemTime::UNIX_EPOCH + Duration::from_secs(5);
         assert!(t.update(0, Watermark::EventTime(t5)).is_none());
-        assert_eq!(t.update(1, Watermark::EventTime(t1)), Some(Watermark::EventTime(t1)));
+        assert_eq!(
+            t.update(1, Watermark::EventTime(t1)),
+            Some(Watermark::EventTime(t1))
+        );
         let t3 = SystemTime::UNIX_EPOCH + Duration::from_secs(3);
         assert_eq!(
             t.update(1, Watermark::EventTime(t3)),

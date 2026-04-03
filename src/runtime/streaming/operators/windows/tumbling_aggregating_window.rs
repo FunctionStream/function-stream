@@ -10,20 +10,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arrow::compute::{partition, sort_to_indices, take};
 use arrow_array::{Array, PrimitiveArray, RecordBatch, types::TimestampNanosecondType};
 use arrow_schema::SchemaRef;
 use datafusion::common::ScalarValue;
+use datafusion::execution::SendableRecordBatchStream;
 use datafusion::execution::context::SessionContext;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::execution::SendableRecordBatchStream;
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::{
-    physical_plan::{from_proto::parse_physical_expr, AsExecutionPlan},
+    physical_plan::{AsExecutionPlan, from_proto::parse_physical_expr},
     protobuf::{PhysicalExprNode, PhysicalPlanNode},
 };
 use futures::StreamExt;
@@ -32,19 +31,19 @@ use std::collections::BTreeMap;
 use std::mem;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::warn;
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
-use async_trait::async_trait;
 use crate::runtime::streaming::factory::Registry;
-use protocol::grpc::api::TumblingWindowAggregateOperator;
-use crate::runtime::streaming::StreamOutput;
-use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, Watermark};
 use crate::sql::common::time_utils::print_time;
+use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
 use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 use crate::sql::schema::utils::add_timestamp_field_arrow;
+use async_trait::async_trait;
+use protocol::grpc::api::TumblingWindowAggregateOperator;
 
 struct ActiveBin {
     sender: Option<UnboundedSender<RecordBatch>>,
@@ -120,7 +119,8 @@ impl TumblingWindowOperator {
         bin_start: SystemTime,
         schema: SchemaRef,
     ) -> Result<RecordBatch> {
-        let bin_start_scalar = ScalarValue::TimestampNanosecond(Some(to_nanos(bin_start) as i64), None);
+        let bin_start_scalar =
+            ScalarValue::TimestampNanosecond(Some(to_nanos(bin_start) as i64), None);
         let timestamp_array = bin_start_scalar.to_array_of_size(batch.num_rows())?;
         let mut columns = batch.columns().to_vec();
         columns.push(timestamp_array);
@@ -273,7 +273,8 @@ impl Operator for TumblingWindowOperator {
             if let Some(final_projection) = &self.final_projection {
                 *self.final_batches_passer.write().unwrap() = aggregate_results;
                 final_projection.reset()?;
-                let mut proj_exec = final_projection.execute(0, SessionContext::new().task_ctx())?;
+                let mut proj_exec =
+                    final_projection.execute(0, SessionContext::new().task_ctx())?;
 
                 while let Some(batch) = proj_exec.next().await {
                     final_outputs.push(StreamOutput::Forward(batch?));
@@ -284,7 +285,11 @@ impl Operator for TumblingWindowOperator {
         Ok(final_outputs)
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
+    async fn snapshot_state(
+        &mut self,
+        _barrier: CheckpointBarrier,
+        _ctx: &mut TaskContext,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -324,12 +329,13 @@ impl TumblingAggregateWindowConstructor {
             context: DecodingContext::LockedBatchVec(final_batches_passer.clone()),
         };
 
-        let partial_plan = PhysicalPlanNode::decode(&mut config.partial_aggregation_plan.as_slice())?
-            .try_into_physical_plan(
-                registry.as_ref(),
-                &RuntimeEnvBuilder::new().build()?,
-                &codec,
-            )?;
+        let partial_plan =
+            PhysicalPlanNode::decode(&mut config.partial_aggregation_plan.as_slice())?
+                .try_into_physical_plan(
+                    registry.as_ref(),
+                    &RuntimeEnvBuilder::new().build()?,
+                    &codec,
+                )?;
 
         let partial_schema: FsSchema = config
             .partial_schema
@@ -373,4 +379,3 @@ impl TumblingAggregateWindowConstructor {
         })
     }
 }
-

@@ -10,8 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
@@ -27,8 +26,8 @@ use tracing::{debug, error, info, warn};
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::source::{SourceEvent, SourceOffset, SourceOperator};
 use crate::runtime::streaming::format::{BadDataPolicy, DataDeserializer, Format};
-use crate::sql::common::{CheckpointBarrier, MetadataField};
 use crate::sql::common::fs_schema::FieldValueType;
+use crate::sql::common::{CheckpointBarrier, MetadataField};
 // ============================================================================
 // ============================================================================
 
@@ -65,7 +64,12 @@ pub struct BufferedDeserializer {
 }
 
 impl BufferedDeserializer {
-    pub fn new(format: Format, schema: SchemaRef, bad_data_policy: BadDataPolicy, batch_size: usize) -> Self {
+    pub fn new(
+        format: Format,
+        schema: SchemaRef,
+        bad_data_policy: BadDataPolicy,
+        batch_size: usize,
+    ) -> Self {
         Self {
             inner: DataDeserializer::new(format, schema, bad_data_policy),
             buffer: Vec::with_capacity(batch_size),
@@ -285,9 +289,7 @@ impl SourceOperator for KafkaSourceOperator {
                 let partition = msg.partition();
                 let offset = msg.offset();
                 let timestamp = msg.timestamp().to_millis().ok_or_else(|| {
-                    anyhow!(
-                        "Failed to read timestamp from Kafka record: message has no timestamp"
-                    )
+                    anyhow!("Failed to read timestamp from Kafka record: message has no timestamp")
                 })?;
 
                 self.current_offsets.insert(partition, offset);

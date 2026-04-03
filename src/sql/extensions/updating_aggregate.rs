@@ -16,7 +16,7 @@ use std::time::Duration;
 use datafusion::common::{DFSchemaRef, Result, TableReference, ToDFSchema, internal_err, plan_err};
 use datafusion::logical_expr::expr::ScalarFunction;
 use datafusion::logical_expr::{
-    col, lit, Expr, Extension, LogicalPlan, UserDefinedLogicalNodeCore,
+    Expr, Extension, LogicalPlan, UserDefinedLogicalNodeCore, col, lit,
 };
 use datafusion::prelude::named_struct;
 use datafusion::scalar::ScalarValue;
@@ -27,11 +27,13 @@ use protocol::grpc::api::UpdatingAggregateOperator;
 
 use crate::sql::common::constants::{extension_node, proto_operator_name, updating_state_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};
-use crate::sql::extensions::{CompiledTopologyNode, IsRetractExtension, StreamingOperatorBlueprint};
+use crate::sql::extensions::{
+    CompiledTopologyNode, IsRetractExtension, StreamingOperatorBlueprint,
+};
 use crate::sql::functions::multi_hash;
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
-use crate::sql::physical::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
+use crate::sql::physical::FsPhysicalExtensionCodec;
 
 // -----------------------------------------------------------------------------
 // Constants & Configuration
@@ -235,8 +237,7 @@ impl StreamingOperatorBlueprint for ContinuousAggregateNode {
     }
 
     fn yielded_schema(&self) -> FsSchema {
-        FsSchema::from_schema_unkeyed(Arc::new(self.schema().as_ref().into())).expect(
-            "Fatal: Failed to generate unkeyed output schema for continuous aggregate",
-        )
+        FsSchema::from_schema_unkeyed(Arc::new(self.schema().as_ref().into()))
+            .expect("Fatal: Failed to generate unkeyed output schema for continuous aggregate")
     }
 }

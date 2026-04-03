@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use arrow_schema::{DataType, Field, Schema};
 use datafusion::common::{
-    internal_err, plan_err, DFSchema, DFSchemaRef, DataFusionError, Result, TableReference,
+    DFSchema, DFSchemaRef, DataFusionError, Result, TableReference, internal_err, plan_err,
 };
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use datafusion::physical_plan::DisplayAs;
@@ -49,7 +49,11 @@ impl DebeziumSchemaCodec {
         qualifier_override: Option<TableReference>,
     ) -> Result<DFSchemaRef> {
         let ts_field = if flat_schema.has_column_with_unqualified_name(TIMESTAMP_FIELD) {
-            Some(flat_schema.field_with_unqualified_name(TIMESTAMP_FIELD)?.clone())
+            Some(
+                flat_schema
+                    .field_with_unqualified_name(TIMESTAMP_FIELD)?
+                    .clone(),
+            )
         } else {
             None
         };
@@ -64,11 +68,7 @@ impl DebeziumSchemaCodec {
         let payload_struct_type = DataType::Struct(payload_fields.into());
 
         let mut envelope_fields = vec![
-            Arc::new(Field::new(
-                cdc::BEFORE,
-                payload_struct_type.clone(),
-                true,
-            )),
+            Arc::new(Field::new(cdc::BEFORE, payload_struct_type.clone(), true)),
             Arc::new(Field::new(cdc::AFTER, payload_struct_type, true)),
             Arc::new(Field::new(cdc::OP, DataType::Utf8, true)),
         ];
@@ -131,17 +131,23 @@ impl UnrollDebeziumPayloadNode {
     }
 
     fn validate_envelope_structure(schema: &DFSchemaRef) -> Result<(usize, usize)> {
-        let before_idx = schema.index_of_column_by_name(None, cdc::BEFORE).ok_or_else(
-            || DataFusionError::Plan("Missing 'before' state column in CDC stream".into()),
-        )?;
+        let before_idx = schema
+            .index_of_column_by_name(None, cdc::BEFORE)
+            .ok_or_else(|| {
+                DataFusionError::Plan("Missing 'before' state column in CDC stream".into())
+            })?;
 
-        let after_idx = schema.index_of_column_by_name(None, cdc::AFTER).ok_or_else(
-            || DataFusionError::Plan("Missing 'after' state column in CDC stream".into()),
-        )?;
+        let after_idx = schema
+            .index_of_column_by_name(None, cdc::AFTER)
+            .ok_or_else(|| {
+                DataFusionError::Plan("Missing 'after' state column in CDC stream".into())
+            })?;
 
-        let op_idx = schema.index_of_column_by_name(None, cdc::OP).ok_or_else(|| {
-            DataFusionError::Plan("Missing 'op' operation column in CDC stream".into())
-        })?;
+        let op_idx = schema
+            .index_of_column_by_name(None, cdc::OP)
+            .ok_or_else(|| {
+                DataFusionError::Plan("Missing 'op' operation column in CDC stream".into())
+            })?;
 
         let before_type = schema.field(before_idx).data_type();
         let after_type = schema.field(after_idx).data_type();
@@ -153,10 +159,7 @@ impl UnrollDebeziumPayloadNode {
         }
 
         if *schema.field(op_idx).data_type() != DataType::Utf8 {
-            return plan_err!(
-                "The '{}' column must be of type Utf8",
-                cdc::OP
-            );
+            return plan_err!("The '{}' column must be of type Utf8", cdc::OP);
         }
 
         Ok((before_idx, after_idx))
@@ -172,10 +175,7 @@ impl UnrollDebeziumPayloadNode {
         }
     }
 
-    fn map_primary_keys(
-        fields: &arrow_schema::Fields,
-        pk_names: &[String],
-    ) -> Result<Vec<usize>> {
+    fn map_primary_keys(fields: &arrow_schema::Fields, pk_names: &[String]) -> Result<Vec<usize>> {
         pk_names
             .iter()
             .map(|pk| fields.find(pk).map(|(idx, _)| idx))
@@ -196,9 +196,7 @@ impl UnrollDebeziumPayloadNode {
         match (before_qualifier, after_qualifier) {
             (Some(bq), Some(aq)) if bq == aq => Ok(Some(bq.clone())),
             (None, None) => Ok(None),
-            _ => plan_err!(
-                "'before' and 'after' columns must share the same namespace/qualifier"
-            ),
+            _ => plan_err!("'before' and 'after' columns must share the same namespace/qualifier"),
         }
     }
 
@@ -252,7 +250,11 @@ impl UserDefinedLogicalNodeCore for UnrollDebeziumPayloadNode {
         write!(f, "UnrollDebeziumPayload")
     }
 
-    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(
+        &self,
+        _exprs: Vec<Expr>,
+        mut inputs: Vec<LogicalPlan>,
+    ) -> Result<Self> {
         if inputs.len() != 1 {
             return internal_err!(
                 "UnrollDebeziumPayloadNode expects exactly 1 input, got {}",
@@ -278,13 +280,16 @@ impl StreamingOperatorBlueprint for UnrollDebeziumPayloadNode {
         _: usize,
         _: Vec<FsSchemaRef>,
     ) -> Result<CompiledTopologyNode> {
-        plan_err!("UnrollDebeziumPayloadNode is a logical boundary and should not be physically planned")
+        plan_err!(
+            "UnrollDebeziumPayloadNode is a logical boundary and should not be physically planned"
+        )
     }
 
     fn yielded_schema(&self) -> FsSchema {
-        FsSchema::from_schema_unkeyed(Arc::new(self.resolved_schema.as_ref().into())).unwrap_or_else(
-            |_| panic!("Failed to extract physical schema for {}", UNROLL_NODE_NAME),
-        )
+        FsSchema::from_schema_unkeyed(Arc::new(self.resolved_schema.as_ref().into()))
+            .unwrap_or_else(|_| {
+                panic!("Failed to extract physical schema for {}", UNROLL_NODE_NAME)
+            })
     }
 }
 
@@ -346,7 +351,11 @@ impl UserDefinedLogicalNodeCore for PackDebeziumEnvelopeNode {
         write!(f, "PackDebeziumEnvelope")
     }
 
-    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(
+        &self,
+        _exprs: Vec<Expr>,
+        mut inputs: Vec<LogicalPlan>,
+    ) -> Result<Self> {
         if inputs.len() != 1 {
             return internal_err!(
                 "PackDebeziumEnvelopeNode expects exactly 1 input, got {}",
@@ -372,13 +381,13 @@ impl StreamingOperatorBlueprint for PackDebeziumEnvelopeNode {
         _: usize,
         _: Vec<FsSchemaRef>,
     ) -> Result<CompiledTopologyNode> {
-        internal_err!("PackDebeziumEnvelopeNode is a logical boundary and should not be physically planned")
+        internal_err!(
+            "PackDebeziumEnvelopeNode is a logical boundary and should not be physically planned"
+        )
     }
 
     fn yielded_schema(&self) -> FsSchema {
         FsSchema::from_schema_unkeyed(Arc::new(self.envelope_schema.as_ref().into()))
-            .unwrap_or_else(|_| {
-                panic!("Failed to extract physical schema for {}", PACK_NODE_NAME)
-            })
+            .unwrap_or_else(|_| panic!("Failed to extract physical schema for {}", PACK_NODE_NAME))
     }
 }

@@ -37,9 +37,8 @@ impl TryFrom<&str> for TimestampFormat {
             timestamp_format_value::RFC3339_UPPER | timestamp_format_value::RFC3339_SNAKE => {
                 Ok(TimestampFormat::RFC3339)
             }
-            timestamp_format_value::UNIX_MILLIS_PASCAL | timestamp_format_value::UNIX_MILLIS_SNAKE => {
-                Ok(TimestampFormat::UnixMillis)
-            }
+            timestamp_format_value::UNIX_MILLIS_PASCAL
+            | timestamp_format_value::UNIX_MILLIS_SNAKE => Ok(TimestampFormat::UnixMillis),
             _ => Err(()),
         }
     }

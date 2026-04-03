@@ -378,7 +378,9 @@ impl TryFrom<Field> for SourceField {
                 precision: *p,
                 scale: *s,
             }),
-            (DataType::Binary | DataType::LargeBinary | DataType::BinaryView, None) => FieldType::Bytes,
+            (DataType::Binary | DataType::LargeBinary | DataType::BinaryView, None) => {
+                FieldType::Bytes
+            }
             (DataType::Timestamp(TimeUnit::Second, _), None) => {
                 FieldType::Timestamp(TimestampField {
                     unit: TimestampUnit::Second,
@@ -400,7 +402,10 @@ impl TryFrom<Field> for SourceField {
                 })
             }
             (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View, None) => FieldType::String,
-            (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View, Some(FsExtensionType::JSON)) => FieldType::Json,
+            (
+                DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
+                Some(FsExtensionType::JSON),
+            ) => FieldType::Json,
             (DataType::Struct(fields), None) => {
                 let fields: Result<_, String> = fields
                     .into_iter()

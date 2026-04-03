@@ -14,24 +14,24 @@
 //!
 //! [`Schema`]: datafusion::arrow::datatypes::Schema
 
+use super::{TIMESTAMP_FIELD, to_nanos};
+use crate::sql::common::converter::Converter;
+use arrow::compute::kernels::cmp::gt_eq;
+use arrow::compute::kernels::numeric::div;
+use arrow::compute::{SortColumn, filter_record_batch, lexsort_to_indices, partition, take};
+use arrow::row::SortField;
+use arrow_array::types::UInt64Type;
+use arrow_array::{PrimitiveArray, UInt64Array};
 use datafusion::arrow::array::builder::{ArrayBuilder, make_builder};
 use datafusion::arrow::array::{RecordBatch, TimestampNanosecondArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaBuilder, TimeUnit};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::{DataFusionError, Result as DFResult};
+use protocol::grpc::api;
 use serde::{Deserialize, Serialize};
+use std::ops::Range;
 use std::sync::Arc;
 use std::time::SystemTime;
-use arrow::compute::{filter_record_batch, lexsort_to_indices, partition, take, SortColumn};
-use arrow::compute::kernels::cmp::gt_eq;
-use arrow::compute::kernels::numeric::div;
-use arrow::row::SortField;
-use arrow_array::{PrimitiveArray, UInt64Array};
-use arrow_array::types::UInt64Type;
-use protocol::grpc::api;
-use super::{to_nanos, TIMESTAMP_FIELD};
-use std::ops::Range;
-use crate::sql::common::converter::Converter;
 
 #[derive(Debug, Copy, Clone)]
 pub enum FieldValueType<'a> {

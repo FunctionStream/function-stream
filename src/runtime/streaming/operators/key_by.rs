@@ -10,19 +10,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
-use arrow_array::{Array, RecordBatch, UInt64Array};
+use anyhow::{Result, anyhow};
 use arrow::compute::{sort_to_indices, take};
+use arrow_array::{Array, RecordBatch, UInt64Array};
 use async_trait::async_trait;
 use datafusion::physical_expr::PhysicalExpr;
-use datafusion_physical_expr::expressions::Column;
 use datafusion_common::hash_utils::create_hashes;
+use datafusion_physical_expr::expressions::Column;
 use std::sync::Arc;
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
-use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
 use protocol::grpc::api::KeyPlanOperator;
@@ -148,8 +147,7 @@ impl KeyByConstructor {
 
         for field_idx in &config.key_fields {
             let idx = *field_idx as usize;
-            let expr = Arc::new(Column::new(&format!("col_{}", idx), idx))
-                as Arc<dyn PhysicalExpr>;
+            let expr = Arc::new(Column::new(&format!("col_{}", idx), idx)) as Arc<dyn PhysicalExpr>;
             key_extractors.push(expr);
         }
 
@@ -162,4 +160,3 @@ impl KeyByConstructor {
         Ok(KeyByOperator::new(name, key_extractors))
     }
 }
-

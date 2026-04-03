@@ -18,8 +18,8 @@ use datafusion::common::{DFSchemaRef, Result, internal_err, plan_err};
 use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, UserDefinedLogicalNodeCore};
 use datafusion_common::DFSchema;
 use datafusion_expr::col;
-use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionCodec};
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
+use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionCodec};
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use itertools::Itertools;
 use prost::Message;
@@ -31,8 +31,8 @@ use crate::sql::common::constants::{extension_node, sql_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
-use crate::sql::physical::FsPhysicalExtensionCodec;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
+use crate::sql::physical::FsPhysicalExtensionCodec;
 use crate::sql::types::{fields_with_qualifiers, schema_from_df_fields_with_metadata};
 
 pub(crate) const EXTENSION_NODE_IDENTIFIER: &str = extension_node::KEY_EXTRACTION;
@@ -125,12 +125,13 @@ impl KeyExtractionNode {
 
         let output_fs_schema = self.generate_fs_schema()?;
 
-        for (compiled_expr, expected_field) in target_exprs
-            .iter()
-            .zip(output_fs_schema.schema.fields())
+        for (compiled_expr, expected_field) in
+            target_exprs.iter().zip(output_fs_schema.schema.fields())
         {
-            let (expr_type, expr_nullable) = compiled_expr.data_type_and_nullable(input_df_schema)?;
-            if expr_type != *expected_field.data_type() || expr_nullable != expected_field.is_nullable()
+            let (expr_type, expr_nullable) =
+                compiled_expr.data_type_and_nullable(input_df_schema)?;
+            if expr_type != *expected_field.data_type()
+                || expr_nullable != expected_field.is_nullable()
             {
                 return plan_err!(
                     "Type mismatch in key calculation: Expected {} (nullable: {}), got {} (nullable: {})",
@@ -180,7 +181,8 @@ impl KeyExtractionNode {
 
                 for (idx, expr) in expressions.iter().enumerate() {
                     let (data_type, nullable) = expr.data_type_and_nullable(base_arrow_schema)?;
-                    composite_fields.push(Field::new(format!("__key_{idx}"), data_type, nullable).into());
+                    composite_fields
+                        .push(Field::new(format!("__key_{idx}"), data_type, nullable).into());
                 }
 
                 for field in base_arrow_schema.fields().iter() {
@@ -211,7 +213,9 @@ impl StreamingOperatorBlueprint for KeyExtractionNode {
         }
 
         let input_schema_ref = input_schemas.remove(0);
-        let input_df_schema = Arc::new(DFSchema::try_from(input_schema_ref.schema.as_ref().clone())?);
+        let input_df_schema = Arc::new(DFSchema::try_from(
+            input_schema_ref.schema.as_ref().clone(),
+        )?);
 
         let physical_plan = planner.sync_plan(&self.upstream_plan)?;
         let physical_plan_proto = PhysicalPlanNode::try_from_physical_plan(
@@ -233,7 +237,10 @@ impl StreamingOperatorBlueprint for KeyExtractionNode {
             format!("key_{node_index}"),
             engine_operator_name,
             protobuf_payload,
-            format!("ArrowKey<{}>", self.operator_label.as_deref().unwrap_or("_")),
+            format!(
+                "ArrowKey<{}>",
+                self.operator_label.as_deref().unwrap_or("_")
+            ),
             1,
         );
 
@@ -273,12 +280,15 @@ impl UserDefinedLogicalNodeCore for KeyExtractionNode {
         write!(
             f,
             "KeyExtractionNode: Strategy={:?} | Schema={}",
-            self.extraction_strategy,
-            self.resolved_schema
+            self.extraction_strategy, self.resolved_schema
         )
     }
 
-    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(
+        &self,
+        exprs: Vec<Expr>,
+        mut inputs: Vec<LogicalPlan>,
+    ) -> Result<Self> {
         if inputs.len() != 1 {
             return internal_err!("KeyExtractionNode requires exactly 1 input logical plan");
         }

@@ -17,31 +17,30 @@
 
 pub mod arrow_ext;
 pub mod connector_options;
-pub mod with_option_keys;
 pub mod constants;
 pub mod control;
+pub mod converter;
 pub mod date;
 pub mod debezium;
-pub mod fs_schema;
 pub mod errors;
 pub mod format_from_opts;
 pub mod formats;
+pub mod fs_schema;
 pub mod kafka_catalog;
-pub mod message;
 pub mod operator_config;
 pub mod time_utils;
-pub mod converter;
 pub mod topology;
+pub mod with_option_keys;
 
 // ── Re-exports from existing modules ──
+pub use crate::runtime::streaming::protocol::{CheckpointBarrier, Watermark};
 pub use arrow_ext::FsExtensionType;
-pub use message::{CheckpointBarrier, Watermark};
 pub use time_utils::{from_nanos, to_micros, to_millis, to_nanos};
 
 // ── Re-exports from new modules ──
-pub use fs_schema::{FsSchema, FsSchemaRef};
 pub use connector_options::ConnectorOptions;
 pub use formats::{BadData, Format, Framing, JsonCompression, JsonFormat};
+pub use fs_schema::{FsSchema, FsSchemaRef};
 pub use operator_config::MetadataField;
 
 // ── Well-known column names ──

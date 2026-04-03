@@ -12,15 +12,15 @@
 
 use std::sync::Arc;
 
-use datafusion::common::{plan_datafusion_err, plan_err, Result};
+use datafusion::common::{Result, plan_datafusion_err, plan_err};
 use datafusion::execution::SessionStateBuilder;
 use datafusion::sql::sqlparser::ast::{
-    CreateTable as SqlCreateTable, Expr as SqlExpr, ObjectType, SqlOption, Statement as DFStatement,
-    TableConstraint,
+    CreateTable as SqlCreateTable, Expr as SqlExpr, ObjectType, SqlOption,
+    Statement as DFStatement, TableConstraint,
 };
 use datafusion_common::TableReference;
 use datafusion_execution::config::SessionConfig;
-use datafusion_expr::{col, Extension, Expr, LogicalPlan};
+use datafusion_expr::{Expr, Extension, LogicalPlan, col};
 use sqlparser::ast::Statement;
 use tracing::debug;
 
@@ -28,25 +28,22 @@ use crate::coordinator::analyze::analysis::Analysis;
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
     DropStreamingTablePlan, DropTablePlan, PlanNode, ShowCatalogTablesPlan,
-    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan,
-    ShowStreamingTablesPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
+    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan, ShowStreamingTablesPlan,
+    StartFunctionPlan, StopFunctionPlan, StreamingTable,
 };
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction,
-    DropStreamingTableStatement, DropTableStatement, ShowCatalogTables,
-    ShowCreateStreamingTable, ShowCreateTable, ShowFunctions, ShowStreamingTables,
-    StartFunction, StatementVisitor, StatementVisitorContext, StatementVisitorResult,
-    StopFunction, StreamingTableStatement,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropStreamingTableStatement,
+    DropTableStatement, ShowCatalogTables, ShowCreateStreamingTable, ShowCreateTable,
+    ShowFunctions, ShowStreamingTables, StartFunction, StatementVisitor, StatementVisitorContext,
+    StatementVisitorResult, StopFunction, StreamingTableStatement,
 };
 use crate::coordinator::tool::ConnectorOptions;
-use crate::sql::analysis::{
-    maybe_add_key_extension_to_sink, rewrite_sinks, StreamSchemaProvider,
-};
+use crate::sql::analysis::{StreamSchemaProvider, maybe_add_key_extension_to_sink, rewrite_sinks};
 use crate::sql::common::with_option_keys as opt;
 use crate::sql::extensions::sink::StreamEgressNode;
 use crate::sql::functions::{is_json_union, serialize_outgoing_json};
 use crate::sql::logical_node::logical::{LogicalProgram, ProgramConfig};
-use crate::sql::logical_planner::optimizers::{produce_optimized_plan, ChainingOptimizer};
+use crate::sql::logical_planner::optimizers::{ChainingOptimizer, produce_optimized_plan};
 use crate::sql::logical_planner::planner::PlanToGraphVisitor;
 use crate::sql::rewrite_plan;
 use crate::sql::schema::source_table::SourceTable;
@@ -79,10 +76,7 @@ impl LogicalPlanVisitor {
         Self::new(schema_provider.clone()).compile_streaming_sink(stmt)
     }
 
-    fn compile_streaming_sink(
-        &self,
-        stmt: &StreamingTableStatement,
-    ) -> Result<StreamingTable> {
+    fn compile_streaming_sink(&self, stmt: &StreamingTableStatement) -> Result<StreamingTable> {
         let DFStatement::CreateStreamingTable {
             name,
             with_options,
@@ -94,16 +88,21 @@ impl LogicalPlanVisitor {
         };
 
         let sink_table_name = name.to_string();
-        debug!("Initiating streaming sink compilation for identifier: {}", sink_table_name);
+        debug!(
+            "Initiating streaming sink compilation for identifier: {}",
+            sink_table_name
+        );
 
         let mut sink_properties = ConnectorOptions::new(with_options, &None)?;
-        let connector_type = sink_properties.pull_opt_str(opt::CONNECTOR)?.ok_or_else(|| {
-            plan_datafusion_err!(
-            "Validation Error: Streaming table '{}' requires the '{}' property",
-            sink_table_name,
-            opt::CONNECTOR
-        )
-        })?;
+        let connector_type = sink_properties
+            .pull_opt_str(opt::CONNECTOR)?
+            .ok_or_else(|| {
+                plan_datafusion_err!(
+                    "Validation Error: Streaming table '{}' requires the '{}' property",
+                    sink_table_name,
+                    opt::CONNECTOR
+                )
+            })?;
 
         let partition_keys = Self::extract_partitioning_keys(&mut sink_properties)?;
 
@@ -119,8 +118,14 @@ impl LogicalPlanVisitor {
             &self.schema_provider,
         )?;
 
-        if query_logical_plan.schema().fields().iter().any(|f| is_json_union(f.data_type())) {
-            query_logical_plan = serialize_outgoing_json(&self.schema_provider, Arc::new(query_logical_plan));
+        if query_logical_plan
+            .schema()
+            .fields()
+            .iter()
+            .any(|f| is_json_union(f.data_type()))
+        {
+            query_logical_plan =
+                serialize_outgoing_json(&self.schema_provider, Arc::new(query_logical_plan));
         }
 
         let output_schema_fields = query_logical_plan
@@ -196,9 +201,7 @@ impl LogicalPlanVisitor {
         Ok(executable_program)
     }
 
-    fn extract_partitioning_keys(
-        options: &mut ConnectorOptions,
-    ) -> Result<Option<Vec<Expr>>> {
+    fn extract_partitioning_keys(options: &mut ConnectorOptions) -> Result<Option<Vec<Expr>>> {
         options
             .pull_opt_str(opt::PARTITION_BY)?
             .map(|raw_cols| raw_cols.split(',').map(|c| col(c.trim())).collect())
@@ -249,12 +252,11 @@ impl LogicalPlanVisitor {
         Ok(strategy)
     }
 
-    fn compile_connector_source_plan(
-        &self,
-        stmt: &SqlCreateTable,
-    ) -> Result<CreateTablePlan> {
+    fn compile_connector_source_plan(&self, stmt: &SqlCreateTable) -> Result<CreateTablePlan> {
         if stmt.query.is_some() {
-            return plan_err!("Syntax Error: CREATE TABLE ... AS SELECT combined with WITH ('connector'=...) is invalid. Use CREATE STREAMING TABLE instead.");
+            return plan_err!(
+                "Syntax Error: CREATE TABLE ... AS SELECT combined with WITH ('connector'=...) is invalid. Use CREATE STREAMING TABLE instead."
+            );
         }
         if stmt.or_replace {
             return plan_err!(
@@ -267,7 +269,9 @@ impl LogicalPlanVisitor {
             );
         }
         if stmt.external {
-            return plan_err!("Syntax Error: EXTERNAL keyword is redundant and unsupported for connector configurations.");
+            return plan_err!(
+                "Syntax Error: EXTERNAL keyword is redundant and unsupported for connector configurations."
+            );
         }
 
         let target_name = stmt.name.to_string();
@@ -287,12 +291,14 @@ impl LogicalPlanVisitor {
             .collect::<Vec<_>>();
 
         let mut connector_options = ConnectorOptions::new(&stmt.with_options, &None)?;
-        let adapter_type = connector_options.pull_opt_str(opt::CONNECTOR)?.ok_or_else(|| {
-            plan_datafusion_err!(
-                "Configuration Error: Missing required property '{}' in WITH clause",
-                opt::CONNECTOR
-            )
-        })?;
+        let adapter_type = connector_options
+            .pull_opt_str(opt::CONNECTOR)?
+            .ok_or_else(|| {
+                plan_datafusion_err!(
+                    "Configuration Error: Missing required property '{}' in WITH clause",
+                    opt::CONNECTOR
+                )
+            })?;
 
         let pk_constraints = Self::parse_primary_keys(&stmt.constraints)?;
         let watermark_strategy = Self::parse_watermark_strategy(&stmt.constraints)?;
@@ -376,9 +382,7 @@ impl StatementVisitor for LogicalPlanVisitor {
         stmt: &ShowCreateTable,
         _ctx: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        StatementVisitorResult::Plan(Box::new(ShowCreateTablePlan::new(
-            stmt.table_name.clone(),
-        )))
+        StatementVisitorResult::Plan(Box::new(ShowCreateTablePlan::new(stmt.table_name.clone())))
     }
 
     fn visit_create_python_function(
@@ -399,14 +403,15 @@ impl StatementVisitor for LogicalPlanVisitor {
         _ctx: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         if let Statement::CreateTable(ast_node) = &stmt.statement {
-            if ast_node.query.is_none()
-                && Self::contains_connector_property(&ast_node.with_options)
+            if ast_node.query.is_none() && Self::contains_connector_property(&ast_node.with_options)
             {
-                let execution_plan = self.compile_connector_source_plan(ast_node).unwrap_or_else(
-                    |err| {
-                        panic!("Fatal Compiler Error: Connector source resolution failed - {err:#}");
-                    },
-                );
+                let execution_plan =
+                    self.compile_connector_source_plan(ast_node)
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "Fatal Compiler Error: Connector source resolution failed - {err:#}"
+                            );
+                        });
                 return StatementVisitorResult::Plan(Box::new(execution_plan));
             }
         }
@@ -454,7 +459,9 @@ impl StatementVisitor for LogicalPlanVisitor {
             panic!("Fatal Compiler Error: Drop target must be of type TABLE");
         }
         if names.len() != 1 {
-            panic!("Fatal Compiler Error: Bulk drop operations are not supported. Specify exactly one table.");
+            panic!(
+                "Fatal Compiler Error: Bulk drop operations are not supported. Specify exactly one table."
+            );
         }
 
         StatementVisitorResult::Plan(Box::new(DropTablePlan::new(

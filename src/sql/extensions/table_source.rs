@@ -54,8 +54,7 @@ impl StreamIngestionNode {
         source_identifier: TableReference,
         source_definition: SourceTable,
     ) -> Result<Self> {
-        let resolved_schema =
-            Self::build_ingestion_schema(&source_identifier, &source_definition)?;
+        let resolved_schema = Self::build_ingestion_schema(&source_identifier, &source_definition)?;
 
         Ok(Self {
             source_identifier,
@@ -72,7 +71,13 @@ impl StreamIngestionNode {
             .schema_specs
             .iter()
             .filter(|col| !col.is_computed())
-            .map(|col| (Some(identifier.clone()), Arc::new(col.arrow_field().clone())).into())
+            .map(|col| {
+                (
+                    Some(identifier.clone()),
+                    Arc::new(col.arrow_field().clone()),
+                )
+                    .into()
+            })
             .collect();
 
         let base_schema = Arc::new(schema_from_df_fields(&physical_fields)?);
@@ -169,8 +174,7 @@ impl StreamingOperatorBlueprint for StreamIngestionNode {
     }
 
     fn yielded_schema(&self) -> FsSchema {
-        FsSchema::from_schema_keys(Arc::new(self.resolved_schema.as_ref().into()), vec![]).expect(
-            "Fatal: Failed to generate output schema for stream ingestion",
-        )
+        FsSchema::from_schema_keys(Arc::new(self.resolved_schema.as_ref().into()), vec![])
+            .expect("Fatal: Failed to generate output schema for stream ingestion")
     }
 }

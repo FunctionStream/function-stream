@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use super::message::CheckpointBarrier;
+use crate::runtime::streaming::protocol::CheckpointBarrier;
 
 /// Control messages sent from the controller to worker tasks.
 #[derive(Debug, Clone)]

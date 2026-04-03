@@ -57,11 +57,7 @@ fn format_columns(schema: &datafusion::arrow::datatypes::Schema) -> Vec<String> 
         .fields()
         .iter()
         .map(|f| {
-            let null = if f.is_nullable() {
-                ""
-            } else {
-                " NOT NULL"
-            };
+            let null = if f.is_nullable() { "" } else { " NOT NULL" };
             format!("  {} {}{}", f.name(), data_type_sql(f.data_type()), null)
         })
         .collect()
@@ -190,9 +186,9 @@ pub fn show_create_stream_table(table: &StreamTable) -> String {
             ddl
         }
         StreamTable::Sink { name, program } => {
-            let schema = program
-                .egress_arrow_schema()
-                .unwrap_or_else(|| std::sync::Arc::new(datafusion::arrow::datatypes::Schema::empty()));
+            let schema = program.egress_arrow_schema().unwrap_or_else(|| {
+                std::sync::Arc::new(datafusion::arrow::datatypes::Schema::empty())
+            });
             let cols = format_columns(&schema);
             let mut ddl = format!(
                 "CREATE STREAMING TABLE {name}\nWITH ('connector' = '...') AS SELECT ...\n/* Sink WITH / AS SELECT text is not stored. Output schema:\n{}\n*/\n\n",
@@ -247,7 +243,9 @@ pub fn show_create_catalog_table(table: &CatalogTable) -> String {
             ddl
         }
         CatalogTable::TableFromQuery { name, .. } => {
-            format!("CREATE TABLE {name} AS SELECT ...;\n/* logical query text is not persisted */\n")
+            format!(
+                "CREATE TABLE {name} AS SELECT ...;\n/* logical query text is not persisted */\n"
+            )
         }
     }
 }

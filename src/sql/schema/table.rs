@@ -10,19 +10,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-use std::time::Duration;
+use super::source_table::SourceTable;
+use crate::sql::analysis::rewrite_plan;
+use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::logical_planner::optimizers::produce_optimized_plan;
+use crate::sql::schema::StreamSchemaProvider;
+use crate::sql::types::{DFField, ProcessingMode};
 use datafusion::arrow::datatypes::FieldRef;
 use datafusion::common::{Result, plan_err};
 use datafusion::logical_expr::{Extension, LogicalPlan};
 use datafusion::sql::sqlparser::ast::Statement;
 use protocol::grpc::api::ConnectorOp;
-use super::source_table::SourceTable;
-use crate::sql::logical_planner::optimizers::produce_optimized_plan;
-use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
-use crate::sql::analysis::rewrite_plan;
-use crate::sql::types::{DFField, ProcessingMode};
+use std::sync::Arc;
+use std::time::Duration;
 
 /// Represents all table types in the FunctionStream SQL catalog.
 #[allow(clippy::enum_variant_names)]

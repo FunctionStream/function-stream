@@ -10,11 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 pub mod control;
 pub mod event;
-pub mod stream_out;
-pub mod tracked;
-pub mod watermark;
 
-pub use stream_out::StreamOutput;
+pub use event::{CheckpointBarrier, StreamOutput, Watermark};

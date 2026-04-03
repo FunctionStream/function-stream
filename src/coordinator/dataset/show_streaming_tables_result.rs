@@ -41,7 +41,11 @@ impl DataSet for ShowStreamingTablesResult {
         let job_ids: Vec<&str> = self.jobs.iter().map(|j| j.job_id.as_str()).collect();
         let statuses: Vec<&str> = self.jobs.iter().map(|j| j.status.as_str()).collect();
         let pipeline_counts: Vec<i32> = self.jobs.iter().map(|j| j.pipeline_count).collect();
-        let uptimes: Vec<String> = self.jobs.iter().map(|j| format_duration(j.uptime_secs)).collect();
+        let uptimes: Vec<String> = self
+            .jobs
+            .iter()
+            .map(|j| format_duration(j.uptime_secs))
+            .collect();
         let uptime_refs: Vec<&str> = uptimes.iter().map(|s| s.as_str()).collect();
 
         arrow_array::RecordBatch::try_new(

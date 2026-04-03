@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use std::any::Any;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -27,10 +26,10 @@ use datafusion::common::{DataFusionError, Result, plan_err};
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::logical_expr::ColumnarValue;
 use datafusion::physical_plan::{DisplayAs, ExecutionPlan, PlanProperties};
-use futures::{ready, stream::Stream, StreamExt};
+use futures::{StreamExt, ready, stream::Stream};
 
-use crate::sql::common::constants::{cdc, debezium_op_short, physical_plan_node_name};
 use crate::sql::common::TIMESTAMP_FIELD;
+use crate::sql::common::constants::{cdc, debezium_op_short, physical_plan_node_name};
 use crate::sql::functions::MultiHashFunction;
 use crate::sql::physical::meta::{updating_meta_field, updating_meta_fields};
 use crate::sql::physical::readers::make_stream_properties;

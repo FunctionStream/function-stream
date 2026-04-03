@@ -16,9 +16,9 @@ use datafusion::arrow::datatypes::{DataType, Field};
 use datafusion::common::{Result, plan_err};
 
 use super::column_descriptor::ColumnDescriptor;
+use crate::sql::common::Format;
 use crate::sql::common::constants::{cdc, connection_format_value, with_opt_bool_str};
 use crate::sql::common::with_option_keys as opt;
-use crate::sql::common::Format;
 
 /// High-level payload encoding (orthogonal to `Format` wire details in `ConnectionSchema`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

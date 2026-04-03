@@ -18,12 +18,12 @@ use datafusion::common::{Result as DFResult, plan_datafusion_err, plan_err};
 
 use super::connector_options::ConnectorOptions;
 use super::constants::{bad_data_value, connection_format_value, framing_method_value};
-use super::with_option_keys as opt;
 use super::formats::{
     AvroFormat, BadData, DecimalEncoding, Format, Framing, JsonCompression, JsonFormat,
     NewlineDelimitedFraming, ParquetCompression, ParquetFormat, ProtobufFormat, RawBytesFormat,
     RawStringFormat, TimestampFormat,
 };
+use super::with_option_keys as opt;
 
 impl JsonFormat {
     pub fn from_opts(opts: &mut ConnectorOptions) -> DFResult<Self> {
@@ -44,14 +44,12 @@ impl JsonFormat {
             j.unstructured = v;
         }
         if let Some(s) = opts.pull_opt_str(opt::JSON_TIMESTAMP_FORMAT)? {
-            j.timestamp_format = TimestampFormat::try_from(s.as_str()).map_err(|_| {
-                plan_datafusion_err!("invalid json.timestamp_format '{}'", s)
-            })?;
+            j.timestamp_format = TimestampFormat::try_from(s.as_str())
+                .map_err(|_| plan_datafusion_err!("invalid json.timestamp_format '{}'", s))?;
         }
         if let Some(s) = opts.pull_opt_str(opt::JSON_DECIMAL_ENCODING)? {
-            j.decimal_encoding = DecimalEncoding::try_from(s.as_str()).map_err(|_| {
-                plan_datafusion_err!("invalid json.decimal_encoding '{s}'")
-            })?;
+            j.decimal_encoding = DecimalEncoding::try_from(s.as_str())
+                .map_err(|_| plan_datafusion_err!("invalid json.decimal_encoding '{s}'"))?;
         }
         if let Some(s) = opts.pull_opt_str(opt::JSON_COMPRESSION)? {
             j.compression = JsonCompression::from_str(&s)
@@ -81,9 +79,7 @@ impl Format {
             connection_format_value::PROTOBUF => {
                 Ok(Some(Format::Protobuf(ProtobufFormat::from_opts(opts)?)))
             }
-            connection_format_value::RAW_STRING => {
-                Ok(Some(Format::RawString(RawStringFormat {})))
-            }
+            connection_format_value::RAW_STRING => Ok(Some(Format::RawString(RawStringFormat {}))),
             connection_format_value::RAW_BYTES => Ok(Some(Format::RawBytes(RawBytesFormat {}))),
             _ => plan_err!("unknown format '{name}'"),
         }

@@ -12,11 +12,11 @@
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::source::SourceOperator;
-use crate::runtime::streaming::protocol::stream_out::StreamOutput;
+use crate::runtime::streaming::protocol::event::StreamOutput;
+use crate::sql::common::{CheckpointBarrier, Watermark};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
 use std::time::Duration;
-use crate::sql::common::{CheckpointBarrier, Watermark};
 
 // ---------------------------------------------------------------------------
 // ConstructedOperator

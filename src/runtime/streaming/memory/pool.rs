@@ -11,8 +11,8 @@
 // limitations under the License.
 
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Notify;
 use tracing::{debug, warn};
 
@@ -65,7 +65,10 @@ impl MemoryPool {
                 }
             }
 
-            debug!("Backpressure engaged: waiting for {} bytes to be freed...", bytes);
+            debug!(
+                "Backpressure engaged: waiting for {} bytes to be freed...",
+                bytes
+            );
             self.notify.notified().await;
         }
     }

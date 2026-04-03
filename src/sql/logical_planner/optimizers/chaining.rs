@@ -16,7 +16,6 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::*;
 use petgraph::visit::NodeRef;
 
-
 use crate::sql::logical_node::logical::{LogicalEdgeType, LogicalGraph, Optimizer};
 
 pub type NodeId = NodeIndex;
@@ -119,7 +118,7 @@ mod tests {
 
     use crate::sql::common::FsSchema;
     use crate::sql::logical_node::logical::{
-        LogicalEdge, LogicalEdgeType, LogicalGraph, LogicalNode, Optimizer, OperatorName,
+        LogicalEdge, LogicalEdgeType, LogicalGraph, LogicalNode, OperatorName, Optimizer,
     };
 
     use super::ChainingOptimizer;

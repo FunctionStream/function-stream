@@ -26,12 +26,14 @@ use protocol::grpc::api::{AsyncUdfOperator, AsyncUdfOrdering};
 
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::extension_node;
+use crate::sql::common::constants::sql_field;
 use crate::sql::common::{FsSchema, FsSchemaRef};
-use crate::sql::extensions::streaming_operator_blueprint::{CompiledTopologyNode, StreamingOperatorBlueprint};
+use crate::sql::extensions::streaming_operator_blueprint::{
+    CompiledTopologyNode, StreamingOperatorBlueprint,
+};
 use crate::sql::logical_node::logical::{
     DylibUdfConfig, LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName,
 };
-use crate::sql::common::constants::sql_field;
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{DFField, fields_with_qualifiers, schema_from_df_fields};
 
@@ -208,13 +210,15 @@ impl UserDefinedLogicalNodeCore for AsyncFunctionExecutionNode {
         write!(
             f,
             "AsyncFunctionExecution<{}>: Concurrency={}, Ordered={}",
-            self.operator_name,
-            self.concurrency_limit,
-            self.preserve_ordering
+            self.operator_name, self.concurrency_limit, self.preserve_ordering
         )
     }
 
-    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(
+        &self,
+        exprs: Vec<Expr>,
+        mut inputs: Vec<LogicalPlan>,
+    ) -> Result<Self> {
         if inputs.len() != 1 {
             return internal_err!(
                 "AsyncFunctionExecutionNode expects exactly 1 input, but received {}",

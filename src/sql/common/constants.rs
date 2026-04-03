@@ -10,8 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
 pub mod scalar_fn {
     pub const GET_FIRST_JSON_OBJECT: &str = "get_first_json_object";
     pub const EXTRACT_JSON: &str = "extract_json";
@@ -20,20 +18,17 @@ pub mod scalar_fn {
     pub const MULTI_HASH: &str = "multi_hash";
 }
 
-
 pub mod window_fn {
     pub const HOP: &str = "hop";
     pub const TUMBLE: &str = "tumble";
     pub const SESSION: &str = "session";
 }
 
-
 pub mod planning_placeholder_udf {
     pub const UNNEST: &str = "unnest";
     pub const ROW_TIME: &str = "row_time";
     pub const LIST_ELEMENT_FIELD: &str = "field";
 }
-
 
 pub mod operator_feature {
     pub const ASYNC_UDF: &str = "async-udf";
@@ -49,7 +44,6 @@ pub mod operator_feature {
     pub const CONNECTOR_SOURCE: &str = "connector-source";
     pub const CONNECTOR_SINK: &str = "connector-sink";
 }
-
 
 pub mod extension_node {
     pub const STREAM_WINDOW_AGGREGATE: &str = "StreamWindowAggregateNode";
@@ -70,7 +64,6 @@ pub mod extension_node {
     pub const PACK_DEBEZIUM_ENVELOPE: &str = "PackDebeziumEnvelopeNode";
 }
 
-
 pub mod proto_operator_name {
     pub const TUMBLING_WINDOW: &str = "TumblingWindow";
     pub const UPDATING_AGGREGATE: &str = "UpdatingAggregate";
@@ -80,13 +73,11 @@ pub mod proto_operator_name {
     pub const INSTANT_WINDOW_LABEL: &str = "instant window";
 }
 
-
 pub mod runtime_operator_kind {
     pub const STREAMING_JOIN: &str = "streaming_join";
     pub const WATERMARK_GENERATOR: &str = "watermark_generator";
     pub const STREAMING_WINDOW_EVALUATOR: &str = "streaming_window_evaluator";
 }
-
 
 pub mod factory_operator_name {
     pub const CONNECTOR_SOURCE: &str = "ConnectorSource";
@@ -95,19 +86,16 @@ pub mod factory_operator_name {
     pub const KAFKA_SINK: &str = "KafkaSink";
 }
 
-
 pub mod cdc {
     pub const BEFORE: &str = "before";
     pub const AFTER: &str = "after";
     pub const OP: &str = "op";
 }
 
-
 pub mod updating_state_field {
     pub const IS_RETRACT: &str = "is_retract";
     pub const ID: &str = "id";
 }
-
 
 pub mod sql_field {
     pub const ASYNC_RESULT: &str = "__async_result";
@@ -118,12 +106,10 @@ pub mod sql_field {
     pub const UPDATING_META_FIELD: &str = "_updating_meta";
 }
 
-
 pub mod sql_planning_default {
     pub const DEFAULT_PARALLELISM: usize = 4;
     pub const PLANNING_TTL_SECS: u64 = 24 * 60 * 60;
 }
-
 
 pub mod with_opt_bool_str {
     pub const TRUE: &str = "true";
@@ -147,7 +133,6 @@ pub mod interval_duration_unit {
     pub const D: &str = "d";
 }
 
-
 pub mod connection_format_value {
     pub const JSON: &str = "json";
     pub const DEBEZIUM_JSON: &str = "debezium_json";
@@ -167,7 +152,6 @@ pub mod bad_data_value {
     pub const FAIL: &str = "fail";
     pub const DROP: &str = "drop";
 }
-
 
 pub mod timestamp_format_value {
     pub const RFC3339_SNAKE: &str = "rfc3339";
@@ -196,7 +180,6 @@ pub mod parquet_compression_value {
     pub const LZ4_RAW: &str = "lz4_raw";
 }
 
-
 pub mod date_part_keyword {
     pub const YEAR: &str = "year";
     pub const MONTH: &str = "month";
@@ -222,7 +205,6 @@ pub mod date_trunc_keyword {
     pub const MINUTE: &str = "minute";
     pub const SECOND: &str = "second";
 }
-
 
 pub mod mem_exec_join_side {
     pub const LEFT: &str = "left";
@@ -254,7 +236,6 @@ pub mod debezium_op_short {
     pub const DELETE: &str = "d";
 }
 
-
 pub mod connector_type {
     pub const KAFKA: &str = "kafka";
     pub const KINESIS: &str = "kinesis";
@@ -273,17 +254,13 @@ pub mod connector_type {
     pub const POSTGRES: &str = "postgres";
 }
 
-
 pub mod connection_table_role {
     pub const SOURCE: &str = "source";
     pub const SINK: &str = "sink";
     pub const LOOKUP: &str = "lookup";
 }
 
-pub const SUPPORTED_CONNECTOR_ADAPTERS: &[&str] = &[
-    connector_type::KAFKA,
-];
-
+pub const SUPPORTED_CONNECTOR_ADAPTERS: &[&str] = &[connector_type::KAFKA];
 
 pub mod kafka_with_value {
     pub const SCAN_LATEST: &str = "latest";

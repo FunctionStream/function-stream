@@ -29,42 +29,36 @@ impl RocksDbMetaStore {
     pub fn open<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let path = path.as_ref();
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).with_context(|| {
-                format!("stream catalog: create parent directory {parent:?}")
-            })?;
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("stream catalog: create parent directory {parent:?}"))?;
         }
         let mut opts = Options::default();
         opts.create_if_missing(true);
-        let db = DB::open(&opts, path).with_context(|| {
-            format!("stream catalog: open RocksDB at {}", path.display())
-        })?;
+        let db = DB::open(&opts, path)
+            .with_context(|| format!("stream catalog: open RocksDB at {}", path.display()))?;
         Ok(Self { db: Arc::new(db) })
     }
 }
 
 impl MetaStore for RocksDbMetaStore {
     fn put(&self, key: &str, value: Vec<u8>) -> Result<()> {
-        self.db
-            .put(key.as_bytes(), value.as_slice())
-            .map_err(|e| datafusion::common::DataFusionError::Execution(format!(
-                "stream catalog store put: {e}"
-            )))
+        self.db.put(key.as_bytes(), value.as_slice()).map_err(|e| {
+            datafusion::common::DataFusionError::Execution(format!("stream catalog store put: {e}"))
+        })
     }
 
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        self.db
-            .get(key.as_bytes())
-            .map_err(|e| datafusion::common::DataFusionError::Execution(format!(
-                "stream catalog store get: {e}"
-            )))
+        self.db.get(key.as_bytes()).map_err(|e| {
+            datafusion::common::DataFusionError::Execution(format!("stream catalog store get: {e}"))
+        })
     }
 
     fn delete(&self, key: &str) -> Result<()> {
-        self.db
-            .delete(key.as_bytes())
-            .map_err(|e| datafusion::common::DataFusionError::Execution(format!(
+        self.db.delete(key.as_bytes()).map_err(|e| {
+            datafusion::common::DataFusionError::Execution(format!(
                 "stream catalog store delete: {e}"
-            )))
+            ))
+        })
     }
 
     fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
@@ -102,10 +96,8 @@ mod tests {
 
     #[test]
     fn put_get_scan_roundtrip() {
-        let dir: PathBuf = std::env::temp_dir().join(format!(
-            "fs_stream_catalog_test_{}",
-            Uuid::new_v4()
-        ));
+        let dir: PathBuf =
+            std::env::temp_dir().join(format!("fs_stream_catalog_test_{}", Uuid::new_v4()));
         let _ = std::fs::remove_dir_all(&dir);
 
         let store = RocksDbMetaStore::open(&dir).expect("open");

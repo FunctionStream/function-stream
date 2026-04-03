@@ -104,7 +104,11 @@ impl UserDefinedLogicalNodeCore for SystemTimestampInjectorNode {
         )
     }
 
-    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, mut inputs: Vec<LogicalPlan>) -> Result<Self> {
+    fn with_exprs_and_inputs(
+        &self,
+        _exprs: Vec<Expr>,
+        mut inputs: Vec<LogicalPlan>,
+    ) -> Result<Self> {
         if inputs.len() != 1 {
             return internal_err!(
                 "SystemTimestampInjectorNode requires exactly 1 upstream logical plan, but received {}",

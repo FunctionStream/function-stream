@@ -10,16 +10,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use anyhow::Result;
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
 use futures::StreamExt;
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::operators::StatelessPhysicalExecutor;
-use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
 pub struct ValueExecutionOperator {

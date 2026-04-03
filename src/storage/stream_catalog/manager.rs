@@ -12,8 +12,8 @@
 
 use std::sync::{Arc, OnceLock};
 
-use anyhow::{anyhow, bail, Context};
-use datafusion::common::{internal_err, plan_err, Result as DFResult};
+use anyhow::{Context, anyhow, bail};
+use datafusion::common::{Result as DFResult, internal_err, plan_err};
 use prost::Message;
 use protocol::grpc::api::FsProgram;
 use protocol::storage::{self as pb, table_definition};
@@ -110,9 +110,7 @@ impl CatalogManager {
         Ok(())
     }
 
-    pub fn load_streaming_job_definitions(
-        &self,
-    ) -> DFResult<Vec<(String, FsProgram)>> {
+    pub fn load_streaming_job_definitions(&self) -> DFResult<Vec<(String, FsProgram)>> {
         let records = self.store.scan_prefix(STREAMING_JOB_KEY_PREFIX)?;
         let mut out = Vec::with_capacity(records.len());
         for (key, payload) in records {
@@ -316,10 +314,12 @@ impl CatalogManager {
                     table_definition::TableType::ConnectorTable(catalog_row)
                 }
             }
-            CatalogTable::TableFromQuery { name, .. } => return plan_err!(
-                "Persisting query-defined table '{}' is not supported by stream catalog storage",
-                name
-            ),
+            CatalogTable::TableFromQuery { name, .. } => {
+                return plan_err!(
+                    "Persisting query-defined table '{}' is not supported by stream catalog storage",
+                    name
+                );
+            }
         };
 
         Ok(pb::TableDefinition {
@@ -369,10 +369,13 @@ impl CatalogManager {
 
         // Rebuild strongly-typed ConnectorConfig from persisted WITH options.
         if source.connector().eq_ignore_ascii_case("kafka") {
-            use crate::sql::schema::kafka_operator_config::build_kafka_proto_config_from_string_map;
             use crate::sql::schema::ConnectorConfig;
-            let opts_map: std::collections::HashMap<String, String> =
-                source.catalog_with_options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            use crate::sql::schema::kafka_operator_config::build_kafka_proto_config_from_string_map;
+            let opts_map: std::collections::HashMap<String, String> = source
+                .catalog_with_options
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             let physical = source.produce_physical_schema();
             if let Ok(proto_cfg) = build_kafka_proto_config_from_string_map(opts_map, &physical) {
                 source.connector_config = match proto_cfg {
@@ -390,7 +393,11 @@ impl CatalogManager {
         } else {
             use crate::sql::schema::ConnectorConfig;
             source.connector_config = ConnectorConfig::Generic(
-                source.catalog_with_options.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+                source
+                    .catalog_with_options
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
             );
         }
 
@@ -421,7 +428,8 @@ impl CatalogManager {
 
     fn load_catalog_tables_map(
         &self,
-    ) -> DFResult<std::collections::HashMap<crate::sql::schema::ObjectName, Arc<CatalogTable>>> {
+    ) -> DFResult<std::collections::HashMap<crate::sql::schema::ObjectName, Arc<CatalogTable>>>
+    {
         let mut out = std::collections::HashMap::new();
         let records = self.store.scan_prefix(CATALOG_KEY_PREFIX)?;
         for (key, payload) in records {
@@ -557,14 +565,12 @@ pub fn initialize_stream_catalog(config: &crate::config::GlobalConfig) -> anyhow
         )
     })?;
 
-    let store = std::sync::Arc::new(
-        super::RocksDbMetaStore::open(&path).with_context(|| {
-            format!(
-                "Failed to open stream catalog RocksDB at {}",
-                path.display()
-            )
-        })?,
-    );
+    let store = std::sync::Arc::new(super::RocksDbMetaStore::open(&path).with_context(|| {
+        format!(
+            "Failed to open stream catalog RocksDB at {}",
+            path.display()
+        )
+    })?);
 
     CatalogManager::init_global(store).context("Stream catalog (CatalogManager) init failed")
 }
@@ -607,10 +613,7 @@ mod tests {
 
         mgr.add_catalog_table(table).unwrap();
 
-        let got = mgr
-            .get_catalog_table("t1")
-            .unwrap()
-            .expect("table present");
+        let got = mgr.get_catalog_table("t1").unwrap().expect("table present");
         assert_eq!(got.name(), "t1");
     }
 

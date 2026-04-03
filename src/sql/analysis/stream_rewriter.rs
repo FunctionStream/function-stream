@@ -13,14 +13,14 @@
 use std::sync::Arc;
 
 use super::StreamSchemaProvider;
-use crate::sql::extensions::StreamingOperatorBlueprint;
-use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::analysis::TimeWindowNullCheckRemover;
 use crate::sql::analysis::row_time_rewriter::RowTimeRewriter;
 use crate::sql::analysis::{
     aggregate_rewriter::AggregateRewriter, join_rewriter::JoinRewriter,
     window_function_rewriter::WindowFunctionRewriter,
 };
-use crate::sql::analysis::TimeWindowNullCheckRemover;
+use crate::sql::extensions::StreamingOperatorBlueprint;
+use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
 use crate::sql::schema::utils::{add_timestamp_field, has_timestamp_field};
 use crate::sql::types::{DFField, TIMESTAMP_FIELD};
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
@@ -164,7 +164,10 @@ impl<'a> StreamRewriter<'a> {
             // we skip wrapping to avoid unnecessary nesting of logical nodes.
             if let LogicalPlan::Extension(Extension { node }) = input.as_ref() {
                 let stream_ext: &dyn StreamingOperatorBlueprint = node.try_into().map_err(|e| {
-                    DataFusionError::Internal(format!("Failed to resolve StreamingOperatorBlueprint: {}", e))
+                    DataFusionError::Internal(format!(
+                        "Failed to resolve StreamingOperatorBlueprint: {}",
+                        e
+                    ))
                 })?;
 
                 if !stream_ext.is_passthrough_boundary() {

@@ -10,12 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
-use prost::Message;
-use std::collections::HashMap;
-use std::sync::Arc;
-use protocol::grpc::api::ProjectionOperator as ProjectionOperatorProto;
 use super::operator_constructor::OperatorConstructor;
 use crate::runtime::streaming::api::operator::ConstructedOperator;
 use crate::runtime::streaming::factory::connector::{
@@ -26,6 +20,11 @@ use crate::runtime::streaming::operators::grouping::IncrementalAggregatingConstr
 use crate::runtime::streaming::operators::joins::{
     InstantJoinConstructor, JoinWithExpirationConstructor,
 };
+use anyhow::{Result, anyhow};
+use prost::Message;
+use protocol::grpc::api::ProjectionOperator as ProjectionOperatorProto;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::runtime::streaming::operators::watermark::WatermarkGeneratorConstructor;
 use crate::runtime::streaming::operators::windows::{
@@ -36,10 +35,10 @@ use crate::runtime::streaming::operators::{
     KeyExecutionOperator, ProjectionOperator, StatelessPhysicalExecutor, ValueExecutionOperator,
 };
 use protocol::grpc::api::{
-    ExpressionWatermarkConfig, JoinOperator as JoinOperatorProto,
-    KeyPlanOperator as KeyByProto,
-    SessionWindowAggregateOperator, SlidingWindowAggregateOperator, TumblingWindowAggregateOperator,
-    UpdatingAggregateOperator, ValuePlanOperator, WindowFunctionOperator as WindowFunctionProto,
+    ExpressionWatermarkConfig, JoinOperator as JoinOperatorProto, KeyPlanOperator as KeyByProto,
+    SessionWindowAggregateOperator, SlidingWindowAggregateOperator,
+    TumblingWindowAggregateOperator, UpdatingAggregateOperator, ValuePlanOperator,
+    WindowFunctionOperator as WindowFunctionProto,
 };
 
 use crate::sql::logical_node::logical::OperatorName;
@@ -64,21 +63,22 @@ impl OperatorFactory {
         self.constructors.insert(name.to_string(), constructor);
     }
 
-    pub fn register_named(&mut self, name: OperatorName, constructor: Box<dyn OperatorConstructor>) {
+    pub fn register_named(
+        &mut self,
+        name: OperatorName,
+        constructor: Box<dyn OperatorConstructor>,
+    ) {
         self.register(name.as_registry_key(), constructor);
     }
 
     pub fn create_operator(&self, name: &str, payload: &[u8]) -> Result<ConstructedOperator> {
-        let ctor = self
-            .constructors
-            .get(name)
-            .ok_or_else(|| {
-                anyhow!(
-                    "FATAL: Operator '{}' not found in Factory Registry. \
+        let ctor = self.constructors.get(name).ok_or_else(|| {
+            anyhow!(
+                "FATAL: Operator '{}' not found in Factory Registry. \
                      Ensure the worker is compiled with the correct plugins.",
-                    name
-                )
-            })?;
+                name
+            )
+        })?;
 
         ctor.with_config(payload, self.registry.clone())
     }
@@ -88,9 +88,18 @@ impl OperatorFactory {
     }
 
     fn register_builtins(&mut self) {
-        self.register_named(OperatorName::TumblingWindowAggregate, Box::new(TumblingWindowBridge));
-        self.register_named(OperatorName::SlidingWindowAggregate, Box::new(SlidingWindowBridge));
-        self.register_named(OperatorName::SessionWindowAggregate, Box::new(SessionWindowBridge));
+        self.register_named(
+            OperatorName::TumblingWindowAggregate,
+            Box::new(TumblingWindowBridge),
+        );
+        self.register_named(
+            OperatorName::SlidingWindowAggregate,
+            Box::new(SlidingWindowBridge),
+        );
+        self.register_named(
+            OperatorName::SessionWindowAggregate,
+            Box::new(SessionWindowBridge),
+        );
 
         self.register_named(OperatorName::ExpressionWatermark, Box::new(WatermarkBridge));
 
@@ -102,13 +111,19 @@ impl OperatorFactory {
         self.register_named(OperatorName::InstantJoin, Box::new(InstantJoinBridge));
         self.register_named(OperatorName::LookupJoin, Box::new(LookupJoinBridge));
 
-        self.register_named(OperatorName::UpdatingAggregate, Box::new(IncrementalAggregateBridge));
+        self.register_named(
+            OperatorName::UpdatingAggregate,
+            Box::new(IncrementalAggregateBridge),
+        );
 
         self.register_named(OperatorName::KeyBy, Box::new(KeyByBridge));
 
         self.register_named(OperatorName::Projection, Box::new(ProjectionConstructor));
         self.register_named(OperatorName::Value, Box::new(ValueBridge));
-        self.register_named(OperatorName::ConnectorSource, Box::new(ConnectorSourceBridge));
+        self.register_named(
+            OperatorName::ConnectorSource,
+            Box::new(ConnectorSourceBridge),
+        );
         self.register_named(OperatorName::ConnectorSink, Box::new(ConnectorSinkBridge));
 
         crate::runtime::streaming::factory::register_kafka_connector_plugins(self);
@@ -188,7 +203,9 @@ impl OperatorConstructor for InstantJoinBridge {
 struct LookupJoinBridge;
 impl OperatorConstructor for LookupJoinBridge {
     fn with_config(&self, _config: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        Err(anyhow!("LookupJoin is not supported in the current runtime"))
+        Err(anyhow!(
+            "LookupJoin is not supported in the current runtime"
+        ))
     }
 }
 
@@ -255,7 +272,6 @@ impl OperatorConstructor for ConnectorSinkBridge {
         ConnectorSinkDispatcher.with_config(config, registry)
     }
 }
-
 
 struct ValueExecutionConstructor;
 impl ValueExecutionConstructor {

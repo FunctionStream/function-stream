@@ -11,9 +11,9 @@
 // limitations under the License.
 
 use crate::runtime::streaming::memory::MemoryPool;
-use crate::runtime::streaming::protocol::event::StreamEvent;
-use crate::runtime::streaming::protocol::tracked::TrackedEvent;
 use crate::runtime::streaming::network::endpoint::PhysicalSender;
+use crate::runtime::streaming::protocol::event::StreamEvent;
+use crate::runtime::streaming::protocol::event::TrackedEvent;
 
 use arrow_array::RecordBatch;
 use std::sync::Arc;
@@ -96,11 +96,7 @@ impl TaskContext {
         Ok(())
     }
 
-    pub async fn collect_keyed(
-        &self,
-        key_hash: u64,
-        batch: RecordBatch,
-    ) -> anyhow::Result<()> {
+    pub async fn collect_keyed(&self, key_hash: u64, batch: RecordBatch) -> anyhow::Result<()> {
         if self.outboxes.is_empty() {
             return Ok(());
         }

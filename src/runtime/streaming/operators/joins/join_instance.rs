@@ -10,13 +10,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arrow::compute::{max, min, partition, sort_to_indices, take};
 use arrow_array::{RecordBatch, TimestampNanosecondArray};
+use datafusion::execution::SendableRecordBatchStream;
 use datafusion::execution::context::SessionContext;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::execution::SendableRecordBatchStream;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion_proto::physical_plan::AsExecutionPlan;
 use datafusion_proto::protobuf::PhysicalPlanNode;
@@ -25,18 +24,18 @@ use prost::Message;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::warn;
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
+use crate::sql::common::constants::mem_exec_join_side;
+use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark, from_nanos};
+use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 use async_trait::async_trait;
 use protocol::grpc::api::JoinOperator;
-use crate::runtime::streaming::StreamOutput;
-use crate::sql::common::constants::mem_exec_join_side;
-use crate::sql::common::{from_nanos, CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
-use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum JoinSide {
@@ -271,10 +270,8 @@ impl InstantJoinConstructor {
     ) -> anyhow::Result<InstantJoinOperator> {
         let join_physical_plan_node = PhysicalPlanNode::decode(&mut config.join_plan.as_slice())?;
 
-        let left_input_schema: Arc<FsSchema> =
-            Arc::new(config.left_schema.unwrap().try_into()?);
-        let right_input_schema: Arc<FsSchema> =
-            Arc::new(config.right_schema.unwrap().try_into()?);
+        let left_input_schema: Arc<FsSchema> = Arc::new(config.left_schema.unwrap().try_into()?);
+        let right_input_schema: Arc<FsSchema> = Arc::new(config.right_schema.unwrap().try_into()?);
 
         let left_receiver_hook = Arc::new(RwLock::new(None));
         let right_receiver_hook = Arc::new(RwLock::new(None));

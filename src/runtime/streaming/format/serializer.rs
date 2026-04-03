@@ -10,11 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arrow_array::{Array, RecordBatch, StructArray};
-use arrow_json::writer::make_encoder;
 use arrow_json::EncoderOptions;
+use arrow_json::writer::make_encoder;
 use arrow_schema::{DataType, Field, SchemaRef};
 use std::sync::Arc;
 

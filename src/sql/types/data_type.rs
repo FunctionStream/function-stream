@@ -17,8 +17,8 @@ use datafusion::arrow::datatypes::{
 };
 use datafusion::common::{Result, plan_datafusion_err, plan_err};
 
-use crate::sql::common::constants::planning_placeholder_udf;
 use crate::sql::common::FsExtensionType;
+use crate::sql::common::constants::planning_placeholder_udf;
 
 pub fn convert_data_type(
     sql_type: &datafusion::sql::sqlparser::ast::DataType,
@@ -34,7 +34,11 @@ pub fn convert_data_type(
             Ok((
                 DataType::List(Arc::new(FsExtensionType::add_metadata(
                     extension,
-                    Field::new(planning_placeholder_udf::LIST_ELEMENT_FIELD, data_type, true),
+                    Field::new(
+                        planning_placeholder_udf::LIST_ELEMENT_FIELD,
+                        data_type,
+                        true,
+                    ),
                 ))),
                 None,
             ))

@@ -10,8 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arrow::compute::concat_batches;
 use arrow_array::RecordBatch;
 use datafusion::execution::context::SessionContext;
@@ -25,14 +24,14 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tracing::warn;
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
-use async_trait::async_trait;
-use protocol::grpc::api::JoinOperator;
-use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
 use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
+use async_trait::async_trait;
+use protocol::grpc::api::JoinOperator;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum JoinSide {
@@ -133,9 +132,7 @@ impl JoinWithExpirationOperator {
         batch: RecordBatch,
         ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
-        let current_time = ctx
-            .last_present_watermark()
-            .unwrap_or_else(SystemTime::now);
+        let current_time = ctx.last_present_watermark().unwrap_or_else(SystemTime::now);
 
         self.left_state.expire(current_time);
         self.right_state.expire(current_time);

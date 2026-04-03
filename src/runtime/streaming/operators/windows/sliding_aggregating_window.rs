@@ -10,20 +10,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use arrow::compute::{partition, sort_to_indices, take};
 use arrow_array::{Array, PrimitiveArray, RecordBatch, types::TimestampNanosecondType};
 use arrow_schema::SchemaRef;
 use datafusion::common::ScalarValue;
+use datafusion::execution::SendableRecordBatchStream;
 use datafusion::execution::context::SessionContext;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::execution::SendableRecordBatchStream;
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::{
-    physical_plan::{from_proto::parse_physical_expr, AsExecutionPlan},
+    physical_plan::{AsExecutionPlan, from_proto::parse_physical_expr},
     protobuf::{PhysicalExprNode, PhysicalPlanNode},
 };
 use futures::StreamExt;
@@ -31,16 +30,16 @@ use prost::Message;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
-use async_trait::async_trait;
 use crate::runtime::streaming::factory::Registry;
-use protocol::grpc::api::SlidingWindowAggregateOperator;
-use crate::runtime::streaming::StreamOutput;
-use crate::sql::common::{from_nanos, to_nanos, CheckpointBarrier, FsSchema, Watermark};
+use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
 use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
+use async_trait::async_trait;
+use protocol::grpc::api::SlidingWindowAggregateOperator;
 // ============================================================================
 // ============================================================================
 
@@ -94,11 +93,7 @@ impl RecordBatchTier {
     }
 
     fn batches_for_timestamp(&self, bin_start: SystemTime) -> Result<Vec<RecordBatch>> {
-        if self
-            .start_time
-            .map(|st| st > bin_start)
-            .unwrap_or(true)
-        {
+        if self.start_time.map(|st| st > bin_start).unwrap_or(true) {
             return Ok(vec![]);
         }
         let bin_index = (bin_start
@@ -113,11 +108,7 @@ impl RecordBatchTier {
 
     fn delete_before(&mut self, cutoff: SystemTime) -> Result<()> {
         let bin_start = self.bin_start(cutoff);
-        if self
-            .start_time
-            .map(|st| st >= bin_start)
-            .unwrap_or(true)
-        {
+        if self.start_time.map(|st| st >= bin_start).unwrap_or(true) {
             return Ok(());
         }
         let bin_index = (bin_start
@@ -145,7 +136,10 @@ struct TieredRecordBatchHolder {
 impl TieredRecordBatchHolder {
     fn new(tier_widths: Vec<Duration>) -> Result<Self> {
         for i in 0..tier_widths.len().saturating_sub(1) {
-            if !tier_widths[i + 1].as_nanos().is_multiple_of(tier_widths[i].as_nanos()) {
+            if !tier_widths[i + 1]
+                .as_nanos()
+                .is_multiple_of(tier_widths[i].as_nanos())
+            {
                 bail!(
                     "tier width {} does not evenly divide next {}",
                     tier_widths[i].as_nanos(),
@@ -197,7 +191,8 @@ impl TieredRecordBatchHolder {
         if current_start != interval_end {
             bail!(
                 "interval end {:?} does not match current start {:?}",
-                interval_end, current_start
+                interval_end,
+                current_start
             );
         }
         Ok(batches)
@@ -293,7 +288,8 @@ impl SlidingWindowOperator {
         bin_start: SystemTime,
         schema: SchemaRef,
     ) -> Result<RecordBatch> {
-        let bin_start_scalar = ScalarValue::TimestampNanosecond(Some(to_nanos(bin_start) as i64), None);
+        let bin_start_scalar =
+            ScalarValue::TimestampNanosecond(Some(to_nanos(bin_start) as i64), None);
         let timestamp_array = bin_start_scalar.to_array_of_size(batch.num_rows())?;
         let mut columns = batch.columns().to_vec();
         columns.push(timestamp_array);
@@ -456,7 +452,11 @@ impl Operator for SlidingWindowOperator {
         Ok(final_outputs)
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
+    async fn snapshot_state(
+        &mut self,
+        _barrier: CheckpointBarrier,
+        _ctx: &mut TaskContext,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -500,12 +500,13 @@ impl SlidingAggregatingWindowConstructor {
             context: DecodingContext::LockedBatchVec(final_batches_passer.clone()),
         };
 
-        let partial_plan = PhysicalPlanNode::decode(&mut config.partial_aggregation_plan.as_slice())?
-            .try_into_physical_plan(
-                registry.as_ref(),
-                &RuntimeEnvBuilder::new().build()?,
-                &codec,
-            )?;
+        let partial_plan =
+            PhysicalPlanNode::decode(&mut config.partial_aggregation_plan.as_slice())?
+                .try_into_physical_plan(
+                    registry.as_ref(),
+                    &RuntimeEnvBuilder::new().build()?,
+                    &codec,
+                )?;
 
         let finish_plan = PhysicalPlanNode::decode(&mut config.final_aggregation_plan.as_slice())?
             .try_into_physical_plan(
@@ -542,4 +543,3 @@ impl SlidingAggregatingWindowConstructor {
         })
     }
 }
-

@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 mod physical_aggregate;
 
 pub use physical_aggregate::decode_aggregate;

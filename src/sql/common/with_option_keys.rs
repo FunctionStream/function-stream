@@ -10,8 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
 pub const CONNECTOR: &str = "connector";
 pub const TYPE: &str = "type";
 pub const FORMAT: &str = "format";
@@ -28,9 +26,7 @@ pub const IDLE_TIME: &str = "idle_time";
 pub const LOOKUP_CACHE_MAX_BYTES: &str = "lookup.cache.max_bytes";
 pub const LOOKUP_CACHE_TTL: &str = "lookup.cache.ttl";
 
-
 pub const CONNECTION_SCHEMA: &str = "connection_schema";
-
 
 pub const ADAPTER: &str = "adapter";
 
@@ -86,6 +82,5 @@ pub const PROTOBUF_LENGTH_DELIMITED: &str = "protobuf.length_delimited";
 
 pub const FRAMING_METHOD: &str = "framing.method";
 pub const FRAMING_MAX_LINE_LENGTH: &str = "framing.max_line_length";
-
 
 pub const FORMAT_DEBEZIUM_FLAG: &str = "format.debezium";

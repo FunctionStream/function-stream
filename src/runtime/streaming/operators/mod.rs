@@ -10,22 +10,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 pub mod grouping;
 pub mod joins;
 pub mod key_by;
-pub mod sink;
-pub mod source;
-pub mod watermark;
-pub mod windows;
 mod key_operator;
 pub mod projection;
+pub mod sink;
+pub mod source;
 mod stateless_physical_executor;
 mod value_execution;
+pub mod watermark;
+pub mod windows;
 
-pub use stateless_physical_executor::StatelessPhysicalExecutor;
 pub use key_operator::KeyExecutionOperator;
 pub use projection::ProjectionOperator;
+pub use stateless_physical_executor::StatelessPhysicalExecutor;
 pub use value_execution::ValueExecutionOperator;
 
 pub use grouping::{Key, UpdatingCache};

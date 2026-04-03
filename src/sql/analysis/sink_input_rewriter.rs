@@ -10,14 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::extensions::sink::StreamEgressNode;
 use crate::sql::extensions::StreamingOperatorBlueprint;
+use crate::sql::extensions::sink::StreamEgressNode;
+use crate::sql::logical_planner::planner::NamedNode;
 use datafusion::common::Result as DFResult;
 use datafusion::common::tree_node::{Transformed, TreeNodeRecursion, TreeNodeRewriter};
 use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore};
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::sql::logical_planner::planner::NamedNode;
 
 type SinkInputs = HashMap<NamedNode, Vec<LogicalPlan>>;
 

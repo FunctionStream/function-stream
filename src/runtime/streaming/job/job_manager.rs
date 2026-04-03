@@ -27,7 +27,9 @@ use crate::runtime::streaming::execution::runner::{ChainedDriver, Pipeline};
 use crate::runtime::streaming::execution::source::SourceRunner;
 use crate::runtime::streaming::factory::OperatorFactory;
 use crate::runtime::streaming::job::edge_manager::EdgeManager;
-use crate::runtime::streaming::job::models::{PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus};
+use crate::runtime::streaming::job::models::{
+    PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus,
+};
 use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
 use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
@@ -78,7 +80,10 @@ impl JobManager {
         }
     }
 
-    pub fn init(operator_factory: Arc<OperatorFactory>, max_memory_bytes: usize) -> anyhow::Result<()> {
+    pub fn init(
+        operator_factory: Arc<OperatorFactory>,
+        max_memory_bytes: usize,
+    ) -> anyhow::Result<()> {
         let manager = Arc::new(Self::new(operator_factory, max_memory_bytes));
         GLOBAL_JOB_MANAGER
             .set(manager)
@@ -101,7 +106,10 @@ impl JobManager {
             let pipeline_id = node.node_index as u32;
 
             let (raw_inboxes, raw_outboxes) = edge_manager.take_endpoints(pipeline_id);
-            let physical_outboxes = raw_outboxes.into_iter().map(PhysicalSender::Local).collect();
+            let physical_outboxes = raw_outboxes
+                .into_iter()
+                .map(PhysicalSender::Local)
+                .collect();
             let physical_inboxes: Vec<BoxedEventStream> = raw_inboxes
                 .into_iter()
                 .map(|rx| Box::pin(ReceiverStream::new(rx)) as _)
@@ -164,7 +172,10 @@ impl JobManager {
             start_time: std::time::Instant::now(),
         };
 
-        self.active_jobs.write().unwrap().insert(job_id.clone(), graph);
+        self.active_jobs
+            .write()
+            .unwrap()
+            .insert(job_id.clone(), graph);
         info!(job_id = %job_id, "Job submitted successfully.");
 
         Ok(job_id)
@@ -177,7 +188,11 @@ impl JobManager {
                 .get(job_id)
                 .ok_or_else(|| anyhow::anyhow!("Job not found: {job_id}"))?;
 
-            graph.pipelines.values().map(|p| p.control_tx.clone()).collect()
+            graph
+                .pipelines
+                .values()
+                .map(|p| p.control_tx.clone())
+                .collect()
         };
 
         for tx in control_senders {
@@ -193,11 +208,10 @@ impl JobManager {
         let graph = jobs_guard.get(job_id)?;
 
         Some(
-            graph.pipelines
+            graph
+                .pipelines
                 .iter()
-                .map(|(id, pipeline)| {
-                    (*id, pipeline.status.read().unwrap().clone())
-                })
+                .map(|(id, pipeline)| (*id, pipeline.status.read().unwrap().clone()))
                 .collect(),
         )
     }
@@ -260,8 +274,11 @@ impl JobManager {
                 anyhow::bail!("Job not found: {job_id}");
             }
             let graph = &jobs_guard[job_id];
-            let control_senders: Vec<_> =
-                graph.pipelines.values().map(|p| p.control_tx.clone()).collect();
+            let control_senders: Vec<_> = graph
+                .pipelines
+                .values()
+                .map(|p| p.control_tx.clone())
+                .collect();
 
             drop(jobs_guard);
 
@@ -275,9 +292,7 @@ impl JobManager {
         Ok(())
     }
 
-    fn aggregate_pipeline_status(
-        pipelines: &HashMap<u32, PhysicalPipeline>,
-    ) -> String {
+    fn aggregate_pipeline_status(pipelines: &HashMap<u32, PhysicalPipeline>) -> String {
         let mut running = 0u32;
         let mut failed = 0u32;
         let mut finished = 0u32;
@@ -316,7 +331,8 @@ impl JobManager {
         let mut chain = Vec::with_capacity(operator_configs.len());
 
         for op_config in operator_configs {
-            let constructed = self.operator_factory
+            let constructed = self
+                .operator_factory
                 .create_operator(&op_config.operator_name, &op_config.operator_config)?;
 
             match constructed {
@@ -367,23 +383,27 @@ impl JobManager {
                     .expect("Failed to build current-thread Tokio runtime for pipeline");
 
                 let job_id_inner = job_id.clone();
-                let execution_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    rt.block_on(async move {
-                        let ctx = TaskContext::new(
-                            job_id_inner,
-                            pipeline_id,
-                            0,
-                            1,
-                            outboxes,
-                            memory_pool,
-                        );
+                let execution_result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        rt.block_on(async move {
+                            let ctx = TaskContext::new(
+                                job_id_inner,
+                                pipeline_id,
+                                0,
+                                1,
+                                outboxes,
+                                memory_pool,
+                            );
 
-                        let pipeline = Pipeline::new(operators, ctx, inboxes, control_rx)
-                            .map_err(|e| anyhow::anyhow!("Pipeline init failed: {e}"))?;
+                            let pipeline = Pipeline::new(operators, ctx, inboxes, control_rx)
+                                .map_err(|e| anyhow::anyhow!("Pipeline init failed: {e}"))?;
 
-                        pipeline.run().await.map_err(|e| anyhow::anyhow!("Pipeline execution failed: {e}"))
-                    })
-                }));
+                            pipeline
+                                .run()
+                                .await
+                                .map_err(|e| anyhow::anyhow!("Pipeline execution failed: {e}"))
+                        })
+                    }));
 
                 Self::handle_pipeline_exit(&job_id, pipeline_id, execution_result, &status);
             })?;
@@ -415,26 +435,26 @@ impl JobManager {
                     .expect("Failed to build current-thread Tokio runtime for source pipeline");
 
                 let job_id_inner = job_id.clone();
-                let execution_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    rt.block_on(async move {
-                        let ctx = TaskContext::new(
-                            job_id_inner,
-                            pipeline_id,
-                            0,
-                            1,
-                            outboxes,
-                            memory_pool,
-                        );
+                let execution_result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        rt.block_on(async move {
+                            let ctx = TaskContext::new(
+                                job_id_inner,
+                                pipeline_id,
+                                0,
+                                1,
+                                outboxes,
+                                memory_pool,
+                            );
 
-                        let chain_head = ChainedDriver::build_chain(operators);
-                        let runner = SourceRunner::new(source, chain_head, ctx, control_rx);
+                            let chain_head = ChainedDriver::build_chain(operators);
+                            let runner = SourceRunner::new(source, chain_head, ctx, control_rx);
 
-                        runner
-                            .run()
-                            .await
-                            .map_err(|e| anyhow::anyhow!("Source pipeline execution failed: {e}"))
-                    })
-                }));
+                            runner.run().await.map_err(|e| {
+                                anyhow::anyhow!("Source pipeline execution failed: {e}")
+                            })
+                        })
+                    }));
 
                 Self::handle_pipeline_exit(&job_id, pipeline_id, execution_result, &status);
             })?;

@@ -10,8 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::sql::extensions::sink::{StreamEgressNode, STREAM_EGRESS_NODE_NAME};
-use crate::sql::extensions::table_source::{StreamIngestionNode, STREAM_INGESTION_NODE_NAME};
+use crate::sql::extensions::sink::{STREAM_EGRESS_NODE_NAME, StreamEgressNode};
+use crate::sql::extensions::table_source::{STREAM_INGESTION_NODE_NAME, StreamIngestionNode};
 use crate::sql::schema::StreamSchemaProvider;
 use datafusion::common::Result as DFResult;
 use datafusion::common::tree_node::{TreeNodeRecursion, TreeNodeVisitor};

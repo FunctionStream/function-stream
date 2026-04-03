@@ -15,18 +15,18 @@
 //! [`datafusion_common::hash_utils::create_hashes`] on those columns — same mechanism as
 //! [`crate::runtime::streaming::operators::key_by::KeyByOperator`].
 
-use anyhow::{anyhow, Result};
+use crate::runtime::streaming::StreamOutput;
+use crate::runtime::streaming::api::context::TaskContext;
+use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::operators::StatelessPhysicalExecutor;
+use crate::sql::common::{CheckpointBarrier, Watermark};
 use ahash::RandomState;
+use anyhow::{Result, anyhow};
 use arrow::compute::{sort_to_indices, take};
 use arrow_array::{Array, ArrayRef, RecordBatch, UInt64Array};
 use async_trait::async_trait;
 use datafusion_common::hash_utils::create_hashes;
 use futures::StreamExt;
-use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
-use crate::runtime::streaming::operators::StatelessPhysicalExecutor;
-use crate::runtime::streaming::StreamOutput;
-use crate::sql::common::{CheckpointBarrier, Watermark};
 
 // ===========================================================================
 // ===========================================================================
@@ -35,20 +35,16 @@ pub struct KeyExecutionOperator {
     name: String,
     executor: StatelessPhysicalExecutor,
     key_fields: Vec<usize>,
-    random_state: RandomState
+    random_state: RandomState,
 }
 
 impl KeyExecutionOperator {
-    pub fn new(
-        name: String,
-        executor: StatelessPhysicalExecutor,
-        key_fields: Vec<usize>,
-    ) -> Self {
+    pub fn new(name: String, executor: StatelessPhysicalExecutor, key_fields: Vec<usize>) -> Self {
         let deterministic_random_state = RandomState::with_seeds(
             0x1234567890ABCDEF,
             0x0FEDCBA987654321,
             0x1357924680135792,
-            0x2468013579246801
+            0x2468013579246801,
         );
 
         Self {

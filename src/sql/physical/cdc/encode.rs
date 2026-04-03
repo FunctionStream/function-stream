@@ -10,7 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use std::any::Any;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -24,12 +23,12 @@ use datafusion::arrow::array::{
 };
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::compute::take;
-use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef, UInt64Type};
 use datafusion::arrow::datatypes::TimestampNanosecondType;
+use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef, UInt64Type};
 use datafusion::common::{DataFusionError, Result};
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::physical_plan::{DisplayAs, ExecutionPlan, PlanProperties};
-use futures::{ready, stream::Stream, StreamExt};
+use futures::{StreamExt, ready, stream::Stream};
 
 use crate::sql::common::constants::{cdc, debezium_op_short, physical_plan_node_name};
 use crate::sql::common::{TIMESTAMP_FIELD, UPDATING_META_FIELD};

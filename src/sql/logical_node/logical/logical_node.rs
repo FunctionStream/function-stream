@@ -52,11 +52,9 @@ impl LogicalNode {
     }
 
     pub fn resolve_pipeline_operator_name(&self) -> Result<String> {
-        let first_op = self
-            .operator_chain
-            .operators
-            .first()
-            .ok_or_else(|| DataFusionError::Plan("Invalid LogicalNode: Operator chain is empty".into()))?;
+        let first_op = self.operator_chain.operators.first().ok_or_else(|| {
+            DataFusionError::Plan("Invalid LogicalNode: Operator chain is empty".into())
+        })?;
 
         if let Some(connector_name) = first_op.extract_connector_name() {
             return Ok(connector_name);

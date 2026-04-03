@@ -11,10 +11,9 @@
 // limitations under the License.
 
 use super::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction,
-    DropStreamingTableStatement, DropTableStatement, ShowCatalogTables,
-    ShowCreateStreamingTable, ShowCreateTable, ShowFunctions, ShowStreamingTables,
-    StartFunction, StopFunction, StreamingTableStatement,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropStreamingTableStatement,
+    DropTableStatement, ShowCatalogTables, ShowCreateStreamingTable, ShowCreateTable,
+    ShowFunctions, ShowStreamingTables, StartFunction, StopFunction, StreamingTableStatement,
 };
 use crate::coordinator::plan::PlanNode;
 use crate::coordinator::statement::Statement;

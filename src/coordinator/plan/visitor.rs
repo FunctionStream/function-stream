@@ -13,9 +13,8 @@
 use super::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
     DropStreamingTablePlan, DropTablePlan, LookupTablePlan, ShowCatalogTablesPlan,
-    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan,
-    ShowStreamingTablesPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
-    StreamingTableConnectorPlan,
+    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan, ShowStreamingTablesPlan,
+    StartFunctionPlan, StopFunctionPlan, StreamingTable, StreamingTableConnectorPlan,
 };
 
 /// Context passed to PlanVisitor methods

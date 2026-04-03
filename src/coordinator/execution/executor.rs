@@ -17,24 +17,22 @@ use thiserror::Error;
 use tracing::{debug, info, warn};
 
 use crate::coordinator::dataset::{
-    empty_record_batch, ExecuteResult, ShowCatalogTablesResult,
-    ShowCreateStreamingTableResult, ShowCreateTableResult, ShowFunctionsResult,
-    ShowStreamingTablesResult,
+    ExecuteResult, ShowCatalogTablesResult, ShowCreateStreamingTableResult, ShowCreateTableResult,
+    ShowFunctionsResult, ShowStreamingTablesResult, empty_record_batch,
 };
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, CreateTablePlanBody,
     DropFunctionPlan, DropStreamingTablePlan, DropTablePlan, LookupTablePlan, PlanNode,
     PlanVisitor, PlanVisitorContext, PlanVisitorResult, ShowCatalogTablesPlan,
-    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan,
-    ShowStreamingTablesPlan, StartFunctionPlan, StopFunctionPlan, StreamingTable,
-    StreamingTableConnectorPlan,
+    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan, ShowStreamingTablesPlan,
+    StartFunctionPlan, StopFunctionPlan, StreamingTable, StreamingTableConnectorPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::streaming::job::JobManager;
 use crate::runtime::streaming::protocol::control::StopMode;
 use crate::runtime::taskexecutor::TaskManager;
-use crate::sql::schema::table::Table as CatalogTable;
 use crate::sql::schema::show_create_catalog_table;
+use crate::sql::schema::table::Table as CatalogTable;
 use crate::storage::stream_catalog::CatalogManager;
 
 #[derive(Error, Debug)]
@@ -86,7 +84,6 @@ impl Executor {
         }
     }
 }
-
 
 impl PlanVisitor for Executor {
     fn visit_create_function(
@@ -187,7 +184,9 @@ impl PlanVisitor for Executor {
     ) -> PlanVisitorResult {
         let tables = match self.catalog_manager.list_catalog_tables() {
             Ok(tables) => tables,
-            Err(e) => return PlanVisitorResult::Execute(Err(ExecuteError::Internal(e.to_string()))),
+            Err(e) => {
+                return PlanVisitorResult::Execute(Err(ExecuteError::Internal(e.to_string())));
+            }
         };
         let n = tables.len();
         let result = ExecuteResult::ok_with_data(
@@ -348,7 +347,10 @@ impl PlanVisitor for Executor {
             );
 
             Ok(ExecuteResult::ok_with_data(
-                format!("Streaming table '{}' created, job_id = {}", plan.name, job_id),
+                format!(
+                    "Streaming table '{}' created, job_id = {}",
+                    plan.name, job_id
+                ),
                 empty_record_batch(),
             ))
         };

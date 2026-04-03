@@ -56,11 +56,8 @@ impl StreamEgressNode {
         initial_schema: DFSchemaRef,
         upstream_plan: LogicalPlan,
     ) -> Result<Self> {
-        let (mut processed_plan, mut resolved_schema) = Self::apply_cdc_transformations(
-            upstream_plan,
-            initial_schema,
-            &destination_table,
-        )?;
+        let (mut processed_plan, mut resolved_schema) =
+            Self::apply_cdc_transformations(upstream_plan, initial_schema, &destination_table)?;
 
         Self::enforce_computational_boundary(&mut resolved_schema, &mut processed_plan);
 
@@ -107,7 +104,9 @@ impl StreamEgressNode {
                 }
             }
             Table::LookupTable(..) => {
-                plan_err!("Topology Violation: A Lookup Table cannot be used as a streaming data sink.")
+                plan_err!(
+                    "Topology Violation: A Lookup Table cannot be used as a streaming data sink."
+                )
             }
             Table::TableFromQuery { .. } => Ok((plan, schema)),
         }

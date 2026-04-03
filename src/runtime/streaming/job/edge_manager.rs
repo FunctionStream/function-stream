@@ -15,10 +15,16 @@ use std::collections::HashMap;
 use protocol::grpc::api::{FsEdge, FsNode};
 use tokio::sync::mpsc;
 
-use crate::runtime::streaming::protocol::tracked::TrackedEvent;
+use crate::runtime::streaming::protocol::event::TrackedEvent;
 
 pub struct EdgeManager {
-    endpoints: HashMap<u32, (Vec<mpsc::Receiver<TrackedEvent>>, Vec<mpsc::Sender<TrackedEvent>>)>,
+    endpoints: HashMap<
+        u32,
+        (
+            Vec<mpsc::Receiver<TrackedEvent>>,
+            Vec<mpsc::Sender<TrackedEvent>>,
+        ),
+    >,
 }
 
 impl EdgeManager {
@@ -45,7 +51,10 @@ impl EdgeManager {
     pub fn take_endpoints(
         &mut self,
         id: u32,
-    ) -> (Vec<mpsc::Receiver<TrackedEvent>>, Vec<mpsc::Sender<TrackedEvent>>) {
+    ) -> (
+        Vec<mpsc::Receiver<TrackedEvent>>,
+        Vec<mpsc::Sender<TrackedEvent>>,
+    ) {
         self.endpoints
             .remove(&id)
             .expect("Critical: Execution Graph Inconsistent")

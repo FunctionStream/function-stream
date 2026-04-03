@@ -10,8 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use arrow::compute::kernels::aggregate;
 use arrow_array::cast::AsArray;
 use arrow_array::types::TimestampNanosecondType;
@@ -26,13 +25,13 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, info};
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
+use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_millis};
 use async_trait::async_trait;
 use protocol::grpc::api::ExpressionWatermarkConfig;
-use crate::runtime::streaming::StreamOutput;
-use crate::sql::common::{from_nanos, to_millis, CheckpointBarrier, FsSchema, Watermark};
 
 #[derive(Debug, Copy, Clone, Encode, Decode, PartialEq, Eq)]
 pub struct WatermarkGeneratorState {
@@ -171,10 +170,7 @@ impl Operator for WatermarkGeneratorOperator {
         ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
         if let Some(idle_timeout) = self.idle_time {
-            let elapsed = self
-                .last_event_wall
-                .elapsed()
-                .unwrap_or(Duration::ZERO);
+            let elapsed = self.last_event_wall.elapsed().unwrap_or(Duration::ZERO);
             if !self.is_idle && elapsed > idle_timeout {
                 info!(
                     "task [{}] entering Idle after {:?}",
@@ -187,14 +183,18 @@ impl Operator for WatermarkGeneratorOperator {
         Ok(vec![])
     }
 
-    async fn snapshot_state(&mut self, _barrier: CheckpointBarrier, _ctx: &mut TaskContext) -> Result<()> {
+    async fn snapshot_state(
+        &mut self,
+        _barrier: CheckpointBarrier,
+        _ctx: &mut TaskContext,
+    ) -> Result<()> {
         Ok(())
     }
 
     async fn on_close(&mut self, _ctx: &mut TaskContext) -> Result<Vec<StreamOutput>> {
-        Ok(vec![StreamOutput::Watermark(Watermark::EventTime(from_nanos(
-            u64::MAX as u128,
-        )))])
+        Ok(vec![StreamOutput::Watermark(Watermark::EventTime(
+            from_nanos(u64::MAX as u128),
+        ))])
     }
 }
 
@@ -213,10 +213,8 @@ impl WatermarkGeneratorConstructor {
             .map_err(|e| anyhow!("input schema: {e}"))?;
         let timestamp_index = input_schema.timestamp_index;
 
-        let expression_node =
-            PhysicalExprNode::decode(&mut config.expression.as_slice()).map_err(|e| {
-                anyhow!("decode expression: {e}")
-            })?;
+        let expression_node = PhysicalExprNode::decode(&mut config.expression.as_slice())
+            .map_err(|e| anyhow!("decode expression: {e}"))?;
         let expression = parse_physical_expr(
             &expression_node,
             registry.as_ref(),
@@ -236,4 +234,3 @@ impl WatermarkGeneratorConstructor {
         ))
     }
 }
-

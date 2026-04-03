@@ -11,8 +11,8 @@
 // limitations under the License.
 
 use crate::runtime::streaming::protocol::event::StreamEvent;
-use crate::runtime::streaming::protocol::tracked::TrackedEvent;
-use anyhow::{anyhow, Result};
+use crate::runtime::streaming::protocol::event::TrackedEvent;
+use anyhow::{Result, anyhow};
 use std::pin::Pin;
 use tokio::sync::mpsc;
 use tokio_stream::Stream;
@@ -45,9 +45,9 @@ impl PhysicalSender {
     pub async fn send(&self, tracked_event: TrackedEvent) -> Result<()> {
         match self {
             PhysicalSender::Local(tx) => {
-                tx.send(tracked_event)
-                    .await
-                    .map_err(|_| anyhow!("Local channel closed! Downstream task may have crashed."))?;
+                tx.send(tracked_event).await.map_err(|_| {
+                    anyhow!("Local channel closed! Downstream task may have crashed.")
+                })?;
             }
             PhysicalSender::Remote(stub) => {
                 stub.send_over_network(&tracked_event.event).await?;

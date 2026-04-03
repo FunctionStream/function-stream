@@ -17,10 +17,10 @@ use datafusion::logical_expr::{Aggregate, Expr, Extension, LogicalPlan, Projecti
 use datafusion::prelude::col;
 use std::sync::Arc;
 
-use crate::sql::schema::StreamSchemaProvider;
+use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
 use crate::sql::extensions::aggregate::StreamWindowAggregateNode;
 use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
-use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
+use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::types::{
     DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers, find_window,
     schema_from_df_fields_with_metadata,

@@ -13,11 +13,10 @@
 use super::Analysis;
 use crate::coordinator::execution_context::ExecutionContext;
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, CreateTable, DropFunction,
-    DropStreamingTableStatement, DropTableStatement, ShowCatalogTables,
-    ShowCreateStreamingTable, ShowCreateTable, ShowFunctions, ShowStreamingTables,
-    StartFunction, Statement, StatementVisitor, StatementVisitorContext,
-    StatementVisitorResult, StopFunction, StreamingTableStatement,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropStreamingTableStatement,
+    DropTableStatement, ShowCatalogTables, ShowCreateStreamingTable, ShowCreateTable,
+    ShowFunctions, ShowStreamingTables, StartFunction, Statement, StatementVisitor,
+    StatementVisitorContext, StatementVisitorResult, StopFunction, StreamingTableStatement,
 };
 use std::fmt;
 

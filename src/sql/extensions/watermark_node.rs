@@ -97,10 +97,8 @@ impl EventTimeWatermarkNode {
     }
 
     fn compile_operator_config(&self, planner: &Planner) -> Result<ExpressionWatermarkConfig> {
-        let physical_expr = planner.create_physical_expr(
-            &self.watermark_strategy_expr,
-            &self.resolved_schema,
-        )?;
+        let physical_expr =
+            planner.create_physical_expr(&self.watermark_strategy_expr, &self.resolved_schema)?;
 
         let serialized_expr =
             serialize_physical_expr(&physical_expr, &DefaultPhysicalExtensionCodec {})?;

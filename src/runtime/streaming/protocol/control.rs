@@ -10,11 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
+use super::event::CheckpointBarrier;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use crate::sql::common::CheckpointBarrier;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckpointBarrierWire {

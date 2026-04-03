@@ -10,26 +10,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use anyhow::{anyhow, bail, Result};
-use arrow_array::cast::AsArray;
+use anyhow::{Result, anyhow, bail};
 use arrow_array::Array;
 use arrow_array::RecordBatch;
+use arrow_array::cast::AsArray;
 use arrow_schema::{DataType, TimeUnit};
 use async_trait::async_trait;
+use rdkafka::ClientConfig;
 use rdkafka::error::{KafkaError, RDKafkaErrorCode};
 use rdkafka::producer::{DeliveryFuture, FutureProducer, FutureRecord, Producer};
 use rdkafka::util::Timeout;
-use rdkafka::ClientConfig;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
+use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::format::DataSerializer;
-use crate::runtime::streaming::StreamOutput;
 use crate::sql::common::constants::factory_operator_name;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
 // ============================================================================
@@ -102,7 +101,11 @@ impl KafkaSinkOperator {
         }
     }
 
-    fn create_producer(&self, ctx: &TaskContext, tx_index: Option<usize>) -> Result<FutureProducer> {
+    fn create_producer(
+        &self,
+        ctx: &TaskContext,
+        tx_index: Option<usize>,
+    ) -> Result<FutureProducer> {
         let mut config = ClientConfig::new();
         config.set("bootstrap.servers", &self.bootstrap_servers);
 
@@ -150,7 +153,9 @@ impl KafkaSinkOperator {
     fn current_producer(&self) -> &FutureProducer {
         match &self.consistency_mode {
             ConsistencyMode::AtLeastOnce => self.at_least_once_producer.as_ref().unwrap(),
-            ConsistencyMode::ExactlyOnce => &self.transactional_state.as_ref().unwrap().active_producer,
+            ConsistencyMode::ExactlyOnce => {
+                &self.transactional_state.as_ref().unwrap().active_producer
+            }
         }
     }
 }
@@ -264,7 +269,10 @@ impl Operator for KafkaSinkOperator {
                         self.write_futures.push(delivery_future);
                         break;
                     }
-                    Err((KafkaError::MessageProduction(RDKafkaErrorCode::QueueFull), returned_record)) => {
+                    Err((
+                        KafkaError::MessageProduction(RDKafkaErrorCode::QueueFull),
+                        returned_record,
+                    )) => {
                         record = returned_record;
                         sleep(Duration::from_millis(10)).await;
                     }
@@ -327,7 +335,10 @@ impl Operator for KafkaSinkOperator {
         loop {
             match committing_producer.commit_transaction(Timeout::After(Duration::from_secs(10))) {
                 Ok(_) => {
-                    info!("Successfully committed Kafka transaction for epoch {}", epoch);
+                    info!(
+                        "Successfully committed Kafka transaction for epoch {}",
+                        epoch
+                    );
                     break;
                 }
                 Err(e) => {

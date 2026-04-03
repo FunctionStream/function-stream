@@ -16,14 +16,8 @@ use datafusion::logical_expr::Expr;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ColumnDescriptor {
     Physical(Field),
-    SystemMeta {
-        field: Field,
-        meta_key: String,
-    },
-    Computed {
-        field: Field,
-        logic: Box<Expr>,
-    },
+    SystemMeta { field: Field, meta_key: String },
+    Computed { field: Field, logic: Box<Expr> },
 }
 
 impl ColumnDescriptor {
@@ -113,7 +107,11 @@ impl ColumnDescriptor {
         match self {
             Self::Physical(f) => {
                 if let DataType::Timestamp(_, tz) = f.data_type() {
-                    *f = Field::new(f.name(), DataType::Timestamp(unit, tz.clone()), f.is_nullable());
+                    *f = Field::new(
+                        f.name(),
+                        DataType::Timestamp(unit, tz.clone()),
+                        f.is_nullable(),
+                    );
                 }
             }
             Self::SystemMeta { field, .. } => {

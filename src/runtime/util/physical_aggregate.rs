@@ -10,12 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use std::sync::Arc;
 
 use arrow::datatypes::SchemaRef;
-use datafusion::common::internal_err;
 use datafusion::common::Result as DFResult;
+use datafusion::common::internal_err;
 use datafusion::execution::FunctionRegistry;
 use datafusion::physical_expr::aggregate::{AggregateExprBuilder, AggregateFunctionExpr};
 use datafusion::physical_expr::{LexOrdering, PhysicalExpr};
