@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 
-use anyhow::anyhow;
+use anyhow::{Context, Result, anyhow, bail};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, warn};
@@ -23,8 +23,7 @@ use protocol::grpc::api::{ChainedOperator, FsProgram};
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::{ConstructedOperator, Operator};
 use crate::runtime::streaming::api::source::SourceOperator;
-use crate::runtime::streaming::execution::runner::{ChainedDriver, Pipeline};
-use crate::runtime::streaming::execution::source::SourceRunner;
+use crate::runtime::streaming::execution::{ChainBuilder, Pipeline, SourceDriver};
 use crate::runtime::streaming::factory::OperatorFactory;
 use crate::runtime::streaming::job::edge_manager::EdgeManager;
 use crate::runtime::streaming::job::models::{
@@ -34,6 +33,9 @@ use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
 use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
 
+// ---------------------------------------------------------------------------
+// 核心数据结构
+// ---------------------------------------------------------------------------
 #[derive(Debug, Clone)]
 pub struct StreamingJobSummary {
     pub job_id: String,
@@ -71,6 +73,20 @@ struct PreparedChain {
     operators: Vec<Box<dyn Operator>>,
 }
 
+enum PipelineRunner {
+    Source(SourceDriver),
+    Standard(Pipeline),
+}
+
+impl PipelineRunner {
+    async fn run(self) -> Result<(), crate::runtime::streaming::error::RunError> {
+        match self {
+            PipelineRunner::Source(driver) => driver.run().await,
+            PipelineRunner::Standard(pipeline) => pipeline.run().await,
+        }
+    }
+}
+
 impl JobManager {
     pub fn new(operator_factory: Arc<OperatorFactory>, max_memory_bytes: usize) -> Self {
         Self {
@@ -80,89 +96,41 @@ impl JobManager {
         }
     }
 
-    pub fn init(
-        operator_factory: Arc<OperatorFactory>,
-        max_memory_bytes: usize,
-    ) -> anyhow::Result<()> {
-        let manager = Arc::new(Self::new(operator_factory, max_memory_bytes));
+    pub fn init(factory: Arc<OperatorFactory>, memory_bytes: usize) -> Result<()> {
         GLOBAL_JOB_MANAGER
-            .set(manager)
+            .set(Arc::new(Self::new(factory, memory_bytes)))
             .map_err(|_| anyhow!("JobManager singleton already initialized"))
     }
 
-    pub fn global() -> anyhow::Result<Arc<Self>> {
+    pub fn global() -> Result<Arc<Self>> {
         GLOBAL_JOB_MANAGER
             .get()
             .cloned()
             .ok_or_else(|| anyhow!("JobManager not initialized. Call init() first."))
     }
 
-    ///
-    pub async fn submit_job(&self, job_id: String, program: FsProgram) -> anyhow::Result<String> {
+    pub async fn submit_job(&self, job_id: String, program: FsProgram) -> Result<String> {
         let mut edge_manager = EdgeManager::build(&program.nodes, &program.edges);
-        let mut pipelines = HashMap::new();
+        let mut pipelines = HashMap::with_capacity(program.nodes.len());
 
         for node in &program.nodes {
             let pipeline_id = node.node_index as u32;
 
-            let (raw_inboxes, raw_outboxes) = edge_manager.take_endpoints(pipeline_id);
-            let physical_outboxes = raw_outboxes
-                .into_iter()
-                .map(PhysicalSender::Local)
-                .collect();
-            let physical_inboxes: Vec<BoxedEventStream> = raw_inboxes
-                .into_iter()
-                .map(|rx| Box::pin(ReceiverStream::new(rx)) as _)
-                .collect();
-
-            let chain = self.build_operator_chain(&node.operators)?;
-            if chain.source.is_none() && physical_inboxes.is_empty() {
-                anyhow::bail!(
-                    "Topology Error: pipeline '{}' contains no source operator and has no upstream inputs.",
-                    pipeline_id
-                );
-            }
-            if chain.source.is_some() && !physical_inboxes.is_empty() {
-                anyhow::bail!(
-                    "Topology Error: source pipeline '{}' should not have upstream inputs.",
-                    pipeline_id
-                );
-            }
-
-            let (control_tx, control_rx) = mpsc::channel(64);
-            let status = Arc::new(RwLock::new(PipelineStatus::Initializing));
-
-            let handle = if let Some(source) = chain.source {
-                self.spawn_source_pipeline_thread(
+            let pipeline = self
+                .build_and_spawn_pipeline(
                     job_id.clone(),
                     pipeline_id,
-                    source,
-                    chain.operators,
-                    physical_outboxes,
-                    control_rx,
-                    Arc::clone(&status),
-                )?
-            } else {
-                self.spawn_pipeline_thread(
-                    job_id.clone(),
-                    pipeline_id,
-                    chain.operators,
-                    physical_inboxes,
-                    physical_outboxes,
-                    control_rx,
-                    Arc::clone(&status),
-                )?
-            };
+                    &node.operators,
+                    &mut edge_manager,
+                )
+                .with_context(|| {
+                    format!(
+                        "Failed to build pipeline {} for job {}",
+                        pipeline_id, job_id
+                    )
+                })?;
 
-            pipelines.insert(
-                pipeline_id,
-                PhysicalPipeline {
-                    pipeline_id,
-                    handle: Some(handle),
-                    status,
-                    control_tx,
-                },
-            );
+            pipelines.insert(pipeline_id, pipeline);
         }
 
         let graph = PhysicalExecutionGraph {
@@ -172,28 +140,18 @@ impl JobManager {
             start_time: std::time::Instant::now(),
         };
 
-        self.active_jobs
+        let mut jobs_guard = self
+            .active_jobs
             .write()
-            .unwrap()
-            .insert(job_id.clone(), graph);
-        info!(job_id = %job_id, "Job submitted successfully.");
+            .map_err(|e| anyhow!("Active jobs lock poisoned: {}", e))?;
+        jobs_guard.insert(job_id.clone(), graph);
 
+        info!(job_id = %job_id, "Job submitted successfully.");
         Ok(job_id)
     }
 
-    pub async fn stop_job(&self, job_id: &str, mode: StopMode) -> anyhow::Result<()> {
-        let control_senders: Vec<_> = {
-            let jobs_guard = self.active_jobs.read().unwrap();
-            let graph = jobs_guard
-                .get(job_id)
-                .ok_or_else(|| anyhow::anyhow!("Job not found: {job_id}"))?;
-
-            graph
-                .pipelines
-                .values()
-                .map(|p| p.control_tx.clone())
-                .collect()
-        };
+    pub async fn stop_job(&self, job_id: &str, mode: StopMode) -> Result<()> {
+        let control_senders = self.extract_control_senders(job_id)?;
 
         for tx in control_senders {
             let _ = tx.send(ControlCommand::Stop { mode: mode.clone() }).await;
@@ -203,21 +161,35 @@ impl JobManager {
         Ok(())
     }
 
-    pub fn get_pipeline_statuses(&self, job_id: &str) -> Option<HashMap<u32, PipelineStatus>> {
-        let jobs_guard = self.active_jobs.read().unwrap();
-        let graph = jobs_guard.get(job_id)?;
+    pub async fn remove_job(&self, job_id: &str, mode: StopMode) -> Result<()> {
+        self.stop_job(job_id, mode).await?;
 
-        Some(
-            graph
-                .pipelines
-                .iter()
-                .map(|(id, pipeline)| (*id, pipeline.status.read().unwrap().clone()))
-                .collect(),
-        )
+        let mut jobs_guard = self
+            .active_jobs
+            .write()
+            .map_err(|_| anyhow!("Active jobs lock poisoned"))?;
+
+        if jobs_guard.remove(job_id).is_some() {
+            info!(job_id = %job_id, "Job removed from JobManager.");
+            Ok(())
+        } else {
+            bail!("Job not found during removal: {}", job_id)
+        }
+    }
+
+    pub fn has_job(&self, job_id: &str) -> bool {
+        self.active_jobs
+            .read()
+            .map(|guard| guard.contains_key(job_id))
+            .unwrap_or(false)
     }
 
     pub fn list_jobs(&self) -> Vec<StreamingJobSummary> {
-        let jobs_guard = self.active_jobs.read().unwrap();
+        let Ok(jobs_guard) = self.active_jobs.read() else {
+            warn!("Failed to read active_jobs due to lock poisoning.");
+            return vec![];
+        };
+
         jobs_guard
             .values()
             .map(|graph| {
@@ -235,7 +207,7 @@ impl JobManager {
     }
 
     pub fn get_job_detail(&self, job_id: &str) -> Option<StreamingJobDetail> {
-        let jobs_guard = self.active_jobs.read().unwrap();
+        let jobs_guard = self.active_jobs.read().ok()?;
         let graph = jobs_guard.get(job_id)?;
 
         let uptime_secs = graph.start_time.elapsed().as_secs();
@@ -245,7 +217,15 @@ impl JobManager {
             .pipelines
             .iter()
             .map(|(id, pipeline)| {
-                let status = pipeline.status.read().unwrap().clone();
+                let status = pipeline
+                    .status
+                    .read()
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|_| PipelineStatus::Failed {
+                        error: "Status lock poisoned".into(),
+                        is_panic: true,
+                    });
+
                 PipelineDetail {
                     pipeline_id: *id,
                     status: format!("{status:?}"),
@@ -263,33 +243,27 @@ impl JobManager {
         })
     }
 
-    pub fn has_job(&self, job_id: &str) -> bool {
-        self.active_jobs.read().unwrap().contains_key(job_id)
-    }
+    pub fn get_pipeline_statuses(&self, job_id: &str) -> Option<HashMap<u32, PipelineStatus>> {
+        let jobs_guard = self.active_jobs.read().ok()?;
+        let graph = jobs_guard.get(job_id)?;
 
-    pub async fn remove_job(&self, job_id: &str, mode: StopMode) -> anyhow::Result<()> {
-        {
-            let jobs_guard = self.active_jobs.read().unwrap();
-            if !jobs_guard.contains_key(job_id) {
-                anyhow::bail!("Job not found: {job_id}");
-            }
-            let graph = &jobs_guard[job_id];
-            let control_senders: Vec<_> = graph
+        Some(
+            graph
                 .pipelines
-                .values()
-                .map(|p| p.control_tx.clone())
-                .collect();
-
-            drop(jobs_guard);
-
-            for tx in control_senders {
-                let _ = tx.send(ControlCommand::Stop { mode: mode.clone() }).await;
-            }
-        }
-
-        self.active_jobs.write().unwrap().remove(job_id);
-        info!(job_id = %job_id, "Job stopped and removed.");
-        Ok(())
+                .iter()
+                .map(|(id, pipeline)| {
+                    let status = pipeline
+                        .status
+                        .read()
+                        .map(|s| s.clone())
+                        .unwrap_or_else(|_| PipelineStatus::Failed {
+                            error: "Status lock poisoned".into(),
+                            is_panic: true,
+                        });
+                    (*id, status)
+                })
+                .collect(),
+        )
     }
 
     fn aggregate_pipeline_status(pipelines: &HashMap<u32, PhysicalPipeline>) -> String {
@@ -299,7 +273,16 @@ impl JobManager {
         let mut initializing = 0u32;
 
         for pipeline in pipelines.values() {
-            match &*pipeline.status.read().unwrap() {
+            let status = pipeline
+                .status
+                .read()
+                .map(|s| s.clone())
+                .unwrap_or_else(|_| PipelineStatus::Failed {
+                    error: "Status lock poisoned".into(),
+                    is_panic: true,
+                });
+
+            match status {
                 PipelineStatus::Running => running += 1,
                 PipelineStatus::Failed { .. } => failed += 1,
                 PipelineStatus::Finished => finished += 1,
@@ -320,13 +303,89 @@ impl JobManager {
             "PARTIAL".to_string()
         }
     }
+    fn extract_control_senders(&self, job_id: &str) -> Result<Vec<mpsc::Sender<ControlCommand>>> {
+        let jobs_guard = self
+            .active_jobs
+            .read()
+            .map_err(|_| anyhow!("Active jobs lock poisoned"))?;
 
-    // ========================================================================
+        let graph = jobs_guard
+            .get(job_id)
+            .ok_or_else(|| anyhow!("Job not found: {job_id}"))?;
 
-    fn build_operator_chain(
+        Ok(graph
+            .pipelines
+            .values()
+            .map(|p| p.control_tx.clone())
+            .collect())
+    }
+
+    fn build_and_spawn_pipeline(
         &self,
-        operator_configs: &[ChainedOperator],
-    ) -> anyhow::Result<PreparedChain> {
+        job_id: String,
+        pipeline_id: u32,
+        operators: &[ChainedOperator],
+        edge_manager: &mut EdgeManager,
+    ) -> Result<PhysicalPipeline> {
+        let (raw_inboxes, raw_outboxes) = edge_manager.take_endpoints(pipeline_id);
+
+        let physical_outboxes = raw_outboxes
+            .into_iter()
+            .map(PhysicalSender::Local)
+            .collect();
+        let physical_inboxes: Vec<BoxedEventStream> = raw_inboxes
+            .into_iter()
+            .map(|rx| Box::pin(ReceiverStream::new(rx)) as _)
+            .collect();
+
+        let chain = self.build_operator_chain(operators)?;
+
+        if chain.source.is_none() && physical_inboxes.is_empty() {
+            bail!(
+                "Topology Error: pipeline '{}' contains no source and no upstream inputs.",
+                pipeline_id
+            );
+        }
+        if chain.source.is_some() && !physical_inboxes.is_empty() {
+            bail!(
+                "Topology Error: source pipeline '{}' should not have upstream inputs.",
+                pipeline_id
+            );
+        }
+
+        let (control_tx, control_rx) = mpsc::channel(64);
+        let status = Arc::new(RwLock::new(PipelineStatus::Initializing));
+
+        let ctx = TaskContext::new(
+            job_id.clone(),
+            pipeline_id,
+            0,
+            1,
+            physical_outboxes,
+            Arc::clone(&self.memory_pool),
+        );
+
+        let runner = if let Some(source) = chain.source {
+            let chain_head = ChainBuilder::build(chain.operators);
+            PipelineRunner::Source(SourceDriver::new(source, chain_head, ctx, control_rx))
+        } else {
+            PipelineRunner::Standard(
+                Pipeline::new(chain.operators, ctx, physical_inboxes, control_rx)
+                    .map_err(|e| anyhow!("Pipeline init failed: {e}"))?,
+            )
+        };
+
+        let handle = self.spawn_worker_thread(job_id, pipeline_id, runner, Arc::clone(&status))?;
+
+        Ok(PhysicalPipeline {
+            pipeline_id,
+            handle: Some(handle),
+            status,
+            control_tx,
+        })
+    }
+
+    fn build_operator_chain(&self, operator_configs: &[ChainedOperator]) -> Result<PreparedChain> {
         let mut source: Option<Box<dyn SourceOperator>> = None;
         let mut chain = Vec::with_capacity(operator_configs.len());
 
@@ -339,13 +398,11 @@ impl JobManager {
                 ConstructedOperator::Operator(msg_op) => chain.push(msg_op),
                 ConstructedOperator::Source(src_op) => {
                     if source.is_some() {
-                        anyhow::bail!(
-                            "Topology Error: Multiple source operators detected in one physical chain."
-                        );
+                        bail!("Topology Error: Multiple sources in one physical chain.");
                     }
                     if !chain.is_empty() {
-                        anyhow::bail!(
-                            "Topology Error: Source operator '{}' cannot be scheduled inside a MessageOperator physical chain.",
+                        bail!(
+                            "Topology Error: Source '{}' must be the first operator.",
                             op_config.operator_name
                         );
                     }
@@ -359,100 +416,34 @@ impl JobManager {
         })
     }
 
-    fn spawn_pipeline_thread(
+    fn spawn_worker_thread(
         &self,
         job_id: String,
         pipeline_id: u32,
-        operators: Vec<Box<dyn Operator>>,
-        inboxes: Vec<BoxedEventStream>,
-        outboxes: Vec<PhysicalSender>,
-        control_rx: mpsc::Receiver<ControlCommand>,
+        runner: PipelineRunner,
         status: Arc<RwLock<PipelineStatus>>,
-    ) -> anyhow::Result<std::thread::JoinHandle<()>> {
-        let memory_pool = Arc::clone(&self.memory_pool);
+    ) -> Result<std::thread::JoinHandle<()>> {
         let thread_name = format!("Task-{job_id}-{pipeline_id}");
 
         let handle = std::thread::Builder::new()
             .name(thread_name)
             .spawn(move || {
-                *status.write().unwrap() = PipelineStatus::Running;
+                if let Ok(mut st) = status.write() {
+                    *st = PipelineStatus::Running;
+                }
 
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
-                    .expect("Failed to build current-thread Tokio runtime for pipeline");
+                    .expect("Failed to build current-thread Tokio runtime");
 
-                let job_id_inner = job_id.clone();
                 let execution_result =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         rt.block_on(async move {
-                            let ctx = TaskContext::new(
-                                job_id_inner,
-                                pipeline_id,
-                                0,
-                                1,
-                                outboxes,
-                                memory_pool,
-                            );
-
-                            let pipeline = Pipeline::new(operators, ctx, inboxes, control_rx)
-                                .map_err(|e| anyhow::anyhow!("Pipeline init failed: {e}"))?;
-
-                            pipeline
+                            runner
                                 .run()
                                 .await
-                                .map_err(|e| anyhow::anyhow!("Pipeline execution failed: {e}"))
-                        })
-                    }));
-
-                Self::handle_pipeline_exit(&job_id, pipeline_id, execution_result, &status);
-            })?;
-
-        Ok(handle)
-    }
-
-    fn spawn_source_pipeline_thread(
-        &self,
-        job_id: String,
-        pipeline_id: u32,
-        source: Box<dyn SourceOperator>,
-        operators: Vec<Box<dyn Operator>>,
-        outboxes: Vec<PhysicalSender>,
-        control_rx: mpsc::Receiver<ControlCommand>,
-        status: Arc<RwLock<PipelineStatus>>,
-    ) -> anyhow::Result<std::thread::JoinHandle<()>> {
-        let memory_pool = Arc::clone(&self.memory_pool);
-        let thread_name = format!("Task-{job_id}-{pipeline_id}");
-
-        let handle = std::thread::Builder::new()
-            .name(thread_name)
-            .spawn(move || {
-                *status.write().unwrap() = PipelineStatus::Running;
-
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("Failed to build current-thread Tokio runtime for source pipeline");
-
-                let job_id_inner = job_id.clone();
-                let execution_result =
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        rt.block_on(async move {
-                            let ctx = TaskContext::new(
-                                job_id_inner,
-                                pipeline_id,
-                                0,
-                                1,
-                                outboxes,
-                                memory_pool,
-                            );
-
-                            let chain_head = ChainedDriver::build_chain(operators);
-                            let runner = SourceRunner::new(source, chain_head, ctx, control_rx);
-
-                            runner.run().await.map_err(|e| {
-                                anyhow::anyhow!("Source pipeline execution failed: {e}")
-                            })
+                                .map_err(|e| anyhow!("Execution failed: {e}"))
                         })
                     }));
 
@@ -465,37 +456,42 @@ impl JobManager {
     fn handle_pipeline_exit(
         job_id: &str,
         pipeline_id: u32,
-        thread_result: std::thread::Result<anyhow::Result<()>>,
+        thread_result: std::thread::Result<Result<()>>,
         status: &RwLock<PipelineStatus>,
     ) {
-        let mut is_fatal = false;
-        let final_status = match thread_result {
+        let (final_status, is_fatal) = match thread_result {
             Ok(Ok(_)) => {
                 info!(job_id = %job_id, pipeline_id = pipeline_id, "Pipeline finished gracefully.");
-                PipelineStatus::Finished
+                (PipelineStatus::Finished, false)
             }
             Ok(Err(e)) => {
                 error!(job_id = %job_id, pipeline_id = pipeline_id, error = %e, "Pipeline failed.");
-                is_fatal = true;
-                PipelineStatus::Failed {
-                    error: e.to_string(),
-                    is_panic: false,
-                }
+                (
+                    PipelineStatus::Failed {
+                        error: e.to_string(),
+                        is_panic: false,
+                    },
+                    true,
+                )
             }
             Err(_) => {
                 error!(job_id = %job_id, pipeline_id = pipeline_id, "Pipeline thread panicked!");
-                is_fatal = true;
-                PipelineStatus::Failed {
-                    error: "Task thread encountered an unexpected panic".into(),
-                    is_panic: true,
-                }
+                (
+                    PipelineStatus::Failed {
+                        error: "Unexpected panic in task thread".into(),
+                        is_panic: true,
+                    },
+                    true,
+                )
             }
         };
 
-        *status.write().unwrap() = final_status;
+        if let Ok(mut st) = status.write() {
+            *st = final_status;
+        }
 
         if is_fatal {
-            warn!(job_id = %job_id, pipeline_id = pipeline_id, "Pipeline failure detected, Job should be aborted or recovered.");
+            warn!(job_id = %job_id, pipeline_id = pipeline_id, "Pipeline failure detected. Job degraded.");
         }
     }
 }

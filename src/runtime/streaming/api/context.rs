@@ -17,6 +17,22 @@ use crate::runtime::streaming::protocol::event::TrackedEvent;
 
 use arrow_array::RecordBatch;
 use std::sync::Arc;
+use std::time::Duration;
+
+/// 与单个子任务绑定的运行时参数（可由 `TaskContext::new` 默认填充，后续可扩展为从 Job 配置注入）。
+#[derive(Debug, Clone)]
+pub struct TaskContextConfig {
+    /// Source 在无数据（`SourceEvent::Idle`）时的退避休眠时长。
+    pub source_idle_timeout: Duration,
+}
+
+impl Default for TaskContextConfig {
+    fn default() -> Self {
+        Self {
+            source_idle_timeout: Duration::from_millis(50),
+        }
+    }
+}
 
 pub struct TaskContext {
     pub job_id: String,
@@ -29,6 +45,8 @@ pub struct TaskContext {
     memory_pool: Arc<MemoryPool>,
 
     current_watermark: Option<std::time::SystemTime>,
+
+    config: TaskContextConfig,
 }
 
 impl TaskContext {
@@ -48,7 +66,12 @@ impl TaskContext {
             outboxes,
             memory_pool,
             current_watermark: None,
+            config: TaskContextConfig::default(),
         }
+    }
+
+    pub fn config(&self) -> &TaskContextConfig {
+        &self.config
     }
 
     // ========================================================================

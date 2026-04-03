@@ -10,10 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-
 use arrow_array::{
-    Array, Decimal128Array, TimestampMicrosecondArray, TimestampMillisecondArray,
+    Array, BinaryArray, Decimal128Array, TimestampMicrosecondArray, TimestampMillisecondArray,
     TimestampNanosecondArray, TimestampSecondArray,
 };
 use arrow_json::writer::NullableEncoder;
@@ -21,6 +19,7 @@ use arrow_json::{Encoder, EncoderFactory, EncoderOptions};
 use arrow_schema::{ArrowError, DataType, FieldRef, TimeUnit};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use std::io::Write;
 
 use super::config::{DecimalEncoding, TimestampFormat};
 
@@ -37,6 +36,14 @@ impl EncoderFactory for CustomEncoderFactory {
         array: &'a dyn Array,
         _options: &'a EncoderOptions,
     ) -> Result<Option<NullableEncoder<'a>>, ArrowError> {
+        let downcast_err = |expected: &str| {
+            ArrowError::CastError(format!(
+                "Physical array type mismatch: expected {} for logical type {:?}",
+                expected,
+                array.data_type()
+            ))
+        };
+
         let encoder: Box<dyn Encoder> = match (
             &self.decimal_encoding,
             &self.timestamp_format,
@@ -46,7 +53,7 @@ impl EncoderFactory for CustomEncoderFactory {
                 let arr = array
                     .as_any()
                     .downcast_ref::<TimestampNanosecondArray>()
-                    .unwrap()
+                    .ok_or_else(|| downcast_err("TimestampNanosecondArray"))?
                     .clone();
                 Box::new(UnixMillisEncoder::Nanos(arr))
             }
@@ -54,7 +61,7 @@ impl EncoderFactory for CustomEncoderFactory {
                 let arr = array
                     .as_any()
                     .downcast_ref::<TimestampMicrosecondArray>()
-                    .unwrap()
+                    .ok_or_else(|| downcast_err("TimestampMicrosecondArray"))?
                     .clone();
                 Box::new(UnixMillisEncoder::Micros(arr))
             }
@@ -62,7 +69,7 @@ impl EncoderFactory for CustomEncoderFactory {
                 let arr = array
                     .as_any()
                     .downcast_ref::<TimestampMillisecondArray>()
-                    .unwrap()
+                    .ok_or_else(|| downcast_err("TimestampMillisecondArray"))?
                     .clone();
                 Box::new(UnixMillisEncoder::Millis(arr))
             }
@@ -70,17 +77,16 @@ impl EncoderFactory for CustomEncoderFactory {
                 let arr = array
                     .as_any()
                     .downcast_ref::<TimestampSecondArray>()
-                    .unwrap()
+                    .ok_or_else(|| downcast_err("TimestampSecondArray"))?
                     .clone();
                 Box::new(UnixMillisEncoder::Seconds(arr))
             }
 
-            // ── Decimal128 → String / Bytes ──
             (DecimalEncoding::String, _, DataType::Decimal128(_, _)) => {
                 let arr = array
                     .as_any()
                     .downcast_ref::<Decimal128Array>()
-                    .unwrap()
+                    .ok_or_else(|| downcast_err("Decimal128Array"))?
                     .clone();
                 Box::new(DecimalEncoder::StringEncoder(arr))
             }
@@ -88,17 +94,16 @@ impl EncoderFactory for CustomEncoderFactory {
                 let arr = array
                     .as_any()
                     .downcast_ref::<Decimal128Array>()
-                    .unwrap()
+                    .ok_or_else(|| downcast_err("Decimal128Array"))?
                     .clone();
                 Box::new(DecimalEncoder::BytesEncoder(arr))
             }
 
-            // ── Binary → Base64 ──
             (_, _, DataType::Binary) => {
                 let arr = array
                     .as_any()
-                    .downcast_ref::<arrow_array::BinaryArray>()
-                    .unwrap()
+                    .downcast_ref::<BinaryArray>()
+                    .ok_or_else(|| downcast_err("BinaryArray"))?
                     .clone();
                 Box::new(BinaryEncoder(arr))
             }
@@ -111,6 +116,7 @@ impl EncoderFactory for CustomEncoderFactory {
 }
 
 // ---------------------------------------------------------------------------
+// Timestamp Encoders
 // ---------------------------------------------------------------------------
 
 enum UnixMillisEncoder {
@@ -128,11 +134,13 @@ impl Encoder for UnixMillisEncoder {
             Self::Millis(arr) => arr.value(idx),
             Self::Seconds(arr) => arr.value(idx) * 1_000,
         };
-        out.extend_from_slice(millis.to_string().as_bytes());
+
+        write!(out, "{millis}").expect("Writing integer to Vec<u8> buffer should never fail");
     }
 }
 
 // ---------------------------------------------------------------------------
+// Decimal Encoders
 // ---------------------------------------------------------------------------
 
 enum DecimalEncoder {
@@ -149,12 +157,14 @@ impl Encoder for DecimalEncoder {
                 out.push(b'"');
             }
             Self::BytesEncoder(arr) => {
+                let bytes = arr.value(idx).to_be_bytes();
+                let mut stack_buf = [0u8; 24];
+                BASE64_STANDARD
+                    .encode_slice(&bytes, &mut stack_buf)
+                    .expect("Base64 encode_slice size mismatch");
+
                 out.push(b'"');
-                out.extend_from_slice(
-                    BASE64_STANDARD
-                        .encode(arr.value(idx).to_be_bytes())
-                        .as_bytes(),
-                );
+                out.extend_from_slice(&stack_buf);
                 out.push(b'"');
             }
         }
@@ -162,14 +172,26 @@ impl Encoder for DecimalEncoder {
 }
 
 // ---------------------------------------------------------------------------
+// Binary Encoder
 // ---------------------------------------------------------------------------
 
-struct BinaryEncoder(arrow_array::BinaryArray);
+struct BinaryEncoder(BinaryArray);
 
 impl Encoder for BinaryEncoder {
     fn encode(&mut self, idx: usize, out: &mut Vec<u8>) {
+        let bytes = self.0.value(idx);
+
+        let b64_len = bytes.len().saturating_add(2) / 3 * 4;
+
         out.push(b'"');
-        out.extend_from_slice(BASE64_STANDARD.encode(self.0.value(idx)).as_bytes());
+
+        let start_idx = out.len();
+        out.resize(start_idx + b64_len, 0);
+
+        BASE64_STANDARD
+            .encode_slice(bytes, &mut out[start_idx..])
+            .expect("Base64 encode_slice buffer capacity should match exactly");
+
         out.push(b'"');
     }
 }

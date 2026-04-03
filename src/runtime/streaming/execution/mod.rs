@@ -10,6 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod runner;
-pub mod source;
+pub mod operator_chain;
+pub mod pipeline;
+pub mod source_driver;
 pub mod tracker;
+
+pub use operator_chain::{ChainBuilder, OperatorDrive};
+pub use pipeline::Pipeline;
+pub use source_driver::SourceDriver;

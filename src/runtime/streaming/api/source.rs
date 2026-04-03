@@ -51,6 +51,14 @@ pub trait SourceOperator: Send + 'static {
         ctx: &mut TaskContext,
     ) -> anyhow::Result<()>;
 
+    async fn commit_checkpoint(
+        &mut self,
+        _epoch: u32,
+        _ctx: &mut TaskContext,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     async fn on_close(&mut self, _ctx: &mut TaskContext) -> anyhow::Result<()> {
         Ok(())
     }

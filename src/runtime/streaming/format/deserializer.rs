@@ -10,17 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use arrow_array::builder::{BinaryBuilder, StringBuilder, TimestampNanosecondBuilder};
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_json::reader::ReaderBuilder;
 use arrow_schema::{Schema, SchemaRef};
-use std::collections::HashMap;
 use std::sync::Arc;
-
-use crate::sql::common::TIMESTAMP_FIELD;
+use tracing::{debug, warn};
 
 use super::config::{BadDataPolicy, Format};
+use crate::sql::common::TIMESTAMP_FIELD;
 
 pub struct DataDeserializer {
     format: Format,
@@ -49,10 +48,28 @@ impl DataDeserializer {
         messages: &[&[u8]],
         kafka_timestamps_ms: &[u64],
     ) -> Result<RecordBatch> {
+        if messages.is_empty() {
+            return Ok(RecordBatch::new_empty(self.final_schema.clone()));
+        }
+
+        if !kafka_timestamps_ms.is_empty() && kafka_timestamps_ms.len() != messages.len() {
+            warn!(
+                message_count = messages.len(),
+                timestamp_count = kafka_timestamps_ms.len(),
+                "Kafka timestamps count mismatches with messages count"
+            );
+        }
+
         match &self.format {
-            Format::Json(_) => self.deserialize_json(messages, kafka_timestamps_ms),
-            Format::RawString => self.deserialize_raw_string(messages, kafka_timestamps_ms),
-            Format::RawBytes => self.deserialize_raw_bytes(messages, kafka_timestamps_ms),
+            Format::Json(_) => self
+                .deserialize_json(messages, kafka_timestamps_ms)
+                .context("Failed to deserialize JSON format"),
+            Format::RawString => self
+                .deserialize_raw_string(messages, kafka_timestamps_ms)
+                .context("Failed to deserialize RawString format"),
+            Format::RawBytes => self
+                .deserialize_raw_bytes(messages, kafka_timestamps_ms)
+                .context("Failed to deserialize RawBytes format"),
         }
     }
 
@@ -61,39 +78,49 @@ impl DataDeserializer {
         messages: &[&[u8]],
         kafka_timestamps_ms: &[u64],
     ) -> Result<RecordBatch> {
-        let mut buffer = Vec::with_capacity(messages.len() * 256);
+        let total_capacity: usize = messages.iter().map(|m| m.len() + 1).sum();
+        let mut buffer = Vec::with_capacity(total_capacity);
         for msg in messages {
             buffer.extend_from_slice(msg);
             buffer.push(b'\n');
         }
 
-        let allow_bad_data = self.bad_data_policy == BadDataPolicy::Drop;
         let mut decoder = ReaderBuilder::new(self.decoder_schema.clone())
             .with_strict_mode(false)
-            .build_decoder()?;
+            .build_decoder()
+            .context("Failed to build Arrow JSON decoder")?;
 
-        decoder.decode(&buffer)?;
+        decoder
+            .decode(&buffer)
+            .context("Arrow JSON decoding error")?;
 
-        let (batch, valid_indices) = if allow_bad_data {
-            let Some((batch, mask, _, _errors)) = decoder.flush_with_bad_data()? else {
-                return Ok(RecordBatch::new_empty(self.final_schema.clone()));
-            };
-            let mut indices = Vec::with_capacity(batch.num_rows());
-            for i in 0..mask.len() {
-                if mask.value(i) {
-                    indices.push(i);
+        match self.bad_data_policy {
+            BadDataPolicy::Drop => {
+                let Some((batch, mask, _remainder, _errors)) = decoder.flush_with_bad_data()?
+                else {
+                    return Ok(RecordBatch::new_empty(self.final_schema.clone()));
+                };
+
+                let valid_count = mask.true_count();
+                if valid_count < messages.len() {
+                    warn!(
+                        "Dropped {} malformed JSON rows",
+                        messages.len() - valid_count
+                    );
                 }
-            }
-            (batch, indices)
-        } else {
-            let batch = decoder
-                .flush()?
-                .unwrap_or_else(|| RecordBatch::new_empty(self.decoder_schema.clone()));
-            let indices: Vec<usize> = (0..batch.num_rows()).collect();
-            (batch, indices)
-        };
 
-        self.rebuild_with_timestamp(batch, kafka_timestamps_ms, &valid_indices)
+                let valid_indices: Vec<usize> =
+                    (0..mask.len()).filter(|&i| mask.value(i)).collect();
+                self.rebuild_with_timestamp(batch, kafka_timestamps_ms, &valid_indices)
+            }
+            _ => {
+                let batch = decoder
+                    .flush()?
+                    .unwrap_or_else(|| RecordBatch::new_empty(self.decoder_schema.clone()));
+                let indices: Vec<usize> = (0..batch.num_rows()).collect();
+                self.rebuild_with_timestamp(batch, kafka_timestamps_ms, &indices)
+            }
+        }
     }
 
     fn deserialize_raw_string(
@@ -104,21 +131,28 @@ impl DataDeserializer {
         let value_idx = self
             .decoder_schema
             .index_of("value")
-            .map_err(|_| anyhow!("RawString format requires a 'value' column"))?;
+            .context("RawString format requires a 'value' column in the schema")?;
+        let total_bytes: usize = messages.iter().map(|m| m.len()).sum();
+        let mut builder = StringBuilder::with_capacity(messages.len(), total_bytes);
 
-        let mut builder = StringBuilder::with_capacity(messages.len(), messages.len() * 64);
         for msg in messages {
             builder.append_value(String::from_utf8_lossy(msg));
         }
 
         let mut columns = vec![None; self.decoder_schema.fields().len()];
         columns[value_idx] = Some(Arc::new(builder.finish()) as ArrayRef);
+
         let decoded_columns = columns
             .into_iter()
-            .map(|c| c.ok_or_else(|| anyhow!("missing RawString decoded column")))
+            .enumerate()
+            .map(|(i, c)| {
+                c.ok_or_else(|| anyhow!("Missing decoded column at index {} for RawString", i))
+            })
             .collect::<Result<Vec<_>>>()?;
+
         let decoded_batch = RecordBatch::try_new(self.decoder_schema.clone(), decoded_columns)
-            .map_err(|e| anyhow!("build RawString decoded batch: {e}"))?;
+            .context("Failed to build RecordBatch for RawString")?;
+
         let valid_indices: Vec<usize> = (0..decoded_batch.num_rows()).collect();
         self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &valid_indices)
     }
@@ -131,20 +165,29 @@ impl DataDeserializer {
         let value_idx = self
             .decoder_schema
             .index_of("value")
-            .map_err(|_| anyhow!("RawBytes format requires a 'value' column"))?;
-        let mut builder = BinaryBuilder::with_capacity(messages.len(), messages.len() * 64);
+            .context("RawBytes format requires a 'value' column in the schema")?;
+
+        let total_bytes: usize = messages.iter().map(|m| m.len()).sum();
+        let mut builder = BinaryBuilder::with_capacity(messages.len(), total_bytes);
+
         for msg in messages {
             builder.append_value(msg);
         }
 
         let mut columns = vec![None; self.decoder_schema.fields().len()];
         columns[value_idx] = Some(Arc::new(builder.finish()) as ArrayRef);
+
         let decoded_columns = columns
             .into_iter()
-            .map(|c| c.ok_or_else(|| anyhow!("missing RawBytes decoded column")))
+            .enumerate()
+            .map(|(i, c)| {
+                c.ok_or_else(|| anyhow!("Missing decoded column at index {} for RawBytes", i))
+            })
             .collect::<Result<Vec<_>>>()?;
+
         let decoded_batch = RecordBatch::try_new(self.decoder_schema.clone(), decoded_columns)
-            .map_err(|e| anyhow!("build RawBytes decoded batch: {e}"))?;
+            .context("Failed to build RecordBatch for RawBytes")?;
+
         let valid_indices: Vec<usize> = (0..decoded_batch.num_rows()).collect();
         self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &valid_indices)
     }
@@ -155,17 +198,11 @@ impl DataDeserializer {
         kafka_timestamps_ms: &[u64],
         valid_indices: &[usize],
     ) -> Result<RecordBatch> {
-        let mut by_name: HashMap<String, ArrayRef> = decoded_batch
-            .schema()
-            .fields()
-            .iter()
-            .zip(decoded_batch.columns().iter())
-            .map(|(f, a)| (f.name().to_string(), a.clone()))
-            .collect();
+        let num_rows = valid_indices.len();
 
-        let mut ts_builder = TimestampNanosecondBuilder::with_capacity(valid_indices.len());
-        for idx in valid_indices {
-            let ms = kafka_timestamps_ms.get(*idx).copied().unwrap_or(0);
+        let mut ts_builder = TimestampNanosecondBuilder::with_capacity(num_rows);
+        for &idx in valid_indices {
+            let ms = kafka_timestamps_ms.get(idx).copied().unwrap_or(0);
             ts_builder.append_value((ms as i64).saturating_mul(1_000_000));
         }
         let timestamp_col: ArrayRef = Arc::new(ts_builder.finish());
@@ -175,15 +212,16 @@ impl DataDeserializer {
             if field.name() == TIMESTAMP_FIELD {
                 columns.push(timestamp_col.clone());
             } else {
-                let array = by_name
-                    .remove(field.name())
-                    .ok_or_else(|| anyhow!("decoded JSON missing field '{}'", field.name()))?;
-                columns.push(array);
+                let idx = self
+                    .decoder_schema
+                    .index_of(field.name())
+                    .map_err(|_| anyhow!("Field '{}' missing in decoded batch", field.name()))?;
+                columns.push(decoded_batch.column(idx).clone());
             }
         }
 
         RecordBatch::try_new(self.final_schema.clone(), columns)
-            .map_err(|e| anyhow!("build JSON batch with _timestamp: {e}"))
+            .context("Final RecordBatch assembly with timestamp failed")
     }
 }
 

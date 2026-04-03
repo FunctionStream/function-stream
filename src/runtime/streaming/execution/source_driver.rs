@@ -10,30 +10,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use tokio::sync::mpsc::Receiver;
+use tokio::time::{Instant, sleep};
+use tracing::{Instrument, info, info_span, warn};
+
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::source::{SourceEvent, SourceOperator};
 use crate::runtime::streaming::error::RunError;
-use crate::runtime::streaming::execution::runner::OperatorDrive;
-use crate::runtime::streaming::protocol::control::ControlCommand;
-use crate::runtime::streaming::protocol::event::StreamEvent;
-use crate::runtime::streaming::protocol::event::TrackedEvent;
+use crate::runtime::streaming::execution::OperatorDrive;
+use crate::runtime::streaming::protocol::{
+    control::ControlCommand,
+    event::{StreamEvent, TrackedEvent},
+};
 use crate::sql::common::CheckpointBarrier;
-use std::time::Duration;
-use tokio::sync::mpsc::Receiver;
-use tokio::time::{MissedTickBehavior, interval};
-use tracing::{Instrument, info, info_span, warn};
 
-pub const SOURCE_IDLE_SLEEP: Duration = Duration::from_millis(50);
-pub const WATERMARK_EMIT_INTERVAL: Duration = Duration::from_millis(200);
-
-pub struct SourceRunner {
+pub struct SourceDriver {
     operator: Box<dyn SourceOperator>,
     chain_head: Option<Box<dyn OperatorDrive>>,
     ctx: TaskContext,
     control_rx: Receiver<ControlCommand>,
 }
 
-impl SourceRunner {
+impl SourceDriver {
     pub fn new(
         operator: Box<dyn SourceOperator>,
         chain_head: Option<Box<dyn OperatorDrive>>,
@@ -51,48 +49,38 @@ impl SourceRunner {
     pub async fn run(mut self) -> Result<(), RunError> {
         let span = info_span!(
             "source_run",
+            job_id = %self.ctx.job_id,
             vertex = self.ctx.vertex_id,
             op = self.operator.name()
         );
 
         async move {
-            info!("Source subtask starting");
+            info!("SourceDriver initializing...");
+
             self.operator.on_start(&mut self.ctx).await?;
             if let Some(chain) = &mut self.chain_head {
                 chain.on_start(&mut self.ctx).await?;
             }
 
-            let mut idle_timer = interval(SOURCE_IDLE_SLEEP);
-            idle_timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            let idle_timeout = self.ctx.config().source_idle_timeout;
 
-            let mut wm_timer = interval(WATERMARK_EMIT_INTERVAL);
-            wm_timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            let idle_delay = sleep(idle_timeout);
+            tokio::pin!(idle_delay);
 
             let mut is_idle = false;
-            let mut is_running = true;
 
-            while is_running {
+            loop {
                 tokio::select! {
                     biased;
 
-                    cmd_opt = self.control_rx.recv() => {
-                        match cmd_opt {
-                            None => is_running = false,
-                            Some(cmd) => {
-                                if self.handle_control(cmd).await? {
-                                    is_running = false;
-                                }
-                            }
+                    Some(cmd) = self.control_rx.recv() => {
+                        if self.handle_control(cmd).await? {
+                            info!("SourceDriver received stop signal, breaking event loop.");
+                            break;
                         }
                     }
 
-                    _ = wm_timer.tick() => {
-                        if let Some(wm) = self.operator.poll_watermark() {
-                            self.dispatch_event(StreamEvent::Watermark(wm)).await?;
-                        }
-                    }
-
-                    _ = idle_timer.tick(), if is_idle => {
+                    () = idle_delay.as_mut(), if is_idle => {
                         is_idle = false;
                     }
 
@@ -106,17 +94,32 @@ impl SourceRunner {
                             }
                             Ok(SourceEvent::Idle) => {
                                 is_idle = true;
-                                idle_timer.reset();
+                                idle_delay
+                                    .as_mut()
+                                    .reset(Instant::now() + idle_timeout);
                             }
                             Ok(SourceEvent::EndOfStream) => {
                                 self.dispatch_event(StreamEvent::EndOfStream).await?;
-                                is_running = false;
+                                info!(
+                                    "Source '{}' reached EndOfStream, pipeline shutting down gracefully.",
+                                    self.operator.name()
+                                );
+                                break;
                             }
                             Err(e) => {
-                                warn!("fetch_next error: {}", e);
+                                warn!(
+                                    "Source operator '{}' encountered critical fetch error: {}",
+                                    self.operator.name(),
+                                    e
+                                );
                                 return Err(RunError::Operator(e));
                             }
                         }
+                    }
+
+                    else => {
+                        warn!("Control channel closed unexpectedly, SourceDriver shutting down.");
+                        break;
                     }
                 }
             }
@@ -129,7 +132,7 @@ impl SourceRunner {
 
     async fn dispatch_event(&mut self, event: StreamEvent) -> Result<(), RunError> {
         if let Some(chain) = &mut self.chain_head {
-            let _stop = chain
+            chain
                 .process_event(0, TrackedEvent::control(event), &mut self.ctx)
                 .await?;
         } else {
@@ -150,32 +153,43 @@ impl SourceRunner {
     }
 
     async fn handle_control(&mut self, cmd: ControlCommand) -> Result<bool, RunError> {
-        match cmd {
+        let mut stop = false;
+
+        match &cmd {
             ControlCommand::TriggerCheckpoint { barrier } => {
-                let b: CheckpointBarrier = barrier.into();
+                let b: CheckpointBarrier = barrier.clone().into();
                 self.operator
                     .snapshot_state(b.clone(), &mut self.ctx)
                     .await?;
                 self.dispatch_event(StreamEvent::Barrier(b)).await?;
             }
-            ControlCommand::Stop { .. } => return Ok(true),
-            other => {
-                if let Some(chain) = &mut self.chain_head {
-                    if chain.handle_control(other, &mut self.ctx).await? {
-                        return Ok(true);
-                    }
-                }
+            ControlCommand::Commit { epoch } => {
+                self.operator
+                    .commit_checkpoint(*epoch, &mut self.ctx)
+                    .await?;
+            }
+            ControlCommand::Stop { .. } => {
+                stop = true;
+            }
+            _ => {}
+        }
+
+        if let Some(chain) = &mut self.chain_head {
+            if chain.handle_control(cmd, &mut self.ctx).await? {
+                stop = true;
             }
         }
-        Ok(false)
+
+        Ok(stop)
     }
 
     async fn teardown(mut self) -> Result<(), RunError> {
+        info!("SourceDriver teardown initiated...");
         self.operator.on_close(&mut self.ctx).await?;
         if let Some(chain) = &mut self.chain_head {
             chain.on_close(&mut self.ctx).await?;
         }
-        info!("Source subtask shutdown");
+        info!("SourceDriver teardown complete. Goodbye.");
         Ok(())
     }
 }
