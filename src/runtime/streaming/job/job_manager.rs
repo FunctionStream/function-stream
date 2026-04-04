@@ -34,8 +34,6 @@ use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSen
 use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
 
 // ---------------------------------------------------------------------------
-// 核心数据结构
-// ---------------------------------------------------------------------------
 #[derive(Debug, Clone)]
 pub struct StreamingJobSummary {
     pub job_id: String,
