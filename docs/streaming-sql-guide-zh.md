@@ -145,7 +145,7 @@ CREATE STREAMING TABLE metric_hop_uv_10m WITH (
 SELECT
     HOP(INTERVAL '1' MINUTE, INTERVAL '10' MINUTE) AS time_window,
     ad_id,
-    COUNT(DISTINCT user_id) AS unique_users
+    COUNT(DISTINCT CAST(user_id AS STRING)) AS unique_users
 FROM ad_impressions
 GROUP BY
     1,
