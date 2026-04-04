@@ -12,10 +12,14 @@
 
 use std::collections::HashMap;
 
-use protocol::grpc::api::{FsEdge, FsNode};
+use anyhow::{Result, anyhow};
 use tokio::sync::mpsc;
+use tracing::{debug, info, warn};
 
 use crate::runtime::streaming::protocol::event::TrackedEvent;
+use protocol::grpc::api::{FsEdge, FsNode};
+
+const DEFAULT_CHANNEL_CAPACITY: usize = 2048;
 
 type TrackedEventEndpoints = (
     Vec<mpsc::Receiver<TrackedEvent>>,
@@ -28,34 +32,69 @@ pub struct EdgeManager {
 
 impl EdgeManager {
     pub fn build(nodes: &[FsNode], edges: &[FsEdge]) -> Self {
-        let mut tx_map: HashMap<u32, Vec<mpsc::Sender<TrackedEvent>>> = HashMap::new();
-        let mut rx_map: HashMap<u32, Vec<mpsc::Receiver<TrackedEvent>>> = HashMap::new();
+        Self::build_with_capacity(nodes, edges, DEFAULT_CHANNEL_CAPACITY)
+    }
+
+    pub fn build_with_capacity(nodes: &[FsNode], edges: &[FsEdge], capacity: usize) -> Self {
+        info!(
+            "Building EdgeManager for {} nodes and {} edges (channel capacity: {})",
+            nodes.len(),
+            edges.len(),
+            capacity
+        );
+
+        let mut tx_map: HashMap<u32, Vec<mpsc::Sender<TrackedEvent>>> =
+            HashMap::with_capacity(nodes.len());
+        let mut rx_map: HashMap<u32, Vec<mpsc::Receiver<TrackedEvent>>> =
+            HashMap::with_capacity(nodes.len());
 
         for edge in edges {
-            let (tx, rx) = mpsc::channel(2048);
-            tx_map.entry(edge.source as u32).or_default().push(tx);
-            rx_map.entry(edge.target as u32).or_default().push(rx);
+            let source_id = edge.source as u32;
+            let target_id = edge.target as u32;
+
+            let (tx, rx) = mpsc::channel(capacity);
+
+            tx_map.entry(source_id).or_default().push(tx);
+            rx_map.entry(target_id).or_default().push(rx);
+
+            debug!(
+                "Created physical edge channel: Node {} -> Node {}",
+                source_id, target_id
+            );
         }
 
-        let mut endpoints = HashMap::new();
+        let mut endpoints = HashMap::with_capacity(nodes.len());
         for node in nodes {
             let id = node.node_index as u32;
+
             let inboxes = rx_map.remove(&id).unwrap_or_default();
-            endpoints.insert(id, (inboxes, tx_map.remove(&id).unwrap_or_default()));
+            let outboxes = tx_map.remove(&id).unwrap_or_default();
+
+            endpoints.insert(id, (inboxes, outboxes));
+        }
+
+        for remaining_target in rx_map.keys() {
+            warn!(
+                "Topology Warning: Found incoming edges pointing to non-existent Node {}",
+                remaining_target
+            );
+        }
+        for remaining_source in tx_map.keys() {
+            warn!(
+                "Topology Warning: Found outgoing edges coming from non-existent Node {}",
+                remaining_source
+            );
         }
 
         Self { endpoints }
     }
 
-    pub fn take_endpoints(
-        &mut self,
-        id: u32,
-    ) -> (
-        Vec<mpsc::Receiver<TrackedEvent>>,
-        Vec<mpsc::Sender<TrackedEvent>>,
-    ) {
+    pub fn take_endpoints(&mut self, id: u32) -> Result<TrackedEventEndpoints> {
         self.endpoints
             .remove(&id)
-            .expect("Critical: Execution Graph Inconsistent")
+            .ok_or_else(|| anyhow!(
+                "Topology Error: Endpoints for Node {} not found or already taken. Execution Graph may be inconsistent.",
+                id
+            ))
     }
 }

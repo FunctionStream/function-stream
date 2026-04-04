@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, warn};
@@ -330,40 +330,52 @@ impl JobManager {
         operators: &[ChainedOperator],
         edge_manager: &mut EdgeManager,
     ) -> Result<PhysicalPipeline> {
-        let (raw_inboxes, raw_outboxes) = edge_manager.take_endpoints(pipeline_id);
+        let (raw_inboxes, raw_outboxes) =
+            edge_manager.take_endpoints(pipeline_id).with_context(|| {
+                format!(
+                    "Failed to retrieve network endpoints for pipeline {}",
+                    pipeline_id
+                )
+            })?;
 
-        let physical_outboxes = raw_outboxes
+        let physical_outboxes: Vec<PhysicalSender> = raw_outboxes
             .into_iter()
             .map(PhysicalSender::Local)
             .collect();
+
         let physical_inboxes: Vec<BoxedEventStream> = raw_inboxes
             .into_iter()
             .map(|rx| Box::pin(ReceiverStream::new(rx)) as _)
             .collect();
 
-        let chain = self.build_operator_chain(operators)?;
+        let chain = self.build_operator_chain(operators).with_context(|| {
+            format!(
+                "Failed to build operator chain for pipeline {}",
+                pipeline_id
+            )
+        })?;
 
-        if chain.source.is_none() && physical_inboxes.is_empty() {
-            bail!(
-                "Topology Error: pipeline '{}' contains no source and no upstream inputs.",
-                pipeline_id
-            );
-        }
-        if chain.source.is_some() && !physical_inboxes.is_empty() {
-            bail!(
-                "Topology Error: source pipeline '{}' should not have upstream inputs.",
-                pipeline_id
-            );
-        }
+        ensure!(
+            chain.source.is_some() || !physical_inboxes.is_empty(),
+            "Topology Error: Pipeline '{}' contains no source and has no upstream inputs (Dead end).",
+            pipeline_id
+        );
+        ensure!(
+            chain.source.is_none() || physical_inboxes.is_empty(),
+            "Topology Error: Source pipeline '{}' cannot have upstream inputs.",
+            pipeline_id
+        );
 
         let (control_tx, control_rx) = mpsc::channel(64);
         let status = Arc::new(RwLock::new(PipelineStatus::Initializing));
 
+        let subtask_index = 0;
+        let parallelism = 1;
         let ctx = TaskContext::new(
             job_id.clone(),
             pipeline_id,
-            0,
-            1,
+            subtask_index,
+            parallelism,
             physical_outboxes,
             Arc::clone(&self.memory_pool),
         );
@@ -373,12 +385,15 @@ impl JobManager {
             PipelineRunner::Source(SourceDriver::new(source, chain_head, ctx, control_rx))
         } else {
             PipelineRunner::Standard(
-                Pipeline::new(chain.operators, ctx, physical_inboxes, control_rx)
-                    .map_err(|e| anyhow!("Pipeline init failed: {e}"))?,
+                Pipeline::new(chain.operators, ctx, physical_inboxes, control_rx).with_context(
+                    || format!("Failed to initialize Standard Pipeline {}", pipeline_id),
+                )?,
             )
         };
 
-        let handle = self.spawn_worker_thread(job_id, pipeline_id, runner, Arc::clone(&status))?;
+        let handle = self
+            .spawn_worker_thread(job_id, pipeline_id, runner, Arc::clone(&status))
+            .with_context(|| format!("Failed to spawn OS thread for pipeline {}", pipeline_id))?;
 
         Ok(PhysicalPipeline {
             pipeline_id,
