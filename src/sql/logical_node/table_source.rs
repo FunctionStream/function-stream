@@ -20,7 +20,7 @@ use prost::Message;
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::extension_node;
 use crate::sql::common::{FsSchema, FsSchemaRef};
-use crate::sql::extensions::debezium::DebeziumSchemaCodec;
+use crate::sql::logical_node::debezium::DebeziumSchemaCodec;
 use crate::sql::logical_node::logical::{LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::schema::SourceTable;

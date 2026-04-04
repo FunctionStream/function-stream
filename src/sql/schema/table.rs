@@ -12,7 +12,7 @@
 
 use super::source_table::SourceTable;
 use crate::sql::analysis::rewrite_plan;
-use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::logical_node::remote_table::RemoteTableBoundaryNode;
 use crate::sql::logical_planner::optimizers::produce_optimized_plan;
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::types::{ProcessingMode, QualifiedField};

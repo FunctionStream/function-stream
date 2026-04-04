@@ -19,8 +19,8 @@ use crate::sql::analysis::{
     aggregate_rewriter::AggregateRewriter, join_rewriter::JoinRewriter,
     window_function_rewriter::WindowFunctionRewriter,
 };
-use crate::sql::extensions::StreamingOperatorBlueprint;
-use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::logical_node::StreamingOperatorBlueprint;
+use crate::sql::logical_node::remote_table::RemoteTableBoundaryNode;
 use crate::sql::schema::utils::{add_timestamp_field, has_timestamp_field};
 use crate::sql::types::{QualifiedField, TIMESTAMP_FIELD};
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};

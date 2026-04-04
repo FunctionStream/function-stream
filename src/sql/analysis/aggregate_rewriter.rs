@@ -18,8 +18,8 @@ use datafusion::prelude::col;
 use std::sync::Arc;
 
 use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
-use crate::sql::extensions::aggregate::StreamWindowAggregateNode;
-use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
+use crate::sql::logical_node::aggregate::StreamWindowAggregateNode;
+use crate::sql::logical_node::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::types::{
     QualifiedField, TIMESTAMP_FIELD, WindowBehavior, WindowType, build_df_schema_with_metadata,

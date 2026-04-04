@@ -27,11 +27,11 @@ use protocol::grpc::api::UpdatingAggregateOperator;
 
 use crate::sql::common::constants::{extension_node, proto_operator_name, updating_state_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};
-use crate::sql::extensions::{
-    CompiledTopologyNode, IsRetractExtension, StreamingOperatorBlueprint,
-};
 use crate::sql::functions::multi_hash;
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use crate::sql::logical_node::{
+    CompiledTopologyNode, IsRetractExtension, StreamingOperatorBlueprint,
+};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::physical::StreamingExtensionCodec;
 

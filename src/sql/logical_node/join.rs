@@ -24,8 +24,8 @@ use protocol::grpc::api::JoinOperator;
 
 use crate::sql::common::constants::{extension_node, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};
-use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use crate::sql::logical_node::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::physical::StreamingExtensionCodec;
 

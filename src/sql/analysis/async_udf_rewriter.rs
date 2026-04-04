@@ -11,8 +11,8 @@
 // limitations under the License.
 
 use crate::sql::common::constants::sql_field;
-use crate::sql::extensions::AsyncFunctionExecutionNode;
-use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
+use crate::sql::logical_node::AsyncFunctionExecutionNode;
+use crate::sql::logical_node::remote_table::RemoteTableBoundaryNode;
 use crate::sql::schema::StreamSchemaProvider;
 use datafusion::common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
 use datafusion::common::{Column, Result as DFResult, TableReference, plan_err};

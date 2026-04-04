@@ -20,8 +20,8 @@ use prost::Message;
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::extension_node;
 use crate::sql::common::{FsSchema, FsSchemaRef, UPDATING_META_FIELD};
-use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use crate::sql::logical_node::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::schema::Table;
 

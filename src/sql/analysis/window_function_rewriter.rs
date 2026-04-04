@@ -21,8 +21,8 @@ use std::sync::Arc;
 use tracing::debug;
 
 use crate::sql::analysis::streaming_window_analzer::{StreamingWindowAnalzer, extract_column};
-use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
-use crate::sql::extensions::windows_function::StreamingWindowFunctionNode;
+use crate::sql::logical_node::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
+use crate::sql::logical_node::windows_function::StreamingWindowFunctionNode;
 use crate::sql::types::{WindowType, build_df_schema, extract_qualified_fields};
 
 /// WindowFunctionRewriter transforms standard SQL Window functions into streaming-compatible

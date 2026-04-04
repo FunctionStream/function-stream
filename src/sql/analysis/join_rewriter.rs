@@ -13,8 +13,8 @@
 use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
 use crate::sql::common::TIMESTAMP_FIELD;
 use crate::sql::common::constants::mem_exec_join_side;
-use crate::sql::extensions::join::StreamingJoinNode;
-use crate::sql::extensions::key_calculation::KeyExtractionNode;
+use crate::sql::logical_node::join::StreamingJoinNode;
+use crate::sql::logical_node::key_calculation::KeyExtractionNode;
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::types::{WindowType, build_df_schema_with_metadata, extract_qualified_fields};
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};

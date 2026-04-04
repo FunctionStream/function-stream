@@ -21,10 +21,10 @@ use datafusion::logical_expr::{
 };
 
 use crate::sql::common::UPDATING_META_FIELD;
-use crate::sql::extensions::debezium::UnrollDebeziumPayloadNode;
-use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
-use crate::sql::extensions::table_source::StreamIngestionNode;
-use crate::sql::extensions::watermark_node::EventTimeWatermarkNode;
+use crate::sql::logical_node::debezium::UnrollDebeziumPayloadNode;
+use crate::sql::logical_node::remote_table::RemoteTableBoundaryNode;
+use crate::sql::logical_node::table_source::StreamIngestionNode;
+use crate::sql::logical_node::watermark_node::EventTimeWatermarkNode;
 use crate::sql::schema::ColumnDescriptor;
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::schema::source_table::SourceTable;

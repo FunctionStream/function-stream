@@ -42,10 +42,10 @@ use datafusion::error::DataFusionError;
 use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore};
 use tracing::{debug, info, instrument};
 
-use crate::sql::extensions::StreamingOperatorBlueprint;
-use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
-use crate::sql::extensions::projection::StreamProjectionNode;
-use crate::sql::extensions::sink::StreamEgressNode;
+use crate::sql::logical_node::StreamingOperatorBlueprint;
+use crate::sql::logical_node::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
+use crate::sql::logical_node::projection::StreamProjectionNode;
+use crate::sql::logical_node::sink::StreamEgressNode;
 use crate::sql::logical_planner::planner::NamedNode;
 
 fn duration_from_sql_expr(

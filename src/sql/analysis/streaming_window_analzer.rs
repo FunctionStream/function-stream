@@ -17,8 +17,8 @@ use datafusion::common::tree_node::{TreeNodeRecursion, TreeNodeVisitor};
 use datafusion::common::{Column, DFSchema, DataFusionError, Result};
 use datafusion::logical_expr::{Expr, Extension, LogicalPlan, expr::Alias};
 
-use crate::sql::extensions::aggregate::{STREAM_AGG_EXTENSION_NAME, StreamWindowAggregateNode};
-use crate::sql::extensions::join::STREAM_JOIN_NODE_TYPE;
+use crate::sql::logical_node::aggregate::{STREAM_AGG_EXTENSION_NAME, StreamWindowAggregateNode};
+use crate::sql::logical_node::join::STREAM_JOIN_NODE_TYPE;
 use crate::sql::types::{
     QualifiedField, WindowBehavior, WindowType, extract_qualified_fields, extract_window_type,
 };

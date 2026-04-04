@@ -24,8 +24,8 @@ use protocol::grpc::api::ProjectionOperator;
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::{extension_node, sql_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};
-use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use crate::sql::logical_node::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::types::{QualifiedField, build_df_schema};
 

@@ -43,12 +43,12 @@ use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 
 use crate::sql::common::{FsSchema, FsSchemaRef};
-use crate::sql::extensions::debezium::{
+use crate::sql::logical_node::debezium::{
     PACK_NODE_NAME, UNROLL_NODE_NAME, UnrollDebeziumPayloadNode,
 };
-use crate::sql::extensions::key_calculation::KeyExtractionNode;
-use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
+use crate::sql::logical_node::key_calculation::KeyExtractionNode;
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalGraph, LogicalNode};
+use crate::sql::logical_node::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::physical::{
     CdcDebeziumPackExec, CdcDebeziumUnrollExec, FsMemExec, StreamingDecodingContext,
     StreamingExtensionCodec,

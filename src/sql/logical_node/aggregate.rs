@@ -33,10 +33,10 @@ use protocol::grpc::api::{
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::{extension_node, proto_operator_name};
 use crate::sql::common::{FsSchema, FsSchemaRef};
-use crate::sql::extensions::{
+use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
+use crate::sql::logical_node::{
     CompiledTopologyNode, StreamingOperatorBlueprint, SystemTimestampInjectorNode,
 };
-use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner, SplitPlanOutput};
 use crate::sql::physical::{StreamingExtensionCodec, window};
 use crate::sql::types::{

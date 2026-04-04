@@ -40,9 +40,9 @@ use crate::coordinator::statement::{
 use crate::coordinator::tool::ConnectorOptions;
 use crate::sql::analysis::{StreamSchemaProvider, maybe_add_key_extension_to_sink, rewrite_sinks};
 use crate::sql::common::with_option_keys as opt;
-use crate::sql::extensions::sink::StreamEgressNode;
 use crate::sql::functions::{is_json_union, serialize_outgoing_json};
 use crate::sql::logical_node::logical::{LogicalProgram, ProgramConfig};
+use crate::sql::logical_node::sink::StreamEgressNode;
 use crate::sql::logical_planner::optimizers::{ChainingOptimizer, produce_optimized_plan};
 use crate::sql::logical_planner::planner::PlanToGraphVisitor;
 use crate::sql::rewrite_plan;

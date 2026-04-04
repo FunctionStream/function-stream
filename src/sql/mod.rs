@@ -14,7 +14,6 @@ pub mod api;
 pub mod common;
 
 pub mod analysis;
-pub(crate) mod extensions;
 pub mod functions;
 pub mod logical_node;
 pub mod logical_planner;

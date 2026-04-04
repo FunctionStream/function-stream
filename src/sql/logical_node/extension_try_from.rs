@@ -15,20 +15,20 @@ use std::sync::Arc;
 use datafusion::common::{DataFusionError, Result};
 use datafusion::logical_expr::UserDefinedLogicalNode;
 
-use crate::sql::extensions::aggregate::StreamWindowAggregateNode;
-use crate::sql::extensions::async_udf::AsyncFunctionExecutionNode;
-use crate::sql::extensions::debezium::{PackDebeziumEnvelopeNode, UnrollDebeziumPayloadNode};
-use crate::sql::extensions::join::StreamingJoinNode;
-use crate::sql::extensions::key_calculation::KeyExtractionNode;
-use crate::sql::extensions::lookup::StreamReferenceJoinNode;
-use crate::sql::extensions::projection::StreamProjectionNode;
-use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
-use crate::sql::extensions::sink::StreamEgressNode;
-use crate::sql::extensions::streaming_operator_blueprint::StreamingOperatorBlueprint;
-use crate::sql::extensions::table_source::StreamIngestionNode;
-use crate::sql::extensions::updating_aggregate::ContinuousAggregateNode;
-use crate::sql::extensions::watermark_node::EventTimeWatermarkNode;
-use crate::sql::extensions::windows_function::StreamingWindowFunctionNode;
+use crate::sql::logical_node::aggregate::StreamWindowAggregateNode;
+use crate::sql::logical_node::async_udf::AsyncFunctionExecutionNode;
+use crate::sql::logical_node::debezium::{PackDebeziumEnvelopeNode, UnrollDebeziumPayloadNode};
+use crate::sql::logical_node::join::StreamingJoinNode;
+use crate::sql::logical_node::key_calculation::KeyExtractionNode;
+use crate::sql::logical_node::lookup::StreamReferenceJoinNode;
+use crate::sql::logical_node::projection::StreamProjectionNode;
+use crate::sql::logical_node::remote_table::RemoteTableBoundaryNode;
+use crate::sql::logical_node::sink::StreamEgressNode;
+use crate::sql::logical_node::streaming_operator_blueprint::StreamingOperatorBlueprint;
+use crate::sql::logical_node::table_source::StreamIngestionNode;
+use crate::sql::logical_node::updating_aggregate::ContinuousAggregateNode;
+use crate::sql::logical_node::watermark_node::EventTimeWatermarkNode;
+use crate::sql::logical_node::windows_function::StreamingWindowFunctionNode;
 
 fn try_from_t<T: StreamingOperatorBlueprint + 'static>(
     node: &dyn UserDefinedLogicalNode,
