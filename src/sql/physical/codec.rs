@@ -305,7 +305,3 @@ fn decode_debezium_pack(
         schema,
     )))
 }
-
-// Historical names (same types) — keep existing `use crate::sql::physical::FsPhysicalExtensionCodec` working.
-pub type FsPhysicalExtensionCodec = StreamingExtensionCodec;
-pub type DecodingContext = StreamingDecodingContext;

@@ -25,7 +25,7 @@ use futures::StreamExt;
 use prost::Message;
 
 use crate::runtime::streaming::factory::Registry;
-use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 
 pub struct StatelessPhysicalExecutor {
     batch: Arc<RwLock<Option<RecordBatch>>>,
@@ -39,8 +39,8 @@ impl StatelessPhysicalExecutor {
 
         let plan_node = PhysicalPlanNode::decode(&mut proto)
             .map_err(|e| anyhow!("decode PhysicalPlanNode: {e}"))?;
-        let codec = FsPhysicalExtensionCodec {
-            context: DecodingContext::SingleLockedBatch(batch.clone()),
+        let codec = StreamingExtensionCodec {
+            context: StreamingDecodingContext::SingleLockedBatch(batch.clone()),
         };
 
         let plan = plan_node.try_into_physical_plan(

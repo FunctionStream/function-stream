@@ -40,7 +40,7 @@ use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use crate::sql::common::time_utils::print_time;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
-use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use crate::sql::schema::utils::add_timestamp_field_arrow;
 use async_trait::async_trait;
 use protocol::grpc::api::TumblingWindowAggregateOperator;
@@ -313,11 +313,11 @@ impl TumblingAggregateWindowConstructor {
         let receiver_hook = Arc::new(RwLock::new(None));
         let final_batches_passer = Arc::new(RwLock::new(Vec::new()));
 
-        let codec = FsPhysicalExtensionCodec {
-            context: DecodingContext::UnboundedBatchStream(receiver_hook.clone()),
+        let codec = StreamingExtensionCodec {
+            context: StreamingDecodingContext::UnboundedBatchStream(receiver_hook.clone()),
         };
-        let final_codec = FsPhysicalExtensionCodec {
-            context: DecodingContext::LockedBatchVec(final_batches_passer.clone()),
+        let final_codec = StreamingExtensionCodec {
+            context: StreamingDecodingContext::LockedBatchVec(final_batches_passer.clone()),
         };
 
         let partial_plan =

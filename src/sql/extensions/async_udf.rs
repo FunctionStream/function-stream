@@ -35,7 +35,7 @@ use crate::sql::logical_node::logical::{
     DylibUdfConfig, LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName,
 };
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::types::{DFField, fields_with_qualifiers, schema_from_df_fields};
+use crate::sql::types::{QualifiedField, build_df_schema, extract_qualified_fields};
 
 pub(crate) const NODE_TYPE_NAME: &str = extension_node::ASYNC_FUNCTION_EXECUTION;
 
@@ -88,9 +88,9 @@ impl AsyncFunctionExecutionNode {
     /// Computes the intermediate schema which bridges the upstream output
     /// and the raw asynchronous result injected by the UDF execution.
     fn compute_intermediate_schema(&self) -> Result<DFSchemaRef> {
-        let mut fields = fields_with_qualifiers(self.upstream_plan.schema());
+        let mut fields = extract_qualified_fields(self.upstream_plan.schema());
 
-        let raw_result_field = DFField::new(
+        let raw_result_field = QualifiedField::new(
             None,
             sql_field::ASYNC_RESULT,
             self.function_config.return_type.clone(),
@@ -98,7 +98,7 @@ impl AsyncFunctionExecutionNode {
         );
         fields.push(raw_result_field);
 
-        Ok(Arc::new(schema_from_df_fields(&fields)?))
+        Ok(Arc::new(build_df_schema(&fields)?))
     }
 
     fn to_protobuf_config(

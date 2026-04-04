@@ -29,7 +29,7 @@ use crate::sql::common::constants::{planning_placeholder_udf, window_fn};
 use crate::sql::logical_node::logical::{DylibUdfConfig, LogicalProgram};
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::sql::schema::utils::window_arrow_struct;
-use crate::sql::types::{PlaceholderUdf, PlanningOptions};
+use crate::sql::types::{PlanningOptions, PlanningPlaceholderUdf};
 
 pub type ObjectName = UniCase<String>;
 
@@ -376,7 +376,7 @@ impl StreamPlanningContextBuilder {
 
     pub fn with_streaming_extensions(mut self) -> Result<Self> {
         let extensions = vec![
-            PlaceholderUdf::with_return(
+            PlanningPlaceholderUdf::new_with_return(
                 window_fn::HOP,
                 vec![
                     DataType::Interval(datatypes::IntervalUnit::MonthDayNano),
@@ -384,17 +384,17 @@ impl StreamPlanningContextBuilder {
                 ],
                 window_arrow_struct(),
             ),
-            PlaceholderUdf::with_return(
+            PlanningPlaceholderUdf::new_with_return(
                 window_fn::TUMBLE,
                 vec![DataType::Interval(datatypes::IntervalUnit::MonthDayNano)],
                 window_arrow_struct(),
             ),
-            PlaceholderUdf::with_return(
+            PlanningPlaceholderUdf::new_with_return(
                 window_fn::SESSION,
                 vec![DataType::Interval(datatypes::IntervalUnit::MonthDayNano)],
                 window_arrow_struct(),
             ),
-            PlaceholderUdf::with_return(
+            PlanningPlaceholderUdf::new_with_return(
                 planning_placeholder_udf::UNNEST,
                 vec![DataType::List(Arc::new(Field::new(
                     planning_placeholder_udf::LIST_ELEMENT_FIELD,
@@ -403,7 +403,7 @@ impl StreamPlanningContextBuilder {
                 )))],
                 DataType::Utf8,
             ),
-            PlaceholderUdf::with_return(
+            PlanningPlaceholderUdf::new_with_return(
                 planning_placeholder_udf::ROW_TIME,
                 vec![],
                 DataType::Timestamp(datatypes::TimeUnit::Nanosecond, None),

@@ -29,7 +29,7 @@ use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
-use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
 use protocol::grpc::api::JoinOperator;
 
@@ -235,8 +235,8 @@ impl JoinWithExpirationConstructor {
         let left_passer = Arc::new(RwLock::new(None));
         let right_passer = Arc::new(RwLock::new(None));
 
-        let codec = FsPhysicalExtensionCodec {
-            context: DecodingContext::LockedJoinPair {
+        let codec = StreamingExtensionCodec {
+            context: StreamingDecodingContext::LockedJoinPair {
                 left: left_passer.clone(),
                 right: right_passer.clone(),
             },

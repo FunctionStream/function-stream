@@ -43,7 +43,7 @@ use crate::sql::common::converter::Converter;
 use crate::sql::common::{
     CheckpointBarrier, FsSchema, FsSchemaRef, Watermark, from_nanos, to_nanos,
 };
-use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use crate::sql::schema::utils::window_arrow_struct;
 use async_trait::async_trait;
 use protocol::grpc::api::SessionWindowAggregateOperator;
@@ -739,8 +739,8 @@ impl SessionAggregatingWindowConstructor {
 
         let receiver_hook = Arc::new(RwLock::new(None));
 
-        let codec = FsPhysicalExtensionCodec {
-            context: DecodingContext::UnboundedBatchStream(receiver_hook.clone()),
+        let codec = StreamingExtensionCodec {
+            context: StreamingDecodingContext::UnboundedBatchStream(receiver_hook.clone()),
         };
 
         let final_plan = PhysicalPlanNode::decode(&mut config.final_aggregation_plan.as_slice())?;

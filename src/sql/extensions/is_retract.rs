@@ -18,7 +18,9 @@ use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 
 use crate::multifield_partial_ord;
 use crate::sql::physical::updating_meta_field;
-use crate::sql::types::{DFField, TIMESTAMP_FIELD, fields_with_qualifiers, schema_from_df_fields};
+use crate::sql::types::{
+    QualifiedField, TIMESTAMP_FIELD, build_df_schema, extract_qualified_fields,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct IsRetractExtension {
@@ -31,17 +33,17 @@ multifield_partial_ord!(IsRetractExtension, input, timestamp_qualifier);
 
 impl IsRetractExtension {
     pub(crate) fn new(input: LogicalPlan, timestamp_qualifier: Option<TableReference>) -> Self {
-        let mut output_fields = fields_with_qualifiers(input.schema());
+        let mut output_fields = extract_qualified_fields(input.schema());
 
         let timestamp_index = output_fields.len() - 1;
-        output_fields[timestamp_index] = DFField::new(
+        output_fields[timestamp_index] = QualifiedField::new(
             timestamp_qualifier.clone(),
             TIMESTAMP_FIELD,
             DataType::Timestamp(TimeUnit::Nanosecond, None),
             false,
         );
         output_fields.push((timestamp_qualifier.clone(), updating_meta_field()).into());
-        let schema = Arc::new(schema_from_df_fields(&output_fields).unwrap());
+        let schema = Arc::new(build_df_schema(&output_fields).unwrap());
         Self {
             input,
             schema,

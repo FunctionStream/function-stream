@@ -16,7 +16,7 @@ use crate::sql::common::constants::mem_exec_join_side;
 use crate::sql::extensions::join::StreamingJoinNode;
 use crate::sql::extensions::key_calculation::KeyExtractionNode;
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields_with_metadata};
+use crate::sql::types::{WindowType, build_df_schema_with_metadata, extract_qualified_fields};
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
 use datafusion::common::{
     JoinConstraint, JoinType, Result, ScalarValue, TableReference, not_impl_err, plan_err,
@@ -90,7 +90,7 @@ impl<'a> JoinRewriter<'a> {
                 e.alias_qualified(Some(TableReference::bare("_stream")), format!("_key_{i}"))
             })
             .chain(
-                fields_with_qualifiers(input.schema())
+                extract_qualified_fields(input.schema())
                     .iter()
                     .map(|f| Expr::Column(f.qualified_column())),
             )
@@ -112,7 +112,7 @@ impl<'a> JoinRewriter<'a> {
     /// Streaming joins must output the 'max' of the two input timestamps to ensure Watermark progression.
     fn apply_timestamp_resolution(&self, join_plan: LogicalPlan) -> Result<LogicalPlan> {
         let schema = join_plan.schema();
-        let all_fields = fields_with_qualifiers(schema);
+        let all_fields = extract_qualified_fields(schema);
 
         let timestamp_fields: Vec<_> = all_fields
             .iter()
@@ -166,7 +166,7 @@ impl<'a> JoinRewriter<'a> {
             .chain(std::iter::once(timestamp_fields[0].clone()))
             .collect();
 
-        let out_schema = Arc::new(schema_from_df_fields_with_metadata(
+        let out_schema = Arc::new(build_df_schema_with_metadata(
             &out_fields,
             schema.metadata().clone(),
         )?);

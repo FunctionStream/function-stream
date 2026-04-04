@@ -33,7 +33,7 @@ use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use crate::sql::common::constants::mem_exec_join_side;
 use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark, from_nanos};
-use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
 use protocol::grpc::api::JoinOperator;
 
@@ -276,8 +276,8 @@ impl InstantJoinConstructor {
         let left_receiver_hook = Arc::new(RwLock::new(None));
         let right_receiver_hook = Arc::new(RwLock::new(None));
 
-        let codec = FsPhysicalExtensionCodec {
-            context: DecodingContext::LockedJoinStream {
+        let codec = StreamingExtensionCodec {
+            context: StreamingDecodingContext::LockedJoinStream {
                 left: left_receiver_hook.clone(),
                 right: right_receiver_hook.clone(),
             },

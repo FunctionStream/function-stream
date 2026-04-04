@@ -33,7 +33,7 @@ use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use crate::sql::common::time_utils::print_time;
 use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark, from_nanos};
-use crate::sql::physical::{DecodingContext, FsPhysicalExtensionCodec};
+use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
 
 // ============================================================================
@@ -255,8 +255,8 @@ impl WindowFunctionConstructor {
         );
 
         let receiver_hook = Arc::new(RwLock::new(None));
-        let codec = FsPhysicalExtensionCodec {
-            context: DecodingContext::UnboundedBatchStream(receiver_hook.clone()),
+        let codec = StreamingExtensionCodec {
+            context: StreamingDecodingContext::UnboundedBatchStream(receiver_hook.clone()),
         };
 
         let window_exec_node =

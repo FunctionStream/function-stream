@@ -15,25 +15,29 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::DataType;
-use datafusion::common::Result;
+use datafusion::common::{Result, internal_err};
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 
-#[allow(clippy::type_complexity)]
-pub(crate) struct PlaceholderUdf {
+// ============================================================================
+// PlanningPlaceholderUdf
+// ============================================================================
+
+/// Logical-planning-only UDF: satisfies type checking until real functions are wired in.
+pub(crate) struct PlanningPlaceholderUdf {
     name: String,
     signature: Signature,
-    return_type: Arc<dyn Fn(&[DataType]) -> Result<DataType> + Send + Sync + 'static>,
+    return_type: DataType,
 }
 
-impl Debug for PlaceholderUdf {
+impl Debug for PlanningPlaceholderUdf {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PlaceholderUDF<{}>", self.name)
+        write!(f, "PlanningPlaceholderUDF<{}>", self.name)
     }
 }
 
-impl ScalarUDFImpl for PlaceholderUdf {
+impl ScalarUDFImpl for PlanningPlaceholderUdf {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -46,25 +50,30 @@ impl ScalarUDFImpl for PlaceholderUdf {
         &self.signature
     }
 
-    fn return_type(&self, args: &[DataType]) -> Result<DataType> {
-        (self.return_type)(args)
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(self.return_type.clone())
     }
 
     fn invoke_with_args(&self, _args: ScalarFunctionArgs) -> Result<ColumnarValue> {
-        unimplemented!("PlaceholderUdf should never be called at execution time");
+        internal_err!(
+            "PlanningPlaceholderUDF '{}' was invoked during physical execution. \
+             This indicates a bug in the stream query compiler: placeholders must be \
+             swapped with actual physical UDFs before execution begins.",
+            self.name
+        )
     }
 }
 
-impl PlaceholderUdf {
-    pub fn with_return(
+impl PlanningPlaceholderUdf {
+    pub fn new_with_return(
         name: impl Into<String>,
         args: Vec<DataType>,
-        ret: DataType,
+        return_type: DataType,
     ) -> Arc<ScalarUDF> {
-        Arc::new(ScalarUDF::new_from_impl(PlaceholderUdf {
+        Arc::new(ScalarUDF::new_from_impl(Self {
             name: name.into(),
             signature: Signature::exact(args, Volatility::Volatile),
-            return_type: Arc::new(move |_| Ok(ret.clone())),
+            return_type,
         }))
     }
 }

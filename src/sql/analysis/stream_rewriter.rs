@@ -22,7 +22,7 @@ use crate::sql::analysis::{
 use crate::sql::extensions::StreamingOperatorBlueprint;
 use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
 use crate::sql::schema::utils::{add_timestamp_field, has_timestamp_field};
-use crate::sql::types::{DFField, TIMESTAMP_FIELD};
+use crate::sql::types::{QualifiedField, TIMESTAMP_FIELD};
 use datafusion::common::tree_node::{Transformed, TreeNodeRewriter};
 use datafusion::common::{Column, DataFusionError, Result, Spans, TableReference, plan_err};
 use datafusion::logical_expr::{
@@ -108,7 +108,7 @@ impl<'a> StreamRewriter<'a> {
             let input_schema = projection.input.schema();
 
             // Resolve the timestamp field from the input schema using the global constant.
-            let timestamp_field: DFField = input_schema
+            let timestamp_field: QualifiedField = input_schema
                 .qualified_field_with_unqualified_name(TIMESTAMP_FIELD)
                 .map_err(|_| {
                     DataFusionError::Plan(format!(

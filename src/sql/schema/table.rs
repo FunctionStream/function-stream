@@ -15,7 +15,7 @@ use crate::sql::analysis::rewrite_plan;
 use crate::sql::extensions::remote_table::RemoteTableBoundaryNode;
 use crate::sql::logical_planner::optimizers::produce_optimized_plan;
 use crate::sql::schema::StreamSchemaProvider;
-use crate::sql::types::{DFField, ProcessingMode};
+use crate::sql::types::{ProcessingMode, QualifiedField};
 use datafusion::arrow::datatypes::FieldRef;
 use datafusion::common::{Result, plan_err};
 use datafusion::logical_expr::{Extension, LogicalPlan};
@@ -110,7 +110,7 @@ impl Table {
         }
     }
 
-    pub fn set_inferred_fields(&mut self, fields: Vec<DFField>) -> Result<()> {
+    pub fn set_inferred_fields(&mut self, fields: Vec<QualifiedField>) -> Result<()> {
         let Table::ConnectorTable(t) = self else {
             return Ok(());
         };

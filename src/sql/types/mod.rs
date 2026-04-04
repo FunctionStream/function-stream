@@ -21,11 +21,11 @@ use std::time::Duration;
 use crate::sql::common::constants::sql_planning_default;
 
 pub use df_field::{
-    DFField, fields_with_qualifiers, schema_from_df_fields, schema_from_df_fields_with_metadata,
+    QualifiedField, build_df_schema, build_df_schema_with_metadata, extract_qualified_fields,
 };
-pub(crate) use placeholder_udf::PlaceholderUdf;
+pub(crate) use placeholder_udf::PlanningPlaceholderUdf;
 pub(crate) use window::WindowBehavior;
-pub use window::{WindowType, find_window};
+pub use window::{WindowType, extract_window_type};
 
 pub use crate::sql::common::constants::sql_field::TIMESTAMP_FIELD;
 

@@ -22,8 +22,8 @@ use crate::sql::extensions::aggregate::StreamWindowAggregateNode;
 use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::types::{
-    DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers, find_window,
-    schema_from_df_fields_with_metadata,
+    QualifiedField, TIMESTAMP_FIELD, WindowBehavior, WindowType, build_df_schema_with_metadata,
+    extract_qualified_fields, extract_window_type,
 };
 
 /// AggregateRewriter transforms batch DataFusion aggregates into streaming stateful operators.
@@ -45,7 +45,11 @@ impl TreeNodeRewriter for AggregateRewriter<'_> {
             .group_expr
             .iter()
             .enumerate()
-            .filter_map(|(i, e)| find_window(e).map(|opt| opt.map(|w| (i, w))).transpose())
+            .filter_map(|(i, e)| {
+                extract_window_type(e)
+                    .map(|opt| opt.map(|w| (i, w)))
+                    .transpose()
+            })
             .collect::<Result<Vec<_>>>()?;
 
         if window_exprs.len() > 1 {
@@ -53,11 +57,11 @@ impl TreeNodeRewriter for AggregateRewriter<'_> {
         }
 
         // 2. Prepare internal metadata for Key-based distribution.
-        let mut key_fields: Vec<DFField> = fields_with_qualifiers(&agg.schema)
+        let mut key_fields: Vec<QualifiedField> = extract_qualified_fields(&agg.schema)
             .iter()
             .take(agg.group_expr.len())
             .map(|f| {
-                DFField::new(
+                QualifiedField::new(
                     f.qualifier().cloned(),
                     format!("_key_{}", f.name()),
                     f.data_type().clone(),
@@ -96,11 +100,11 @@ impl TreeNodeRewriter for AggregateRewriter<'_> {
             self.build_keyed_input(agg.input.clone(), &agg.group_expr, &key_fields)?;
 
         // 5. Build the final StreamWindowAggregateNode for the physical planner.
-        let mut internal_fields = fields_with_qualifiers(&agg.schema);
+        let mut internal_fields = extract_qualified_fields(&agg.schema);
         if let WindowBehavior::FromOperator { window_index, .. } = &behavior {
             internal_fields.remove(*window_index);
         }
-        let internal_schema = Arc::new(schema_from_df_fields_with_metadata(
+        let internal_schema = Arc::new(build_df_schema_with_metadata(
             &internal_fields,
             agg.schema.metadata().clone(),
         )?);
@@ -135,13 +139,13 @@ impl<'a> AggregateRewriter<'a> {
         &self,
         input: Arc<LogicalPlan>,
         group_expr: &[Expr],
-        key_fields: &[DFField],
+        key_fields: &[QualifiedField],
     ) -> Result<LogicalPlan> {
         let key_count = group_expr.len();
         let mut projection_fields = key_fields.to_vec();
-        projection_fields.extend(fields_with_qualifiers(input.schema()));
+        projection_fields.extend(extract_qualified_fields(input.schema()));
 
-        let key_schema = Arc::new(schema_from_df_fields_with_metadata(
+        let key_schema = Arc::new(build_df_schema_with_metadata(
             &projection_fields,
             input.schema().metadata().clone(),
         )?);
@@ -154,7 +158,7 @@ impl<'a> AggregateRewriter<'a> {
             .collect();
 
         exprs.extend(
-            fields_with_qualifiers(input.schema())
+            extract_qualified_fields(input.schema())
                 .iter()
                 .map(|f| Expr::Column(f.qualified_column())),
         );
@@ -175,7 +179,7 @@ impl<'a> AggregateRewriter<'a> {
     fn rewrite_as_updating_aggregate(
         &self,
         input: Arc<LogicalPlan>,
-        key_fields: Vec<DFField>,
+        key_fields: Vec<QualifiedField>,
         group_expr: Vec<Expr>,
         mut aggr_expr: Vec<Expr>,
         schema: Arc<DFSchema>,
@@ -192,13 +196,13 @@ impl<'a> AggregateRewriter<'a> {
                 )
             })?;
 
-        let timestamp_field: DFField = timestamp_col.into();
+        let timestamp_field: QualifiedField = timestamp_col.into();
         aggr_expr.push(max(col(timestamp_field.qualified_column())).alias(TIMESTAMP_FIELD));
 
-        let mut output_fields = fields_with_qualifiers(&schema);
+        let mut output_fields = extract_qualified_fields(&schema);
         output_fields.push(timestamp_field);
 
-        let output_schema = Arc::new(schema_from_df_fields_with_metadata(
+        let output_schema = Arc::new(build_df_schema_with_metadata(
             &output_fields,
             schema.metadata().clone(),
         )?);

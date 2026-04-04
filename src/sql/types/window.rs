@@ -12,13 +12,19 @@
 
 use std::time::Duration;
 
-use datafusion::common::{Result, plan_err};
+use datafusion::common::{Result, ScalarValue, not_impl_err, plan_err};
 use datafusion::logical_expr::Expr;
+use datafusion::logical_expr::expr::{Alias, ScalarFunction};
 
 use crate::sql::common::constants::window_fn;
 
-use super::DFField;
+use super::QualifiedField;
 
+// ============================================================================
+// Window Definitions
+// ============================================================================
+
+/// Temporal windowing semantics for streaming aggregations.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum WindowType {
     Tumbling { width: Duration },
@@ -27,83 +33,102 @@ pub enum WindowType {
     Instant,
 }
 
+/// How windowing is represented in the physical plan.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum WindowBehavior {
     FromOperator {
         window: WindowType,
-        window_field: DFField,
+        window_field: QualifiedField,
         window_index: usize,
         is_nested: bool,
     },
     InData,
 }
 
-pub fn get_duration(expression: &Expr) -> Result<Duration> {
-    use datafusion::common::ScalarValue;
+// ============================================================================
+// Logical Expression Parsers
+// ============================================================================
 
+pub fn extract_duration(expression: &Expr) -> Result<Duration> {
     match expression {
         Expr::Literal(ScalarValue::IntervalDayTime(Some(val)), _) => {
-            Ok(Duration::from_secs((val.days as u64) * 24 * 60 * 60)
-                + Duration::from_millis(val.milliseconds as u64))
+            let secs = (val.days as u64) * 24 * 60 * 60;
+            let millis = val.milliseconds as u64;
+            Ok(Duration::from_secs(secs) + Duration::from_millis(millis))
         }
         Expr::Literal(ScalarValue::IntervalMonthDayNano(Some(val)), _) => {
             if val.months != 0 {
-                return datafusion::common::not_impl_err!(
-                    "Windows do not support durations specified as months"
+                return not_impl_err!(
+                    "Streaming engine does not support window durations specified in months due to variable month lengths."
                 );
             }
-            Ok(Duration::from_secs((val.days as u64) * 24 * 60 * 60)
-                + Duration::from_nanos(val.nanoseconds as u64))
+            let secs = (val.days as u64) * 24 * 60 * 60;
+            let nanos = val.nanoseconds as u64;
+            Ok(Duration::from_secs(secs) + Duration::from_nanos(nanos))
         }
         _ => plan_err!(
-            "unsupported Duration expression, expect duration literal, not {}",
+            "Unsupported window duration expression. Expected an interval literal (e.g., INTERVAL '1' MINUTE), got: {}",
             expression
         ),
     }
 }
 
-pub fn find_window(expression: &Expr) -> Result<Option<WindowType>> {
-    use datafusion::logical_expr::expr::Alias;
-    use datafusion::logical_expr::expr::ScalarFunction;
-
+pub fn extract_window_type(expression: &Expr) -> Result<Option<WindowType>> {
     match expression {
-        Expr::ScalarFunction(ScalarFunction { func: fun, args }) => match fun.name() {
+        Expr::ScalarFunction(ScalarFunction { func, args }) => match func.name() {
             name if name == window_fn::HOP => {
                 if args.len() != 2 {
-                    unreachable!();
+                    return plan_err!(
+                        "hop() window function expects exactly 2 arguments (slide, width), got {}",
+                        args.len()
+                    );
                 }
-                let slide = get_duration(&args[0])?;
-                let width = get_duration(&args[1])?;
+
+                let slide = extract_duration(&args[0])?;
+                let width = extract_duration(&args[1])?;
+
                 if width.as_nanos() % slide.as_nanos() != 0 {
                     return plan_err!(
-                        "hop() width {:?} must be a multiple of slide {:?}",
+                        "Streaming Topology Error: hop() window width {:?} must be a perfect multiple of slide {:?}",
                         width,
                         slide
                     );
                 }
+
                 if slide == width {
                     Ok(Some(WindowType::Tumbling { width }))
                 } else {
                     Ok(Some(WindowType::Sliding { width, slide }))
                 }
             }
+
             name if name == window_fn::TUMBLE => {
                 if args.len() != 1 {
-                    unreachable!("wrong number of arguments for tumble(), expect one");
+                    return plan_err!(
+                        "tumble() window function expects exactly 1 argument (width), got {}",
+                        args.len()
+                    );
                 }
-                let width = get_duration(&args[0])?;
+                let width = extract_duration(&args[0])?;
                 Ok(Some(WindowType::Tumbling { width }))
             }
+
             name if name == window_fn::SESSION => {
                 if args.len() != 1 {
-                    unreachable!("wrong number of arguments for session(), expected one");
+                    return plan_err!(
+                        "session() window function expects exactly 1 argument (gap), got {}",
+                        args.len()
+                    );
                 }
-                let gap = get_duration(&args[0])?;
+                let gap = extract_duration(&args[0])?;
                 Ok(Some(WindowType::Session { gap }))
             }
+
             _ => Ok(None),
         },
-        Expr::Alias(Alias { expr, .. }) => find_window(expr),
+
+        Expr::Alias(Alias { expr, .. }) => extract_window_type(expr),
+
         _ => Ok(None),
     }
 }

@@ -38,10 +38,10 @@ use crate::sql::extensions::{
 };
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner, SplitPlanOutput};
-use crate::sql::physical::{FsPhysicalExtensionCodec, window};
+use crate::sql::physical::{StreamingExtensionCodec, window};
 use crate::sql::types::{
-    DFField, TIMESTAMP_FIELD, WindowBehavior, WindowType, fields_with_qualifiers,
-    schema_from_df_fields, schema_from_df_fields_with_metadata,
+    QualifiedField, TIMESTAMP_FIELD, WindowBehavior, WindowType, build_df_schema,
+    build_df_schema_with_metadata, extract_qualified_fields,
 };
 
 pub(crate) const STREAM_AGG_EXTENSION_NAME: &str = extension_node::STREAM_WINDOW_AGGREGATE;
@@ -100,7 +100,7 @@ impl StreamWindowAggregateNode {
         let final_physical = planner.sync_plan(&self.post_aggregation_plan)?;
         let final_physical_proto = PhysicalPlanNode::try_from_physical_plan(
             final_physical,
-            &FsPhysicalExtensionCodec::default(),
+            &StreamingExtensionCodec::default(),
         )?;
 
         let operator_config = TumblingWindowAggregateOperator {
@@ -149,7 +149,7 @@ impl StreamWindowAggregateNode {
         let final_physical = planner.sync_plan(&self.post_aggregation_plan)?;
         let final_physical_proto = PhysicalPlanNode::try_from_physical_plan(
             final_physical,
-            &FsPhysicalExtensionCodec::default(),
+            &StreamingExtensionCodec::default(),
         )?;
 
         let operator_config = SlidingWindowAggregateOperator {
@@ -196,13 +196,13 @@ impl StreamWindowAggregateNode {
             return plan_err!("Expected standard session window configuration");
         };
 
-        let output_fields = fields_with_qualifiers(self.base_agg_plan.schema());
+        let output_fields = extract_qualified_fields(self.base_agg_plan.schema());
         let LogicalPlan::Aggregate(base_agg) = self.base_agg_plan.clone() else {
             return plan_err!("Base plan must be an Aggregate node");
         };
 
         let key_count = self.partition_keys.len();
-        let unkeyed_schema = Arc::new(schema_from_df_fields_with_metadata(
+        let unkeyed_schema = Arc::new(build_df_schema_with_metadata(
             &output_fields[key_count..],
             self.base_agg_plan.schema().metadata().clone(),
         )?);
@@ -217,7 +217,7 @@ impl StreamWindowAggregateNode {
         let physical_agg = planner.sync_plan(&LogicalPlan::Aggregate(unkeyed_agg_node))?;
         let physical_agg_proto = PhysicalPlanNode::try_from_physical_plan(
             physical_agg,
-            &FsPhysicalExtensionCodec::default(),
+            &StreamingExtensionCodec::default(),
         )?;
 
         let operator_config = SessionWindowAggregateOperator {
@@ -263,7 +263,7 @@ impl StreamWindowAggregateNode {
             let physical_plan = planner.sync_plan(&self.post_aggregation_plan)?;
             let proto_node = PhysicalPlanNode::try_from_physical_plan(
                 physical_plan,
-                &FsPhysicalExtensionCodec::default(),
+                &StreamingExtensionCodec::default(),
             )?;
             Some(proto_node.encode_to_vec())
         } else {
@@ -427,7 +427,7 @@ impl WindowBoundaryMath {
         agg_plan: &LogicalPlan,
         window_spec: WindowBehavior,
     ) -> Result<LogicalPlan> {
-        let ts_field: DFField = agg_plan
+        let ts_field: QualifiedField = agg_plan
             .inputs()
             .first()
             .ok_or_else(|| DataFusionError::Plan("Aggregate has no inputs".into()))?
@@ -470,7 +470,7 @@ impl WindowBoundaryMath {
             return Self::build_nested_projection(plan_with_ts, win_field, win_index, duration);
         }
 
-        let mut output_fields = fields_with_qualifiers(agg_plan.schema());
+        let mut output_fields = extract_qualified_fields(agg_plan.schema());
         let mut projections: Vec<_> = output_fields
             .iter()
             .map(|f| Expr::Column(f.qualified_column()))
@@ -510,24 +510,24 @@ impl WindowBoundaryMath {
             logical_expr::Projection::try_new_with_schema(
                 projections,
                 Arc::new(plan_with_ts),
-                Arc::new(schema_from_df_fields(&output_fields)?),
+                Arc::new(build_df_schema(&output_fields)?),
             )?,
         ))
     }
 
     fn build_nested_projection(
         plan: LogicalPlan,
-        win_field: DFField,
+        win_field: QualifiedField,
         win_index: usize,
         duration: Duration,
     ) -> Result<LogicalPlan> {
-        let ts_field: DFField = plan
+        let ts_field: QualifiedField = plan
             .schema()
             .qualified_field_with_unqualified_name(TIMESTAMP_FIELD)?
             .into();
         let ts_col_expr = Expr::Column(Column::new(ts_field.qualifier().cloned(), ts_field.name()));
 
-        let mut output_fields = fields_with_qualifiers(plan.schema());
+        let mut output_fields = extract_qualified_fields(plan.schema());
         let mut projections: Vec<_> = output_fields
             .iter()
             .map(|f| Expr::Column(f.qualified_column()))
@@ -560,7 +560,7 @@ impl WindowBoundaryMath {
             logical_expr::Projection::try_new_with_schema(
                 projections,
                 Arc::new(plan),
-                Arc::new(schema_from_df_fields(&output_fields)?),
+                Arc::new(build_df_schema(&output_fields)?),
             )?,
         ))
     }
@@ -573,7 +573,7 @@ impl WindowBoundaryMath {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InjectWindowFieldNode {
     pub(crate) upstream_plan: LogicalPlan,
-    pub(crate) target_field: DFField,
+    pub(crate) target_field: QualifiedField,
     pub(crate) insertion_index: usize,
     pub(crate) new_schema: DFSchemaRef,
 }
@@ -583,10 +583,10 @@ multifield_partial_ord!(InjectWindowFieldNode, upstream_plan, insertion_index);
 impl InjectWindowFieldNode {
     fn try_new(
         upstream_plan: LogicalPlan,
-        target_field: DFField,
+        target_field: QualifiedField,
         insertion_index: usize,
     ) -> Result<Self> {
-        let mut fields = fields_with_qualifiers(upstream_plan.schema());
+        let mut fields = extract_qualified_fields(upstream_plan.schema());
         fields.insert(insertion_index, target_field.clone());
         let meta = upstream_plan.schema().metadata().clone();
 
@@ -594,7 +594,7 @@ impl InjectWindowFieldNode {
             upstream_plan,
             target_field,
             insertion_index,
-            new_schema: Arc::new(schema_from_df_fields_with_metadata(&fields, meta)?),
+            new_schema: Arc::new(build_df_schema_with_metadata(&fields, meta)?),
         })
     }
 }

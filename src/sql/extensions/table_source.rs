@@ -25,7 +25,7 @@ use crate::sql::logical_node::logical::{LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::schema::SourceTable;
 use crate::sql::schema::utils::add_timestamp_field;
-use crate::sql::types::schema_from_df_fields;
+use crate::sql::types::build_df_schema;
 
 use super::{CompiledTopologyNode, StreamingOperatorBlueprint};
 
@@ -80,7 +80,7 @@ impl StreamIngestionNode {
             })
             .collect();
 
-        let base_schema = Arc::new(schema_from_df_fields(&physical_fields)?);
+        let base_schema = Arc::new(build_df_schema(&physical_fields)?);
 
         let enveloped_schema = if definition.is_updating() {
             DebeziumSchemaCodec::wrap_into_envelope(&base_schema, Some(identifier.clone()))?

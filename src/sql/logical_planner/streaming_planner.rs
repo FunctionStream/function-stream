@@ -50,8 +50,8 @@ use crate::sql::extensions::key_calculation::KeyExtractionNode;
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalGraph, LogicalNode};
 use crate::sql::physical::{
-    CdcDebeziumPackExec, CdcDebeziumUnrollExec, DecodingContext, FsMemExec,
-    FsPhysicalExtensionCodec,
+    CdcDebeziumPackExec, CdcDebeziumUnrollExec, FsMemExec, StreamingDecodingContext,
+    StreamingExtensionCodec,
 };
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::schema::utils::add_timestamp_field_arrow;
@@ -159,8 +159,8 @@ impl<'a> Planner<'a> {
         add_timestamp_field: bool,
     ) -> Result<SplitPlanOutput> {
         let physical_plan = self.sync_plan(aggregate)?;
-        let codec = FsPhysicalExtensionCodec {
-            context: DecodingContext::Planning,
+        let codec = StreamingExtensionCodec {
+            context: StreamingDecodingContext::Planning,
         };
         let mut physical_plan_node =
             PhysicalPlanNode::try_from_physical_plan(physical_plan.clone(), &codec)?;

@@ -17,7 +17,7 @@ use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit}
 use datafusion::common::{DFSchema, DFSchemaRef, Result as DFResult, TableReference};
 
 use crate::sql::common::constants::window_interval_field;
-use crate::sql::types::{DFField, TIMESTAMP_FIELD};
+use crate::sql::types::{QualifiedField, TIMESTAMP_FIELD};
 
 /// Returns the Arrow struct type for a window (start, end) pair.
 pub fn window_arrow_struct() -> DataType {
@@ -47,7 +47,7 @@ pub fn add_timestamp_field(
         return Ok(schema);
     }
 
-    let timestamp_field = DFField::new(
+    let timestamp_field = QualifiedField::new(
         qualifier,
         TIMESTAMP_FIELD,
         DataType::Timestamp(TimeUnit::Nanosecond, None),

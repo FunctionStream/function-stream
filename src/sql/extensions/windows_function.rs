@@ -25,7 +25,7 @@ use crate::sql::common::constants::{extension_node, proto_operator_name, runtime
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::physical::FsPhysicalExtensionCodec;
+use crate::sql::physical::StreamingExtensionCodec;
 use crate::sql::types::TIMESTAMP_FIELD;
 
 use super::{CompiledTopologyNode, StreamingOperatorBlueprint};
@@ -76,7 +76,7 @@ impl StreamingWindowFunctionNode {
 
         let proto_plan_node = PhysicalPlanNode::try_from_physical_plan(
             physical_window_plan,
-            &FsPhysicalExtensionCodec::default(),
+            &StreamingExtensionCodec::default(),
         )?;
 
         Ok(proto_plan_node.encode_to_vec())

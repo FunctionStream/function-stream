@@ -16,37 +16,47 @@ use std::sync::Arc;
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion::common::{Column, DFSchema, Result, TableReference};
 
+// ============================================================================
+// QualifiedField (Strongly-typed Field Wrapper)
+// ============================================================================
+
+/// Arrow [`Field`] plus optional SQL [`TableReference`] qualifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DFField {
+pub struct QualifiedField {
     qualifier: Option<TableReference>,
     field: FieldRef,
 }
 
-impl From<(Option<TableReference>, FieldRef)> for DFField {
-    fn from(value: (Option<TableReference>, FieldRef)) -> Self {
+// ============================================================================
+// Type Conversions (Interoperability with DataFusion)
+// ============================================================================
+
+impl From<(Option<TableReference>, FieldRef)> for QualifiedField {
+    fn from((qualifier, field): (Option<TableReference>, FieldRef)) -> Self {
+        Self { qualifier, field }
+    }
+}
+
+impl From<(Option<&TableReference>, &Field)> for QualifiedField {
+    fn from((qualifier, field): (Option<&TableReference>, &Field)) -> Self {
         Self {
-            qualifier: value.0,
-            field: value.1,
+            qualifier: qualifier.cloned(),
+            field: Arc::new(field.clone()),
         }
     }
 }
 
-impl From<(Option<&TableReference>, &Field)> for DFField {
-    fn from(value: (Option<&TableReference>, &Field)) -> Self {
-        Self {
-            qualifier: value.0.cloned(),
-            field: Arc::new(value.1.clone()),
-        }
-    }
-}
-
-impl From<DFField> for (Option<TableReference>, FieldRef) {
-    fn from(value: DFField) -> Self {
+impl From<QualifiedField> for (Option<TableReference>, FieldRef) {
+    fn from(value: QualifiedField) -> Self {
         (value.qualifier, value.field)
     }
 }
 
-impl DFField {
+// ============================================================================
+// Core API
+// ============================================================================
+
+impl QualifiedField {
     pub fn new(
         qualifier: Option<TableReference>,
         name: impl Into<String>,
@@ -60,33 +70,46 @@ impl DFField {
     }
 
     pub fn new_unqualified(name: &str, data_type: DataType, nullable: bool) -> Self {
-        DFField {
+        Self {
             qualifier: None,
             field: Arc::new(Field::new(name, data_type, nullable)),
         }
     }
 
-    pub fn name(&self) -> &String {
+    #[inline]
+    pub fn name(&self) -> &str {
         self.field.name()
     }
 
+    #[inline]
     pub fn data_type(&self) -> &DataType {
         self.field.data_type()
     }
 
+    #[inline]
     pub fn is_nullable(&self) -> bool {
         self.field.is_nullable()
     }
 
+    #[inline]
     pub fn metadata(&self) -> &HashMap<String, String> {
         self.field.metadata()
     }
 
+    #[inline]
+    pub fn qualifier(&self) -> Option<&TableReference> {
+        self.qualifier.as_ref()
+    }
+
+    #[inline]
+    pub fn field(&self) -> &FieldRef {
+        &self.field
+    }
+
     pub fn qualified_name(&self) -> String {
-        if let Some(qualifier) = &self.qualifier {
-            format!("{}.{}", qualifier, self.field.name())
-        } else {
-            self.field.name().to_owned()
+        match &self.qualifier {
+            Some(qualifier) => format!("{}.{}", qualifier, self.field.name()),
+            None => self.field.name().to_owned(),
         }
     }
 
@@ -106,48 +129,53 @@ impl DFField {
         }
     }
 
-    pub fn qualifier(&self) -> Option<&TableReference> {
-        self.qualifier.as_ref()
-    }
-
-    pub fn field(&self) -> &FieldRef {
-        &self.field
-    }
-
     pub fn strip_qualifier(mut self) -> Self {
         self.qualifier = None;
         self
     }
 
     pub fn with_nullable(mut self, nullable: bool) -> Self {
-        let f = self.field().as_ref().clone().with_nullable(nullable);
-        self.field = f.into();
+        if self.field.is_nullable() == nullable {
+            return self;
+        }
+        let field = Arc::try_unwrap(self.field).unwrap_or_else(|arc| (*arc).clone());
+        self.field = Arc::new(field.with_nullable(nullable));
         self
     }
 
     pub fn with_metadata(mut self, metadata: HashMap<String, String>) -> Self {
-        let f = self.field().as_ref().clone().with_metadata(metadata);
-        self.field = f.into();
+        let field = Arc::try_unwrap(self.field).unwrap_or_else(|arc| (*arc).clone());
+        self.field = Arc::new(field.with_metadata(metadata));
         self
     }
 }
 
-pub fn fields_with_qualifiers(schema: &DFSchema) -> Vec<DFField> {
+// ============================================================================
+// Schema Collection Helpers
+// ============================================================================
+
+pub fn extract_qualified_fields(schema: &DFSchema) -> Vec<QualifiedField> {
     schema
         .fields()
         .iter()
         .enumerate()
-        .map(|(i, f)| (schema.qualified_field(i).0.cloned(), f.clone()).into())
+        .map(|(i, field)| {
+            let (qualifier, _) = schema.qualified_field(i);
+            QualifiedField {
+                qualifier: qualifier.cloned(),
+                field: field.clone(),
+            }
+        })
         .collect()
 }
 
-pub fn schema_from_df_fields(fields: &[DFField]) -> Result<DFSchema> {
-    schema_from_df_fields_with_metadata(fields, HashMap::new())
+pub fn build_df_schema(fields: &[QualifiedField]) -> Result<DFSchema> {
+    build_df_schema_with_metadata(fields, HashMap::new())
 }
 
-pub fn schema_from_df_fields_with_metadata(
-    fields: &[DFField],
+pub fn build_df_schema_with_metadata(
+    fields: &[QualifiedField],
     metadata: HashMap<String, String>,
 ) -> Result<DFSchema> {
-    DFSchema::new_with_metadata(fields.iter().map(|t| t.clone().into()).collect(), metadata)
+    DFSchema::new_with_metadata(fields.iter().map(|f| f.clone().into()).collect(), metadata)
 }

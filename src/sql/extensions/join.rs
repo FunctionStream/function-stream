@@ -27,7 +27,7 @@ use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::physical::FsPhysicalExtensionCodec;
+use crate::sql::physical::StreamingExtensionCodec;
 
 // -----------------------------------------------------------------------------
 // Constants
@@ -74,7 +74,7 @@ impl StreamingJoinNode {
 
         let proto_node = PhysicalPlanNode::try_from_physical_plan(
             physical_plan,
-            &FsPhysicalExtensionCodec::default(),
+            &StreamingExtensionCodec::default(),
         )?;
 
         Ok(JoinOperator {

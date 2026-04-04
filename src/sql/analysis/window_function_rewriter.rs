@@ -23,7 +23,7 @@ use tracing::debug;
 use crate::sql::analysis::streaming_window_analzer::{StreamingWindowAnalzer, extract_column};
 use crate::sql::extensions::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
 use crate::sql::extensions::windows_function::StreamingWindowFunctionNode;
-use crate::sql::types::{WindowType, fields_with_qualifiers, schema_from_df_fields};
+use crate::sql::types::{WindowType, build_df_schema, extract_qualified_fields};
 
 /// WindowFunctionRewriter transforms standard SQL Window functions into streaming-compatible
 /// stateful operators, ensuring proper data partitioning and sorting for distributed execution.
@@ -48,7 +48,7 @@ impl WindowFunctionRewriter {
         &self,
         params: &WindowFunctionParams,
         input: &LogicalPlan,
-        input_window_fields: &std::collections::HashSet<crate::sql::types::DFField>,
+        input_window_fields: &std::collections::HashSet<crate::sql::types::QualifiedField>,
     ) -> DFResult<usize> {
         let matched: Vec<_> = params
             .partition_by
@@ -95,21 +95,21 @@ impl WindowFunctionRewriter {
             .collect();
 
         exprs.extend(
-            fields_with_qualifiers(input.schema())
+            extract_qualified_fields(input.schema())
                 .iter()
                 .map(|f| Expr::Column(f.qualified_column())),
         );
 
         // 2. Derive the keyed schema
         let mut keyed_fields =
-            fields_with_qualifiers(&Projection::try_new(exprs.clone(), input.clone())?.schema)
+            extract_qualified_fields(&Projection::try_new(exprs.clone(), input.clone())?.schema)
                 .iter()
                 .take(key_count)
                 .cloned()
                 .collect::<Vec<_>>();
-        keyed_fields.extend(fields_with_qualifiers(input.schema()));
+        keyed_fields.extend(extract_qualified_fields(input.schema()));
 
-        let keyed_schema = Arc::new(schema_from_df_fields(&keyed_fields)?);
+        let keyed_schema = Arc::new(build_df_schema(&keyed_fields)?);
 
         let projection =
             LogicalPlan::Projection(Projection::try_new_with_schema(exprs, input, keyed_schema)?);

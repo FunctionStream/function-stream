@@ -33,7 +33,7 @@ use crate::sql::extensions::{
 use crate::sql::functions::multi_hash;
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::physical::FsPhysicalExtensionCodec;
+use crate::sql::physical::StreamingExtensionCodec;
 
 // -----------------------------------------------------------------------------
 // Constants & Configuration
@@ -122,7 +122,7 @@ impl ContinuousAggregateNode {
         let physical_agg_plan = planner.sync_plan(&self.base_aggregate_plan)?;
         let compiled_agg_payload = PhysicalPlanNode::try_from_physical_plan(
             physical_agg_plan,
-            &FsPhysicalExtensionCodec::default(),
+            &StreamingExtensionCodec::default(),
         )?
         .encode_to_vec();
 

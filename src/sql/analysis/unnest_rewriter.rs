@@ -19,7 +19,7 @@ use datafusion::logical_expr::expr::ScalarFunction;
 use datafusion::logical_expr::{ColumnUnnestList, Expr, LogicalPlan, Projection, Unnest};
 
 use crate::sql::common::constants::planning_placeholder_udf;
-use crate::sql::types::{DFField, fields_with_qualifiers, schema_from_df_fields};
+use crate::sql::types::{QualifiedField, build_df_schema, extract_qualified_fields};
 
 pub const UNNESTED_COL: &str = "__unnested";
 
@@ -112,7 +112,7 @@ impl TreeNodeRewriter for UnnestRewriter {
                 projection.input.clone(),
             )?));
 
-            let unnest_fields = fields_with_qualifiers(produce_list.schema())
+            let unnest_fields = extract_qualified_fields(produce_list.schema())
                 .iter()
                 .enumerate()
                 .map(|(i, f)| {
@@ -123,7 +123,7 @@ impl TreeNodeRewriter for UnnestRewriter {
                                 f.qualified_name()
                             );
                         };
-                        Ok(DFField::new_unqualified(
+                        Ok(QualifiedField::new_unqualified(
                             UNNESTED_COL,
                             inner.data_type().clone(),
                             inner.is_nullable(),
@@ -136,7 +136,7 @@ impl TreeNodeRewriter for UnnestRewriter {
 
             let unnest_node = LogicalPlan::Unnest(Unnest {
                 exec_columns: vec![
-                    DFField::from(produce_list.schema().qualified_field(unnest_idx))
+                    QualifiedField::from(produce_list.schema().qualified_field(unnest_idx))
                         .qualified_column(),
                 ],
                 input: produce_list,
@@ -149,7 +149,7 @@ impl TreeNodeRewriter for UnnestRewriter {
                 )],
                 struct_type_columns: vec![],
                 dependency_indices: vec![],
-                schema: Arc::new(schema_from_df_fields(&unnest_fields)?),
+                schema: Arc::new(build_df_schema(&unnest_fields)?),
                 options: Default::default(),
             });
 
@@ -162,7 +162,7 @@ impl TreeNodeRewriter for UnnestRewriter {
                             expr.clone()
                         } else {
                             Expr::Column(
-                                DFField::from(unnest_node.schema().qualified_field(i))
+                                QualifiedField::from(unnest_node.schema().qualified_field(i))
                                     .qualified_column(),
                             )
                         }

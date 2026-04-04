@@ -27,7 +27,7 @@ use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::types::{DFField, schema_from_df_fields};
+use crate::sql::types::{QualifiedField, build_df_schema};
 
 // -----------------------------------------------------------------------------
 // Constants & Identifiers
@@ -67,10 +67,10 @@ impl StreamProjectionNode {
         let mut projected_fields = Vec::with_capacity(projection_exprs.len());
         for logical_expr in &projection_exprs {
             let arrow_field = logical_expr.to_field(upstream_schema)?;
-            projected_fields.push(DFField::from(arrow_field));
+            projected_fields.push(QualifiedField::from(arrow_field));
         }
 
-        let resolved_schema = Arc::new(schema_from_df_fields(&projected_fields)?);
+        let resolved_schema = Arc::new(build_df_schema(&projected_fields)?);
 
         Ok(Self {
             upstream_plans,

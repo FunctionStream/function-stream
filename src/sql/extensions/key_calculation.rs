@@ -32,8 +32,8 @@ use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::physical::FsPhysicalExtensionCodec;
-use crate::sql::types::{fields_with_qualifiers, schema_from_df_fields_with_metadata};
+use crate::sql::physical::StreamingExtensionCodec;
+use crate::sql::types::{build_df_schema_with_metadata, extract_qualified_fields};
 
 pub(crate) const EXTENSION_NODE_IDENTIFIER: &str = extension_node::KEY_EXTRACTION;
 
@@ -67,7 +67,7 @@ impl KeyExtractionNode {
         target_indices: Vec<usize>,
         label: String,
     ) -> Result<Self> {
-        let projected_fields: Vec<_> = fields_with_qualifiers(upstream_plan.schema())
+        let projected_fields: Vec<_> = extract_qualified_fields(upstream_plan.schema())
             .into_iter()
             .enumerate()
             .filter(|(idx, _)| !target_indices.contains(idx))
@@ -75,7 +75,7 @@ impl KeyExtractionNode {
             .collect();
 
         let metadata = upstream_plan.schema().metadata().clone();
-        let resolved_schema = schema_from_df_fields_with_metadata(&projected_fields, metadata)?;
+        let resolved_schema = build_df_schema_with_metadata(&projected_fields, metadata)?;
 
         Ok(Self {
             operator_label: Some(label),
@@ -220,7 +220,7 @@ impl StreamingOperatorBlueprint for KeyExtractionNode {
         let physical_plan = planner.sync_plan(&self.upstream_plan)?;
         let physical_plan_proto = PhysicalPlanNode::try_from_physical_plan(
             physical_plan,
-            &FsPhysicalExtensionCodec::default(),
+            &StreamingExtensionCodec::default(),
         )?;
 
         let (protobuf_payload, engine_operator_name) = match &self.extraction_strategy {

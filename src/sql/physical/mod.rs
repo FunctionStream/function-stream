@@ -17,7 +17,7 @@ mod source_exec;
 mod udfs;
 
 pub use cdc::{CdcDebeziumPackExec, CdcDebeziumUnrollExec};
-pub use codec::{DecodingContext, FsPhysicalExtensionCodec};
+pub use codec::{StreamingDecodingContext, StreamingExtensionCodec};
 pub use meta::{updating_meta_field, updating_meta_fields};
 pub use source_exec::FsMemExec;
 pub use udfs::window;

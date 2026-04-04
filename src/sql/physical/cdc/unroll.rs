@@ -102,7 +102,7 @@ impl CdcDebeziumUnrollExec {
         })
     }
 
-    /// Used when deserializing a plan with a pre-baked output schema (see [`FsPhysicalExtensionCodec`]).
+    /// Used when deserializing a plan with a pre-baked output schema (see [`StreamingExtensionCodec`]).
     pub(crate) fn from_decoded_parts(
         input: Arc<dyn ExecutionPlan>,
         schema: SchemaRef,

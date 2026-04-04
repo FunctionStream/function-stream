@@ -19,7 +19,9 @@ use datafusion::logical_expr::{Expr, Extension, LogicalPlan, expr::Alias};
 
 use crate::sql::extensions::aggregate::{STREAM_AGG_EXTENSION_NAME, StreamWindowAggregateNode};
 use crate::sql::extensions::join::STREAM_JOIN_NODE_TYPE;
-use crate::sql::types::{DFField, WindowBehavior, WindowType, fields_with_qualifiers, find_window};
+use crate::sql::types::{
+    QualifiedField, WindowBehavior, WindowType, extract_qualified_fields, extract_window_type,
+};
 
 /// WindowDetectingVisitor identifies windowing strategies and tracks window-carrying fields
 /// as they propagate upward through the logical plan tree.
@@ -28,7 +30,7 @@ pub(crate) struct StreamingWindowAnalzer {
     /// The specific window type discovered (Tumble, Hop, etc.)
     pub(crate) window: Option<WindowType>,
     /// Set of fields in the current plan node that carry window semantics.
-    pub(crate) fields: HashSet<DFField>,
+    pub(crate) fields: HashSet<QualifiedField>,
 }
 
 impl StreamingWindowAnalzer {
@@ -49,7 +51,7 @@ impl StreamingWindowAnalzer {
         // 1. Check if the expression directly references a known window field.
         if let Some(col) = extract_column(expr) {
             let field = input_schema.field_with_name(col.relation.as_ref(), &col.name)?;
-            let df_field: DFField = (col.relation.clone(), Arc::new(field.clone())).into();
+            let df_field: QualifiedField = (col.relation.clone(), Arc::new(field.clone())).into();
 
             if self.fields.contains(&df_field) {
                 return Ok(self.window.clone());
@@ -57,7 +59,7 @@ impl StreamingWindowAnalzer {
         }
 
         // 2. Otherwise, check if it's a new window function call (e.g., tumble(), hop()).
-        find_window(expr)
+        extract_window_type(expr)
     }
 
     /// Updates the internal state with new window findings and maps them to the output schema.
@@ -197,7 +199,9 @@ impl TreeNodeVisitor<'_> for StreamingWindowAnalzer {
                     }
                     WindowBehavior::InData => {
                         let current_schema_fields: HashSet<_> =
-                            fields_with_qualifiers(node.schema()).into_iter().collect();
+                            extract_qualified_fields(node.schema())
+                                .into_iter()
+                                .collect();
                         self.fields.retain(|f| current_schema_fields.contains(f));
 
                         if self.fields.is_empty() {

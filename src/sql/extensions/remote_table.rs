@@ -27,7 +27,7 @@ use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalEdgeType, LogicalNode, OperatorName};
 use crate::sql::logical_planner::planner::{NamedNode, Planner};
-use crate::sql::physical::FsPhysicalExtensionCodec;
+use crate::sql::physical::StreamingExtensionCodec;
 
 // -----------------------------------------------------------------------------
 // Constants & Identifiers
@@ -61,7 +61,7 @@ impl RemoteTableBoundaryNode {
 
         let physical_plan_proto = PhysicalPlanNode::try_from_physical_plan(
             physical_plan,
-            &FsPhysicalExtensionCodec::default(),
+            &StreamingExtensionCodec::default(),
         )?;
 
         let operator_config = ValuePlanOperator {
