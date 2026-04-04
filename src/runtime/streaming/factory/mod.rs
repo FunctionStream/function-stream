@@ -22,7 +22,7 @@ use crate::sql::common::constants::factory_operator_name;
 
 #[allow(unused_imports)]
 pub use connector::{
-    ConnectorSinkDispatcher, ConnectorSourceDispatcher, KafkaSinkDispatcher, KafkaSourceDispatcher,
+    ConnectorSinkDispatcher, ConnectorSourceDispatcher, KafkaConnectorDispatcher,
 };
 pub use global::Registry;
 pub use operator_factory::OperatorFactory;
@@ -41,11 +41,11 @@ fn register_builtin_connectors(factory: &mut OperatorFactory) {
 fn register_kafka_connector_plugins(factory: &mut OperatorFactory) {
     factory.register(
         factory_operator_name::KAFKA_SOURCE,
-        Box::new(connector::kafka::ConnectorDispatcher),
+        Box::new(connector::kafka::KafkaConnectorDispatcher),
     );
     factory.register(
         factory_operator_name::KAFKA_SINK,
-        Box::new(connector::kafka::ConnectorDispatcher),
+        Box::new(connector::kafka::KafkaConnectorDispatcher),
     );
     info!(
         "Registered Kafka connector plugins ({}, {})",

@@ -118,11 +118,11 @@ fn merge_client_configs(
     configs
 }
 
-// ─────────────── Unified Connector Dispatcher ───────────────
+// ─────────────── Kafka connector dispatcher (ConnectorOp → source/sink) ───────────────
 
-pub struct ConnectorDispatcher;
+pub struct KafkaConnectorDispatcher;
 
-impl OperatorConstructor for ConnectorDispatcher {
+impl OperatorConstructor for KafkaConnectorDispatcher {
     fn with_config(&self, payload: &[u8], _registry: Arc<Registry>) -> Result<ConstructedOperator> {
         let op = ConnectorOp::decode(payload).context("Failed to decode ConnectorOp protobuf")?;
 
@@ -147,7 +147,7 @@ impl OperatorConstructor for ConnectorDispatcher {
     }
 }
 
-impl ConnectorDispatcher {
+impl KafkaConnectorDispatcher {
     fn build_kafka_source(
         _name: &str,
         cfg: &KafkaSourceConfig,
@@ -252,7 +252,3 @@ fn sink_fs_schema_adjusted(
     };
     Ok(FsSchema::new(schema, ts, keys, routing))
 }
-
-// Legacy dispatcher aliases kept for backward compatibility with factory registration.
-pub type KafkaSourceDispatcher = ConnectorDispatcher;
-pub type KafkaSinkDispatcher = ConnectorDispatcher;

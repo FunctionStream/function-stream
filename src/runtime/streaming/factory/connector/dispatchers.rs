@@ -18,13 +18,13 @@ use crate::runtime::streaming::api::operator::ConstructedOperator;
 use crate::runtime::streaming::factory::global::Registry;
 use crate::runtime::streaming::factory::operator_constructor::OperatorConstructor;
 
-use super::kafka::ConnectorDispatcher;
+use super::kafka::KafkaConnectorDispatcher;
 
 pub struct ConnectorSourceDispatcher;
 
 impl OperatorConstructor for ConnectorSourceDispatcher {
     fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        ConnectorDispatcher.with_config(config, registry)
+        KafkaConnectorDispatcher.with_config(config, registry)
     }
 }
 
@@ -32,6 +32,6 @@ pub struct ConnectorSinkDispatcher;
 
 impl OperatorConstructor for ConnectorSinkDispatcher {
     fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
-        ConnectorDispatcher.with_config(config, registry)
+        KafkaConnectorDispatcher.with_config(config, registry)
     }
 }
