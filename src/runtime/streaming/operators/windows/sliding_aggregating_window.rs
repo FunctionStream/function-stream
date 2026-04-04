@@ -339,7 +339,7 @@ impl Operator for SlidingWindowOperator {
             .ok_or_else(|| anyhow!("binning function must produce TimestampNanosecond"))?;
         let partition_ranges = partition(std::slice::from_ref(&sorted_bins))?.ranges();
 
-        let watermark = ctx.last_present_watermark();
+        let watermark = ctx.current_watermark();
 
         for range in partition_ranges {
             let bin_start = from_nanos(typed_bin.value(range.start) as u128);

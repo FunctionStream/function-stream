@@ -167,7 +167,7 @@ impl Operator for WindowFunctionOperator {
         batch: RecordBatch,
         ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
-        let current_watermark = ctx.last_present_watermark();
+        let current_watermark = ctx.current_watermark();
         let split_batches = self.filter_and_split_batches(batch, current_watermark)?;
 
         for (sub_batch, timestamp) in split_batches {

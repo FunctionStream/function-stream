@@ -141,7 +141,7 @@ impl Operator for WatermarkGeneratorOperator {
         if self.is_idle || time_since_last_emit > self.interval {
             debug!(
                 "[{}] emitting expression watermark {}",
-                ctx.subtask_idx,
+                ctx.subtask_index,
                 to_millis(self.state.max_watermark)
             );
 
@@ -174,7 +174,7 @@ impl Operator for WatermarkGeneratorOperator {
             if !self.is_idle && elapsed > idle_timeout {
                 info!(
                     "task [{}] entering Idle after {:?}",
-                    ctx.subtask_idx, idle_timeout
+                    ctx.subtask_index, idle_timeout
                 );
                 self.is_idle = true;
                 return Ok(vec![StreamOutput::Watermark(Watermark::Idle)]);

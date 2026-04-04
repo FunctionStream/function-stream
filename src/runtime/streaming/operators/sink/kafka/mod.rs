@@ -117,7 +117,7 @@ impl KafkaSinkOperator {
             config.set("enable.idempotence", "true");
             let transactional_id = format!(
                 "fs-tx-{}-{}-{}-{}",
-                ctx.job_id, self.topic, ctx.subtask_idx, idx
+                ctx.job_id, self.topic, ctx.subtask_index, idx
             );
             config.set("transactional.id", &transactional_id);
 

@@ -189,9 +189,9 @@ impl KafkaSourceOperator {
         let group_id = match (&self.group_id, &self.group_id_prefix) {
             (Some(gid), _) => gid.clone(),
             (None, Some(prefix)) => {
-                format!("{}-fs-{}-{}", prefix, ctx.job_id, ctx.subtask_idx)
+                format!("{}-fs-{}-{}", prefix, ctx.job_id, ctx.subtask_index)
             }
-            (None, None) => format!("fs-{}-{}-consumer", ctx.job_id, ctx.subtask_idx),
+            (None, None) => format!("fs-{}-{}-consumer", ctx.job_id, ctx.subtask_index),
         };
 
         for (key, value) in &self.client_configs {
@@ -223,7 +223,7 @@ impl KafkaSourceOperator {
         let pmax = ctx.parallelism.max(1) as i32;
 
         for p in partitions {
-            if p.id().rem_euclid(pmax) == ctx.subtask_idx as i32 {
+            if p.id().rem_euclid(pmax) == ctx.subtask_index as i32 {
                 let offset = state_map
                     .get(&p.id())
                     .map(|s| Offset::Offset(s.offset))
@@ -241,7 +241,7 @@ impl KafkaSourceOperator {
         if our_partitions.is_empty() {
             warn!(
                 "[Task {}] Subscribed to no partitions. Entering idle mode.",
-                ctx.subtask_idx
+                ctx.subtask_index
             );
             self.is_empty_assignment = true;
         } else {
@@ -366,7 +366,7 @@ impl SourceOperator for KafkaSourceOperator {
         _barrier: CheckpointBarrier,
         ctx: &mut TaskContext,
     ) -> Result<()> {
-        debug!("Source [{}] executing checkpoint", ctx.subtask_idx);
+        debug!("Source [{}] executing checkpoint", ctx.subtask_index);
 
         let mut topic_partitions = TopicPartitionList::new();
         for (&partition, &offset) in &self.current_offsets {

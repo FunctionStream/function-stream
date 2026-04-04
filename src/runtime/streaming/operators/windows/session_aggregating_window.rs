@@ -676,7 +676,7 @@ impl Operator for SessionWindowOperator {
         batch: RecordBatch,
         ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
-        let watermark_time = ctx.last_present_watermark();
+        let watermark_time = ctx.current_watermark();
 
         let filtered_batch = self.filter_batch_by_time(batch, watermark_time)?;
         if filtered_batch.num_rows() == 0 {

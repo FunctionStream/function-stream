@@ -50,7 +50,7 @@ impl SourceDriver {
         let span = info_span!(
             "source_run",
             job_id = %self.ctx.job_id,
-            vertex = self.ctx.vertex_id,
+            pipeline_id = self.ctx.pipeline_id,
             op = self.operator.name()
         );
 

@@ -174,7 +174,7 @@ impl Operator for TumblingWindowOperator {
         for range in partition_ranges {
             let bin_start = from_nanos(typed_bin.value(range.start) as u128);
 
-            if let Some(watermark) = ctx.last_present_watermark()
+            if let Some(watermark) = ctx.current_watermark()
                 && bin_start < self.bin_start(watermark)
             {
                 warn!(

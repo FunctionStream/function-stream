@@ -132,7 +132,7 @@ impl JoinWithExpirationOperator {
         batch: RecordBatch,
         ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
-        let current_time = ctx.last_present_watermark().unwrap_or_else(SystemTime::now);
+        let current_time = ctx.current_watermark().unwrap_or_else(SystemTime::now);
 
         self.left_state.expire(current_time);
         self.right_state.expire(current_time);
