@@ -70,7 +70,7 @@ impl BatchData {
     }
 
     fn dec(&mut self) {
-        self.count = self.count.checked_sub(1).unwrap_or_default();
+        self.count = self.count.saturating_sub(1);
         self.generation += 1;
     }
 }
