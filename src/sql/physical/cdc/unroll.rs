@@ -17,11 +17,12 @@ use std::task::{Context, Poll};
 
 use datafusion::arrow::array::AsArray;
 use datafusion::arrow::array::{
-    Array, BooleanBuilder, RecordBatch, StringArray, StructArray, TimestampNanosecondArray,
-    TimestampNanosecondBuilder, UInt32Builder,
+    BooleanBuilder, RecordBatch, StructArray, TimestampNanosecondBuilder, UInt32Builder,
 };
 use datafusion::arrow::compute::{concat, take};
-use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit};
+use datafusion::arrow::datatypes::{
+    DataType, Field, Schema, SchemaRef, TimeUnit, TimestampNanosecondType,
+};
 use datafusion::common::{DataFusionError, Result, plan_err};
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::logical_expr::ColumnarValue;
@@ -32,103 +33,118 @@ use crate::sql::common::TIMESTAMP_FIELD;
 use crate::sql::common::constants::{cdc, debezium_op_short, physical_plan_node_name};
 use crate::sql::functions::MultiHashFunction;
 use crate::sql::physical::meta::{updating_meta_field, updating_meta_fields};
-use crate::sql::physical::readers::make_stream_properties;
+use crate::sql::physical::source_exec::make_stream_properties;
 
+// ============================================================================
+// CdcDebeziumUnrollExec (Execution Plan Node)
+// ============================================================================
+
+/// Physical node that unrolls Debezium CDC payloads (`before` / `after` / `op`) into a flat
+/// changelog stream with retract metadata.
+///
+/// - `c` / `r` → emit `after` (`is_retract = false`)
+/// - `d` → emit `before` (`is_retract = true`)
+/// - `u` → emit `before` (retract) then `after` (insert)
 #[derive(Debug)]
-pub struct DebeziumUnrollingExec {
+pub struct CdcDebeziumUnrollExec {
     input: Arc<dyn ExecutionPlan>,
     schema: SchemaRef,
     properties: PlanProperties,
-    primary_keys: Vec<usize>,
+    primary_key_indices: Vec<usize>,
 }
 
-impl DebeziumUnrollingExec {
-    pub fn try_new(input: Arc<dyn ExecutionPlan>, primary_keys: Vec<usize>) -> Result<Self> {
+impl CdcDebeziumUnrollExec {
+    /// Builds the node and validates Debezium payload schema constraints.
+    pub fn try_new(input: Arc<dyn ExecutionPlan>, primary_key_indices: Vec<usize>) -> Result<Self> {
         let input_schema = input.schema();
+
         let before_index = input_schema.index_of(cdc::BEFORE)?;
         let after_index = input_schema.index_of(cdc::AFTER)?;
         let op_index = input_schema.index_of(cdc::OP)?;
         let _timestamp_index = input_schema.index_of(TIMESTAMP_FIELD)?;
+
         let before_type = input_schema.field(before_index).data_type();
         let after_type = input_schema.field(after_index).data_type();
+
         if before_type != after_type {
-            return Err(DataFusionError::Internal(
-                "before and after columns must have the same type".to_string(),
+            return Err(DataFusionError::Plan(
+                "CDC 'before' and 'after' columns must share the exact same DataType".to_string(),
             ));
         }
-        let op_type = input_schema.field(op_index).data_type();
-        if *op_type != DataType::Utf8 {
-            return Err(DataFusionError::Internal(
-                "op column must be a string".to_string(),
+
+        if *input_schema.field(op_index).data_type() != DataType::Utf8 {
+            return Err(DataFusionError::Plan(
+                "CDC 'op' (operation) column must be of type Utf8 (String)".to_string(),
             ));
         }
+
         let DataType::Struct(fields) = before_type else {
-            return Err(DataFusionError::Internal(
-                "before and after columns must be structs".to_string(),
+            return Err(DataFusionError::Plan(
+                "CDC 'before' and 'after' payload columns must be Structs".to_string(),
             ));
         };
-        let mut fields = fields.to_vec();
-        fields.push(updating_meta_field());
-        fields.push(Arc::new(Field::new(
+
+        let mut unrolled_fields = fields.to_vec();
+        unrolled_fields.push(updating_meta_field());
+        unrolled_fields.push(Arc::new(Field::new(
             TIMESTAMP_FIELD,
             DataType::Timestamp(TimeUnit::Nanosecond, None),
             false,
         )));
 
-        let schema = Arc::new(Schema::new(fields));
+        let schema = Arc::new(Schema::new(unrolled_fields));
+
         Ok(Self {
             input,
             schema: schema.clone(),
             properties: make_stream_properties(schema),
-            primary_keys,
+            primary_key_indices,
         })
     }
 
+    /// Used when deserializing a plan with a pre-baked output schema (see [`FsPhysicalExtensionCodec`]).
     pub(crate) fn from_decoded_parts(
         input: Arc<dyn ExecutionPlan>,
         schema: SchemaRef,
-        primary_keys: Vec<usize>,
+        primary_key_indices: Vec<usize>,
     ) -> Self {
         Self {
             properties: make_stream_properties(schema.clone()),
             input,
             schema,
-            primary_keys,
+            primary_key_indices,
         }
     }
 
     pub fn primary_key_indices(&self) -> &[usize] {
-        &self.primary_keys
+        &self.primary_key_indices
     }
 }
 
-impl DisplayAs for DebeziumUnrollingExec {
+impl DisplayAs for CdcDebeziumUnrollExec {
     fn fmt_as(
         &self,
         _t: datafusion::physical_plan::DisplayFormatType,
         f: &mut std::fmt::Formatter,
     ) -> std::fmt::Result {
-        write!(f, "DebeziumUnrollingExec")
+        write!(f, "CdcDebeziumUnrollExec")
     }
 }
 
-impl ExecutionPlan for DebeziumUnrollingExec {
+impl ExecutionPlan for CdcDebeziumUnrollExec {
     fn name(&self) -> &str {
         physical_plan_node_name::DEBEZIUM_UNROLLING_EXEC
     }
 
     fn as_any(&self) -> &dyn Any {
-        self as &dyn Any
+        self
     }
-
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
-
     fn properties(&self) -> &PlanProperties {
         &self.properties
     }
-
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
         vec![&self.input]
     }
@@ -139,14 +155,14 @@ impl ExecutionPlan for DebeziumUnrollingExec {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         if children.len() != 1 {
             return Err(DataFusionError::Internal(
-                "DebeziumUnrollingExec wrong number of children".to_string(),
+                "CdcDebeziumUnrollExec expects exactly one child".to_string(),
             ));
         }
-        Ok(Arc::new(DebeziumUnrollingExec {
+        Ok(Arc::new(Self {
             input: children[0].clone(),
             schema: self.schema.clone(),
             properties: self.properties.clone(),
-            primary_keys: self.primary_keys.clone(),
+            primary_key_indices: self.primary_key_indices.clone(),
         }))
     }
 
@@ -155,10 +171,10 @@ impl ExecutionPlan for DebeziumUnrollingExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
-        Ok(Box::pin(DebeziumUnrollingStream::try_new(
+        Ok(Box::pin(CdcDebeziumUnrollStream::try_new(
             self.input.execute(partition, context)?,
             self.schema.clone(),
-            self.primary_keys.clone(),
+            self.primary_key_indices.clone(),
         )?))
     }
 
@@ -167,130 +183,139 @@ impl ExecutionPlan for DebeziumUnrollingExec {
     }
 }
 
-struct DebeziumUnrollingStream {
+// ============================================================================
+// CdcDebeziumUnrollStream (Physical Stream Execution)
+// ============================================================================
+
+struct CdcDebeziumUnrollStream {
     input: SendableRecordBatchStream,
     schema: SchemaRef,
     before_index: usize,
     after_index: usize,
     op_index: usize,
     timestamp_index: usize,
-    primary_keys: Vec<usize>,
+    primary_key_indices: Vec<usize>,
 }
 
-impl DebeziumUnrollingStream {
+impl CdcDebeziumUnrollStream {
     fn try_new(
         input: SendableRecordBatchStream,
         schema: SchemaRef,
-        primary_keys: Vec<usize>,
+        primary_key_indices: Vec<usize>,
     ) -> Result<Self> {
-        if primary_keys.is_empty() {
-            return plan_err!("there must be at least one primary key for a Debezium source");
+        if primary_key_indices.is_empty() {
+            return plan_err!(
+                "A CDC source requires at least one primary key to maintain state correctly."
+            );
         }
-        let input_schema = input.schema();
-        let before_index = input_schema.index_of(cdc::BEFORE)?;
-        let after_index = input_schema.index_of(cdc::AFTER)?;
-        let op_index = input_schema.index_of(cdc::OP)?;
-        let timestamp_index = input_schema.index_of(TIMESTAMP_FIELD)?;
 
+        let input_schema = input.schema();
         Ok(Self {
             input,
             schema,
-            before_index,
-            after_index,
-            op_index,
-            timestamp_index,
-            primary_keys,
+            before_index: input_schema.index_of(cdc::BEFORE)?,
+            after_index: input_schema.index_of(cdc::AFTER)?,
+            op_index: input_schema.index_of(cdc::OP)?,
+            timestamp_index: input_schema.index_of(TIMESTAMP_FIELD)?,
+            primary_key_indices,
         })
     }
 
     fn unroll_batch(&self, batch: &RecordBatch) -> Result<RecordBatch> {
-        let before = batch.column(self.before_index).as_ref();
-        let after = batch.column(self.after_index).as_ref();
-        let op = batch
-            .column(self.op_index)
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .ok_or_else(|| DataFusionError::Internal("op column is not a string".to_string()))?;
-
-        let timestamp = batch
-            .column(self.timestamp_index)
-            .as_any()
-            .downcast_ref::<TimestampNanosecondArray>()
-            .ok_or_else(|| {
-                DataFusionError::Internal("timestamp column is not a timestamp".to_string())
-            })?;
-
         let num_rows = batch.num_rows();
-        let combined_array = concat(&[before, after])?;
-        let mut take_indices = UInt32Builder::with_capacity(num_rows);
-        let mut is_retract_builder = BooleanBuilder::with_capacity(num_rows);
+        if num_rows == 0 {
+            return Ok(RecordBatch::new_empty(self.schema.clone()));
+        }
 
-        let mut timestamp_builder = TimestampNanosecondBuilder::with_capacity(2 * num_rows);
+        let before_col = batch.column(self.before_index);
+        let after_col = batch.column(self.after_index);
+
+        let op_array = batch.column(self.op_index).as_string::<i32>();
+        let timestamp_array = batch
+            .column(self.timestamp_index)
+            .as_primitive::<TimestampNanosecondType>();
+
+        let max_capacity = num_rows * 2;
+        let mut take_indices = UInt32Builder::with_capacity(max_capacity);
+        let mut is_retract_builder = BooleanBuilder::with_capacity(max_capacity);
+        let mut timestamp_builder = TimestampNanosecondBuilder::with_capacity(max_capacity);
+
         for i in 0..num_rows {
-            let op = op.value(i);
+            let op = op_array.value(i);
+            let ts = timestamp_array.value(i);
+
             match op {
                 debezium_op_short::CREATE | debezium_op_short::READ => {
                     take_indices.append_value((i + num_rows) as u32);
                     is_retract_builder.append_value(false);
-                    timestamp_builder.append_value(timestamp.value(i));
-                }
-                debezium_op_short::UPDATE => {
-                    take_indices.append_value(i as u32);
-                    is_retract_builder.append_value(true);
-                    timestamp_builder.append_value(timestamp.value(i));
-                    take_indices.append_value((i + num_rows) as u32);
-                    is_retract_builder.append_value(false);
-                    timestamp_builder.append_value(timestamp.value(i));
+                    timestamp_builder.append_value(ts);
                 }
                 debezium_op_short::DELETE => {
                     take_indices.append_value(i as u32);
                     is_retract_builder.append_value(true);
-                    timestamp_builder.append_value(timestamp.value(i));
+                    timestamp_builder.append_value(ts);
+                }
+                debezium_op_short::UPDATE => {
+                    take_indices.append_value(i as u32);
+                    is_retract_builder.append_value(true);
+                    timestamp_builder.append_value(ts);
+
+                    take_indices.append_value((i + num_rows) as u32);
+                    is_retract_builder.append_value(false);
+                    timestamp_builder.append_value(ts);
                 }
                 _ => {
-                    return Err(DataFusionError::Internal(format!(
-                        "unexpected op value: {op}"
+                    return Err(DataFusionError::Execution(format!(
+                        "Encountered unexpected Debezium operation code: '{op}'"
                     )));
                 }
             }
         }
+
         let take_indices = take_indices.finish();
+        let unrolled_row_count = take_indices.len();
+
+        let combined_array = concat(&[before_col.as_ref(), after_col.as_ref()])?;
         let unrolled_array = take(&combined_array, &take_indices, None)?;
 
-        let mut columns = unrolled_array.as_struct().columns().to_vec();
+        let mut final_columns = unrolled_array.as_struct().columns().to_vec();
 
-        let hash = MultiHashFunction::default().invoke(
-            &self
-                .primary_keys
-                .iter()
-                .map(|i| ColumnarValue::Array(columns[*i].clone()))
-                .collect::<Vec<_>>(),
-        )?;
+        let pk_columns: Vec<ColumnarValue> = self
+            .primary_key_indices
+            .iter()
+            .map(|&idx| ColumnarValue::Array(Arc::clone(&final_columns[idx])))
+            .collect();
 
-        let ids = hash.into_array(num_rows)?;
+        let hash_column = MultiHashFunction::default().invoke(&pk_columns)?;
+        let ids_array = hash_column.into_array(unrolled_row_count)?;
 
-        let meta = StructArray::try_new(
+        let meta_struct = StructArray::try_new(
             updating_meta_fields(),
-            vec![Arc::new(is_retract_builder.finish()), ids],
+            vec![Arc::new(is_retract_builder.finish()), ids_array],
             None,
         )?;
-        columns.push(Arc::new(meta));
-        columns.push(Arc::new(timestamp_builder.finish()));
-        Ok(RecordBatch::try_new(self.schema.clone(), columns)?)
+
+        final_columns.push(Arc::new(meta_struct));
+        final_columns.push(Arc::new(timestamp_builder.finish()));
+
+        Ok(RecordBatch::try_new(self.schema.clone(), final_columns)?)
     }
 }
 
-impl Stream for DebeziumUnrollingStream {
+impl Stream for CdcDebeziumUnrollStream {
     type Item = Result<RecordBatch>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let result =
-            ready!(self.input.poll_next_unpin(cx)).map(|result| self.unroll_batch(&result?));
-        Poll::Ready(result)
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.as_mut().get_mut();
+        match ready!(this.input.poll_next_unpin(cx)) {
+            Some(Ok(batch)) => Poll::Ready(Some(this.unroll_batch(&batch))),
+            Some(Err(e)) => Poll::Ready(Some(Err(e))),
+            None => Poll::Ready(None),
+        }
     }
 }
 
-impl RecordBatchStream for DebeziumUnrollingStream {
+impl RecordBatchStream for CdcDebeziumUnrollStream {
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }

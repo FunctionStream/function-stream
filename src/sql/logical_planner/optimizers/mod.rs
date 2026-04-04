@@ -14,7 +14,7 @@
 //! DataFusion SQL logical-plan rules ([`produce_optimized_plan`]).
 
 mod chaining;
-mod datafusion_logical;
+mod optimized_plan;
 
 pub use chaining::ChainingOptimizer;
-pub use datafusion_logical::produce_optimized_plan;
+pub use optimized_plan::produce_optimized_plan;

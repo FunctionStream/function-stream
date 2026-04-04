@@ -13,5 +13,5 @@
 mod encode;
 mod unroll;
 
-pub use encode::ToDebeziumExec;
-pub use unroll::DebeziumUnrollingExec;
+pub use encode::CdcDebeziumPackExec;
+pub use unroll::CdcDebeziumUnrollExec;

@@ -11,4 +11,6 @@
 // limitations under the License.
 
 pub mod optimizers;
-pub(crate) mod planner;
+
+pub(crate) mod streaming_planner;
+pub(crate) use streaming_planner as planner;

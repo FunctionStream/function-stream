@@ -50,11 +50,17 @@ use crate::sql::extensions::key_calculation::KeyExtractionNode;
 use crate::sql::extensions::{CompiledTopologyNode, StreamingOperatorBlueprint};
 use crate::sql::logical_node::logical::{LogicalEdge, LogicalGraph, LogicalNode};
 use crate::sql::physical::{
-    DebeziumUnrollingExec, DecodingContext, FsMemExec, FsPhysicalExtensionCodec, ToDebeziumExec,
+    CdcDebeziumPackExec, CdcDebeziumUnrollExec, DecodingContext, FsMemExec,
+    FsPhysicalExtensionCodec,
 };
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::schema::utils::add_timestamp_field_arrow;
 
+pub(crate) struct SplitPlanOutput {
+    pub(crate) partial_aggregation_plan: PhysicalPlanNode,
+    pub(crate) partial_schema: FsSchema,
+    pub(crate) finish_plan: PhysicalPlanNode,
+}
 #[derive(Eq, Hash, PartialEq, Debug)]
 pub(crate) enum NamedNode {
     Source(TableReference),
@@ -259,14 +265,14 @@ impl ExtensionPlanner for FsExtensionPlanner {
                         .downcast_ref::<UnrollDebeziumPayloadNode>()
                         .unwrap();
                     let input = physical_inputs[0].clone();
-                    return Ok(Some(Arc::new(DebeziumUnrollingExec::try_new(
+                    return Ok(Some(Arc::new(CdcDebeziumUnrollExec::try_new(
                         input,
                         node.pk_indices.clone(),
                     )?)));
                 }
                 PACK_NODE_NAME => {
                     let input = physical_inputs[0].clone();
-                    return Ok(Some(Arc::new(ToDebeziumExec::try_new(input)?)));
+                    return Ok(Some(Arc::new(CdcDebeziumPackExec::try_new(input)?)));
                 }
                 _ => return Ok(None),
             }
@@ -409,10 +415,4 @@ impl TreeNodeVisitor<'_> for PlanToGraphVisitor<'_> {
 
         Ok(TreeNodeRecursion::Continue)
     }
-}
-
-pub(crate) struct SplitPlanOutput {
-    pub(crate) partial_aggregation_plan: PhysicalPlanNode,
-    pub(crate) partial_schema: FsSchema,
-    pub(crate) finish_plan: PhysicalPlanNode,
 }

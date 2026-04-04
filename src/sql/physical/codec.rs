@@ -29,8 +29,8 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::sql::analysis::UNNESTED_COL;
 use crate::sql::common::constants::{mem_exec_join_side, window_function_udf};
-use crate::sql::physical::cdc::{DebeziumUnrollingExec, ToDebeziumExec};
-use crate::sql::physical::readers::{
+use crate::sql::physical::cdc::{CdcDebeziumPackExec, CdcDebeziumUnrollExec};
+use crate::sql::physical::source_exec::{
     FsMemExec, RecordBatchVecReader, RwLockRecordBatchReader, UnboundedRecordBatchReader,
 };
 use crate::sql::physical::udfs::window;
@@ -107,7 +107,7 @@ impl PhysicalExtensionCodec for FsPhysicalExtensionCodec {
             });
         }
 
-        if let Some(decode) = node.as_any().downcast_ref::<DebeziumUnrollingExec>() {
+        if let Some(decode) = node.as_any().downcast_ref::<CdcDebeziumUnrollExec>() {
             proto = Some(FsExecNode {
                 node: Some(Node::DebeziumDecode(DebeziumDecodeNode {
                     schema: serde_json::to_string(decode.schema().as_ref()).unwrap(),
@@ -120,7 +120,7 @@ impl PhysicalExtensionCodec for FsPhysicalExtensionCodec {
             });
         }
 
-        if let Some(encode) = node.as_any().downcast_ref::<ToDebeziumExec>() {
+        if let Some(encode) = node.as_any().downcast_ref::<CdcDebeziumPackExec>() {
             proto = Some(FsExecNode {
                 node: Some(Node::DebeziumEncode(DebeziumEncodeNode {
                     schema: serde_json::to_string(encode.schema().as_ref()).unwrap(),
@@ -247,7 +247,7 @@ fn decode_debezium_decode(
         .into_iter()
         .map(|c| c as usize)
         .collect();
-    Ok(Arc::new(DebeziumUnrollingExec::from_decoded_parts(
+    Ok(Arc::new(CdcDebeziumUnrollExec::from_decoded_parts(
         input,
         schema.clone(),
         primary_keys,
@@ -267,5 +267,7 @@ fn decode_debezium_encode(
         .first()
         .ok_or_else(|| DataFusionError::Internal("no input for debezium node".to_string()))?
         .clone();
-    Ok(Arc::new(ToDebeziumExec::from_decoded_parts(input, schema)))
+    Ok(Arc::new(CdcDebeziumPackExec::from_decoded_parts(
+        input, schema,
+    )))
 }

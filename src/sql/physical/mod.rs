@@ -13,11 +13,11 @@
 mod cdc;
 mod codec;
 mod meta;
-mod readers;
+mod source_exec;
 mod udfs;
 
-pub use cdc::{DebeziumUnrollingExec, ToDebeziumExec};
+pub use cdc::{CdcDebeziumPackExec, CdcDebeziumUnrollExec};
 pub use codec::{DecodingContext, FsPhysicalExtensionCodec};
 pub use meta::{updating_meta_field, updating_meta_fields};
-pub use readers::FsMemExec;
+pub use source_exec::FsMemExec;
 pub use udfs::window;
