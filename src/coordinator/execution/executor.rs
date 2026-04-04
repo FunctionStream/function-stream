@@ -277,7 +277,8 @@ impl PlanVisitor for Executor {
                     if_not_exists,
                 } => {
                     let table_name = source_table.name().to_string();
-                    let table_instance = CatalogTable::ConnectorTable(source_table.clone());
+                    let table_instance =
+                        CatalogTable::ConnectorTable(source_table.as_ref().clone());
                     (table_name, *if_not_exists, table_instance)
                 }
                 CreateTablePlanBody::DataFusion(_) => {

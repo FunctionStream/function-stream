@@ -402,18 +402,18 @@ impl StatementVisitor for LogicalPlanVisitor {
         stmt: &CreateTable,
         _ctx: &StatementVisitorContext,
     ) -> StatementVisitorResult {
-        if let Statement::CreateTable(ast_node) = &stmt.statement {
-            if ast_node.query.is_none() && Self::contains_connector_property(&ast_node.with_options)
-            {
-                let execution_plan =
-                    self.compile_connector_source_plan(ast_node)
-                        .unwrap_or_else(|err| {
-                            panic!(
-                                "Fatal Compiler Error: Connector source resolution failed - {err:#}"
-                            );
-                        });
-                return StatementVisitorResult::Plan(Box::new(execution_plan));
-            }
+        if let Statement::CreateTable(ast_node) = &stmt.statement
+            && ast_node.query.is_none()
+            && Self::contains_connector_property(&ast_node.with_options)
+        {
+            let execution_plan =
+                self.compile_connector_source_plan(ast_node)
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "Fatal Compiler Error: Connector source resolution failed - {err:#}"
+                        );
+                    });
+            return StatementVisitorResult::Plan(Box::new(execution_plan));
         }
 
         let schema_compiler = datafusion::sql::planner::SqlToRel::new(&self.schema_provider);

@@ -96,15 +96,15 @@ impl WindowFunctionOperator {
         let min_timestamp = from_nanos(min(timestamp_column).unwrap() as u128);
         let max_timestamp = from_nanos(max(timestamp_column).unwrap() as u128);
 
-        if let Some(wm) = watermark {
-            if max_timestamp < wm {
-                warn!(
-                    "dropped late batch: max_ts {} < watermark {}",
-                    print_time(max_timestamp),
-                    print_time(wm)
-                );
-                return Ok(vec![]);
-            }
+        if let Some(wm) = watermark
+            && max_timestamp < wm
+        {
+            warn!(
+                "dropped late batch: max_ts {} < watermark {}",
+                print_time(max_timestamp),
+                print_time(wm)
+            );
+            return Ok(vec![]);
         }
 
         if min_timestamp == max_timestamp {

@@ -45,20 +45,11 @@ use crate::sql::schema::utils::add_timestamp_field_arrow;
 use async_trait::async_trait;
 use protocol::grpc::api::TumblingWindowAggregateOperator;
 
+#[derive(Default)]
 struct ActiveBin {
     sender: Option<UnboundedSender<RecordBatch>>,
     result_stream: Option<SendableRecordBatchStream>,
     finished_batches: Vec<RecordBatch>,
-}
-
-impl Default for ActiveBin {
-    fn default() -> Self {
-        Self {
-            sender: None,
-            result_stream: None,
-            finished_batches: Vec::new(),
-        }
-    }
 }
 
 impl ActiveBin {
@@ -183,15 +174,15 @@ impl Operator for TumblingWindowOperator {
         for range in partition_ranges {
             let bin_start = from_nanos(typed_bin.value(range.start) as u128);
 
-            if let Some(watermark) = ctx.last_present_watermark() {
-                if bin_start < self.bin_start(watermark) {
-                    warn!(
-                        "late data dropped: bin {} < watermark {}",
-                        print_time(bin_start),
-                        print_time(watermark)
-                    );
-                    continue;
-                }
+            if let Some(watermark) = ctx.last_present_watermark()
+                && bin_start < self.bin_start(watermark)
+            {
+                warn!(
+                    "late data dropped: bin {} < watermark {}",
+                    print_time(bin_start),
+                    print_time(watermark)
+                );
+                continue;
             }
 
             let bin_batch = sorted.slice(range.start, range.end - range.start);

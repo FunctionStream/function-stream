@@ -575,6 +575,7 @@ pub fn initialize_stream_catalog(config: &crate::config::GlobalConfig) -> anyhow
     CatalogManager::init_global(store).context("Stream catalog (CatalogManager) init failed")
 }
 
+#[allow(clippy::unwrap_or_default)]
 pub fn planning_schema_provider() -> StreamPlanningContext {
     CatalogManager::try_global()
         .map(|m| m.acquire_planning_context())

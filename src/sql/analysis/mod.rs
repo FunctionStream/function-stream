@@ -76,7 +76,7 @@ fn duration_from_sql_expr(
 }
 
 fn parse_interval_to_duration(s: &str) -> Result<std::time::Duration> {
-    let parts: Vec<&str> = s.trim().split_whitespace().collect();
+    let parts: Vec<&str> = s.split_whitespace().collect();
     if parts.len() != 2 {
         return plan_err!("invalid interval string '{s}'; expected '<value> <unit>'");
     }
@@ -95,17 +95,16 @@ fn parse_interval_to_duration(s: &str) -> Result<std::time::Duration> {
 fn build_sink_inputs(extensions: &[LogicalPlan]) -> HashMap<NamedNode, Vec<LogicalPlan>> {
     let mut sink_inputs = HashMap::<NamedNode, Vec<LogicalPlan>>::new();
     for extension in extensions.iter() {
-        if let LogicalPlan::Extension(ext) = extension {
-            if let Some(sink_node) = ext.node.as_any().downcast_ref::<StreamEgressNode>() {
-                if let Some(named_node) = sink_node.operator_identity() {
-                    let inputs = sink_node
-                        .inputs()
-                        .into_iter()
-                        .cloned()
-                        .collect::<Vec<LogicalPlan>>();
-                    sink_inputs.entry(named_node).or_default().extend(inputs);
-                }
-            }
+        if let LogicalPlan::Extension(ext) = extension
+            && let Some(sink_node) = ext.node.as_any().downcast_ref::<StreamEgressNode>()
+            && let Some(named_node) = sink_node.operator_identity()
+        {
+            let inputs = sink_node
+                .inputs()
+                .into_iter()
+                .cloned()
+                .collect::<Vec<LogicalPlan>>();
+            sink_inputs.entry(named_node).or_default().extend(inputs);
         }
     }
     sink_inputs

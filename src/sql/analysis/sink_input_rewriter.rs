@@ -40,19 +40,17 @@ impl TreeNodeRewriter for SinkInputRewriter<'_> {
     type Node = LogicalPlan;
 
     fn f_down(&mut self, node: Self::Node) -> DFResult<Transformed<Self::Node>> {
-        if let LogicalPlan::Extension(extension) = &node {
-            if let Some(sink_node) = extension.node.as_any().downcast_ref::<StreamEgressNode>() {
-                if let Some(named_node) = sink_node.operator_identity() {
-                    if let Some(inputs) = self.sink_inputs.remove(&named_node) {
-                        let new_node = LogicalPlan::Extension(Extension {
-                            node: Arc::new(sink_node.with_exprs_and_inputs(vec![], inputs)?),
-                        });
-                        return Ok(Transformed::new(new_node, true, TreeNodeRecursion::Jump));
-                    } else {
-                        self.was_removed = true;
-                    }
-                }
+        if let LogicalPlan::Extension(extension) = &node
+            && let Some(sink_node) = extension.node.as_any().downcast_ref::<StreamEgressNode>()
+            && let Some(named_node) = sink_node.operator_identity()
+        {
+            if let Some(inputs) = self.sink_inputs.remove(&named_node) {
+                let new_node = LogicalPlan::Extension(Extension {
+                    node: Arc::new(sink_node.with_exprs_and_inputs(vec![], inputs)?),
+                });
+                return Ok(Transformed::new(new_node, true, TreeNodeRecursion::Jump));
             }
+            self.was_removed = true;
         }
         Ok(Transformed::no(node))
     }

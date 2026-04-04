@@ -16,7 +16,7 @@ use std::sync::Arc;
 use crate::runtime::streaming::api::operator::ConstructedOperator;
 use crate::runtime::streaming::factory::global::Registry;
 
-///
+/// Builds a [`ConstructedOperator`] from serialized configuration and a [`Registry`].
 pub trait OperatorConstructor: Send + Sync {
     fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator>;
 }

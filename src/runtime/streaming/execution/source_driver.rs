@@ -158,9 +158,7 @@ impl SourceDriver {
         match &cmd {
             ControlCommand::TriggerCheckpoint { barrier } => {
                 let b: CheckpointBarrier = barrier.clone().into();
-                self.operator
-                    .snapshot_state(b.clone(), &mut self.ctx)
-                    .await?;
+                self.operator.snapshot_state(b, &mut self.ctx).await?;
                 self.dispatch_event(StreamEvent::Barrier(b)).await?;
             }
             ControlCommand::Commit { epoch } => {
@@ -174,10 +172,10 @@ impl SourceDriver {
             _ => {}
         }
 
-        if let Some(chain) = &mut self.chain_head {
-            if chain.handle_control(cmd, &mut self.ctx).await? {
-                stop = true;
-            }
+        if let Some(chain) = &mut self.chain_head
+            && chain.handle_control(cmd, &mut self.ctx).await?
+        {
+            stop = true;
         }
 
         Ok(stop)

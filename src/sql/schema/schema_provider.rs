@@ -121,7 +121,7 @@ pub struct TableCatalog {
     pub source_defs: HashMap<String, String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct StreamPlanningContext {
     pub tables: TableCatalog,
     pub functions: FunctionCatalog,
@@ -129,19 +129,6 @@ pub struct StreamPlanningContext {
     pub config_options: datafusion::config::ConfigOptions,
     pub planning_options: PlanningOptions,
     pub analyzer: Analyzer,
-}
-
-impl Default for StreamPlanningContext {
-    fn default() -> Self {
-        Self {
-            tables: TableCatalog::default(),
-            functions: FunctionCatalog::default(),
-            dylib_udfs: HashMap::new(),
-            config_options: datafusion::config::ConfigOptions::default(),
-            planning_options: PlanningOptions::default(),
-            analyzer: Analyzer::default(),
-        }
-    }
 }
 
 /// Back-compat name for [`StreamPlanningContext`].
@@ -193,7 +180,7 @@ impl StreamPlanningContext {
         self.tables
             .catalogs
             .get_mut(&object_name(table_name.as_ref().to_string()))
-            .map(|t| Arc::make_mut(t))
+            .map(Arc::make_mut)
     }
 
     pub fn add_source_table(
@@ -237,7 +224,7 @@ impl StreamPlanningContext {
         self.tables
             .streams
             .get_mut(&object_name(table_name.as_ref().to_string()))
-            .map(|a| Arc::make_mut(a))
+            .map(Arc::make_mut)
     }
 
     pub fn get_async_udf_options(&self, _name: &str) -> Option<crate::sql::analysis::AsyncOptions> {

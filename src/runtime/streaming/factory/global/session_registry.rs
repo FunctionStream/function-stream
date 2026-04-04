@@ -19,9 +19,15 @@ use datafusion::execution::context::SessionContext;
 use datafusion::logical_expr::planner::ExprPlanner;
 use datafusion::logical_expr::{AggregateUDF, ScalarUDF, WindowUDF};
 
-///
+/// Global session registry used by DataFusion [`FunctionRegistry`] integration.
 pub struct Registry {
     ctx: SessionContext,
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Registry {

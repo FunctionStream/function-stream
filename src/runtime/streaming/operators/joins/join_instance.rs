@@ -152,11 +152,11 @@ impl InstantJoinOperator {
         let min_timestamp = min(time_column).ok_or_else(|| anyhow!("empty timestamp column"))?;
         let max_timestamp = max(time_column).ok_or_else(|| anyhow!("empty timestamp column"))?;
 
-        if let Some(watermark) = ctx.last_present_watermark() {
-            if watermark > from_nanos(min_timestamp as u128) {
-                warn!("Dropped late batch from {:?} before watermark", side);
-                return Ok(());
-            }
+        if let Some(watermark) = ctx.last_present_watermark()
+            && watermark > from_nanos(min_timestamp as u128)
+        {
+            warn!("Dropped late batch from {:?} before watermark", side);
+            return Ok(());
         }
 
         let unkeyed_batch = self.input_schema(side).unkeyed_batch(&batch)?;

@@ -48,6 +48,7 @@ impl Display for DisplayAsSql<'_> {
 }
 
 /// Arrow extension type markers for FunctionStream-specific semantics.
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum FsExtensionType {
     JSON,

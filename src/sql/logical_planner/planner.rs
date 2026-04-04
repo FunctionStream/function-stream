@@ -249,28 +249,28 @@ impl ExtensionPlanner for FsExtensionPlanner {
         _session_state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>> {
         let schema = node.schema().as_ref().into();
-        if let Ok::<&dyn StreamingOperatorBlueprint, _>(stream_extension) = node.try_into() {
-            if stream_extension.is_passthrough_boundary() {
-                match node.name() {
-                    UNROLL_NODE_NAME => {
-                        let node = node
-                            .as_any()
-                            .downcast_ref::<UnrollDebeziumPayloadNode>()
-                            .unwrap();
-                        let input = physical_inputs[0].clone();
-                        return Ok(Some(Arc::new(DebeziumUnrollingExec::try_new(
-                            input,
-                            node.pk_indices.clone(),
-                        )?)));
-                    }
-                    PACK_NODE_NAME => {
-                        let input = physical_inputs[0].clone();
-                        return Ok(Some(Arc::new(ToDebeziumExec::try_new(input)?)));
-                    }
-                    _ => return Ok(None),
+        if let Ok::<&dyn StreamingOperatorBlueprint, _>(stream_extension) = node.try_into()
+            && stream_extension.is_passthrough_boundary()
+        {
+            match node.name() {
+                UNROLL_NODE_NAME => {
+                    let node = node
+                        .as_any()
+                        .downcast_ref::<UnrollDebeziumPayloadNode>()
+                        .unwrap();
+                    let input = physical_inputs[0].clone();
+                    return Ok(Some(Arc::new(DebeziumUnrollingExec::try_new(
+                        input,
+                        node.pk_indices.clone(),
+                    )?)));
                 }
+                PACK_NODE_NAME => {
+                    let input = physical_inputs[0].clone();
+                    return Ok(Some(Arc::new(ToDebeziumExec::try_new(input)?)));
+                }
+                _ => return Ok(None),
             }
-        };
+        }
         let name = if let Some(key_extension) = node.as_any().downcast_ref::<KeyExtractionNode>() {
             key_extension.operator_label.clone()
         } else {
@@ -305,13 +305,13 @@ impl PlanToGraphVisitor<'_> {
         input_nodes: Vec<NodeIndex>,
         extension: &dyn StreamingOperatorBlueprint,
     ) -> Result<()> {
-        if let Some(node_name) = extension.operator_identity() {
-            if self.named_nodes.contains_key(&node_name) {
-                return plan_err!(
-                    "extension {:?} has already been planned, shouldn't try again.",
-                    node_name
-                );
-            }
+        if let Some(node_name) = extension.operator_identity()
+            && self.named_nodes.contains_key(&node_name)
+        {
+            return plan_err!(
+                "extension {:?} has already been planned, shouldn't try again.",
+                node_name
+            );
         }
 
         let input_schemas = input_nodes
@@ -364,11 +364,11 @@ impl TreeNodeVisitor<'_> for PlanToGraphVisitor<'_> {
             return Ok(TreeNodeRecursion::Continue);
         }
 
-        if let Some(name) = stream_extension.operator_identity() {
-            if let Some(node_index) = self.named_nodes.get(&name) {
-                self.add_index_to_traversal(*node_index);
-                return Ok(TreeNodeRecursion::Jump);
-            }
+        if let Some(name) = stream_extension.operator_identity()
+            && let Some(node_index) = self.named_nodes.get(&name)
+        {
+            self.add_index_to_traversal(*node_index);
+            return Ok(TreeNodeRecursion::Jump);
         }
 
         if !node.inputs().is_empty() {
@@ -391,10 +391,10 @@ impl TreeNodeVisitor<'_> for PlanToGraphVisitor<'_> {
             return Ok(TreeNodeRecursion::Continue);
         }
 
-        if let Some(name) = stream_extension.operator_identity() {
-            if self.named_nodes.contains_key(&name) {
-                return Ok(TreeNodeRecursion::Continue);
-            }
+        if let Some(name) = stream_extension.operator_identity()
+            && self.named_nodes.contains_key(&name)
+        {
+            return Ok(TreeNodeRecursion::Continue);
         }
 
         let input_nodes = if !node.inputs().is_empty() {

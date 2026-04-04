@@ -179,7 +179,7 @@ impl StreamingOperatorBlueprint for StreamEgressNode {
 
         Ok(CompiledTopologyNode {
             execution_unit: logical_node,
-            routing_edges: routing_edges,
+            routing_edges,
         })
     }
 

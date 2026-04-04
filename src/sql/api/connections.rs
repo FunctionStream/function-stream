@@ -431,6 +431,7 @@ impl TryFrom<Field> for SourceField {
 
 // ─────────────────── Schema Definitions ───────────────────
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum SchemaDefinition {
@@ -494,27 +495,25 @@ impl ConnectionSchema {
             .filter(|f| f.metadata_key.is_none())
             .collect();
 
-        if let Some(Format::RawString(_)) = &self.format {
-            if non_metadata_fields.len() != 1
+        if let Some(Format::RawString(_)) = &self.format
+            && (non_metadata_fields.len() != 1
                 || non_metadata_fields.first().unwrap().field_type != FieldType::String
-                || non_metadata_fields.first().unwrap().name != "value"
-            {
-                anyhow::bail!(
-                    "raw_string format requires a schema with a single field called `value` of type TEXT"
-                );
-            }
+                || non_metadata_fields.first().unwrap().name != "value")
+        {
+            anyhow::bail!(
+                "raw_string format requires a schema with a single field called `value` of type TEXT"
+            );
         }
 
-        if let Some(Format::Json(json_format)) = &self.format {
-            if json_format.unstructured
-                && (non_metadata_fields.len() != 1
-                    || non_metadata_fields.first().unwrap().field_type != FieldType::Json
-                    || non_metadata_fields.first().unwrap().name != "value")
-            {
-                anyhow::bail!(
-                    "json format with unstructured flag enabled requires a schema with a single field called `value` of type JSON"
-                );
-            }
+        if let Some(Format::Json(json_format)) = &self.format
+            && json_format.unstructured
+            && (non_metadata_fields.len() != 1
+                || non_metadata_fields.first().unwrap().field_type != FieldType::Json
+                || non_metadata_fields.first().unwrap().name != "value")
+        {
+            anyhow::bail!(
+                "json format with unstructured flag enabled requires a schema with a single field called `value` of type JSON"
+            );
         }
 
         Ok(self)

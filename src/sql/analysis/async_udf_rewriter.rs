@@ -45,20 +45,20 @@ impl<'a> AsyncUdfRewriter<'a> {
     ) -> DFResult<(Expr, Option<AsyncSplitResult>)> {
         let mut found: Option<(String, AsyncOptions, Vec<Expr>)> = None;
         let expr = expr.transform_up(|e| {
-            if let Expr::ScalarFunction(ScalarFunction { func: udf, args }) = &e {
-                if let Some(opts) = provider.get_async_udf_options(udf.name()) {
-                    if found
-                        .replace((udf.name().to_string(), opts, args.clone()))
-                        .is_some()
-                    {
-                        return plan_err!(
-                            "multiple async calls in the same expression, which is not allowed"
-                        );
-                    }
-                    return Ok(Transformed::yes(Expr::Column(Column::new_unqualified(
-                        sql_field::ASYNC_RESULT,
-                    ))));
+            if let Expr::ScalarFunction(ScalarFunction { func: udf, args }) = &e
+                && let Some(opts) = provider.get_async_udf_options(udf.name())
+            {
+                if found
+                    .replace((udf.name().to_string(), opts, args.clone()))
+                    .is_some()
+                {
+                    return plan_err!(
+                        "multiple async calls in the same expression, which is not allowed"
+                    );
                 }
+                return Ok(Transformed::yes(Expr::Column(Column::new_unqualified(
+                    sql_field::ASYNC_RESULT,
+                ))));
             }
             Ok(Transformed::no(e))
         })?;

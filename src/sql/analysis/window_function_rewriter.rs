@@ -31,6 +31,7 @@ pub(crate) struct WindowFunctionRewriter;
 
 impl WindowFunctionRewriter {
     /// Recursively unwraps Aliases to find the underlying WindowFunction.
+    #[allow(clippy::only_used_in_recursion)]
     fn resolve_window_function(&self, expr: &Expr) -> DFResult<(WindowFunction, String)> {
         match expr {
             Expr::Alias(alias) => {

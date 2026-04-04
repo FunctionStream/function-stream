@@ -94,10 +94,10 @@ impl KafkaSinkOperator {
     fn resolve_schema_indices(&mut self) {
         self.timestamp_col_idx = Some(self.input_schema.timestamp_index);
 
-        if let Some(routing_keys) = self.input_schema.routing_keys() {
-            if !routing_keys.is_empty() {
-                self.key_col_idx = Some(routing_keys[0]);
-            }
+        if let Some(routing_keys) = self.input_schema.routing_keys()
+            && !routing_keys.is_empty()
+        {
+            self.key_col_idx = Some(routing_keys[0]);
         }
     }
 
@@ -255,7 +255,7 @@ impl Operator for KafkaSinkOperator {
                 .key_col_idx
                 .and_then(|idx| row_key_bytes(&batch, i, idx));
 
-            let mut record = FutureRecord::<Vec<u8>, Vec<u8>>::to(&self.topic).payload(&payload);
+            let mut record = FutureRecord::<Vec<u8>, Vec<u8>>::to(&self.topic).payload(payload);
             if let Some(ts) = ts_millis {
                 record = record.timestamp(ts);
             }

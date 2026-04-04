@@ -152,6 +152,7 @@ pub struct KafkaSourceOperator {
 }
 
 impl KafkaSourceOperator {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         topic: String,
         bootstrap_servers: String,
@@ -334,11 +335,12 @@ impl SourceOperator for KafkaSourceOperator {
                 let should_flush_by_size = self.deserializer.should_flush();
                 let should_flush_by_time = self.last_flush_time.elapsed() > MAX_BATCH_LINGER_TIME;
 
-                if !self.deserializer.is_empty() && (should_flush_by_size || should_flush_by_time) {
-                    if let Some(batch) = self.deserializer.flush_buffer()? {
-                        self.last_flush_time = Instant::now();
-                        return Ok(SourceEvent::Data(batch));
-                    }
+                if !self.deserializer.is_empty()
+                    && (should_flush_by_size || should_flush_by_time)
+                    && let Some(batch) = self.deserializer.flush_buffer()?
+                {
+                    self.last_flush_time = Instant::now();
+                    return Ok(SourceEvent::Data(batch));
                 }
 
                 Ok(SourceEvent::Idle)
@@ -348,11 +350,11 @@ impl SourceOperator for KafkaSourceOperator {
                 Err(anyhow!("Kafka error: {}", e))
             }
             Err(_) => {
-                if !self.deserializer.is_empty() {
-                    if let Some(batch) = self.deserializer.flush_buffer()? {
-                        self.last_flush_time = Instant::now();
-                        return Ok(SourceEvent::Data(batch));
-                    }
+                if !self.deserializer.is_empty()
+                    && let Some(batch) = self.deserializer.flush_buffer()?
+                {
+                    self.last_flush_time = Instant::now();
+                    return Ok(SourceEvent::Data(batch));
                 }
                 Ok(SourceEvent::Idle)
             }
@@ -373,10 +375,10 @@ impl SourceOperator for KafkaSourceOperator {
                 .map_err(|e| anyhow!("add_partition_offset: {e}"))?;
         }
 
-        if let Some(consumer) = &self.consumer {
-            if let Err(e) = consumer.commit(&topic_partitions, CommitMode::Async) {
-                warn!("Failed to commit async offset to Kafka Broker: {:?}", e);
-            }
+        if let Some(consumer) = &self.consumer
+            && let Err(e) = consumer.commit(&topic_partitions, CommitMode::Async)
+        {
+            warn!("Failed to commit async offset to Kafka Broker: {:?}", e);
         }
 
         Ok(())

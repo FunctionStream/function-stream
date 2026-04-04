@@ -94,8 +94,8 @@ pub fn render_program_topology(program: &FsProgram) -> String {
         }
     }
 
-    let is_source = |idx: &i32| upstream.get(idx).map_or(true, |v| v.is_empty());
-    let is_sink = |idx: &i32| downstream.get(idx).map_or(true, |v| v.is_empty());
+    let is_source = |idx: &i32| upstream.get(idx).is_none_or(|v| v.is_empty());
+    let is_sink = |idx: &i32| downstream.get(idx).is_none_or(|v| v.is_empty());
 
     let mut out = String::new();
     let _ = writeln!(
@@ -183,17 +183,14 @@ pub fn render_program_topology(program: &FsProgram) -> String {
         }
 
         if pos < topo_order.len() - 1 {
-            let single_out = downstream.get(&node_idx).map_or(false, |v| v.len() == 1);
+            let single_out = downstream.get(&node_idx).is_some_and(|v| v.len() == 1);
             let next_idx = topo_order.get(pos + 1).copied();
             let is_direct = single_out
-                && next_idx.map_or(false, |n| {
-                    downstream
-                        .get(&node_idx)
-                        .map_or(false, |v| v[0].target == n)
-                });
+                && next_idx
+                    .is_some_and(|n| downstream.get(&node_idx).is_some_and(|v| v[0].target == n));
             let next_single_in = next_idx
                 .and_then(|n| upstream.get(&n))
-                .map_or(false, |v| v.len() == 1);
+                .is_some_and(|v| v.len() == 1);
 
             if is_direct && next_single_in {
                 let etype = downstream.get(&node_idx).unwrap()[0].edge_type;

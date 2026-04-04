@@ -125,13 +125,13 @@ impl OperatorDrive for IntermediateDriver {
                 Ok(false)
             }
             StreamEvent::Watermark(wm) => {
-                let outputs = self.operator.process_watermark(wm.clone(), ctx).await?;
+                let outputs = self.operator.process_watermark(wm, ctx).await?;
                 self.dispatch_outputs(outputs, ctx).await?;
                 self.forward_signal(StreamEvent::Watermark(wm), ctx).await?;
                 Ok(false)
             }
             StreamEvent::Barrier(barrier) => {
-                self.operator.snapshot_state(barrier.clone(), ctx).await?;
+                self.operator.snapshot_state(barrier, ctx).await?;
                 self.forward_signal(StreamEvent::Barrier(barrier), ctx)
                     .await?;
                 Ok(false)
@@ -239,13 +239,13 @@ impl OperatorDrive for TailDriver {
                 Ok(false)
             }
             StreamEvent::Watermark(wm) => {
-                let outputs = self.operator.process_watermark(wm.clone(), ctx).await?;
+                let outputs = self.operator.process_watermark(wm, ctx).await?;
                 self.dispatch_outputs(outputs, ctx).await?;
                 self.forward_signal(StreamEvent::Watermark(wm), ctx).await?;
                 Ok(false)
             }
             StreamEvent::Barrier(barrier) => {
-                self.operator.snapshot_state(barrier.clone(), ctx).await?;
+                self.operator.snapshot_state(barrier, ctx).await?;
                 self.forward_signal(StreamEvent::Barrier(barrier), ctx)
                     .await?;
                 Ok(false)
@@ -267,7 +267,7 @@ impl OperatorDrive for TailDriver {
         match &cmd {
             ControlCommand::TriggerCheckpoint { barrier } => {
                 let b: CheckpointBarrier = barrier.clone().into();
-                self.operator.snapshot_state(b.clone(), ctx).await?;
+                self.operator.snapshot_state(b, ctx).await?;
                 ctx.broadcast(StreamEvent::Barrier(b)).await?;
             }
             ControlCommand::Commit { epoch } => {

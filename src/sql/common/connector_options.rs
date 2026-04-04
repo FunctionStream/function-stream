@@ -297,7 +297,7 @@ impl ConnectorOptions {
                 .map(|p| {
                     Expr::Value(ValueWithSpan {
                         value: SqlValue::SingleQuotedString(p.to_string()),
-                        span: span.clone(),
+                        span,
                     })
                 })
                 .collect(),
@@ -400,7 +400,7 @@ fn duration_from_sql_expr(expr: &Expr) -> Result<Duration, DataFusionError> {
 }
 
 fn parse_interval_to_duration(s: &str) -> Result<Duration, DataFusionError> {
-    let parts: Vec<&str> = s.trim().split_whitespace().collect();
+    let parts: Vec<&str> = s.split_whitespace().collect();
     if parts.len() != 2 {
         return Err(DataFusionError::Plan(format!(
             "invalid interval string '{s}'; expected '<value> <unit>'"

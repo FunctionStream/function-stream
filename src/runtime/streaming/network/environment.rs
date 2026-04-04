@@ -21,6 +21,12 @@ pub struct NetworkEnvironment {
     pub inboxes: HashMap<(VertexId, SubtaskIndex), Vec<BoxedEventStream>>,
 }
 
+impl Default for NetworkEnvironment {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkEnvironment {
     pub fn new() -> Self {
         Self {

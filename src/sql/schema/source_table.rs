@@ -275,12 +275,12 @@ impl SourceTable {
 
         let catalog_with_options = options.snapshot_for_catalog();
 
-        if let Some(c) = options.pull_opt_str(opt::CONNECTOR)? {
-            if c != connector_name {
-                return plan_err!(
-                    "WITH option `connector` is '{c}' but table uses connector '{connector_name}'"
-                );
-            }
+        if let Some(c) = options.pull_opt_str(opt::CONNECTOR)?
+            && c != connector_name
+        {
+            return plan_err!(
+                "WITH option `connector` is '{c}' but table uses connector '{connector_name}'"
+            );
         }
 
         validate_adapter_availability(connector_name)?;

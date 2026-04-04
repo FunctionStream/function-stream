@@ -19,9 +19,9 @@ use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 /// Payload for [`CreateTablePlan`]: either a DataFusion DDL plan or a connector `CREATE TABLE` (no `AS SELECT`).
 #[derive(Debug, Clone)]
 pub enum CreateTablePlanBody {
-    DataFusion(LogicalPlan),
+    DataFusion(Box<LogicalPlan>),
     ConnectorSource {
-        source_table: SourceTable,
+        source_table: Box<SourceTable>,
         if_not_exists: bool,
     },
 }
@@ -34,14 +34,14 @@ pub struct CreateTablePlan {
 impl CreateTablePlan {
     pub fn new(logical_plan: LogicalPlan) -> Self {
         Self {
-            body: CreateTablePlanBody::DataFusion(logical_plan),
+            body: CreateTablePlanBody::DataFusion(Box::new(logical_plan)),
         }
     }
 
     pub fn connector_source(source_table: SourceTable, if_not_exists: bool) -> Self {
         Self {
             body: CreateTablePlanBody::ConnectorSource {
-                source_table,
+                source_table: Box::new(source_table),
                 if_not_exists,
             },
         }

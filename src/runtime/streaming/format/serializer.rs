@@ -10,14 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use arrow_array::cast::AsArray;
 use arrow_array::{Array, RecordBatch, StructArray};
 use arrow_json::EncoderOptions;
 use arrow_json::writer::make_encoder;
 use arrow_schema::{Field, SchemaRef};
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::warn;
 
 use super::config::{Format, JsonFormat};
 use super::json_encoder::CustomEncoderFactory;

@@ -43,7 +43,6 @@ use protocol::grpc::api::{
 
 use crate::sql::logical_node::logical::OperatorName;
 
-///
 pub struct OperatorFactory {
     constructors: HashMap<String, Box<dyn OperatorConstructor>>,
     registry: Arc<Registry>,

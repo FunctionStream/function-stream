@@ -165,10 +165,10 @@ impl UnrollDebeziumPayloadNode {
         Ok((before_idx, after_idx))
     }
 
-    fn extract_payload_fields<'a>(
-        schema: &'a DFSchemaRef,
+    fn extract_payload_fields(
+        schema: &DFSchemaRef,
         state_idx: usize,
-    ) -> Result<&'a arrow_schema::Fields> {
+    ) -> Result<&arrow_schema::Fields> {
         match schema.field(state_idx).data_type() {
             DataType::Struct(fields) => Ok(fields),
             other => plan_err!("State columns must be of type Struct, found {other}"),

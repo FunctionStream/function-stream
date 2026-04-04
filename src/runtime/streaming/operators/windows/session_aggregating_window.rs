@@ -353,7 +353,7 @@ fn append_output_timestamp_column(
             ));
         }
         DataType::Timestamp(TimeUnit::Nanosecond, tz) => {
-            let v: Vec<i64> = session_results.iter().map(|r| nanos(r)).collect();
+            let v: Vec<i64> = session_results.iter().map(nanos).collect();
             columns.push(Arc::new(
                 TimestampNanosecondArray::from(v).with_timezone_opt(tz.clone()),
             ));
@@ -432,7 +432,7 @@ impl SessionWindowOperator {
         watermark: Option<SystemTime>,
     ) -> Result<()> {
         let partition_ranges = if !self.config.input_schema_ref.has_routing_keys() {
-            vec![0..sorted_batch.num_rows()]
+            std::iter::once(0..sorted_batch.num_rows()).collect::<Vec<_>>()
         } else {
             let key_len = self
                 .config

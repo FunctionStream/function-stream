@@ -160,7 +160,7 @@ impl Encoder for DecimalEncoder {
                 let bytes = arr.value(idx).to_be_bytes();
                 let mut stack_buf = [0u8; 24];
                 BASE64_STANDARD
-                    .encode_slice(&bytes, &mut stack_buf)
+                    .encode_slice(bytes, &mut stack_buf)
                     .expect("Base64 encode_slice size mismatch");
 
                 out.push(b'"');

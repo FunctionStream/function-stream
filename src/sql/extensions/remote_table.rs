@@ -129,7 +129,7 @@ impl StreamingOperatorBlueprint for RemoteTableBoundaryNode {
 
         Ok(CompiledTopologyNode {
             execution_unit: logical_node,
-            routing_edges: routing_edges,
+            routing_edges,
         })
     }
 

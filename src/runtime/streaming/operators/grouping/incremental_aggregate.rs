@@ -330,7 +330,7 @@ impl IncrementalAggregatingFunc {
 
     fn global_aggregate(&mut self, batch: &RecordBatch) -> Result<()> {
         let retracts = Self::get_retracts(batch);
-        let aggregate_input_cols = self.compute_inputs(&batch);
+        let aggregate_input_cols = self.compute_inputs(batch);
 
         let mut first = false;
         if !self
@@ -411,7 +411,7 @@ impl IncrementalAggregatingFunc {
             }
         }
 
-        let aggregate_input_cols = self.compute_inputs(&batch);
+        let aggregate_input_cols = self.compute_inputs(batch);
 
         for (i, key) in keys.iter().enumerate() {
             if !self.accumulators.contains_key(key.as_ref()) {

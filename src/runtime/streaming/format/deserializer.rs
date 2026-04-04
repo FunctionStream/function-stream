@@ -16,7 +16,7 @@ use arrow_array::{ArrayRef, RecordBatch};
 use arrow_json::reader::ReaderBuilder;
 use arrow_schema::{Schema, SchemaRef};
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::warn;
 
 use super::config::{BadDataPolicy, Format};
 use crate::sql::common::TIMESTAMP_FIELD;

@@ -167,15 +167,17 @@ struct ToDebeziumStream {
     struct_projection: Vec<usize>,
 }
 
+type CompactChangelogById<'a> = (
+    Vec<&'a [u8]>,
+    HashMap<&'a [u8], (usize, usize, bool, bool, i64)>,
+);
+
 fn compact_changelog_by_id<'a>(
     num_rows: usize,
     is_retract: &'a BooleanArray,
     id: &'a FixedSizeBinaryArray,
     timestamps: &'a PrimitiveArray<TimestampNanosecondType>,
-) -> (
-    Vec<&'a [u8]>,
-    HashMap<&'a [u8], (usize, usize, bool, bool, i64)>,
-) {
+) -> CompactChangelogById<'a> {
     let mut id_map: HashMap<&[u8], (usize, usize, bool, bool, i64)> = HashMap::new();
     let mut order = vec![];
     for i in 0..num_rows {

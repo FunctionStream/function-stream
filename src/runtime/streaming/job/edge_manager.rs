@@ -17,14 +17,13 @@ use tokio::sync::mpsc;
 
 use crate::runtime::streaming::protocol::event::TrackedEvent;
 
+type TrackedEventEndpoints = (
+    Vec<mpsc::Receiver<TrackedEvent>>,
+    Vec<mpsc::Sender<TrackedEvent>>,
+);
+
 pub struct EdgeManager {
-    endpoints: HashMap<
-        u32,
-        (
-            Vec<mpsc::Receiver<TrackedEvent>>,
-            Vec<mpsc::Sender<TrackedEvent>>,
-        ),
-    >,
+    endpoints: HashMap<u32, TrackedEventEndpoints>,
 }
 
 impl EdgeManager {

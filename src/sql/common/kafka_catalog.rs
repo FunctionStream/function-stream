@@ -10,9 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-//!
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -86,9 +83,10 @@ pub struct KafkaConfig {
     pub connection_properties: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum KafkaConfigAuthentication {
+    #[default]
     #[serde(rename = "None")]
     None,
     #[serde(rename = "AWS_MSK_IAM")]
@@ -100,12 +98,6 @@ pub enum KafkaConfigAuthentication {
         username: String,
         password: String,
     },
-}
-
-impl Default for KafkaConfigAuthentication {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
