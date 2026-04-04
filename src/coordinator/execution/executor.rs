@@ -445,7 +445,7 @@ impl PlanVisitor for Executor {
                 format!("SHOW CREATE STREAMING TABLE {}", plan.table_name),
                 ShowCreateStreamingTableResult::new(
                     plan.table_name.clone(),
-                    detail.status,
+                    detail.status.to_string(),
                     pipeline_detail,
                     detail.program,
                 ),

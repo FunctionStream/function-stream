@@ -27,7 +27,7 @@ use crate::runtime::streaming::execution::{ChainBuilder, Pipeline, SourceDriver}
 use crate::runtime::streaming::factory::OperatorFactory;
 use crate::runtime::streaming::job::edge_manager::EdgeManager;
 use crate::runtime::streaming::job::models::{
-    PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus,
+    PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus, StreamingJobRollupStatus,
 };
 use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
@@ -39,7 +39,7 @@ use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
 #[derive(Debug, Clone)]
 pub struct StreamingJobSummary {
     pub job_id: String,
-    pub status: String,
+    pub status: StreamingJobRollupStatus,
     pub pipeline_count: i32,
     pub uptime_secs: u64,
 }
@@ -53,7 +53,7 @@ pub struct PipelineDetail {
 #[derive(Debug, Clone)]
 pub struct StreamingJobDetail {
     pub job_id: String,
-    pub status: String,
+    pub status: StreamingJobRollupStatus,
     pub pipeline_count: i32,
     pub uptime_secs: u64,
     pub pipelines: Vec<PipelineDetail>,
@@ -266,7 +266,9 @@ impl JobManager {
         )
     }
 
-    fn aggregate_pipeline_status(pipelines: &HashMap<u32, PhysicalPipeline>) -> String {
+    fn aggregate_pipeline_status(
+        pipelines: &HashMap<u32, PhysicalPipeline>,
+    ) -> StreamingJobRollupStatus {
         let mut running = 0u32;
         let mut failed = 0u32;
         let mut finished = 0u32;
@@ -291,16 +293,17 @@ impl JobManager {
             }
         }
 
+        let n = pipelines.len() as u32;
         if failed > 0 {
-            "DEGRADED".to_string()
-        } else if running > 0 && running == pipelines.len() as u32 {
-            "RUNNING".to_string()
-        } else if finished == pipelines.len() as u32 {
-            "FINISHED".to_string()
+            StreamingJobRollupStatus::Degraded
+        } else if running > 0 && running == n {
+            StreamingJobRollupStatus::Running
+        } else if finished == n {
+            StreamingJobRollupStatus::Finished
         } else if initializing > 0 {
-            "INITIALIZING".to_string()
+            StreamingJobRollupStatus::Initializing
         } else {
-            "PARTIAL".to_string()
+            StreamingJobRollupStatus::Reconciling
         }
     }
     fn extract_control_senders(&self, job_id: &str) -> Result<Vec<mpsc::Sender<ControlCommand>>> {
