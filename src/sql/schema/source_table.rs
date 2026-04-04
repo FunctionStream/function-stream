@@ -383,8 +383,6 @@ impl SourceTable {
                 );
             }
 
-            // Watermark 引用的时间列语义上必须非空，强制设为 NOT NULL，
-            // 避免用户建表时遗漏 NOT NULL 导致后续表达式 nullable 校验失败。
             for col in table.schema_specs.iter_mut() {
                 if col.arrow_field().name().as_str() == time_field.as_str() {
                     col.set_nullable(false);
