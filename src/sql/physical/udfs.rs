@@ -14,16 +14,24 @@ use std::any::Any;
 use std::sync::Arc;
 
 use datafusion::arrow::array::StructArray;
-use datafusion::arrow::datatypes::{DataType, Field, TimeUnit};
-use datafusion::common::{Result, ScalarValue, plan_err};
+use datafusion::arrow::datatypes::{DataType, TimeUnit};
+use datafusion::common::{Result, ScalarValue, exec_err};
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, TypeSignature, Volatility,
 };
 
 use crate::make_udf_function;
-use crate::sql::common::constants::{window_function_udf, window_interval_field};
+use crate::sql::common::constants::window_function_udf;
 use crate::sql::schema::utils::window_arrow_struct;
 
+// ============================================================================
+// WindowFunctionUdf (User-Defined Scalar Function)
+// ============================================================================
+
+/// UDF that packs two nanosecond timestamps into the canonical window `Struct` type.
+///
+/// Stream SQL uses a single struct column `[start, end)` for tumbling/hopping windows;
+/// this keeps `GROUP BY` and physical codec alignment on one Arrow shape.
 #[derive(Debug)]
 pub struct WindowFunctionUdf {
     signature: Signature,
@@ -56,72 +64,72 @@ impl ScalarUDFImpl for WindowFunctionUdf {
         &self.signature
     }
 
-    fn return_type(&self, _: &[DataType]) -> Result<DataType> {
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
         Ok(window_arrow_struct())
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let columns = args.args;
+
         if columns.len() != 2 {
-            return plan_err!(
-                "window function expected 2 arguments, got {}",
+            return exec_err!(
+                "Window UDF expected exactly 2 arguments, but received {}",
                 columns.len()
             );
         }
-        if columns[0].data_type() != DataType::Timestamp(TimeUnit::Nanosecond, None) {
-            return plan_err!(
-                "window function expected first argument to be a timestamp, got {:?}",
-                columns[0].data_type()
-            );
-        }
-        if columns[1].data_type() != DataType::Timestamp(TimeUnit::Nanosecond, None) {
-            return plan_err!(
-                "window function expected second argument to be a timestamp, got {:?}",
-                columns[1].data_type()
-            );
-        }
-        let fields = vec![
-            Arc::new(Field::new(
-                window_interval_field::START,
-                DataType::Timestamp(TimeUnit::Nanosecond, None),
-                false,
-            )),
-            Arc::new(Field::new(
-                window_interval_field::END,
-                DataType::Timestamp(TimeUnit::Nanosecond, None),
-                false,
-            )),
-        ]
-        .into();
 
-        match (&columns[0], &columns[1]) {
-            (ColumnarValue::Array(start), ColumnarValue::Array(end)) => {
-                Ok(ColumnarValue::Array(Arc::new(StructArray::new(
-                    fields,
-                    vec![start.clone(), end.clone()],
-                    None,
-                ))))
+        let DataType::Struct(fields) = window_arrow_struct() else {
+            return exec_err!(
+                "Internal Engine Error: window_arrow_struct() must return a Struct DataType"
+            );
+        };
+
+        let start_val = &columns[0];
+        let end_val = &columns[1];
+
+        if !matches!(
+            start_val.data_type(),
+            DataType::Timestamp(TimeUnit::Nanosecond, _)
+        ) {
+            return exec_err!("Window UDF expected first argument to be a Nanosecond Timestamp");
+        }
+        if !matches!(
+            end_val.data_type(),
+            DataType::Timestamp(TimeUnit::Nanosecond, _)
+        ) {
+            return exec_err!("Window UDF expected second argument to be a Nanosecond Timestamp");
+        }
+
+        match (start_val, end_val) {
+            (ColumnarValue::Array(start_arr), ColumnarValue::Array(end_arr)) => {
+                let struct_array =
+                    StructArray::try_new(fields, vec![start_arr.clone(), end_arr.clone()], None)?;
+                Ok(ColumnarValue::Array(Arc::new(struct_array)))
             }
-            (ColumnarValue::Array(start), ColumnarValue::Scalar(end)) => {
-                let end = end.to_array_of_size(start.len())?;
-                Ok(ColumnarValue::Array(Arc::new(StructArray::new(
-                    fields,
-                    vec![start.clone(), end],
-                    None,
-                ))))
+
+            (ColumnarValue::Array(start_arr), ColumnarValue::Scalar(end_scalar)) => {
+                let end_arr = end_scalar.to_array_of_size(start_arr.len())?;
+                let struct_array =
+                    StructArray::try_new(fields, vec![start_arr.clone(), end_arr], None)?;
+                Ok(ColumnarValue::Array(Arc::new(struct_array)))
             }
-            (ColumnarValue::Scalar(start), ColumnarValue::Array(end)) => {
-                let start = start.to_array_of_size(end.len())?;
-                Ok(ColumnarValue::Array(Arc::new(StructArray::new(
-                    fields,
-                    vec![start, end.clone()],
-                    None,
-                ))))
+
+            (ColumnarValue::Scalar(start_scalar), ColumnarValue::Array(end_arr)) => {
+                let start_arr = start_scalar.to_array_of_size(end_arr.len())?;
+                let struct_array =
+                    StructArray::try_new(fields, vec![start_arr, end_arr.clone()], None)?;
+                Ok(ColumnarValue::Array(Arc::new(struct_array)))
             }
-            (ColumnarValue::Scalar(start), ColumnarValue::Scalar(end)) => {
-                Ok(ColumnarValue::Scalar(ScalarValue::Struct(
-                    StructArray::new(fields, vec![start.to_array()?, end.to_array()?], None).into(),
-                )))
+
+            (ColumnarValue::Scalar(start_scalar), ColumnarValue::Scalar(end_scalar)) => {
+                let struct_array = StructArray::try_new(
+                    fields,
+                    vec![start_scalar.to_array()?, end_scalar.to_array()?],
+                    None,
+                )?;
+                Ok(ColumnarValue::Scalar(ScalarValue::Struct(Arc::new(
+                    struct_array,
+                ))))
             }
         }
     }
