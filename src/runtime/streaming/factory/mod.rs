@@ -21,9 +21,7 @@ use tracing::info;
 use crate::sql::common::constants::factory_operator_name;
 
 #[allow(unused_imports)]
-pub use connector::{
-    ConnectorSinkDispatcher, ConnectorSourceDispatcher, KafkaConnectorDispatcher,
-};
+pub use connector::{ConnectorSinkDispatcher, ConnectorSourceDispatcher, KafkaConnectorDispatcher};
 pub use global::Registry;
 pub use operator_factory::OperatorFactory;
 

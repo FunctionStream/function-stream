@@ -14,4 +14,4 @@ mod dispatchers;
 pub mod kafka;
 
 pub use dispatchers::{ConnectorSinkDispatcher, ConnectorSourceDispatcher};
-pub use kafka::{KafkaConnectorDispatcher};
+pub use kafka::KafkaConnectorDispatcher;

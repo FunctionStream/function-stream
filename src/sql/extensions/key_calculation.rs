@@ -237,10 +237,7 @@ impl StreamingOperatorBlueprint for KeyExtractionNode {
             format!("key_{node_index}"),
             engine_operator_name,
             protobuf_payload,
-            format!(
-                "Key<{}>",
-                self.operator_label.as_deref().unwrap_or("_")
-            ),
+            format!("Key<{}>", self.operator_label.as_deref().unwrap_or("_")),
             1,
         );
 
