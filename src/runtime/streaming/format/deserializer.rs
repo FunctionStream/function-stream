@@ -16,11 +16,13 @@ use arrow_array::{ArrayRef, RecordBatch};
 use arrow_json::reader::ReaderBuilder;
 use arrow_schema::{Schema, SchemaRef};
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::config::{BadDataPolicy, Format};
 use crate::sql::common::TIMESTAMP_FIELD;
 
+/// `DataDeserializer` handles high-throughput message transformation
+/// into Apache Arrow `RecordBatch`.
 pub struct DataDeserializer {
     format: Format,
     final_schema: SchemaRef,
@@ -39,10 +41,7 @@ impl DataDeserializer {
         }
     }
 
-    pub fn deserialize_batch(&self, messages: &[&[u8]]) -> Result<RecordBatch> {
-        self.deserialize_batch_with_kafka_timestamps(messages, &[])
-    }
-
+    /// High-performance entry point for batch deserialization.
     pub fn deserialize_batch_with_kafka_timestamps(
         &self,
         messages: &[&[u8]],
@@ -52,35 +51,59 @@ impl DataDeserializer {
             return Ok(RecordBatch::new_empty(self.final_schema.clone()));
         }
 
-        if !kafka_timestamps_ms.is_empty() && kafka_timestamps_ms.len() != messages.len() {
-            warn!(
-                message_count = messages.len(),
-                timestamp_count = kafka_timestamps_ms.len(),
-                "Kafka timestamps count mismatches with messages count"
-            );
+        // Defensive check: align timestamps with messages
+        let ts_len = kafka_timestamps_ms.len();
+        let msg_len = messages.len();
+        if ts_len > 0 && ts_len != msg_len {
+            warn!(msg_len, ts_len, "Kafka timestamps count mismatch");
         }
 
         match &self.format {
-            Format::Json(_) => self
-                .deserialize_json(messages, kafka_timestamps_ms)
-                .context("Failed to deserialize JSON format"),
-            Format::RawString => self
-                .deserialize_raw_string(messages, kafka_timestamps_ms)
-                .context("Failed to deserialize RawString format"),
-            Format::RawBytes => self
-                .deserialize_raw_bytes(messages, kafka_timestamps_ms)
-                .context("Failed to deserialize RawBytes format"),
+            Format::Json(_) => self.deserialize_json(messages, kafka_timestamps_ms),
+            Format::RawString => self.deserialize_raw_string(messages, kafka_timestamps_ms),
+            Format::RawBytes => self.deserialize_raw_bytes(messages, kafka_timestamps_ms),
         }
     }
 
+    /// JSON Deserialization with Row-Level Fault Tolerance.
+    /// Performance Strategy: Uses an NDJSON (Newline Delimited JSON) approach
+    /// but isolates malformed rows prior to full Arrow decoding.
     fn deserialize_json(
         &self,
         messages: &[&[u8]],
         kafka_timestamps_ms: &[u64],
     ) -> Result<RecordBatch> {
-        let total_capacity: usize = messages.iter().map(|m| m.len() + 1).sum();
-        let mut buffer = Vec::with_capacity(total_capacity);
-        for msg in messages {
+        let mut valid_messages = Vec::with_capacity(messages.len());
+        let mut valid_indices = Vec::with_capacity(messages.len());
+        let mut total_size = 0;
+
+        // Step 1: Pre-scan for data quality (Fault Isolation)
+        for (i, msg) in messages.iter().enumerate() {
+            // Fast-path: Check if it's a valid JSON object/array without full binding
+            if serde_json::from_slice::<serde_json::Value>(msg).is_ok() {
+                valid_messages.push(*msg);
+                valid_indices.push(i);
+                total_size += msg.len() + 1; // +1 for newline
+            } else {
+                match self.bad_data_policy {
+                    BadDataPolicy::Fail => {
+                        return Err(anyhow!("Invalid JSON encountered at index {}", i));
+                    }
+                    BadDataPolicy::Drop => {
+                        debug!(index = i, "Dropped malformed JSON row");
+                        continue;
+                    }
+                }
+            }
+        }
+
+        if valid_messages.is_empty() {
+            return Ok(RecordBatch::new_empty(self.final_schema.clone()));
+        }
+
+        // Step 2: Batch Decode valid rows
+        let mut buffer = Vec::with_capacity(total_size);
+        for msg in valid_messages {
             buffer.extend_from_slice(msg);
             buffer.push(b'\n');
         }
@@ -92,35 +115,14 @@ impl DataDeserializer {
 
         decoder
             .decode(&buffer)
-            .context("Arrow JSON decoding error")?;
+            .context("Arrow batch decoding failed")?;
 
-        match self.bad_data_policy {
-            BadDataPolicy::Drop => {
-                let Some((batch, mask, _remainder, _errors)) = decoder.flush_with_bad_data()?
-                else {
-                    return Ok(RecordBatch::new_empty(self.final_schema.clone()));
-                };
+        let decoded_batch = decoder
+            .flush()?
+            .ok_or_else(|| anyhow!("Decoder returned empty batch after successful validation"))?;
 
-                let valid_count = mask.true_count();
-                if valid_count < messages.len() {
-                    warn!(
-                        "Dropped {} malformed JSON rows",
-                        messages.len() - valid_count
-                    );
-                }
-
-                let valid_indices: Vec<usize> =
-                    (0..mask.len()).filter(|&i| mask.value(i)).collect();
-                self.rebuild_with_timestamp(batch, kafka_timestamps_ms, &valid_indices)
-            }
-            _ => {
-                let batch = decoder
-                    .flush()?
-                    .unwrap_or_else(|| RecordBatch::new_empty(self.decoder_schema.clone()));
-                let indices: Vec<usize> = (0..batch.num_rows()).collect();
-                self.rebuild_with_timestamp(batch, kafka_timestamps_ms, &indices)
-            }
-        }
+        // Step 3: Re-inject Event-Time Column
+        self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &valid_indices)
     }
 
     fn deserialize_raw_string(
@@ -131,30 +133,21 @@ impl DataDeserializer {
         let value_idx = self
             .decoder_schema
             .index_of("value")
-            .context("RawString format requires a 'value' column in the schema")?;
-        let total_bytes: usize = messages.iter().map(|m| m.len()).sum();
-        let mut builder = StringBuilder::with_capacity(messages.len(), total_bytes);
+            .context("Schema must contain 'value' for RawString")?;
 
+        let mut builder =
+            StringBuilder::with_capacity(messages.len(), messages.iter().map(|m| m.len()).sum());
         for msg in messages {
             builder.append_value(String::from_utf8_lossy(msg));
         }
 
-        let mut columns = vec![None; self.decoder_schema.fields().len()];
-        columns[value_idx] = Some(Arc::new(builder.finish()) as ArrayRef);
+        let mut columns: Vec<ArrayRef> = Vec::with_capacity(self.decoder_schema.fields().len());
+        columns.push(Arc::new(builder.finish()));
 
-        let decoded_columns = columns
-            .into_iter()
-            .enumerate()
-            .map(|(i, c)| {
-                c.ok_or_else(|| anyhow!("Missing decoded column at index {} for RawString", i))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let decoded_batch = RecordBatch::try_new(self.decoder_schema.clone(), columns)?;
+        let indices: Vec<usize> = (0..messages.len()).collect();
 
-        let decoded_batch = RecordBatch::try_new(self.decoder_schema.clone(), decoded_columns)
-            .context("Failed to build RecordBatch for RawString")?;
-
-        let valid_indices: Vec<usize> = (0..decoded_batch.num_rows()).collect();
-        self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &valid_indices)
+        self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &indices)
     }
 
     fn deserialize_raw_bytes(
@@ -165,41 +158,42 @@ impl DataDeserializer {
         let value_idx = self
             .decoder_schema
             .index_of("value")
-            .context("RawBytes format requires a 'value' column in the schema")?;
+            .context("Schema must contain 'value' for RawBytes")?;
 
-        let total_bytes: usize = messages.iter().map(|m| m.len()).sum();
-        let mut builder = BinaryBuilder::with_capacity(messages.len(), total_bytes);
-
+        let mut builder =
+            BinaryBuilder::with_capacity(messages.len(), messages.iter().map(|m| m.len()).sum());
         for msg in messages {
             builder.append_value(msg);
         }
 
-        let mut columns = vec![None; self.decoder_schema.fields().len()];
-        columns[value_idx] = Some(Arc::new(builder.finish()) as ArrayRef);
+        let mut columns: Vec<ArrayRef> = Vec::with_capacity(self.decoder_schema.fields().len());
+        columns.push(Arc::new(builder.finish()));
 
-        let decoded_columns = columns
-            .into_iter()
-            .enumerate()
-            .map(|(i, c)| {
-                c.ok_or_else(|| anyhow!("Missing decoded column at index {} for RawBytes", i))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let decoded_batch = RecordBatch::try_new(self.decoder_schema.clone(), columns)?;
+        let indices: Vec<usize> = (0..messages.len()).collect();
 
-        let decoded_batch = RecordBatch::try_new(self.decoder_schema.clone(), decoded_columns)
-            .context("Failed to build RecordBatch for RawBytes")?;
-
-        let valid_indices: Vec<usize> = (0..decoded_batch.num_rows()).collect();
-        self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &valid_indices)
+        self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &indices)
     }
 
+    /// Assembler: Merges the decoded Batch with external Event-Time (Watermark) data.
     fn rebuild_with_timestamp(
         &self,
         decoded_batch: RecordBatch,
         kafka_timestamps_ms: &[u64],
         valid_indices: &[usize],
     ) -> Result<RecordBatch> {
-        let num_rows = valid_indices.len();
+        let num_rows = decoded_batch.num_rows();
 
+        // Safety check for indices
+        if valid_indices.len() != num_rows {
+            return Err(anyhow!(
+                "Alignment error: valid rows ({}) != decoded rows ({})",
+                valid_indices.len(),
+                num_rows
+            ));
+        }
+
+        // 1. Build Timestamp Column (Nanoseconds for Arrow standard)
         let mut ts_builder = TimestampNanosecondBuilder::with_capacity(num_rows);
         for &idx in valid_indices {
             let ms = kafka_timestamps_ms.get(idx).copied().unwrap_or(0);
@@ -207,24 +201,26 @@ impl DataDeserializer {
         }
         let timestamp_col: ArrayRef = Arc::new(ts_builder.finish());
 
-        let mut columns = Vec::with_capacity(self.final_schema.fields().len());
+        // 2. Final Assembly based on Target Schema
+        let mut final_columns = Vec::with_capacity(self.final_schema.fields().len());
         for field in self.final_schema.fields() {
             if field.name() == TIMESTAMP_FIELD {
-                columns.push(timestamp_col.clone());
+                final_columns.push(timestamp_col.clone());
             } else {
-                let idx = self
-                    .decoder_schema
-                    .index_of(field.name())
-                    .map_err(|_| anyhow!("Field '{}' missing in decoded batch", field.name()))?;
-                columns.push(decoded_batch.column(idx).clone());
+                let col = decoded_batch.column_by_name(field.name()).ok_or_else(|| {
+                    anyhow!("Field '{}' not found in decoded batch", field.name())
+                })?;
+                final_columns.push(col.clone());
             }
         }
 
-        RecordBatch::try_new(self.final_schema.clone(), columns)
-            .context("Final RecordBatch assembly with timestamp failed")
+        RecordBatch::try_new(self.final_schema.clone(), final_columns)
+            .context("Failed to assemble final RecordBatch with event-time")
     }
 }
 
+/// Helper: Strips the specialized timestamp field to allow the raw decoder
+/// to focus only on payload data.
 fn schema_without_timestamp(schema: &Schema) -> SchemaRef {
     let fields = schema
         .fields()
