@@ -130,8 +130,7 @@ impl DataDeserializer {
         messages: &[&[u8]],
         kafka_timestamps_ms: &[u64],
     ) -> Result<RecordBatch> {
-        let value_idx = self
-            .decoder_schema
+        self.decoder_schema
             .index_of("value")
             .context("Schema must contain 'value' for RawString")?;
 
@@ -155,8 +154,7 @@ impl DataDeserializer {
         messages: &[&[u8]],
         kafka_timestamps_ms: &[u64],
     ) -> Result<RecordBatch> {
-        let value_idx = self
-            .decoder_schema
+        self.decoder_schema
             .index_of("value")
             .context("Schema must contain 'value' for RawBytes")?;
 
