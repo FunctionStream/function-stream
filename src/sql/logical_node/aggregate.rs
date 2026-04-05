@@ -26,7 +26,7 @@ use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use datafusion_proto::physical_plan::{AsExecutionPlan, DefaultPhysicalExtensionCodec};
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
-use protocol::grpc::api::{
+use protocol::function_stream_graph::{
     SessionWindowAggregateOperator, SlidingWindowAggregateOperator, TumblingWindowAggregateOperator,
 };
 

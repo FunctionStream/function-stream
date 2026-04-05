@@ -22,7 +22,7 @@ use crate::runtime::streaming::operators::joins::{
 };
 use anyhow::{Result, anyhow};
 use prost::Message;
-use protocol::grpc::api::ProjectionOperator as ProjectionOperatorProto;
+use protocol::function_stream_graph::ProjectionOperator as ProjectionOperatorProto;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ use crate::runtime::streaming::operators::windows::{
 use crate::runtime::streaming::operators::{
     KeyExecutionOperator, ProjectionOperator, StatelessPhysicalExecutor, ValueExecutionOperator,
 };
-use protocol::grpc::api::{
+use protocol::function_stream_graph::{
     ExpressionWatermarkConfig, JoinOperator as JoinOperatorProto, KeyPlanOperator as KeyByProto,
     SessionWindowAggregateOperator, SlidingWindowAggregateOperator,
     TumblingWindowAggregateOperator, UpdatingAggregateOperator, ValuePlanOperator,
@@ -256,7 +256,6 @@ impl OperatorConstructor for ValueBridge {
     }
 }
 
-/// Generic connector source constructor: decodes `ConnectorOp` and dispatches by connector type.
 struct ConnectorSourceBridge;
 impl OperatorConstructor for ConnectorSourceBridge {
     fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {
@@ -264,7 +263,6 @@ impl OperatorConstructor for ConnectorSourceBridge {
     }
 }
 
-/// Generic connector sink constructor: decodes `ConnectorOp` and dispatches by connector type.
 struct ConnectorSinkBridge;
 impl OperatorConstructor for ConnectorSinkBridge {
     fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator> {

@@ -20,7 +20,7 @@ use datafusion::arrow::datatypes::FieldRef;
 use datafusion::common::{Result, plan_err};
 use datafusion::logical_expr::{Extension, LogicalPlan};
 use datafusion::sql::sqlparser::ast::Statement;
-use protocol::grpc::api::ConnectorOp;
+use protocol::function_stream_graph::ConnectorOp;
 use std::sync::Arc;
 use std::time::Duration;
 

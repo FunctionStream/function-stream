@@ -10,15 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! EXPLAIN-like DAG text renderer for [`FsProgram`].
-//!
-//! Renders a streaming pipeline topology as a human-readable ASCII graph using
-//! Kahn's topological sort.  Handles linear chains, fan-out, and fan-in (JOIN).
-
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Write;
 
-use protocol::grpc::api::FsProgram;
+use protocol::function_stream_graph::FsProgram;
 
 fn edge_type_label(edge_type: i32) -> &'static str {
     match edge_type {
@@ -30,7 +25,6 @@ fn edge_type_label(edge_type: i32) -> &'static str {
     }
 }
 
-/// Render an [`FsProgram`] as an EXPLAIN-style topology string.
 pub fn render_program_topology(program: &FsProgram) -> String {
     if program.nodes.is_empty() {
         return "(empty topology)".to_string();
@@ -45,7 +39,7 @@ pub fn render_program_topology(program: &FsProgram) -> String {
         edge_type: i32,
     }
 
-    let node_map: BTreeMap<i32, &protocol::grpc::api::FsNode> =
+    let node_map: BTreeMap<i32, &protocol::function_stream_graph::FsNode> =
         program.nodes.iter().map(|n| (n.node_index, n)).collect();
 
     let mut downstream: BTreeMap<i32, Vec<EdgeInfo>> = BTreeMap::new();
@@ -207,7 +201,7 @@ pub fn render_program_topology(program: &FsProgram) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use protocol::grpc::api::{ChainedOperator, FsEdge, FsNode, FsProgram};
+    use protocol::function_stream_graph::{ChainedOperator, FsEdge, FsNode, FsProgram};
 
     fn make_node(
         node_index: i32,

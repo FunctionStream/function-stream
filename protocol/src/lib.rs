@@ -10,8 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// ─────────────── FunctionStream Service (original) ───────────────
-
 #[path = "../generated/cli/function_stream.rs"]
 pub mod cli;
 
@@ -24,31 +22,14 @@ pub use service::function_stream_service_server::{
     FunctionStreamService, FunctionStreamServiceServer,
 };
 
-// ─────────────── Streaming job graph (function_stream_graph.proto: package function_stream.v1) ───────────────
-
-/// Physical topology / execution graph types (`proto/function_stream_graph.proto`).
-pub mod function_stream_v1 {
+pub mod function_stream_graph {
     #![allow(clippy::all)]
-    include!("../generated/function_stream_v1/function_stream.v1.rs");
+    include!("../generated/api/function_stream.v1.rs");
 }
 
-// ─────────────── Streaming Pipeline API (fs_api.proto) ───────────────
-
-pub mod grpc {
-    /// Serde-annotated API types for streaming operators, schemas, programs.
-    #[allow(clippy::all)]
-    pub mod api {
-        include!("../generated/api/fs_api.rs");
-    }
-}
-
-/// File descriptor set for fs_api.proto (for gRPC reflection / REST gateway).
 pub const FS_API_FILE_DESCRIPTOR_SET: &[u8] =
     tonic::include_file_descriptor_set!("fs_api_descriptor");
 
-// ─────────────── Durable storage (storage.proto: catalog + task rows) ───────────────
-
-/// Prost types for persisted stream catalog and task storage (`proto/storage.proto`).
 pub mod storage {
     #![allow(clippy::all)]
     #![allow(warnings)]

@@ -24,7 +24,7 @@ use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
-use protocol::grpc::api::KeyPlanOperator;
+use protocol::function_stream_graph::KeyPlanOperator;
 
 pub struct KeyByOperator {
     name: String,

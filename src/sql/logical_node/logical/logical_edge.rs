@@ -14,7 +14,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use datafusion::common::{DataFusionError, Result};
-use protocol::grpc::api::EdgeType as ProtoEdgeType;
+use protocol::function_stream_graph::EdgeType as ProtoEdgeType;
 use serde::{Deserialize, Serialize};
 
 use crate::sql::common::FsSchema;

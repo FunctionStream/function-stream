@@ -31,7 +31,7 @@ use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_millis};
 use async_trait::async_trait;
-use protocol::grpc::api::ExpressionWatermarkConfig;
+use protocol::function_stream_graph::ExpressionWatermarkConfig;
 
 #[derive(Debug, Copy, Clone, Encode, Decode, PartialEq, Eq)]
 pub struct WatermarkGeneratorState {

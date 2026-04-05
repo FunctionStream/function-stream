@@ -20,7 +20,7 @@ use datafusion_proto::protobuf::PhysicalExprNode;
 use prost::Message;
 use std::sync::Arc;
 
-use protocol::grpc::api::ProjectionOperator as ProjectionOperatorProto;
+use protocol::function_stream_graph::ProjectionOperator as ProjectionOperatorProto;
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;

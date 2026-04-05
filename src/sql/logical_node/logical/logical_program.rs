@@ -21,7 +21,7 @@ use datafusion::common::{DataFusionError, Result as DFResult};
 use petgraph::Direction;
 use petgraph::dot::Dot;
 use prost::Message;
-use protocol::grpc::api::FsProgram;
+use protocol::function_stream_graph::FsProgram;
 use rand::distributions::Alphanumeric;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};

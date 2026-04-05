@@ -19,7 +19,7 @@ use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use datafusion_proto::{physical_plan::AsExecutionPlan, protobuf::PhysicalPlanNode};
 use prost::Message;
-use protocol::grpc::api::WindowFunctionOperator;
+use protocol::function_stream_graph::WindowFunctionOperator;
 
 use crate::sql::common::constants::{extension_node, proto_operator_name, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};

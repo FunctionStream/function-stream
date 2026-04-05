@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use itertools::{EitherOrBoth, Itertools};
 use prost::Message;
-use protocol::grpc::api::ConnectorOp;
+use protocol::function_stream_graph::ConnectorOp;
 use serde::{Deserialize, Serialize};
 
 use super::operator_name::OperatorName;

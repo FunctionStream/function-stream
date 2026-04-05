@@ -21,7 +21,7 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::unnest::{ListUnnest, UnnestExec};
 use datafusion_proto::physical_plan::PhysicalExtensionCodec;
 use prost::Message;
-use protocol::grpc::api::{
+use protocol::function_stream_graph::{
     DebeziumDecodeNode, DebeziumEncodeNode, FsExecNode, MemExecNode, UnnestExecNode,
     fs_exec_node::Node,
 };

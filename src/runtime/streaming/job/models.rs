@@ -16,7 +16,7 @@ use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use protocol::grpc::api::FsProgram;
+use protocol::function_stream_graph::FsProgram;
 use tokio::sync::mpsc;
 
 use crate::runtime::streaming::protocol::control::ControlCommand;

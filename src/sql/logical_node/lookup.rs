@@ -21,8 +21,8 @@ use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use prost::Message;
 
-use protocol::grpc::api;
-use protocol::grpc::api::{
+use protocol::function_stream_graph;
+use protocol::function_stream_graph::{
     ConnectorOp, GenericConnectorConfig, LookupJoinCondition, LookupJoinOperator,
 };
 
@@ -35,18 +35,9 @@ use crate::sql::logical_planner::planner::{NamedNode, Planner};
 use crate::sql::schema::SourceTable;
 use crate::sql::schema::utils::add_timestamp_field_arrow;
 
-// -----------------------------------------------------------------------------
-// Constants & Identifiers
-// -----------------------------------------------------------------------------
-
 pub const DICTIONARY_SOURCE_NODE_NAME: &str = extension_node::REFERENCE_TABLE_SOURCE;
 pub const STREAM_DICTIONARY_JOIN_NODE_NAME: &str = extension_node::STREAM_REFERENCE_JOIN;
 
-// -----------------------------------------------------------------------------
-// Logical Node: Reference Table Source
-// -----------------------------------------------------------------------------
-
-/// Static or periodically updated reference table used for lookups.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ReferenceTableSourceNode {
     pub(crate) source_definition: SourceTable,
@@ -90,11 +81,6 @@ impl UserDefinedLogicalNodeCore for ReferenceTableSourceNode {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Logical Node: Stream to Reference Join
-// -----------------------------------------------------------------------------
-
-/// Join between an unbounded stream and a reference (lookup) table.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StreamReferenceJoinNode {
     pub(crate) upstream_stream_plan: LogicalPlan,
@@ -135,8 +121,8 @@ impl StreamReferenceJoinNode {
 
     fn map_api_join_type(&self) -> Result<i32> {
         match self.join_semantics {
-            JoinType::Inner => Ok(api::JoinType::Inner as i32),
-            JoinType::Left => Ok(api::JoinType::Left as i32),
+            JoinType::Inner => Ok(function_stream_graph::JoinType::Inner as i32),
+            JoinType::Left => Ok(function_stream_graph::JoinType::Left as i32),
             unsupported => plan_err!(
                 "Unsupported join type '{unsupported}' for dictionary lookups. Only INNER and LEFT joins are permitted."
             ),
@@ -169,9 +155,11 @@ impl StreamReferenceJoinNode {
                 fs_schema: Some(lookup_fs_schema.into()),
                 name: self.external_dictionary.table_identifier.clone(),
                 description: self.external_dictionary.description.clone(),
-                config: Some(protocol::grpc::api::connector_op::Config::Generic(
-                    GenericConnectorConfig { properties },
-                )),
+                config: Some(
+                    protocol::function_stream_graph::connector_op::Config::Generic(
+                        GenericConnectorConfig { properties },
+                    ),
+                ),
             }),
             key_exprs: self.compile_join_conditions(planner)?,
             join_type: self.map_api_join_type()?,

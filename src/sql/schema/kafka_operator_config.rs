@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use datafusion::arrow::datatypes::Schema;
 use datafusion::common::{Result as DFResult, plan_datafusion_err, plan_err};
 
-use protocol::grpc::api::connector_op::Config as ProtoConfig;
-use protocol::grpc::api::{
+use protocol::function_stream_graph::connector_op::Config as ProtoConfig;
+use protocol::function_stream_graph::{
     BadDataPolicy, DecimalEncodingProto, FormatConfig, JsonFormatConfig, KafkaAuthConfig,
     KafkaAuthNone, KafkaOffsetMode, KafkaReadMode, KafkaSinkCommitMode, KafkaSinkConfig,
     KafkaSourceConfig, RawBytesFormatConfig, RawStringFormatConfig, TimestampFormatProto,
@@ -27,8 +27,8 @@ use crate::sql::schema::table_role::TableRole;
 fn sql_format_to_proto(fmt: &SqlFormat) -> DFResult<FormatConfig> {
     match fmt {
         SqlFormat::Json(j) => Ok(FormatConfig {
-            format: Some(protocol::grpc::api::format_config::Format::Json(
-                JsonFormatConfig {
+            format: Some(
+                protocol::function_stream_graph::format_config::Format::Json(JsonFormatConfig {
                     timestamp_format: match j.timestamp_format {
                         SqlTimestampFormat::RFC3339 => {
                             TimestampFormatProto::TimestampRfc3339 as i32
@@ -47,18 +47,22 @@ fn sql_format_to_proto(fmt: &SqlFormat) -> DFResult<FormatConfig> {
                     schema_id: j.schema_id,
                     debezium: j.debezium,
                     unstructured: j.unstructured,
-                },
-            )),
+                }),
+            ),
         }),
         SqlFormat::RawString(_) => Ok(FormatConfig {
-            format: Some(protocol::grpc::api::format_config::Format::RawString(
-                RawStringFormatConfig {},
-            )),
+            format: Some(
+                protocol::function_stream_graph::format_config::Format::RawString(
+                    RawStringFormatConfig {},
+                ),
+            ),
         }),
         SqlFormat::RawBytes(_) => Ok(FormatConfig {
-            format: Some(protocol::grpc::api::format_config::Format::RawBytes(
-                RawBytesFormatConfig {},
-            )),
+            format: Some(
+                protocol::function_stream_graph::format_config::Format::RawBytes(
+                    RawBytesFormatConfig {},
+                ),
+            ),
         }),
         other => plan_err!(
             "Kafka connector: format '{}' is not supported yet",
@@ -137,9 +141,9 @@ pub fn build_kafka_proto_config(
     let value_subject = options.pull_opt_str(opt::KAFKA_VALUE_SUBJECT)?;
 
     let auth = Some(KafkaAuthConfig {
-        auth: Some(protocol::grpc::api::kafka_auth_config::Auth::None(
-            KafkaAuthNone {},
-        )),
+        auth: Some(
+            protocol::function_stream_graph::kafka_auth_config::Auth::None(KafkaAuthNone {}),
+        ),
     });
 
     let _ = options.pull_opt_str(opt::TYPE)?;

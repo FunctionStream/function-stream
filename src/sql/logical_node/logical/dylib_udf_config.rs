@@ -13,7 +13,7 @@
 use datafusion::arrow::datatypes::DataType;
 use datafusion_proto::protobuf::ArrowType;
 use prost::Message;
-use protocol::grpc::api;
+use protocol::function_stream_graph;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd)]
 pub struct DylibUdfConfig {
@@ -24,9 +24,9 @@ pub struct DylibUdfConfig {
     pub is_async: bool,
 }
 
-impl From<DylibUdfConfig> for api::DylibUdfConfig {
+impl From<DylibUdfConfig> for function_stream_graph::DylibUdfConfig {
     fn from(from: DylibUdfConfig) -> Self {
-        api::DylibUdfConfig {
+        function_stream_graph::DylibUdfConfig {
             dylib_path: from.dylib_path,
             arg_types: from
                 .arg_types
@@ -46,8 +46,8 @@ impl From<DylibUdfConfig> for api::DylibUdfConfig {
     }
 }
 
-impl From<api::DylibUdfConfig> for DylibUdfConfig {
-    fn from(from: api::DylibUdfConfig) -> Self {
+impl From<function_stream_graph::DylibUdfConfig> for DylibUdfConfig {
+    fn from(from: function_stream_graph::DylibUdfConfig) -> Self {
         DylibUdfConfig {
             dylib_path: from.dylib_path,
             arg_types: from

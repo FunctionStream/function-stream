@@ -16,8 +16,8 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use protocol::grpc::api::connector_op::Config;
-use protocol::grpc::api::{
+use protocol::function_stream_graph::connector_op::Config;
+use protocol::function_stream_graph::{
     BadDataPolicy, ConnectorOp, DecimalEncodingProto, FormatConfig, KafkaAuthConfig,
     KafkaOffsetMode, KafkaReadMode, KafkaSinkCommitMode, KafkaSinkConfig, KafkaSourceConfig,
     TimestampFormatProto,
@@ -45,7 +45,7 @@ const DEFAULT_SOURCE_BATCH_SIZE: usize = 1024;
 fn proto_format_to_runtime(fmt: &Option<FormatConfig>) -> Result<RuntimeFormat> {
     let cfg = fmt.as_ref().context("FormatConfig is required")?;
     match &cfg.format {
-        Some(protocol::grpc::api::format_config::Format::Json(j)) => {
+        Some(protocol::function_stream_graph::format_config::Format::Json(j)) => {
             Ok(RuntimeFormat::Json(RuntimeJsonFormat {
                 timestamp_format: match j.timestamp_format() {
                     TimestampFormatProto::TimestampRfc3339 => RtTimestampFormat::RFC3339,
@@ -59,10 +59,10 @@ fn proto_format_to_runtime(fmt: &Option<FormatConfig>) -> Result<RuntimeFormat> 
                 include_schema: j.include_schema,
             }))
         }
-        Some(protocol::grpc::api::format_config::Format::RawString(_)) => {
+        Some(protocol::function_stream_graph::format_config::Format::RawString(_)) => {
             Ok(RuntimeFormat::RawString)
         }
-        Some(protocol::grpc::api::format_config::Format::RawBytes(_)) => {
+        Some(protocol::function_stream_graph::format_config::Format::RawBytes(_)) => {
             Ok(RuntimeFormat::RawBytes)
         }
         None => bail!("FormatConfig has no format variant set"),
@@ -88,13 +88,13 @@ fn build_auth_client_configs(auth: &Option<KafkaAuthConfig>) -> HashMap<String, 
     let mut out = HashMap::new();
     let Some(auth) = auth else { return out };
     match &auth.auth {
-        Some(protocol::grpc::api::kafka_auth_config::Auth::Sasl(sasl)) => {
+        Some(protocol::function_stream_graph::kafka_auth_config::Auth::Sasl(sasl)) => {
             out.insert("security.protocol".to_string(), sasl.protocol.clone());
             out.insert("sasl.mechanism".to_string(), sasl.mechanism.clone());
             out.insert("sasl.username".to_string(), sasl.username.clone());
             out.insert("sasl.password".to_string(), sasl.password.clone());
         }
-        Some(protocol::grpc::api::kafka_auth_config::Auth::AwsMskIam(iam)) => {
+        Some(protocol::function_stream_graph::kafka_auth_config::Auth::AwsMskIam(iam)) => {
             out.insert("security.protocol".to_string(), "SASL_SSL".to_string());
             out.insert("sasl.mechanism".to_string(), "OAUTHBEARER".to_string());
             out.insert(
@@ -117,8 +117,6 @@ fn merge_client_configs(
     }
     configs
 }
-
-// ─────────────── Kafka connector dispatcher (ConnectorOp → source/sink) ───────────────
 
 pub struct KafkaConnectorDispatcher;
 

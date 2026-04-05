@@ -22,7 +22,7 @@ use datafusion_common::{internal_err, plan_err};
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use prost::Message;
-use protocol::grpc::api::{AsyncUdfOperator, AsyncUdfOrdering};
+use protocol::function_stream_graph::{AsyncUdfOperator, AsyncUdfOrdering};
 
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::extension_node;

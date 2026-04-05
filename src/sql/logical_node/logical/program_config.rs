@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use protocol::grpc::api::FsProgramConfig;
+use protocol::function_stream_graph::FsProgramConfig;
 
 /// Placeholder program-level config (UDF tables live elsewhere; wire maps stay empty).
 #[derive(Clone, Debug, Default)]

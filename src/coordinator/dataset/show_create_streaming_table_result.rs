@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use arrow_array::StringArray;
 use arrow_schema::{DataType, Field, Schema};
-use protocol::grpc::api::FsProgram;
+use protocol::function_stream_graph::FsProgram;
 
 use crate::sql::common::render_program_topology;
 

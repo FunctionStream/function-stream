@@ -23,7 +23,7 @@ use datafusion::scalar::ScalarValue;
 use datafusion_proto::physical_plan::AsExecutionPlan;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
-use protocol::grpc::api::UpdatingAggregateOperator;
+use protocol::function_stream_graph::UpdatingAggregateOperator;
 
 use crate::sql::common::constants::{extension_node, proto_operator_name, updating_state_field};
 use crate::sql::common::{FsSchema, FsSchemaRef};

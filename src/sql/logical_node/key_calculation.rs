@@ -24,7 +24,7 @@ use datafusion_proto::protobuf::PhysicalPlanNode;
 use itertools::Itertools;
 use prost::Message;
 
-use protocol::grpc::api::{KeyPlanOperator, ProjectionOperator};
+use protocol::function_stream_graph::{KeyPlanOperator, ProjectionOperator};
 
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::{extension_node, sql_field};

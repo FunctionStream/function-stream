@@ -15,7 +15,7 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{Context, anyhow, bail};
 use datafusion::common::{Result as DFResult, internal_err, plan_err};
 use prost::Message;
-use protocol::grpc::api::FsProgram;
+use protocol::function_stream_graph::FsProgram;
 use protocol::storage::{self as pb, table_definition};
 use tracing::{info, warn};
 use unicase::UniCase;
@@ -379,13 +379,13 @@ impl CatalogManager {
             let physical = source.produce_physical_schema();
             if let Ok(proto_cfg) = build_kafka_proto_config_from_string_map(opts_map, &physical) {
                 source.connector_config = match proto_cfg {
-                    protocol::grpc::api::connector_op::Config::KafkaSource(cfg) => {
+                    protocol::function_stream_graph::connector_op::Config::KafkaSource(cfg) => {
                         ConnectorConfig::KafkaSource(cfg)
                     }
-                    protocol::grpc::api::connector_op::Config::KafkaSink(cfg) => {
+                    protocol::function_stream_graph::connector_op::Config::KafkaSink(cfg) => {
                         ConnectorConfig::KafkaSink(cfg)
                     }
-                    protocol::grpc::api::connector_op::Config::Generic(g) => {
+                    protocol::function_stream_graph::connector_op::Config::Generic(g) => {
                         ConnectorConfig::Generic(g.properties)
                     }
                 };

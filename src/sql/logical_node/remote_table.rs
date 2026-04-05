@@ -19,7 +19,7 @@ use datafusion_proto::physical_plan::AsExecutionPlan;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
 
-use protocol::grpc::api::ValuePlanOperator;
+use protocol::function_stream_graph::ValuePlanOperator;
 
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::extension_node;

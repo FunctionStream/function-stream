@@ -325,15 +325,8 @@ impl ExecutionPlan for BufferedBatchesExec {
 }
 
 // ============================================================================
-// PlanningPlaceholderExec (formerly FsMemExec)
-// ============================================================================
-
-/// Placeholder leaf used only during logical-to-physical planning and serialization.
-///
-/// On workers, real sources replace this after decode; `execute` must not be called.
 #[derive(Debug, Clone)]
 pub struct PlanningPlaceholderExec {
-    /// Matches [`protocol::grpc::api::MemExecNode::table_name`] (table / side label).
     pub table_name: String,
     pub schema: SchemaRef,
     properties: PlanProperties,

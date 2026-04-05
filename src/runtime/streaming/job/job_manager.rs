@@ -18,7 +18,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, info, warn};
 
-use protocol::grpc::api::{ChainedOperator, FsProgram};
+use protocol::function_stream_graph::{ChainedOperator, FsProgram};
 
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::{ConstructedOperator, Operator};
@@ -33,7 +33,6 @@ use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
 use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
 
-// ---------------------------------------------------------------------------
 #[derive(Debug, Clone)]
 pub struct StreamingJobSummary {
     pub job_id: String,

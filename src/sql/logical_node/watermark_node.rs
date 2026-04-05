@@ -19,7 +19,7 @@ use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 use prost::Message;
-use protocol::grpc::api::ExpressionWatermarkConfig;
+use protocol::function_stream_graph::ExpressionWatermarkConfig;
 
 use crate::multifield_partial_ord;
 use crate::sql::common::constants::{extension_node, runtime_operator_kind};

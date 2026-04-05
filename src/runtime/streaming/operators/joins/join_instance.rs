@@ -35,7 +35,7 @@ use crate::sql::common::constants::mem_exec_join_side;
 use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark, from_nanos};
 use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
-use protocol::grpc::api::JoinOperator;
+use protocol::function_stream_graph::JoinOperator;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum JoinSide {

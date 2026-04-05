@@ -20,7 +20,7 @@ use datafusion_common::plan_err;
 use datafusion_proto::physical_plan::AsExecutionPlan;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use prost::Message;
-use protocol::grpc::api::JoinOperator;
+use protocol::function_stream_graph::JoinOperator;
 
 use crate::sql::common::constants::{extension_node, runtime_operator_kind};
 use crate::sql::common::{FsSchema, FsSchemaRef};

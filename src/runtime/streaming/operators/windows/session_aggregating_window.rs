@@ -46,7 +46,7 @@ use crate::sql::common::{
 use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use crate::sql::schema::utils::window_arrow_struct;
 use async_trait::async_trait;
-use protocol::grpc::api::SessionWindowAggregateOperator;
+use protocol::function_stream_graph::SessionWindowAggregateOperator;
 // ============================================================================
 // ============================================================================
 

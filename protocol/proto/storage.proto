@@ -48,7 +48,7 @@ message CatalogSourceTable {
 message StreamingTableDefinition {
   string table_name = 1;
   int64  created_at_millis = 2;
-  // Serialized function_stream.api.FsProgram — the full execution graph.
+  // Serialized function_stream.v1.FsProgram — the full execution graph.
   // Stored as opaque bytes to avoid coupling storage schema with runtime API protos.
   bytes  fs_program_bytes = 3;
   string comment = 4;

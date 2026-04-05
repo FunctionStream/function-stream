@@ -237,7 +237,7 @@ pub struct WindowFunctionConstructor;
 impl WindowFunctionConstructor {
     pub fn with_config(
         &self,
-        config: protocol::grpc::api::WindowFunctionOperator,
+        config: protocol::function_stream_graph::WindowFunctionOperator,
         registry: Arc<Registry>,
     ) -> anyhow::Result<WindowFunctionOperator> {
         let input_schema = Arc::new(

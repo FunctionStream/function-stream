@@ -11,8 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Conversions between [`LogicalProgram`] and `protocol::grpc::api::FsProgram` / pipeline API types.
-
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -20,7 +18,7 @@ use std::sync::Arc;
 use datafusion::common::{DataFusionError, Result as DFResult};
 use petgraph::graph::DiGraph;
 use petgraph::prelude::EdgeRef;
-use protocol::grpc::api::{
+use protocol::function_stream_graph::{
     ChainedOperator, EdgeType as ProtoEdgeType, FsEdge, FsNode, FsProgram,
     FsSchema as ProtoFsSchema,
 };

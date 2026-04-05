@@ -43,7 +43,7 @@ use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_
 use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use crate::sql::schema::utils::add_timestamp_field_arrow;
 use async_trait::async_trait;
-use protocol::grpc::api::TumblingWindowAggregateOperator;
+use protocol::function_stream_graph::TumblingWindowAggregateOperator;
 
 #[derive(Default)]
 struct ActiveBin {

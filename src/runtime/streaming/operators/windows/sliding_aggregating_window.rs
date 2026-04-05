@@ -39,7 +39,7 @@ use crate::runtime::streaming::factory::Registry;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
 use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
-use protocol::grpc::api::SlidingWindowAggregateOperator;
+use protocol::function_stream_graph::SlidingWindowAggregateOperator;
 // ============================================================================
 // ============================================================================
 

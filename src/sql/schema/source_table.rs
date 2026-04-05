@@ -22,7 +22,7 @@ use datafusion::sql::TableReference;
 use datafusion::sql::planner::{PlannerContext, SqlToRel};
 use datafusion::sql::sqlparser::ast;
 use datafusion_expr::ExprSchemable;
-use protocol::grpc::api::ConnectorOp;
+use protocol::function_stream_graph::ConnectorOp;
 use tracing::warn;
 
 use super::StreamSchemaProvider;
@@ -438,13 +438,13 @@ impl SourceTable {
         if connector_name.eq_ignore_ascii_case(connector_type::KAFKA) {
             let proto_cfg = build_kafka_proto_config(options, role, &format, bad_data)?;
             table.connector_config = match proto_cfg {
-                protocol::grpc::api::connector_op::Config::KafkaSource(cfg) => {
+                protocol::function_stream_graph::connector_op::Config::KafkaSource(cfg) => {
                     ConnectorConfig::KafkaSource(cfg)
                 }
-                protocol::grpc::api::connector_op::Config::KafkaSink(cfg) => {
+                protocol::function_stream_graph::connector_op::Config::KafkaSink(cfg) => {
                     ConnectorConfig::KafkaSink(cfg)
                 }
-                protocol::grpc::api::connector_op::Config::Generic(g) => {
+                protocol::function_stream_graph::connector_op::Config::Generic(g) => {
                     ConnectorConfig::Generic(g.properties)
                 }
             };
@@ -476,10 +476,6 @@ impl SourceTable {
             || self.payload_format == Some(DataEncodingFormat::DebeziumJson)
     }
 
-    /// Build strongly-typed `ConnectorOp` protobuf for runtime operator construction.
-    ///
-    /// Directly maps the in-memory [`ConnectorConfig`] to the proto `oneof config` — zero JSON,
-    /// zero re-parsing.
     pub fn connector_op(&self) -> ConnectorOp {
         let physical = self.produce_physical_schema();
         let fields: Vec<Field> = physical

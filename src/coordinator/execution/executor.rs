@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 
-use protocol::grpc::api::FsProgram;
+use protocol::function_stream_graph::FsProgram;
 use thiserror::Error;
 use tracing::{debug, info, warn};
 

@@ -10,10 +10,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! FunctionStream table/stream schema: Arrow [`Schema`] plus timestamp index and optional key columns.
-//!
-//! [`Schema`]: datafusion::arrow::datatypes::Schema
-
 use datafusion::arrow::array::builder::{ArrayBuilder, make_builder};
 use datafusion::arrow::array::{RecordBatch, TimestampNanosecondArray};
 use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaBuilder, TimeUnit};
@@ -27,7 +23,7 @@ use arrow::compute::kernels::numeric::div;
 use arrow::row::SortField;
 use arrow_array::{PrimitiveArray, UInt64Array};
 use arrow_array::types::UInt64Type;
-use protocol::grpc::api;
+use protocol::function_stream_graph;
 use super::{to_nanos, TIMESTAMP_FIELD};
 use std::ops::Range;
 use crate::common::converter::Converter;
@@ -43,9 +39,9 @@ pub struct FsSchema {
     routing_key_indices: Option<Vec<usize>>,
 }
 
-impl TryFrom<api::FsSchema> for FsSchema {
+impl TryFrom<function_stream_graph::FsSchema> for FsSchema {
     type Error = DataFusionError;
-    fn try_from(schema_proto: api::FsSchema) -> Result<Self, DataFusionError> {
+    fn try_from(schema_proto: function_stream_graph::FsSchema) -> Result<Self, DataFusionError> {
         let schema: Schema = serde_json::from_str(&schema_proto.arrow_schema)
             .map_err(|e| DataFusionError::Plan(format!("Invalid arrow schema: {e}")))?;
         let timestamp_index = schema_proto.timestamp_index as usize;
@@ -75,7 +71,7 @@ impl TryFrom<api::FsSchema> for FsSchema {
     }
 }
 
-impl From<FsSchema> for api::FsSchema {
+impl From<FsSchema> for function_stream_graph::FsSchema {
     fn from(schema: FsSchema) -> Self {
         let arrow_schema = serde_json::to_string(schema.schema.as_ref()).unwrap();
         let timestamp_index = schema.timestamp_index as u32;

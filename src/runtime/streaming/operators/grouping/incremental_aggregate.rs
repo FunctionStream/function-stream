@@ -31,7 +31,7 @@ use datafusion_proto::protobuf::PhysicalPlanNode;
 use datafusion_proto::protobuf::physical_plan_node::PhysicalPlanType;
 use itertools::Itertools;
 use prost::Message;
-use protocol::grpc::api::UpdatingAggregateOperator;
+use protocol::function_stream_graph::UpdatingAggregateOperator;
 use std::collections::HashSet;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant, SystemTime};
