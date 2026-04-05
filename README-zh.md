@@ -72,7 +72,7 @@ function-stream/
 - **Rust 工具链**：Stable >= 1.77 (通过 rustup 安装)。
 - **Python 3.9+**：构建 Python WASM 运行时所需。
 - **Protoc**：Protocol Buffers 编译器（用于生成 gRPC 绑定）。
-- **构建工具**：cmake, pkg-config, OpenSSL headers (用于 rdkafka)。
+- **构建工具**：cmake、pkg-config、OpenSSL 头文件，以及 **libcurl** 开发头文件（Debian/Ubuntu 上为 `libcurl4-openssl-dev`）——在使用带 SSL/OAuth 相关选项构建 **rdkafka** 时，捆绑的 librdkafka 需要 `curl/curl.h`。
 
 ## 快速开始 (本地开发)
 

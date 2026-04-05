@@ -36,7 +36,7 @@ async-trait = "0.1"
 num_cpus = "1.0"
 protocol = { path = "./protocol" }
 prost = "0.13"
-rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi"] }
+rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi", "curl"] }
 crossbeam-channel = "0.5"
 wasmtime = { version = "41.0.3", features = ["component-model", "async"] }
 base64 = "0.22"

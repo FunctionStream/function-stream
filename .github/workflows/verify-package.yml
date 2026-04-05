@@ -49,6 +49,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake \
             libssl-dev \
+            libcurl4-openssl-dev \
             pkg-config \
             libsasl2-dev \
             protobuf-compiler

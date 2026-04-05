@@ -73,7 +73,7 @@ function-stream/
 * **Rust Toolchain**: Stable >= 1.77 (via rustup).
 * **Python 3.9+**: Required for building the Python WASM runtime.
 * **Protoc**: Protocol Buffers compiler (for generating gRPC bindings).
-* **Build Tools**: cmake, pkg-config, OpenSSL headers (for rdkafka).
+* **Build Tools**: cmake, pkg-config, OpenSSL headers, **libcurl** development headers (`libcurl4-openssl-dev` on Debian/Ubuntu) — required when building **rdkafka** with SSL/OAuth-related options (bundled librdkafka expects `curl/curl.h`).
 
 ## Quick Start (Local Development)
 
