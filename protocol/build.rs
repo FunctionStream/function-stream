@@ -39,6 +39,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_server(true)
         .compile_protos(&["proto/function_stream.proto"], &["proto"])?;
 
+    let graph_dir = out_dir.join("function_stream_v1");
+    std::fs::create_dir_all(&graph_dir)?;
+    tonic_build::configure()
+        .out_dir(&graph_dir)
+        .build_client(false)
+        .build_server(false)
+        .compile_protos(&["proto/function_stream_graph.proto"], &["proto"])?;
+
     let api_dir = out_dir.join("api");
     std::fs::create_dir_all(&api_dir)?;
 
@@ -67,6 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Protocol Buffers code generated successfully");
     println!("cargo:rustc-env=PROTO_GEN_DIR={}", out_dir.display());
     println!("cargo:rerun-if-changed=proto/function_stream.proto");
+    println!("cargo:rerun-if-changed=proto/function_stream_graph.proto");
     println!("cargo:rerun-if-changed=proto/fs_api.proto");
     println!("cargo:rerun-if-changed=proto/storage.proto");
 

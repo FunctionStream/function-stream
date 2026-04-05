@@ -3845,6 +3845,7 @@ dependencies = [
  "env_logger",
  "log",
  "prost",
+ "prost-types",
  "serde",
  "tonic",
  "tonic-build",

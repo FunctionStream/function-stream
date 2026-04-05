@@ -1,0 +1,285 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Streaming job topology & physical execution graph (wire model).
+syntax = "proto3";
+
+package function_stream.v1;
+
+import "google/protobuf/duration.proto";
+
+// ============================================================================
+// Topology & Execution Graph
+// ============================================================================
+
+// The top-level container representing a complete streaming application.
+message StreamingJobGraph {
+  string job_id = 1;
+  string job_name = 2;
+  repeated ExecutionNode nodes = 3;
+  repeated ExecutionEdge edges = 4;
+  JobRegistryConfig registry_config = 5;
+}
+
+// An ExecutionNode represents a physical task group (Subtask/Parallelism unit).
+message ExecutionNode {
+  uint32 node_id = 1;
+  uint32 parallelism = 2;
+  string label = 3;
+
+  // A node can consist of a chain of operators to reduce serialization overhead.
+  repeated OperatorDefinition operator_chain = 4;
+
+  // Schemas for internal intermediate results.
+  repeated QualifiedSchema output_schemas = 5;
+}
+
+message ExecutionEdge {
+  uint32 source_node_id = 1;
+  uint32 target_node_id = 2;
+  QualifiedSchema schema = 3;
+  RoutingStrategy strategy = 4;
+}
+
+enum RoutingStrategy {
+  ROUTING_STRATEGY_UNSPECIFIED = 0;
+  ROUTING_STRATEGY_FORWARD = 1;    // One-to-one local transfer
+  ROUTING_STRATEGY_SHUFFLE = 2;    // Hash-based redistribution
+  ROUTING_STRATEGY_BROADCAST = 3;  // Replicate to all targets
+  ROUTING_STRATEGY_REBALANCE = 4;  // Round-robin
+}
+
+// ============================================================================
+// Schema & Metadata
+// ============================================================================
+
+// QualifiedSchema combines Arrow metadata with streaming event-time topology.
+message QualifiedSchema {
+  // JSON or Flatbuffers encoded Apache Arrow Schema.
+  string arrow_schema_serialized = 1;
+
+  // Mandatory for watermark generation and time-windowing.
+  uint32 event_time_column_index = 2;
+
+  // State partitioning keys.
+  repeated uint32 state_key_indices = 3;
+
+  // Physical routing keys (often same as state keys).
+  repeated uint32 distribution_key_indices = 4;
+}
+
+// ============================================================================
+// Operator Definitions
+// ============================================================================
+
+message OperatorDefinition {
+  string operator_id = 1;
+  string display_name = 2;
+
+  oneof operator_type {
+    // Sources & Sinks
+    ConnectorConfig connector = 10;
+
+    // Core Transformations
+    ProjectionConfig projection = 11;
+    FilterConfig filter = 12;
+
+    // Windowing & Aggregation
+    WindowAggregateConfig window_aggregate = 13;
+    IncrementalAggregateConfig incremental_aggregate = 14;
+
+    // Joins
+    StreamJoinConfig stream_join = 15;
+    LookupJoinConfig lookup_join = 16;
+
+    // Advanced Extensibility
+    AsyncInvokeConfig async_invoke = 17;
+    CustomNativeNode custom_node = 18;
+  }
+}
+
+// --------------------------- Windowing ---------------------------
+
+message WindowAggregateConfig {
+  WindowType window_type = 1;
+  QualifiedSchema input_schema = 2;
+
+  // Optimized execution plans (DataFusion physical plans).
+  bytes partial_exec_plan = 3;
+  bytes final_exec_plan = 4;
+}
+
+message WindowType {
+  oneof type {
+    TumblingWindow tumbling = 1;
+    SlidingWindow sliding = 2;
+    SessionWindow session = 3;
+  }
+}
+
+message TumblingWindow {
+  google.protobuf.Duration size = 1;
+}
+
+message SlidingWindow {
+  google.protobuf.Duration size = 1;
+  google.protobuf.Duration slide = 2;
+}
+
+message SessionWindow {
+  google.protobuf.Duration gap = 1;
+}
+
+// --------------------------- Connectors ---------------------------
+
+message ConnectorConfig {
+  string type_name = 1;  // e.g., "kafka", "pulsar", "s3"
+
+  oneof source_or_sink {
+    KafkaSourceConfig kafka_source = 2;
+    KafkaSinkConfig kafka_sink = 3;
+    GenericProperties generic = 4;
+  }
+
+  SerializationFormat format = 5;
+}
+
+message KafkaSourceConfig {
+  string bootstrap_servers = 1;
+  repeated string topics = 2;
+  string group_id = 3;
+
+  AutoOffsetReset offset_reset = 4;
+  KafkaIsolationLevel isolation_level = 5;
+  map<string, string> custom_rdkafka_properties = 6;
+}
+
+enum AutoOffsetReset {
+  AUTO_OFFSET_RESET_EARLIEST = 0;
+  AUTO_OFFSET_RESET_LATEST = 1;
+  AUTO_OFFSET_RESET_NONE = 2;
+}
+
+enum KafkaIsolationLevel {
+  KAFKA_ISOLATION_READ_UNCOMMITTED = 0;
+  KAFKA_ISOLATION_READ_COMMITTED = 1;
+}
+
+message KafkaSinkConfig {
+  string bootstrap_servers = 1;
+  string topic = 2;
+  map<string, string> custom_rdkafka_properties = 3;
+}
+
+// --------------------------- Serialization ---------------------------
+
+message SerializationFormat {
+  oneof format_type {
+    JsonFormat json = 1;
+    AvroFormat avro = 2;
+    ProtobufFormat protobuf = 3;
+    RawFormat raw = 4;
+  }
+}
+
+message JsonFormat {
+  bool ignore_parse_errors = 1;
+  bool is_debezium_style = 2;
+}
+
+message RawFormat {
+  enum Encoding {
+    UTF8 = 0;
+    BYTES = 1;
+  }
+  Encoding encoding = 1;
+}
+
+// ============================================================================
+// Control Plane & Observability
+// ============================================================================
+
+message CheckpointMetadata {
+  uint64 checkpoint_id = 1;
+  int64 trigger_timestamp_ms = 2;
+
+  enum CheckpointType {
+    CHECKPOINT_TYPE_FULL = 0;
+    CHECKPOINT_TYPE_INCREMENTAL = 1;
+    CHECKPOINT_TYPE_SAVEPOINT = 2;
+  }
+  CheckpointType type = 3;
+}
+
+message JobRegistryConfig {
+  map<string, DylibUdfMetadata> native_udfs = 1;
+  map<string, PythonUdfMetadata> python_udfs = 2;
+}
+
+message DylibUdfMetadata {
+  string symbol_name = 1;
+  string library_path = 2;
+  // Encoded Arrow types for validation.
+  bytes input_types_serialized = 3;
+  bytes return_type_serialized = 4;
+}
+
+message GenericProperties {
+  map<string, string> properties = 1;
+}
+
+// ============================================================================
+// Internal Execution Nodes (Physical Extensions)
+// ============================================================================
+
+message CustomNativeNode {
+  oneof implementation {
+    DebeziumProcessor debezium = 1;
+    MemTableProvider mem_table = 2;
+    UnnestProvider unnest = 3;
+  }
+}
+
+message DebeziumProcessor {
+  enum Mode {
+    DECODE = 0;
+    ENCODE = 1;
+  }
+  Mode mode = 1;
+  string schema_context = 2;
+}
+
+// ============================================================================
+// Placeholder operator / format configs (extend when wiring the runtime)
+// ============================================================================
+
+message ProjectionConfig {}
+
+message FilterConfig {}
+
+message IncrementalAggregateConfig {}
+
+message StreamJoinConfig {}
+
+message LookupJoinConfig {}
+
+message AsyncInvokeConfig {}
+
+message AvroFormat {}
+
+message ProtobufFormat {}
+
+message PythonUdfMetadata {}
+
+message MemTableProvider {}
+
+message UnnestProvider {}

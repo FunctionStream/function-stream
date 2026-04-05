@@ -24,6 +24,14 @@ pub use service::function_stream_service_server::{
     FunctionStreamService, FunctionStreamServiceServer,
 };
 
+// ─────────────── Streaming job graph (function_stream_graph.proto: package function_stream.v1) ───────────────
+
+/// Physical topology / execution graph types (`proto/function_stream_graph.proto`).
+pub mod function_stream_v1 {
+    #![allow(clippy::all)]
+    include!("../generated/function_stream_v1/function_stream.v1.rs");
+}
+
 // ─────────────── Streaming Pipeline API (fs_api.proto) ───────────────
 
 pub mod grpc {
