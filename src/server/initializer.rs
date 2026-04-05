@@ -10,15 +10,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::GlobalConfig;
-use anyhow::{Context, Result};
+use std::time::Instant;
 
-type InitializerFn = fn(&GlobalConfig) -> Result<()>;
+use anyhow::{Context, Result};
+use tracing::{debug, info, warn};
+
+use crate::config::GlobalConfig;
+
+pub type InitializerFn = fn(&GlobalConfig) -> Result<()>;
 
 #[derive(Clone)]
-struct Component {
-    name: &'static str,
-    initializer: InitializerFn,
+pub struct Component {
+    pub name: &'static str,
+    pub initializer: InitializerFn,
+}
+
+pub struct ComponentRegistry {
+    components: Vec<Component>,
 }
 
 #[derive(Default)]
@@ -27,25 +35,17 @@ pub struct ComponentRegistryBuilder {
 }
 
 impl ComponentRegistryBuilder {
-    #[inline]
     pub fn new() -> Self {
-        Self::with_capacity(8)
-    }
-
-    #[inline]
-    pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            components: Vec::with_capacity(capacity),
+            components: Vec::with_capacity(8),
         }
     }
 
-    #[inline]
     pub fn register(mut self, name: &'static str, initializer: InitializerFn) -> Self {
         self.components.push(Component { name, initializer });
         self
     }
 
-    #[inline]
     pub fn build(self) -> ComponentRegistry {
         ComponentRegistry {
             components: self.components,
@@ -53,57 +53,74 @@ impl ComponentRegistryBuilder {
     }
 }
 
-pub struct ComponentRegistry {
-    components: Vec<Component>,
-}
-
 impl ComponentRegistry {
     pub fn initialize_all(&self, config: &GlobalConfig) -> Result<()> {
         if self.components.is_empty() {
-            log::warn!("No components registered for initialization");
+            warn!("Component registry is empty; no components to initialize");
             return Ok(());
         }
 
-        log::info!("Initializing {} components...", self.components.len());
+        let total = self.components.len();
+        info!(
+            total_components = total,
+            "Commencing system initialization sequence"
+        );
 
-        for (idx, component) in self.components.iter().enumerate() {
-            let start = std::time::Instant::now();
-            log::debug!(
-                "[{}/{}] Initializing component: {}",
-                idx + 1,
-                self.components.len(),
-                component.name
+        for (index, component) in self.components.iter().enumerate() {
+            let start_time = Instant::now();
+
+            debug!(
+                component = component.name,
+                step = format!("{}/{}", index + 1, total),
+                "Initializing component"
             );
 
-            (component.initializer)(config)
-                .with_context(|| format!("Component '{}' initialization failed", component.name))?;
+            (component.initializer)(config).with_context(|| {
+                format!("Fatal error initializing component: {}", component.name)
+            })?;
 
-            let elapsed = start.elapsed();
-            log::debug!(
-                "[{}/{}] Component '{}' initialized successfully in {:?}",
-                idx + 1,
-                self.components.len(),
-                component.name,
-                elapsed
+            debug!(
+                component = component.name,
+                elapsed_ms = start_time.elapsed().as_millis(),
+                "Component initialized successfully"
             );
         }
 
-        log::info!(
-            "All {} components initialized successfully",
-            self.components.len()
-        );
+        info!("System initialization sequence completed successfully");
         Ok(())
     }
+}
 
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.components.len()
-    }
+pub fn build_core_registry() -> ComponentRegistry {
+    let builder = {
+        let b = ComponentRegistryBuilder::new()
+            .register("WasmCache", initialize_wasm_cache)
+            .register("TaskManager", initialize_task_manager)
+            .register("JobManager", initialize_job_manager);
+        #[cfg(feature = "python")]
+        let b = b.register("PythonService", initialize_python_service);
+        b
+    };
 
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.components.is_empty()
-    }
+    builder
+        .register(
+            "StreamCatalog",
+            crate::storage::stream_catalog::initialize_stream_catalog,
+        )
+        .register("Coordinator", initialize_coordinator)
+        .build()
+}
+
+pub fn bootstrap_system(config: &GlobalConfig) -> Result<()> {
+    let registry = build_core_registry();
+
+    registry.initialize_all(config)?;
+
+    crate::storage::stream_catalog::restore_global_catalog_from_store();
+    crate::storage::stream_catalog::restore_streaming_jobs_from_store();
+
+    info!("System bootstrap finished. Node is ready to accept traffic.");
+    Ok(())
 }
 
 fn initialize_wasm_cache(config: &GlobalConfig) -> Result<()> {
@@ -114,18 +131,20 @@ fn initialize_wasm_cache(config: &GlobalConfig) -> Result<()> {
             max_size: config.wasm.max_cache_size,
         },
     );
-    log::info!(
-        "WASM cache configuration: enabled={}, dir={}, max_size={} bytes",
-        config.wasm.enable_cache,
-        config.wasm.cache_dir,
-        config.wasm.max_cache_size
+
+    debug!(
+        enabled = config.wasm.enable_cache,
+        dir = %config.wasm.cache_dir,
+        max_size = config.wasm.max_cache_size,
+        "WASM cache configured"
     );
+
     Ok(())
 }
 
 fn initialize_task_manager(config: &GlobalConfig) -> Result<()> {
     crate::runtime::taskexecutor::TaskManager::init(config)
-        .context("TaskManager initialization failed")?;
+        .context("TaskManager service failed to start")?;
     Ok(())
 }
 
@@ -136,24 +155,33 @@ fn initialize_python_service(config: &GlobalConfig) -> Result<()> {
     Ok(())
 }
 
-fn initialize_coordinator(_config: &GlobalConfig) -> Result<()> {
-    crate::runtime::taskexecutor::TaskManager::get()
-        .context("Coordinator requires TaskManager to be initialized first")?;
-    log::info!("Coordinator verified and ready");
+fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
+    use crate::runtime::streaming::factory::OperatorFactory;
+    use crate::runtime::streaming::factory::Registry;
+    use crate::runtime::streaming::job::JobManager;
+    use std::sync::Arc;
+
+    let registry = Arc::new(Registry::new());
+    let factory = Arc::new(OperatorFactory::new(registry));
+    let max_memory_bytes = config
+        .streaming
+        .max_memory_bytes
+        .unwrap_or(256 * 1024 * 1024);
+
+    JobManager::init(factory, max_memory_bytes).context("JobManager service failed to start")?;
+
     Ok(())
 }
 
-pub fn register_components() -> ComponentRegistry {
-    let builder = {
-        let b = ComponentRegistryBuilder::new()
-            .register("WasmCache", initialize_wasm_cache)
-            .register("TaskManager", initialize_task_manager);
-        #[cfg(feature = "python")]
-        let b = b.register("PythonService", initialize_python_service);
-        b
-    };
+fn initialize_coordinator(_config: &GlobalConfig) -> Result<()> {
+    crate::runtime::taskexecutor::TaskManager::get()
+        .context("Dependency violation: Coordinator requires TaskManager")?;
 
-    builder
-        .register("Coordinator", initialize_coordinator)
-        .build()
+    crate::storage::stream_catalog::CatalogManager::global()
+        .context("Dependency violation: Coordinator requires StreamCatalog")?;
+
+    crate::runtime::streaming::job::JobManager::global()
+        .context("Dependency violation: Coordinator requires JobManager")?;
+
+    Ok(())
 }

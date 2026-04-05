@@ -14,8 +14,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use arrow_ipc::writer::StreamWriter;
-use log::{error, info};
 use tonic::{Request, Response as TonicResponse, Status};
+use tracing::{debug, error, info, warn};
 
 use protocol::service::FunctionInfo as ProtoFunctionInfo;
 use protocol::service::{
@@ -24,12 +24,11 @@ use protocol::service::{
     StopFunctionRequest, function_stream_service_server::FunctionStreamService,
 };
 
-use crate::coordinator::Coordinator;
 use crate::coordinator::{
-    CreateFunction, CreatePythonFunction, DataSet, DropFunction, ShowFunctions,
-    ShowFunctionsResult, StartFunction, Statement, StopFunction,
+    Coordinator, CreateFunction, CreatePythonFunction, DataSet, DropFunction, PythonModule,
+    ShowFunctions, ShowFunctionsResult, StartFunction, Statement, StopFunction,
 };
-use crate::sql::SqlParser;
+use crate::sql::parse::parse_sql;
 
 pub struct FunctionStreamServiceImpl {
     coordinator: Arc<Coordinator>,
@@ -40,23 +39,70 @@ impl FunctionStreamServiceImpl {
         Self { coordinator }
     }
 
-    fn build_response(status_code: StatusCode, message: String, data: Option<Vec<u8>>) -> Response {
+    fn serialize_dataset(ds: &dyn DataSet) -> Result<Vec<u8>, String> {
+        let batch = ds.to_record_batch();
+        let mut buf = Vec::new();
+
+        let mut writer = StreamWriter::try_new(&mut buf, &batch.schema())
+            .map_err(|e| format!("IPC writer initialization failed: {e}"))?;
+
+        writer
+            .write(&batch)
+            .map_err(|e| format!("IPC write failed: {e}"))?;
+
+        writer
+            .finish()
+            .map_err(|e| format!("IPC finish failed: {e}"))?;
+
+        Ok(buf)
+    }
+
+    fn build_success_response(
+        status: StatusCode,
+        message: String,
+        data: Option<Arc<dyn DataSet>>,
+    ) -> Response {
+        let payload = match data {
+            Some(ds) => match Self::serialize_dataset(ds.as_ref()) {
+                Ok(bytes) => Some(bytes),
+                Err(e) => {
+                    error!("Data serialization error: {}", e);
+                    return Self::build_error_response(
+                        StatusCode::InternalServerError,
+                        "Internal data serialization error".to_string(),
+                    );
+                }
+            },
+            None => None,
+        };
+
         Response {
-            status_code: status_code as i32,
+            status_code: status as i32,
             message,
-            data,
+            data: payload,
         }
     }
 
-    fn data_set_to_ipc_bytes(ds: &dyn DataSet) -> Option<Vec<u8>> {
-        let batch = ds.to_record_batch();
-        let mut buf = Vec::new();
-        {
-            let mut writer = StreamWriter::try_new(&mut buf, &batch.schema()).ok()?;
-            writer.write(&batch).ok()?;
-            writer.finish().ok()?;
+    fn build_error_response(status: StatusCode, message: String) -> Response {
+        Response {
+            status_code: status as i32,
+            message,
+            data: None,
         }
-        Some(buf)
+    }
+
+    async fn execute_statement(
+        &self,
+        stmt: &dyn Statement,
+        success_status: StatusCode,
+    ) -> Response {
+        let result = self.coordinator.execute_with_stream_catalog(stmt).await;
+
+        if result.success {
+            Self::build_success_response(success_status, result.message, result.data)
+        } else {
+            Self::build_error_response(StatusCode::InternalServerError, result.message)
+        }
     }
 }
 
@@ -66,225 +112,137 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         &self,
         request: Request<SqlRequest>,
     ) -> Result<TonicResponse<Response>, Status> {
-        let start_time = Instant::now();
+        let timer = Instant::now();
         let req = request.into_inner();
 
-        let parse_start = Instant::now();
-        let stmt = match SqlParser::parse(&req.sql) {
-            Ok(stmt) => {
-                log::debug!("SQL parsed in {}ms", parse_start.elapsed().as_millis());
-                stmt
-            }
-            Err(e) => {
-                return Ok(TonicResponse::new(Self::build_response(
-                    StatusCode::BadRequest,
-                    format!("Parse error: {}", e),
-                    None,
+        let statements = parse_sql(&req.sql).map_err(|e| {
+            let detail = e.to_string();
+            warn!("SQL parse rejection: {}", detail);
+            Status::invalid_argument(detail)
+        })?;
+
+        if statements.is_empty() {
+            return Ok(TonicResponse::new(Self::build_success_response(
+                StatusCode::Ok,
+                "No statements executed".to_string(),
+                None,
+            )));
+        }
+
+        let mut final_response = None;
+
+        for stmt in statements {
+            let result = self
+                .coordinator
+                .execute_with_stream_catalog(stmt.as_ref())
+                .await;
+
+            if !result.success {
+                error!("SQL execution aborted: {}", result.message);
+                return Ok(TonicResponse::new(Self::build_error_response(
+                    StatusCode::InternalServerError,
+                    result.message,
                 )));
             }
-        };
 
-        let exec_start = Instant::now();
-        let result = self.coordinator.execute(stmt.as_ref());
-        log::debug!(
-            "Coordinator execution finished in {}ms",
-            exec_start.elapsed().as_millis()
-        );
+            final_response = Some(result);
+        }
 
-        let status_code = if result.success {
-            StatusCode::Ok
-        } else {
-            error!("Execution failed: {}", result.message);
-            StatusCode::InternalServerError
-        };
+        let result = final_response.unwrap();
+        let response = Self::build_success_response(StatusCode::Ok, result.message, result.data);
 
-        log::debug!(
-            "Total SQL request cost: {}ms",
-            start_time.elapsed().as_millis()
-        );
-
-        Ok(TonicResponse::new(Self::build_response(
-            status_code,
-            result.message,
-            result
-                .data
-                .as_ref()
-                .and_then(|ds| Self::data_set_to_ipc_bytes(ds.as_ref())),
-        )))
+        debug!("execute_sql completed in {}ms", timer.elapsed().as_millis());
+        Ok(TonicResponse::new(response))
     }
 
     async fn create_function(
         &self,
         request: Request<CreateFunctionRequest>,
     ) -> Result<TonicResponse<Response>, Status> {
-        let start_time = Instant::now();
+        let timer = Instant::now();
         let req = request.into_inner();
-        info!(
-            "Received CreateFunction request. Config size: {}, Function size: {}",
-            req.config_bytes.len(),
-            req.function_bytes.len()
-        );
 
-        let config_bytes = if !req.config_bytes.is_empty() {
-            Some(req.config_bytes)
-        } else {
-            None
-        };
-
+        let config_bytes = (!req.config_bytes.is_empty()).then_some(req.config_bytes);
         let stmt = CreateFunction::from_bytes(req.function_bytes, config_bytes);
 
-        let exec_start = Instant::now();
-        let result = self.coordinator.execute(&stmt as &dyn Statement);
-        info!(
-            "Coordinator execution finished in {}ms",
-            exec_start.elapsed().as_millis()
-        );
-
-        let status_code = if result.success {
-            StatusCode::Created
-        } else {
-            error!("CreateFunction failed: {}", result.message);
-            StatusCode::InternalServerError
-        };
+        let response = self.execute_statement(&stmt, StatusCode::Created).await;
 
         info!(
-            "Total CreateFunction request cost: {}ms",
-            start_time.elapsed().as_millis()
+            "create_function completed in {}ms",
+            timer.elapsed().as_millis()
         );
-
-        Ok(TonicResponse::new(Self::build_response(
-            status_code,
-            result.message,
-            result
-                .data
-                .as_ref()
-                .and_then(|ds| Self::data_set_to_ipc_bytes(ds.as_ref())),
-        )))
+        Ok(TonicResponse::new(response))
     }
 
     async fn create_python_function(
         &self,
         request: Request<CreatePythonFunctionRequest>,
     ) -> Result<TonicResponse<Response>, Status> {
-        let start_time = Instant::now();
+        let timer = Instant::now();
         let req = request.into_inner();
-        info!(
-            "Received CreatePythonFunction request. Class name: {}, Modules: {}",
-            req.class_name,
-            req.modules.len()
-        );
 
-        // Convert proto modules to PythonModule
-        let modules: Vec<crate::coordinator::PythonModule> = req
+        if req.modules.is_empty() {
+            return Ok(TonicResponse::new(Self::build_error_response(
+                StatusCode::BadRequest,
+                "Python function creation requires at least one module".to_string(),
+            )));
+        }
+
+        let modules: Vec<PythonModule> = req
             .modules
             .into_iter()
-            .map(|m| crate::coordinator::PythonModule {
+            .map(|m| PythonModule {
                 name: m.module_name,
                 bytes: m.module_bytes,
             })
             .collect();
 
-        if modules.is_empty() {
-            return Ok(TonicResponse::new(Self::build_response(
-                StatusCode::BadRequest,
-                "At least one module is required".to_string(),
-                None,
-            )));
-        }
-
         let stmt = CreatePythonFunction::new(req.class_name, modules, req.config_content);
-
-        let exec_start = Instant::now();
-        let result = self.coordinator.execute(&stmt as &dyn Statement);
-        info!(
-            "Coordinator execution finished in {}ms",
-            exec_start.elapsed().as_millis()
-        );
-
-        let status_code = if result.success {
-            StatusCode::Created
-        } else {
-            error!("CreatePythonFunction failed: {}", result.message);
-            StatusCode::InternalServerError
-        };
+        let response = self.execute_statement(&stmt, StatusCode::Created).await;
 
         info!(
-            "Total CreatePythonFunction request cost: {}ms",
-            start_time.elapsed().as_millis()
+            "create_python_function completed in {}ms",
+            timer.elapsed().as_millis()
         );
-
-        Ok(TonicResponse::new(Self::build_response(
-            status_code,
-            result.message,
-            result
-                .data
-                .as_ref()
-                .and_then(|ds| Self::data_set_to_ipc_bytes(ds.as_ref())),
-        )))
+        Ok(TonicResponse::new(response))
     }
 
     async fn drop_function(
         &self,
         request: Request<DropFunctionRequest>,
     ) -> Result<TonicResponse<Response>, Status> {
-        let start_time = Instant::now();
+        let timer = Instant::now();
         let req = request.into_inner();
-        info!(
-            "Received DropFunction request: function_name={}",
-            req.function_name
-        );
 
         let stmt = DropFunction::new(req.function_name);
-        let exec_start = Instant::now();
-        let result = self.coordinator.execute(&stmt as &dyn Statement);
-        info!(
-            "Coordinator execution finished in {}ms",
-            exec_start.elapsed().as_millis()
-        );
-
-        let status_code = if result.success {
-            StatusCode::Ok
-        } else {
-            error!("DropFunction failed: {}", result.message);
-            StatusCode::InternalServerError
-        };
+        let response = self.execute_statement(&stmt, StatusCode::Ok).await;
 
         info!(
-            "Total DropFunction request cost: {}ms",
-            start_time.elapsed().as_millis()
+            "drop_function completed in {}ms",
+            timer.elapsed().as_millis()
         );
-
-        Ok(TonicResponse::new(Self::build_response(
-            status_code,
-            result.message,
-            None,
-        )))
+        Ok(TonicResponse::new(response))
     }
 
     async fn show_functions(
         &self,
-        request: Request<ShowFunctionsRequest>,
+        _request: Request<ShowFunctionsRequest>,
     ) -> Result<TonicResponse<ShowFunctionsResponse>, Status> {
-        let start_time = Instant::now();
-        let _req = request.into_inner();
-        info!("Received ShowFunctions request");
-
+        let timer = Instant::now();
         let stmt = ShowFunctions::new();
-        let exec_start = Instant::now();
-        let result = self.coordinator.execute(&stmt as &dyn Statement);
-        info!(
-            "Coordinator execution finished in {}ms",
-            exec_start.elapsed().as_millis()
-        );
 
-        let (status_code, message) = if result.success {
-            (StatusCode::Ok as i32, result.message)
-        } else {
-            error!("ShowFunctions failed: {}", result.message);
-            (StatusCode::InternalServerError as i32, result.message)
-        };
+        let result = self.coordinator.execute_with_stream_catalog(&stmt).await;
 
-        let functions: Vec<ProtoFunctionInfo> = result
+        if !result.success {
+            error!("show_functions execution failed: {}", result.message);
+            return Ok(TonicResponse::new(ShowFunctionsResponse {
+                status_code: StatusCode::InternalServerError as i32,
+                message: result.message,
+                functions: vec![],
+            }));
+        }
+
+        let functions = result
             .data
             .as_ref()
             .and_then(|arc_ds| {
@@ -303,14 +261,12 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
             .unwrap_or_default();
 
         info!(
-            "Total ShowFunctions request cost: {}ms, count={}",
-            start_time.elapsed().as_millis(),
-            functions.len()
+            "show_functions completed in {}ms",
+            timer.elapsed().as_millis()
         );
-
         Ok(TonicResponse::new(ShowFunctionsResponse {
-            status_code,
-            message,
+            status_code: StatusCode::Ok as i32,
+            message: result.message,
             functions,
         }))
     }
@@ -319,76 +275,34 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
         &self,
         request: Request<StartFunctionRequest>,
     ) -> Result<TonicResponse<Response>, Status> {
-        let start_time = Instant::now();
+        let timer = Instant::now();
         let req = request.into_inner();
-        info!(
-            "Received StartFunction request: function_name={}",
-            req.function_name
-        );
 
         let stmt = StartFunction::new(req.function_name);
-        let exec_start = Instant::now();
-        let result = self.coordinator.execute(&stmt as &dyn Statement);
-        info!(
-            "Coordinator execution finished in {}ms",
-            exec_start.elapsed().as_millis()
-        );
-
-        let status_code = if result.success {
-            StatusCode::Ok
-        } else {
-            error!("StartFunction failed: {}", result.message);
-            StatusCode::InternalServerError
-        };
+        let response = self.execute_statement(&stmt, StatusCode::Ok).await;
 
         info!(
-            "Total StartFunction request cost: {}ms",
-            start_time.elapsed().as_millis()
+            "start_function completed in {}ms",
+            timer.elapsed().as_millis()
         );
-
-        Ok(TonicResponse::new(Self::build_response(
-            status_code,
-            result.message,
-            None,
-        )))
+        Ok(TonicResponse::new(response))
     }
 
     async fn stop_function(
         &self,
         request: Request<StopFunctionRequest>,
     ) -> Result<TonicResponse<Response>, Status> {
-        let start_time = Instant::now();
+        let timer = Instant::now();
         let req = request.into_inner();
-        info!(
-            "Received StopFunction request: function_name={}",
-            req.function_name
-        );
 
         let stmt = StopFunction::new(req.function_name);
-        let exec_start = Instant::now();
-        let result = self.coordinator.execute(&stmt as &dyn Statement);
-        info!(
-            "Coordinator execution finished in {}ms",
-            exec_start.elapsed().as_millis()
-        );
-
-        let status_code = if result.success {
-            StatusCode::Ok
-        } else {
-            error!("StopFunction failed: {}", result.message);
-            StatusCode::InternalServerError
-        };
+        let response = self.execute_statement(&stmt, StatusCode::Ok).await;
 
         info!(
-            "Total StopFunction request cost: {}ms",
-            start_time.elapsed().as_millis()
+            "stop_function completed in {}ms",
+            timer.elapsed().as_millis()
         );
-
-        Ok(TonicResponse::new(Self::build_response(
-            status_code,
-            result.message,
-            None,
-        )))
+        Ok(TonicResponse::new(response))
     }
 }
 

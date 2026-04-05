@@ -17,11 +17,15 @@ mod dataset;
 mod execution;
 mod execution_context;
 mod plan;
+mod runtime_context;
 mod statement;
+mod tool;
 
 pub use coordinator::Coordinator;
 pub use dataset::{DataSet, ShowFunctionsResult};
 pub use statement::{
-    CreateFunction, CreatePythonFunction, DropFunction, PythonModule, ShowFunctions, StartFunction,
-    Statement, StopFunction,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropStreamingTableStatement,
+    DropTableStatement, PythonModule, ShowCatalogTables, ShowCreateStreamingTable, ShowCreateTable,
+    ShowFunctions, ShowStreamingTables, StartFunction, Statement, StopFunction,
+    StreamingTableStatement,
 };

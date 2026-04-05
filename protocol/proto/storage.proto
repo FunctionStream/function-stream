@@ -1,0 +1,107 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+//
+// All durable / persisted payloads for FunctionStream (single source of truth for storage wire format).
+// - Stream table catalog (MetaStore KV)
+// - Task rows (RocksDB task_meta / task_payload; values may be prefixed — see runtime codec)
+
+syntax = "proto3";
+
+package function_stream.storage;
+
+// =============================================================================
+// Catalog table storage (coordinator SQL catalog)
+// =============================================================================
+
+// Top-level persisted record for one catalog table.
+message TableDefinition {
+  string table_name = 1;
+  int64 updated_at_millis = 2;
+  oneof table_type {
+    // Connector-backed ingestion/egress table definition.
+    CatalogSourceTable connector_table = 3;
+    // Connector-backed lookup table definition.
+    CatalogSourceTable lookup_table = 5;
+  }
+}
+
+// Shared connector-backed table payload for connector/lookup entries.
+message CatalogSourceTable {
+  bytes arrow_schema_ipc = 1;
+  optional string event_time_field = 2;
+  optional string watermark_field = 3;
+  // Original CREATE TABLE ... WITH ('k'='v', ...) pairs — single source of truth.
+  map<string, string> with_options = 4;
+  // Canonical connector identifier (e.g. kafka, postgres-cdc).
+  string connector = 5;
+  reserved 6;  // removed: string opaque_config (JSON blob no longer needed)
+  // Human-readable note from DDL (ConnectorOp.description).
+  string description = 7;
+}
+
+// =============================================================================
+// Streaming table storage (CREATE STREAMING TABLE persistence)
+// =============================================================================
+
+// Persisted record for one streaming table (CREATE STREAMING TABLE).
+// On restart, the engine re-submits each record to JobManager to resume the pipeline.
+message StreamingTableDefinition {
+  string table_name = 1;
+  int64  created_at_millis = 2;
+  // Serialized function_stream.v1.FsProgram — the full execution graph.
+  // Stored as opaque bytes to avoid coupling storage schema with runtime API protos.
+  bytes  fs_program_bytes = 3;
+  string comment = 4;
+}
+
+// =============================================================================
+// Task storage (RocksDB metadata + module payload)
+// =============================================================================
+
+// Lifecycle state persisted for task recovery. New enum values MUST be appended
+// with new numbers (never renumber) for forward compatibility.
+enum ComponentStateKind {
+  COMPONENT_STATE_KIND_UNSPECIFIED = 0;
+  UNINITIALIZED = 1;
+  INITIALIZED = 2;
+  STARTING = 3;
+  RUNNING = 4;
+  CHECKPOINTING = 5;
+  STOPPING = 6;
+  STOPPED = 7;
+  CLOSING = 8;
+  CLOSED = 9;
+  ERROR = 10;
+}
+
+message ComponentStateProto {
+  ComponentStateKind kind = 1;
+  // Set when kind == ERROR
+  string error_message = 2;
+}
+
+// Stored in CF task_meta (after magic prefix FSP1).
+message TaskMetadataProto {
+  string task_type = 1;
+  ComponentStateProto state = 2;
+  uint64 created_at = 3;
+  optional uint64 checkpoint_id = 4;
+}
+
+message TaskModuleWasm {
+  bytes wasm_binary = 1;
+}
+
+message TaskModulePython {
+  string class_name = 1;
+  string module_path = 2;
+  optional bytes embedded_code = 3;
+}
+
+// Stored in CF task_payload (after magic prefix FSP1).
+message TaskModulePayloadProto {
+  oneof payload {
+    TaskModuleWasm wasm = 1;
+    TaskModulePython python = 2;
+  }
+}

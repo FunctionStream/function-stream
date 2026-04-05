@@ -11,4 +11,5 @@
 // limitations under the License.
 
 pub mod state_backend;
+pub mod stream_catalog;
 pub mod task;

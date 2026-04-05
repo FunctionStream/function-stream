@@ -10,128 +10,139 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
 
-use crate::coordinator::analyze::{Analysis, Analyzer};
+use crate::coordinator::analyze::Analyzer;
 use crate::coordinator::dataset::ExecuteResult;
 use crate::coordinator::execution::Executor;
 use crate::coordinator::plan::{LogicalPlanVisitor, LogicalPlanner, PlanNode};
 use crate::coordinator::statement::Statement;
-use crate::runtime::taskexecutor::TaskManager;
+use crate::sql::schema::StreamSchemaProvider;
 
 use super::execution_context::ExecutionContext;
+use super::runtime_context::CoordinatorRuntimeContext;
 
+#[derive(Default)]
 pub struct Coordinator {}
-
-impl Default for Coordinator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl Coordinator {
     pub fn new() -> Self {
         Self {}
     }
 
-    pub fn execute(&self, stmt: &dyn Statement) -> ExecuteResult {
-        let start_time = Instant::now();
-        let context = ExecutionContext::new();
-        let execution_id = context.execution_id;
+    // ========================================================================
+    // Plan compilation
+    // ========================================================================
 
-        match self.execute_pipeline(&context, stmt) {
-            Ok(result) => {
+    pub fn compile_plan(
+        &self,
+        stmt: &dyn Statement,
+        schema_provider: StreamSchemaProvider,
+    ) -> Result<Box<dyn PlanNode>> {
+        self.compile_plan_internal(&ExecutionContext::new(), stmt, schema_provider)
+    }
+
+    /// Internal pipeline: Analyze → build logical plan → optimize.
+    fn compile_plan_internal(
+        &self,
+        context: &ExecutionContext,
+        stmt: &dyn Statement,
+        schema_provider: StreamSchemaProvider,
+    ) -> Result<Box<dyn PlanNode>> {
+        let exec_id = context.execution_id;
+        let start = Instant::now();
+
+        let analysis = Analyzer::new(context)
+            .analyze(stmt)
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("Analyzer phase failed")?;
+        log::debug!(
+            "[{}] Analyze phase finished in {}ms",
+            exec_id,
+            start.elapsed().as_millis()
+        );
+
+        let plan = LogicalPlanVisitor::new(schema_provider).visit(&analysis);
+
+        let opt_start = Instant::now();
+        let optimized = LogicalPlanner::new().optimize(plan, &analysis);
+        log::debug!(
+            "[{}] Optimizer phase finished in {}ms",
+            exec_id,
+            opt_start.elapsed().as_millis()
+        );
+
+        Ok(optimized)
+    }
+
+    // ========================================================================
+    // Execution
+    // ========================================================================
+
+    pub fn execute(&self, stmt: &dyn Statement) -> ExecuteResult {
+        match CoordinatorRuntimeContext::try_from_globals() {
+            Ok(ctx) => self.execute_with_runtime_context(stmt, &ctx),
+            Err(e) => ExecuteResult::err(e.to_string()),
+        }
+    }
+
+    pub async fn execute_with_stream_catalog(&self, stmt: &dyn Statement) -> ExecuteResult {
+        self.execute(stmt)
+    }
+
+    /// Same as [`Self::execute`], but uses an explicit [`CoordinatorRuntimeContext`] (e.g. tests or custom wiring).
+    pub fn execute_with_runtime_context(
+        &self,
+        stmt: &dyn Statement,
+        runtime: &CoordinatorRuntimeContext,
+    ) -> ExecuteResult {
+        let start = Instant::now();
+        let context = ExecutionContext::new();
+        let exec_id = context.execution_id;
+        let schema_provider = runtime.planning_schema_provider();
+
+        let result = (|| -> Result<ExecuteResult> {
+            let plan = self.compile_plan_internal(&context, stmt, schema_provider)?;
+
+            let exec_start = Instant::now();
+            let res = Executor::new(
+                Arc::clone(&runtime.task_manager),
+                runtime.catalog_manager.clone(),
+                Arc::clone(&runtime.job_manager),
+            )
+            .execute(plan.as_ref())
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("Executor phase failed")?;
+
+            log::debug!(
+                "[{}] Executor phase finished in {}ms",
+                exec_id,
+                exec_start.elapsed().as_millis()
+            );
+            Ok(res)
+        })();
+
+        match result {
+            Ok(res) => {
                 log::debug!(
                     "[{}] Execution completed in {}ms",
-                    execution_id,
-                    start_time.elapsed().as_millis()
+                    exec_id,
+                    start.elapsed().as_millis()
                 );
-                result
+                res
             }
             Err(e) => {
                 log::error!(
                     "[{}] Execution failed after {}ms. Error: {:#}",
-                    execution_id,
-                    start_time.elapsed().as_millis(),
+                    exec_id,
+                    start.elapsed().as_millis(),
                     e
                 );
                 ExecuteResult::err(format!("Execution failed: {:#}", e))
             }
         }
-    }
-
-    fn execute_pipeline(
-        &self,
-        context: &ExecutionContext,
-        stmt: &dyn Statement,
-    ) -> Result<ExecuteResult> {
-        let analysis = self.step_analyze(context, stmt)?;
-        let plan = self.step_build_logical_plan(&analysis)?;
-        let optimized_plan = self.step_optimize(&analysis, plan)?;
-        self.step_execute(optimized_plan)
-    }
-
-    fn step_analyze(&self, context: &ExecutionContext, stmt: &dyn Statement) -> Result<Analysis> {
-        let start = Instant::now();
-        let analyzer = Analyzer::new(context);
-        let result = analyzer
-            .analyze(stmt)
-            .map_err(|e| anyhow::anyhow!(e))
-            .context("Analyzer phase failed");
-
-        log::debug!(
-            "[{}] Analyze phase finished in {}ms",
-            context.execution_id,
-            start.elapsed().as_millis()
-        );
-        result
-    }
-
-    fn step_build_logical_plan(&self, analysis: &Analysis) -> Result<Box<dyn PlanNode>> {
-        let visitor = LogicalPlanVisitor::new();
-        let plan = visitor.visit(analysis);
-        Ok(plan)
-    }
-
-    fn step_optimize(
-        &self,
-        analysis: &Analysis,
-        plan: Box<dyn PlanNode>,
-    ) -> Result<Box<dyn PlanNode>> {
-        let start = Instant::now();
-        let planner = LogicalPlanner::new();
-        let optimized = planner.optimize(plan, analysis);
-
-        log::debug!(
-            "Optimizer phase finished in {}ms",
-            start.elapsed().as_millis()
-        );
-        Ok(optimized)
-    }
-
-    fn step_execute(&self, plan: Box<dyn PlanNode>) -> Result<ExecuteResult> {
-        let start = Instant::now();
-        let task_manager = match TaskManager::get() {
-            Ok(tm) => tm,
-            Err(e) => {
-                return Ok(ExecuteResult::err(format!(
-                    "Failed to get TaskManager: {}",
-                    e
-                )));
-            }
-        };
-        let executor = Executor::new(task_manager.clone());
-        let result = executor
-            .execute(plan.as_ref())
-            .map_err(|e| anyhow::anyhow!(e))
-            .context("Executor phase failed");
-
-        log::debug!(
-            "Executor phase finished in {}ms",
-            start.elapsed().as_millis()
-        );
-        result
     }
 }

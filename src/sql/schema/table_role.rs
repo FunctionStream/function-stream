@@ -1,0 +1,104 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::collections::HashMap;
+
+use datafusion::arrow::datatypes::{DataType, TimeUnit};
+use datafusion::common::{Result, plan_err};
+use datafusion::error::DataFusionError;
+
+use super::column_descriptor::ColumnDescriptor;
+use super::connection_type::ConnectionType;
+use crate::sql::common::constants::{
+    SUPPORTED_CONNECTOR_ADAPTERS, connection_table_role, connector_type,
+};
+use crate::sql::common::with_option_keys as opt;
+
+/// Role of a connector-backed table in the pipeline (ingest / egress / lookup).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TableRole {
+    Ingestion,
+    Egress,
+    Reference,
+}
+
+impl From<TableRole> for ConnectionType {
+    fn from(r: TableRole) -> Self {
+        match r {
+            TableRole::Ingestion => ConnectionType::Source,
+            TableRole::Egress => ConnectionType::Sink,
+            TableRole::Reference => ConnectionType::Lookup,
+        }
+    }
+}
+
+impl From<ConnectionType> for TableRole {
+    fn from(c: ConnectionType) -> Self {
+        match c {
+            ConnectionType::Source => TableRole::Ingestion,
+            ConnectionType::Sink => TableRole::Egress,
+            ConnectionType::Lookup => TableRole::Reference,
+        }
+    }
+}
+
+pub fn validate_adapter_availability(adapter: &str) -> Result<()> {
+    if !SUPPORTED_CONNECTOR_ADAPTERS.contains(&adapter) {
+        return Err(DataFusionError::Plan(format!(
+            "Unknown adapter '{adapter}'"
+        )));
+    }
+    Ok(())
+}
+
+pub fn apply_adapter_specific_rules(
+    adapter: &str,
+    mut cols: Vec<ColumnDescriptor>,
+) -> Vec<ColumnDescriptor> {
+    match adapter {
+        a if a == connector_type::DELTA || a == connector_type::ICEBERG => {
+            for c in &mut cols {
+                if matches!(c.data_type(), DataType::Timestamp(_, _)) {
+                    c.force_precision(TimeUnit::Microsecond);
+                }
+            }
+            cols
+        }
+        _ => cols,
+    }
+}
+
+pub fn deduce_role(options: &HashMap<String, String>) -> Result<TableRole> {
+    match options.get(opt::TYPE).map(|s| s.as_str()) {
+        None | Some(connection_table_role::SOURCE) => Ok(TableRole::Ingestion),
+        Some(connection_table_role::SINK) => Ok(TableRole::Egress),
+        Some(connection_table_role::LOOKUP) => Ok(TableRole::Reference),
+        Some(other) => plan_err!("Invalid role '{other}'"),
+    }
+}
+
+pub fn serialize_backend_params(
+    adapter: &str,
+    options: &HashMap<String, String>,
+) -> Result<String> {
+    let mut payload = serde_json::Map::new();
+    payload.insert(
+        opt::ADAPTER.to_string(),
+        serde_json::Value::String(adapter.to_string()),
+    );
+
+    for (k, v) in options {
+        payload.insert(k.clone(), serde_json::Value::String(v.clone()));
+    }
+
+    serde_json::to_string(&payload).map_err(|e| DataFusionError::Plan(e.to_string()))
+}

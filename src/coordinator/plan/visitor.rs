@@ -11,8 +11,10 @@
 // limitations under the License.
 
 use super::{
-    CreateFunctionPlan, CreatePythonFunctionPlan, DropFunctionPlan, ShowFunctionsPlan,
-    StartFunctionPlan, StopFunctionPlan,
+    CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, DropFunctionPlan,
+    DropStreamingTablePlan, DropTablePlan, LookupTablePlan, ShowCatalogTablesPlan,
+    ShowCreateStreamingTablePlan, ShowCreateTablePlan, ShowFunctionsPlan, ShowStreamingTablesPlan,
+    StartFunctionPlan, StopFunctionPlan, StreamingTable, StreamingTableConnectorPlan,
 };
 
 /// Context passed to PlanVisitor methods
@@ -79,9 +81,69 @@ pub trait PlanVisitor {
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 
+    fn visit_show_catalog_tables(
+        &self,
+        plan: &ShowCatalogTablesPlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_show_create_table(
+        &self,
+        plan: &ShowCreateTablePlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
     fn visit_create_python_function(
         &self,
         plan: &CreatePythonFunctionPlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_create_table_plan(
+        &self,
+        plan: &CreateTablePlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_streaming_table(
+        &self,
+        plan: &StreamingTable,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_lookup_table(
+        &self,
+        plan: &LookupTablePlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_streaming_connector_table(
+        &self,
+        plan: &StreamingTableConnectorPlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_drop_table_plan(
+        &self,
+        plan: &DropTablePlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_show_streaming_tables(
+        &self,
+        plan: &ShowStreamingTablesPlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_show_create_streaming_table(
+        &self,
+        plan: &ShowCreateStreamingTablePlan,
+        context: &PlanVisitorContext,
+    ) -> PlanVisitorResult;
+
+    fn visit_drop_streaming_table(
+        &self,
+        plan: &DropStreamingTablePlan,
         context: &PlanVisitorContext,
     ) -> PlanVisitorResult;
 }

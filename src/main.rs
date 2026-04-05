@@ -179,10 +179,7 @@ fn main() -> Result<()> {
     );
 
     // 2. Component Initialization
-    let registry = server::register_components();
-    registry
-        .initialize_all(&config)
-        .context("Component initialization failed")?;
+    server::bootstrap_system(&config).context("Component initialization failed")?;
 
     // 3. Server Startup
     let mut server_handle = spawn_server_thread(config.clone())?;

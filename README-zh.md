@@ -23,7 +23,7 @@
 
 [中文](README-zh.md) | [English](README.md)
 
-**Function Stream** 是一个基于 Rust 构建的高性能、事件驱动的流处理框架。它提供了一个模块化的运行时，用于编排编译为 **WebAssembly (WASM)** 的 Serverless 风格处理函数，支持使用 **Go、Python 和 Rust** 编写函数。
+**Function Stream** 是一个基于 Rust 构建的高性能、事件驱动的流处理框架。它提供了一个模块化的运行时，用于编排编译为 **WebAssembly (WASM)** 的 Serverless 风格处理函数，支持使用 **Go、Python 和 Rust** 编写函数。同时内置 **Streaming SQL** 引擎，可通过纯声明式 SQL 构建实时数据管道 — 包括时间窗口聚合、多流关联和持续 ETL。
 
 ## 目录
 
@@ -46,6 +46,7 @@
 
 ## 核心特性
 
+- **Streaming SQL 引擎**：使用纯 SQL 构建实时管道 — 注册数据源（`CREATE TABLE`）、启动持续计算（`CREATE STREAMING TABLE ... AS SELECT`）、管理生命周期（`SHOW` / `DROP`）。支持滚动窗口、滑动窗口、窗口关联等丰富语义。
 - **事件驱动的 WASM 运行时**：以接近原生的性能和沙箱隔离的方式执行多语言函数（Go、Python、Rust）。
 - **持久化状态管理**：内置支持基于 RocksDB 的状态存储，用于有状态流处理。
 - **SQL 驱动的 CLI**：使用类 SQL 命令进行作业管理和流检测的交互式 REPL。
@@ -71,7 +72,7 @@ function-stream/
 - **Rust 工具链**：Stable >= 1.77 (通过 rustup 安装)。
 - **Python 3.9+**：构建 Python WASM 运行时所需。
 - **Protoc**：Protocol Buffers 编译器（用于生成 gRPC 绑定）。
-- **构建工具**：cmake, pkg-config, OpenSSL headers (用于 rdkafka)。
+- **构建工具**：cmake、pkg-config、OpenSSL 头文件，以及 **libcurl** 开发头文件（Debian/Ubuntu 上为 `libcurl4-openssl-dev`）——在使用带 SSL/OAuth 相关选项构建 **rdkafka** 时，捆绑的 librdkafka 需要 `curl/curl.h`。
 
 ## 快速开始 (本地开发)
 
@@ -200,14 +201,16 @@ function-stream-<version>/
 
 ## 文档
 
-| 文档                                                   | 描述            |
-|------------------------------------------------------|---------------|
-| [服务端配置与运维指南](docs/server-configuration-zh.md)        | 服务端配置与运维操作    |
-| [Function 任务配置规范](docs/function-configuration-zh.md) | 任务定义规范        |
-| [SQL CLI 交互式管理指南](docs/sql-cli-guide-zh.md)          | 交互式管理指南       |
-| [Function 管理与开发指南](docs/function-development-zh.md)  | 管理与开发指南       |
-| [Go SDK 开发与交互指南](docs/Go-SDK/go-sdk-guide-zh.md)     | Go SDK 指南        |
-| [Python SDK 开发与交互指南](docs/Python-SDK/python-sdk-guide-zh.md) | Python SDK 指南 |
+| 文档                                                                     | 描述                       |
+|------------------------------------------------------------------------|--------------------------|
+| [Streaming SQL 使用指南](docs/streaming-sql-guide-zh.md)                   | 声明式 SQL 实时流处理指南         |
+| [连接器、格式与类型参考](docs/connectors-and-formats-zh.md)                       | 支持的 Source/Sink、格式与数据类型  |
+| [服务端配置与运维指南](docs/server-configuration-zh.md)                          | 服务端配置与运维操作              |
+| [Function 任务配置规范](docs/function-configuration-zh.md)        | 任务定义规范           |
+| [SQL CLI 交互式管理指南](docs/sql-cli-guide-zh.md)                 | 交互式管理指南          |
+| [Function 管理与开发指南](docs/function-development-zh.md)         | 管理与开发指南          |
+| [Go SDK 开发与交互指南](docs/Go-SDK/go-sdk-guide-zh.md)            | Go SDK 指南         |
+| [Python SDK 开发与交互指南](docs/Python-SDK/python-sdk-guide-zh.md) | Python SDK 指南     |
 
 ## 配置
 

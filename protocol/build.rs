@@ -10,54 +10,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logger for build script
     env_logger::init();
 
-    // Create output directories in the protocol package directory
-    // Use CARGO_MANIFEST_DIR to get the package root directory
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
     let out_dir = Path::new(&manifest_dir).join("generated");
-    let proto_file = Path::new(&manifest_dir).join("proto/function_stream.proto");
-
-    // Note: Cargo doesn't directly support cleaning custom directories via cargo clean.
-    // The generated directory will be automatically regenerated on each build if needed.
-    // To clean it manually, use: ./clean.sh or make clean or rm -rf protocol/generated
 
     log::info!("Generated code will be placed in: {}", out_dir.display());
-    log::info!("Proto file: {}", proto_file.display());
 
-    // Create output directories
     let cli_dir = out_dir.join("cli");
     let service_dir = out_dir.join("service");
 
     std::fs::create_dir_all(&cli_dir)?;
     std::fs::create_dir_all(&service_dir)?;
-    log::info!(
-        "Created output directories: {} and {}",
-        cli_dir.display(),
-        service_dir.display()
-    );
 
-    // Generate code for CLI - only client code needed
+    // 1. function_stream.proto → CLI (client) and Service (server)
     tonic_build::configure()
         .out_dir(&cli_dir)
-        .build_client(true) // Enable client code generation
-        .build_server(false) // Disable server code generation
+        .build_client(true)
+        .build_server(false)
         .compile_protos(&["proto/function_stream.proto"], &["proto"])?;
 
-    // Generate code for Service - only server code needed
     tonic_build::configure()
         .out_dir(&service_dir)
-        .build_client(false) // Disable client code generation
-        .build_server(true) // Enable server code generation
+        .build_client(false)
+        .build_server(true)
         .compile_protos(&["proto/function_stream.proto"], &["proto"])?;
+
+    let api_dir = out_dir.join("api");
+    std::fs::create_dir_all(&api_dir)?;
+
+    let descriptor_path =
+        PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("fs_api_descriptor.bin");
+
+    tonic_build::configure()
+        .out_dir(&api_dir)
+        .protoc_arg("--experimental_allow_proto3_optional")
+        .file_descriptor_set_path(&descriptor_path)
+        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute(".", "#[serde(rename_all = \"camelCase\")]")
+        .build_client(false)
+        .build_server(false)
+        .compile_protos(&["proto/function_stream_graph.proto"], &["proto"])?;
+
+    let storage_dir = out_dir.join("storage");
+    std::fs::create_dir_all(&storage_dir)?;
+    tonic_build::configure()
+        .out_dir(&storage_dir)
+        .protoc_arg("--experimental_allow_proto3_optional")
+        .build_client(false)
+        .build_server(false)
+        .compile_protos(&["proto/storage.proto"], &["proto"])?;
 
     log::info!("Protocol Buffers code generated successfully");
     println!("cargo:rustc-env=PROTO_GEN_DIR={}", out_dir.display());
-    println!("cargo:rerun-if-changed={}", proto_file.display());
+    println!("cargo:rerun-if-changed=proto/function_stream.proto");
+    println!("cargo:rerun-if-changed=proto/function_stream_graph.proto");
+    println!("cargo:rerun-if-changed=proto/storage.proto");
 
     Ok(())
 }

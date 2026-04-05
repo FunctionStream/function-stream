@@ -14,26 +14,21 @@
 //!
 //! Uses three column families: task_meta, task_config, task_payload.
 
-use super::storage::{StoredTaskInfo, TaskModuleBytes, TaskStorage};
+use super::proto_codec::{
+    decode_task_metadata_bytes, decode_task_module_bytes, encode_task_metadata_bytes,
+    encode_task_module_bytes,
+};
+use super::storage::{StoredTaskInfo, TaskStorage};
 use crate::config::storage::RocksDBStorageConfig;
 use crate::runtime::common::ComponentState;
 use anyhow::{Context, Result, anyhow};
 use rocksdb::{ColumnFamilyDescriptor, DB, IteratorMode, Options, WriteBatch};
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 
 const CF_METADATA: &str = "task_meta";
 const CF_CONFIG: &str = "task_config";
 const CF_PAYLOAD: &str = "task_payload";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TaskMetadata {
-    task_type: String,
-    state: ComponentState,
-    created_at: u64,
-    checkpoint_id: Option<u64>,
-}
 
 pub struct RocksDBTaskStorage {
     db: Arc<DB>,
@@ -95,19 +90,19 @@ impl TaskStorage for RocksDBTaskStorage {
             return Err(anyhow!("Task uniqueness violation: {}", task_info.name));
         }
 
-        let meta = TaskMetadata {
-            task_type: task_info.task_type.clone(),
-            state: task_info.state.clone(),
-            created_at: task_info.created_at,
-            checkpoint_id: task_info.checkpoint_id,
-        };
+        let meta_bytes = encode_task_metadata_bytes(
+            &task_info.task_type,
+            &task_info.state,
+            task_info.created_at,
+            task_info.checkpoint_id,
+        )?;
 
         let mut batch = WriteBatch::default();
-        batch.put_cf(&cf_meta, key, bincode::serialize(&meta)?);
+        batch.put_cf(&cf_meta, key, meta_bytes);
         batch.put_cf(&cf_conf, key, &task_info.config_bytes);
 
         if let Some(ref module) = task_info.module_bytes {
-            batch.put_cf(&cf_payl, key, bincode::serialize(module)?);
+            batch.put_cf(&cf_payl, key, encode_task_module_bytes(module)?);
         }
 
         self.db
@@ -124,10 +119,19 @@ impl TaskStorage for RocksDBTaskStorage {
             .get_cf(&cf, key)?
             .ok_or_else(|| anyhow!("Task {} not found", task_name))?;
 
-        let mut meta: TaskMetadata = bincode::deserialize(&raw)?;
-        meta.state = new_state;
+        let mut decoded = decode_task_metadata_bytes(&raw)?;
+        decoded.state = new_state;
 
-        self.db.put_cf(&cf, key, bincode::serialize(&meta)?)?;
+        self.db.put_cf(
+            &cf,
+            key,
+            encode_task_metadata_bytes(
+                &decoded.task_type,
+                &decoded.state,
+                decoded.created_at,
+                decoded.checkpoint_id,
+            )?,
+        )?;
         Ok(())
     }
 
@@ -140,10 +144,19 @@ impl TaskStorage for RocksDBTaskStorage {
             .get_cf(&cf, key)?
             .ok_or_else(|| anyhow!("Task {} not found", task_name))?;
 
-        let mut meta: TaskMetadata = bincode::deserialize(&raw)?;
-        meta.checkpoint_id = checkpoint_id;
+        let mut decoded = decode_task_metadata_bytes(&raw)?;
+        decoded.checkpoint_id = checkpoint_id;
 
-        self.db.put_cf(&cf, key, bincode::serialize(&meta)?)?;
+        self.db.put_cf(
+            &cf,
+            key,
+            encode_task_metadata_bytes(
+                &decoded.task_type,
+                &decoded.state,
+                decoded.created_at,
+                decoded.checkpoint_id,
+            )?,
+        )?;
         Ok(())
     }
 
@@ -171,12 +184,12 @@ impl TaskStorage for RocksDBTaskStorage {
             .get_cf(&self.get_cf(CF_CONFIG)?, key)?
             .ok_or_else(|| anyhow!("Config missing: {}", task_name))?;
 
-        let module_bytes = self
-            .db
-            .get_cf(&self.get_cf(CF_PAYLOAD)?, key)?
-            .and_then(|b| bincode::deserialize::<TaskModuleBytes>(&b).ok());
+        let module_bytes = match self.db.get_cf(&self.get_cf(CF_PAYLOAD)?, key)? {
+            None => None,
+            Some(b) => Some(decode_task_module_bytes(&b)?),
+        };
 
-        let meta: TaskMetadata = bincode::deserialize(&meta_raw)?;
+        let meta = decode_task_metadata_bytes(&meta_raw)?;
 
         Ok(StoredTaskInfo {
             name: task_name.to_string(),

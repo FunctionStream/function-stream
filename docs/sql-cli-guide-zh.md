@@ -129,7 +129,69 @@ DROP FUNCTION go_processor_demo;
 
 ---
 
-## 三、REPL 内建辅助指令
+## 三、Streaming SQL：TABLE 与 STREAMING TABLE
+
+除了 Function 管理之外，CLI 还支持一整套 **Streaming SQL** 命令，用于声明数据源和构建实时管道。完整示例请参阅 [Streaming SQL 使用指南](streaming-sql-guide-zh.md)。
+
+### 3.1 注册数据源：CREATE TABLE
+
+声明外部数据源（如 Kafka），包含 Schema、事件时间和水位线策略。此操作仅创建**静态目录条目**，不消耗计算资源。
+
+```sql
+CREATE TABLE ad_impressions (
+    impression_id VARCHAR,
+    ad_id BIGINT,
+    campaign_id BIGINT,
+    user_id VARCHAR,
+    impression_time TIMESTAMP NOT NULL,
+    WATERMARK FOR impression_time AS impression_time - INTERVAL '2' SECOND
+) WITH (
+    'connector' = 'kafka',
+    'topic' = 'raw_ad_impressions',
+    'format' = 'json',
+    'bootstrap.servers' = 'localhost:9092'
+);
+```
+
+### 3.2 创建流计算管道：CREATE STREAMING TABLE
+
+使用 CTAS 语法启动持续运行的分布式计算管道。结果以纯追加模式写入目标连接器。
+
+```sql
+CREATE STREAMING TABLE metric_tumble_impressions_1m WITH (
+    'connector' = 'kafka',
+    'topic' = 'sink_impressions_1m',
+    'format' = 'json',
+    'bootstrap.servers' = 'localhost:9092'
+) AS
+SELECT
+    TUMBLE(INTERVAL '1' MINUTE) AS time_window,
+    campaign_id,
+    COUNT(*) AS total_impressions
+FROM ad_impressions
+GROUP BY 1, campaign_id;
+```
+
+### 3.3 查看与监控
+
+| 命令 | 说明 |
+|------|------|
+| `SHOW TABLES` | 列出所有已注册的数据源表。 |
+| `SHOW CREATE TABLE <name>` | 显示某张表的建表 DDL。 |
+| `SHOW STREAMING TABLES` | 列出所有正在运行的流计算管道及其状态。 |
+| `SHOW CREATE STREAMING TABLE <name>` | 查看某条管道的物理执行拓扑图（ASCII 格式）。 |
+
+### 3.4 销毁流计算管道：DROP STREAMING TABLE
+
+停止并释放某条流计算管道的所有资源：
+
+```sql
+DROP STREAMING TABLE metric_tumble_impressions_1m;
+```
+
+---
+
+## 四、REPL 内建辅助指令
 
 在 `function-stream>` 提示符下，支持以下便捷指令：
 
@@ -141,7 +203,7 @@ DROP FUNCTION go_processor_demo;
 
 ---
 
-## 四、技术约束与注意事项
+## 五、技术约束与注意事项
 
 - **路径隔离**：SQL CLI 本身不负责上传文件。function_path 指向的文件必须预先存在于**服务端机器**的磁盘上。若需远程上传打包，请使用 Python SDK。
 - **Python 函数限制**：由于 Python 函数涉及动态依赖分析与代码打包，目前**不支持**通过 SQL CLI 创建，仅能通过 CLI 进行 START / STOP / SHOW 等生命周期管理。

@@ -15,7 +15,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskModuleBytes {
     Wasm(Vec<u8>),
     Python {

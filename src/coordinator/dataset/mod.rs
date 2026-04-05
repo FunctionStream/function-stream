@@ -12,8 +12,16 @@
 
 mod data_set;
 mod execute_result;
+mod show_catalog_tables_result;
+mod show_create_streaming_table_result;
+mod show_create_table_result;
 mod show_functions_result;
+mod show_streaming_tables_result;
 
 pub use data_set::{DataSet, empty_record_batch};
 pub use execute_result::ExecuteResult;
+pub use show_catalog_tables_result::ShowCatalogTablesResult;
+pub use show_create_streaming_table_result::ShowCreateStreamingTableResult;
+pub use show_create_table_result::ShowCreateTableResult;
 pub use show_functions_result::ShowFunctionsResult;
+pub use show_streaming_tables_result::ShowStreamingTablesResult;

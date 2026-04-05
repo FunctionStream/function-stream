@@ -16,6 +16,7 @@
 
 pub mod factory;
 mod function_info;
+mod proto_codec;
 mod rocksdb_storage;
 pub mod storage;
 

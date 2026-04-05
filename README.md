@@ -23,7 +23,7 @@
 
 [中文](README-zh.md) | [English](README.md)
 
-**Function Stream** is a high-performance, event-driven stream processing framework built in Rust. It provides a modular runtime to orchestrate serverless-style processing functions compiled to **WebAssembly (WASM)**, supporting functions written in **Go, Python, and Rust**.
+**Function Stream** is a high-performance, event-driven stream processing framework built in Rust. It provides a modular runtime to orchestrate serverless-style processing functions compiled to **WebAssembly (WASM)**, supporting functions written in **Go, Python, and Rust**. It also features a **Streaming SQL** engine that lets you build real-time data pipelines — including time-windowed aggregations, multi-stream joins, and continuous ETL — using pure declarative SQL.
 
 ## Table of Contents
 
@@ -46,6 +46,7 @@
 
 ## Key Features
 
+* **Streaming SQL Engine**: Build real-time pipelines with pure SQL — register sources (`CREATE TABLE`), launch continuous computations (`CREATE STREAMING TABLE ... AS SELECT`), and manage lifecycle (`SHOW` / `DROP`). Supports tumbling windows, hopping windows, window joins, and more.
 * **Event-Driven WASM Runtime**: Executes polyglot functions (Go, Python, Rust) with near-native performance and sandboxed isolation.
 * **Durable State Management**: Built-in support for RocksDB-backed state stores for stateful stream processing.
 * **SQL-Powered CLI**: Interactive REPL for job management and stream inspection using SQL-like commands.
@@ -72,7 +73,7 @@ function-stream/
 * **Rust Toolchain**: Stable >= 1.77 (via rustup).
 * **Python 3.9+**: Required for building the Python WASM runtime.
 * **Protoc**: Protocol Buffers compiler (for generating gRPC bindings).
-* **Build Tools**: cmake, pkg-config, OpenSSL headers (for rdkafka).
+* **Build Tools**: cmake, pkg-config, OpenSSL headers, **libcurl** development headers (`libcurl4-openssl-dev` on Debian/Ubuntu) — required when building **rdkafka** with SSL/OAuth-related options (bundled librdkafka expects `curl/curl.h`).
 
 ## Quick Start (Local Development)
 
@@ -199,14 +200,16 @@ We provide a robust shell script to manage the server process, capable of handli
 
 ## Documentation
 
-| Document                                                 | Description                       |
-|----------------------------------------------------------|-----------------------------------|
-| [Server Configuration](docs/server-configuration.md)     | Server Configuration & Operations |
-| [Function Configuration](docs/function-configuration.md) | Task Definition Specification     |
-| [SQL CLI Guide](docs/sql-cli-guide.md)                   | Interactive Management Guide      |
-| [Function Development](docs/function-development.md)     | Management & Development Guide    |
-| [Go SDK Guide](docs/Go-SDK/go-sdk-guide.md)              | Go SDK Guide                      |
-| [Python SDK Guide](docs/Python-SDK/python-sdk-guide.md)   | Python SDK Guide                  |
+| Document                                                       | Description                                     |
+|----------------------------------------------------------------|-------------------------------------------------|
+| [Streaming SQL Guide](docs/streaming-sql-guide.md)             | Declarative SQL for Real-Time Stream Processing |
+| [Connectors, Formats & Types](docs/connectors-and-formats.md) | Supported Sources, Sinks, Formats & Data Types  |
+| [Server Configuration](docs/server-configuration.md)           | Server Configuration & Operations               |
+| [Function Configuration](docs/function-configuration.md) | Task Definition Specification                   |
+| [SQL CLI Guide](docs/sql-cli-guide.md)                   | Interactive Management Guide                    |
+| [Function Development](docs/function-development.md)     | Management & Development Guide                  |
+| [Go SDK Guide](docs/Go-SDK/go-sdk-guide.md)              | Go SDK Guide                                    |
+| [Python SDK Guide](docs/Python-SDK/python-sdk-guide.md)  | Python SDK Guide                                |
 
 ## Configuration
 

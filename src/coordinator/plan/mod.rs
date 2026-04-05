@@ -12,22 +12,42 @@
 
 mod create_function_plan;
 mod create_python_function_plan;
+mod create_table_plan;
 mod drop_function_plan;
+mod drop_streaming_table_plan;
+mod drop_table_plan;
 mod logical_plan_visitor;
+mod lookup_table_plan;
 mod optimizer;
+mod show_catalog_tables_plan;
+mod show_create_streaming_table_plan;
+mod show_create_table_plan;
 mod show_functions_plan;
+mod show_streaming_tables_plan;
 mod start_function_plan;
 mod stop_function_plan;
+mod streaming_table_connector_plan;
+mod streaming_table_plan;
 mod visitor;
 
 pub use create_function_plan::CreateFunctionPlan;
 pub use create_python_function_plan::CreatePythonFunctionPlan;
+pub use create_table_plan::{CreateTablePlan, CreateTablePlanBody};
 pub use drop_function_plan::DropFunctionPlan;
+pub use drop_streaming_table_plan::DropStreamingTablePlan;
+pub use drop_table_plan::DropTablePlan;
 pub use logical_plan_visitor::LogicalPlanVisitor;
+pub use lookup_table_plan::LookupTablePlan;
 pub use optimizer::LogicalPlanner;
+pub use show_catalog_tables_plan::ShowCatalogTablesPlan;
+pub use show_create_streaming_table_plan::ShowCreateStreamingTablePlan;
+pub use show_create_table_plan::ShowCreateTablePlan;
 pub use show_functions_plan::ShowFunctionsPlan;
+pub use show_streaming_tables_plan::ShowStreamingTablesPlan;
 pub use start_function_plan::StartFunctionPlan;
 pub use stop_function_plan::StopFunctionPlan;
+pub use streaming_table_connector_plan::StreamingTableConnectorPlan;
+pub use streaming_table_plan::StreamingTable;
 pub use visitor::{PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 
 use std::fmt;

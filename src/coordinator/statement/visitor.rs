@@ -11,7 +11,9 @@
 // limitations under the License.
 
 use super::{
-    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, StopFunction,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropStreamingTableStatement,
+    DropTableStatement, ShowCatalogTables, ShowCreateStreamingTable, ShowCreateTable,
+    ShowFunctions, ShowStreamingTables, StartFunction, StopFunction, StreamingTableStatement,
 };
 use crate::coordinator::plan::PlanNode;
 use crate::coordinator::statement::Statement;
@@ -82,9 +84,57 @@ pub trait StatementVisitor {
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 
+    fn visit_show_catalog_tables(
+        &self,
+        stmt: &ShowCatalogTables,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_show_create_table(
+        &self,
+        stmt: &ShowCreateTable,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
     fn visit_create_python_function(
         &self,
         stmt: &CreatePythonFunction,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_create_table(
+        &self,
+        stmt: &CreateTable,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_streaming_table_statement(
+        &self,
+        stmt: &StreamingTableStatement,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_drop_table_statement(
+        &self,
+        stmt: &DropTableStatement,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_show_streaming_tables(
+        &self,
+        stmt: &ShowStreamingTables,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_show_create_streaming_table(
+        &self,
+        stmt: &ShowCreateStreamingTable,
+        context: &StatementVisitorContext,
+    ) -> StatementVisitorResult;
+
+    fn visit_drop_streaming_table(
+        &self,
+        stmt: &DropStreamingTableStatement,
         context: &StatementVisitorContext,
     ) -> StatementVisitorResult;
 }

@@ -13,8 +13,10 @@
 use super::Analysis;
 use crate::coordinator::execution_context::ExecutionContext;
 use crate::coordinator::statement::{
-    CreateFunction, CreatePythonFunction, DropFunction, ShowFunctions, StartFunction, Statement,
-    StatementVisitor, StatementVisitorContext, StatementVisitorResult, StopFunction,
+    CreateFunction, CreatePythonFunction, CreateTable, DropFunction, DropStreamingTableStatement,
+    DropTableStatement, ShowCatalogTables, ShowCreateStreamingTable, ShowCreateTable,
+    ShowFunctions, ShowStreamingTables, StartFunction, Statement, StatementVisitor,
+    StatementVisitorContext, StatementVisitorResult, StopFunction, StreamingTableStatement,
 };
 use std::fmt;
 
@@ -108,9 +110,75 @@ impl StatementVisitor for Analyzer<'_> {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))
     }
 
+    fn visit_show_catalog_tables(
+        &self,
+        stmt: &ShowCatalogTables,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_show_create_table(
+        &self,
+        stmt: &ShowCreateTable,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
     fn visit_create_python_function(
         &self,
         stmt: &CreatePythonFunction,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_create_table(
+        &self,
+        stmt: &CreateTable,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(CreateTable::new(stmt.statement.clone())))
+    }
+
+    fn visit_streaming_table_statement(
+        &self,
+        stmt: &StreamingTableStatement,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(StreamingTableStatement::new(
+            stmt.statement.clone(),
+        )))
+    }
+
+    fn visit_drop_table_statement(
+        &self,
+        stmt: &DropTableStatement,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(DropTableStatement::new(stmt.statement.clone())))
+    }
+
+    fn visit_show_streaming_tables(
+        &self,
+        stmt: &ShowStreamingTables,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_show_create_streaming_table(
+        &self,
+        stmt: &ShowCreateStreamingTable,
+        _context: &StatementVisitorContext,
+    ) -> StatementVisitorResult {
+        StatementVisitorResult::Analyze(Box::new(stmt.clone()))
+    }
+
+    fn visit_drop_streaming_table(
+        &self,
+        stmt: &DropStreamingTableStatement,
         _context: &StatementVisitorContext,
     ) -> StatementVisitorResult {
         StatementVisitorResult::Analyze(Box::new(stmt.clone()))

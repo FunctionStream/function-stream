@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     libclang-dev \
     libssl-dev \
+    libcurl4-openssl-dev \
     pkg-config \
     libsasl2-dev \
     protobuf-compiler \

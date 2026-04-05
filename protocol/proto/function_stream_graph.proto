@@ -1,0 +1,477 @@
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Streaming pipeline wire types (FsProgram) and optional job graph metadata.
+syntax = "proto3";
+
+package function_stream.v1;
+
+// =============================================================================
+// Topology & Execution Graph
+// =============================================================================
+
+message StreamingJobGraph {
+  string job_id = 1;
+  string job_name = 2;
+  repeated ExecutionNode nodes = 3;
+  repeated ExecutionEdge edges = 4;
+  FsProgramConfig program_config = 5;
+}
+
+message ExecutionNode {
+  uint32 node_id = 1;
+  uint32 parallelism = 2;
+  string label = 3;
+  repeated ChainedOperator operator_chain = 4;
+  repeated QualifiedSchema output_schemas = 5;
+}
+
+message ExecutionEdge {
+  uint32 source_node_id = 1;
+  uint32 target_node_id = 2;
+  QualifiedSchema schema = 3;
+  RoutingStrategy strategy = 4;
+}
+
+enum RoutingStrategy {
+  ROUTING_STRATEGY_UNSPECIFIED = 0;
+  ROUTING_STRATEGY_FORWARD = 1;
+  ROUTING_STRATEGY_SHUFFLE = 2;
+  ROUTING_STRATEGY_BROADCAST = 3;
+  ROUTING_STRATEGY_REBALANCE = 4;
+}
+
+message QualifiedSchema {
+  string arrow_schema_serialized = 1;
+  uint32 event_time_column_index = 2;
+  repeated uint32 state_key_indices = 3;
+  repeated uint32 distribution_key_indices = 4;
+}
+
+
+// ─────────────────────── Operators ───────────────────────
+
+message ConnectorOp {
+  string connector = 1;
+  reserved 2;  // removed: map<string, string> config_map
+  optional FsSchema fs_schema = 3;
+  string name = 4;
+  string description = 5;
+
+  oneof config {
+    KafkaSourceConfig kafka_source = 6;
+    KafkaSinkConfig kafka_sink = 7;
+    GenericConnectorConfig generic = 8;
+  }
+}
+
+// ─────────────────────── Kafka Connector Configs ───────────────────────
+
+message KafkaSourceConfig {
+  string topic = 1;
+  string bootstrap_servers = 2;
+  optional string group_id = 3;
+  optional string group_id_prefix = 4;
+  KafkaOffsetMode offset_mode = 5;
+  KafkaReadMode read_mode = 6;
+  KafkaAuthConfig auth = 7;
+  map<string, string> client_configs = 8;
+  FormatConfig format = 9;
+  BadDataPolicy bad_data_policy = 10;
+  uint32 rate_limit_msgs_per_sec = 11;
+  optional string value_subject = 12;
+}
+
+message KafkaSinkConfig {
+  string topic = 1;
+  string bootstrap_servers = 2;
+  KafkaSinkCommitMode commit_mode = 3;
+  optional string key_field = 4;
+  optional string timestamp_field = 5;
+  KafkaAuthConfig auth = 6;
+  map<string, string> client_configs = 7;
+  FormatConfig format = 8;
+  optional string value_subject = 9;
+}
+
+// Fallback for non-Kafka connectors that are not yet strongly typed.
+message GenericConnectorConfig {
+  map<string, string> properties = 1;
+}
+
+// ─────────────────────── Kafka Auth ───────────────────────
+
+message KafkaAuthConfig {
+  oneof auth {
+    KafkaAuthNone none = 1;
+    KafkaAuthSasl sasl = 2;
+    KafkaAuthAwsMskIam aws_msk_iam = 3;
+  }
+}
+
+message KafkaAuthNone {}
+
+message KafkaAuthSasl {
+  string protocol = 1;
+  string mechanism = 2;
+  string username = 3;
+  string password = 4;
+}
+
+message KafkaAuthAwsMskIam {
+  string region = 1;
+}
+
+// ─────────────────────── Format & Data-Quality ───────────────────────
+
+message FormatConfig {
+  oneof format {
+    JsonFormatConfig json = 1;
+    RawStringFormatConfig raw_string = 2;
+    RawBytesFormatConfig raw_bytes = 3;
+  }
+}
+
+message JsonFormatConfig {
+  TimestampFormatProto timestamp_format = 1;
+  DecimalEncodingProto decimal_encoding = 2;
+  bool include_schema = 3;
+  bool confluent_schema_registry = 4;
+  optional uint32 schema_id = 5;
+  bool debezium = 6;
+  bool unstructured = 7;
+}
+
+message RawStringFormatConfig {}
+message RawBytesFormatConfig {}
+
+// ─────────────────────── Kafka Enums ───────────────────────
+
+enum TimestampFormatProto {
+  TIMESTAMP_RFC3339 = 0;
+  TIMESTAMP_UNIX_MILLIS = 1;
+}
+
+enum DecimalEncodingProto {
+  DECIMAL_NUMBER = 0;
+  DECIMAL_STRING = 1;
+  DECIMAL_BYTES = 2;
+}
+
+enum BadDataPolicy {
+  BAD_DATA_FAIL = 0;
+  BAD_DATA_DROP = 1;
+}
+
+enum KafkaOffsetMode {
+  KAFKA_OFFSET_EARLIEST = 0;
+  KAFKA_OFFSET_LATEST = 1;
+  KAFKA_OFFSET_GROUP = 2;
+}
+
+enum KafkaReadMode {
+  KAFKA_READ_DEFAULT = 0;
+  KAFKA_READ_COMMITTED = 1;
+  KAFKA_READ_UNCOMMITTED = 2;
+}
+
+enum KafkaSinkCommitMode {
+  KAFKA_SINK_AT_LEAST_ONCE = 0;
+  KAFKA_SINK_EXACTLY_ONCE = 1;
+}
+
+message ValuePlanOperator {
+  string name = 1;
+  bytes physical_plan = 2;
+}
+
+message KeyPlanOperator {
+  string name = 1;
+  bytes physical_plan = 2;
+  repeated uint64 key_fields = 3;
+}
+
+message ProjectionOperator {
+  string name = 1;
+  FsSchema input_schema = 2;
+  FsSchema output_schema = 3;
+  repeated bytes exprs = 4;
+}
+
+message TumblingWindowAggregateOperator {
+  string name = 1;
+  uint64 width_micros = 2;
+  bytes binning_function = 3;
+  FsSchema input_schema = 4;
+  FsSchema partial_schema = 5;
+  bytes partial_aggregation_plan = 6;
+  bytes final_aggregation_plan = 7;
+  optional bytes final_projection = 8;
+}
+
+message SlidingWindowAggregateOperator {
+  string name = 1;
+  uint64 width_micros = 2;
+  uint64 slide_micros = 3;
+  bytes binning_function = 4;
+  FsSchema input_schema = 5;
+  FsSchema partial_schema = 6;
+  bytes partial_aggregation_plan = 7;
+  bytes final_aggregation_plan = 8;
+  bytes final_projection = 9;
+}
+
+message SessionWindowAggregateOperator {
+  string name = 1;
+  uint64 gap_micros = 2;
+  string window_field_name = 3;
+  uint64 window_index = 4;
+  FsSchema input_schema = 5;
+  FsSchema unkeyed_aggregate_schema = 6;
+  bytes partial_aggregation_plan = 7;
+  bytes final_aggregation_plan = 8;
+}
+
+message JoinOperator {
+  string name = 1;
+  FsSchema left_schema = 2;
+  FsSchema right_schema = 3;
+  FsSchema output_schema = 4;
+  bytes join_plan = 5;
+  optional uint64 ttl_micros = 6;
+}
+
+message LookupJoinCondition {
+  bytes left_expr = 1;
+  string right_key = 2;
+}
+
+message LookupJoinOperator {
+  FsSchema input_schema = 1;
+  FsSchema lookup_schema = 2;
+  ConnectorOp connector = 3;
+  repeated LookupJoinCondition key_exprs = 4;
+  JoinType join_type = 5;
+  optional uint64 ttl_micros = 6;
+  optional uint64 max_capacity_bytes = 7;
+}
+
+message WindowFunctionOperator {
+  string name = 1;
+  FsSchema input_schema = 2;
+  bytes binning_function = 3;
+  bytes window_function_plan = 4;
+}
+
+enum AsyncUdfOrdering {
+  UNORDERED = 0;
+  ORDERED = 1;
+}
+
+message AsyncUdfOperator {
+  string name = 1;
+  DylibUdfConfig udf = 2;
+  repeated bytes arg_exprs = 3;
+  repeated bytes final_exprs = 4;
+  AsyncUdfOrdering ordering = 5;
+  uint32 max_concurrency = 6;
+  uint64 timeout_micros = 7;
+}
+
+message UpdatingAggregateOperator {
+  string name = 1;
+  FsSchema input_schema = 2;
+  FsSchema final_schema = 3;
+  bytes aggregate_exec = 5;
+  bytes metadata_expr = 6;
+  uint64 flush_interval_micros = 7;
+  uint64 ttl_micros = 8;
+}
+
+// ─────────────────────── Watermark ───────────────────────
+
+message ExpressionWatermarkConfig {
+  uint64 period_micros = 1;
+  optional uint64 idle_time_micros = 2;
+  FsSchema input_schema = 3;
+  bytes expression = 4;
+}
+
+// ─────────────────────── Windows ───────────────────────
+
+message Window {
+  oneof window {
+    SlidingWindow sliding_window = 2;
+    TumblingWindow tumbling_window = 3;
+    InstantWindow instant_window = 4;
+    SessionWindow session_window = 5;
+  }
+}
+
+message SlidingWindow {
+  uint64 size_micros = 1;
+  uint64 slide_micros = 2;
+}
+
+message TumblingWindow {
+  uint64 size_micros = 1;
+}
+
+message InstantWindow {}
+
+message SessionWindow {
+  uint64 gap_micros = 1;
+}
+
+// ─────────────────────── Enums ───────────────────────
+
+enum JoinType {
+  INNER = 0;
+  LEFT = 1;
+  RIGHT = 2;
+  FULL = 3;
+}
+
+enum OffsetMode {
+  EARLIEST = 0;
+  LATEST = 1;
+}
+
+enum EdgeType {
+  UNUSED = 0;
+  FORWARD = 1;
+  SHUFFLE = 2;
+  LEFT_JOIN = 3;
+  RIGHT_JOIN = 4;
+}
+
+// ─────────────────── Physical Extension Nodes ───────────────────
+
+message MemExecNode {
+  string table_name = 1;
+  string schema = 2; // json-encoded
+}
+
+message UnnestExecNode {
+  string schema = 1; // json-encoded
+}
+
+message DebeziumDecodeNode {
+  string schema = 1; // json-encoded
+  repeated uint64 primary_keys = 2;
+}
+
+message DebeziumEncodeNode {
+  string schema = 1; // json-encoded
+}
+
+message FsExecNode {
+  oneof node {
+    MemExecNode mem_exec = 1;
+    UnnestExecNode unnest_exec = 2;
+    DebeziumDecodeNode debezium_decode = 3;
+    DebeziumEncodeNode debezium_encode = 4;
+  }
+}
+
+// ─────────────────── Checkpoints ───────────────────
+
+enum TaskCheckpointEventType {
+  ALIGNMENT_STARTED = 0;
+  CHECKPOINT_STARTED = 1;
+  CHECKPOINT_OPERATOR_SETUP_FINISHED = 2;
+  CHECKPOINT_SYNC_FINISHED = 3;
+  CHECKPOINT_PRE_COMMIT = 4;
+}
+
+message TaskCheckpointEvent {
+  uint64 time = 1;
+  TaskCheckpointEventType event_type = 2;
+}
+
+message TaskCheckpointDetail {
+  uint32 subtask_index = 1;
+  uint64 start_time = 2;
+  optional uint64 finish_time = 3;
+  optional uint64 bytes = 4;
+  repeated TaskCheckpointEvent events = 5;
+}
+
+message OperatorCheckpointDetail {
+  string operator_id = 1;
+  uint64 start_time = 2;
+  optional uint64 finish_time = 3;
+  bool has_state = 4;
+  optional uint64 started_metadata_write = 6;
+  map<uint32, TaskCheckpointDetail> tasks = 5;
+}
+
+// ─────────────────── UDF Config ───────────────────
+
+message DylibUdfConfig {
+  string dylib_path = 1;
+  repeated bytes arg_types = 2;
+  bytes return_type = 3;
+  bool aggregate = 4;
+  bool is_async = 5;
+}
+
+message PythonUdfConfig {
+  string name = 1;
+  repeated bytes arg_types = 2;
+  bytes return_type = 3;
+  string definition = 4;
+}
+
+message FsProgramConfig {
+  map<string, DylibUdfConfig> udf_dylibs = 1;
+  map<string, PythonUdfConfig> python_udfs = 2;
+}
+
+// ─────────────────── Arrow Program ───────────────────
+
+message FsProgram {
+  repeated FsNode nodes = 1;
+  repeated FsEdge edges = 2;
+  FsProgramConfig program_config = 3;
+}
+
+message FsSchema {
+  string arrow_schema = 1;  // json-encoded Arrow Schema
+  uint32 timestamp_index = 2;
+  repeated uint32 key_indices = 3;
+  bool has_keys = 4;
+  repeated uint32 routing_key_indices = 5;
+  bool has_routing_keys = 6;
+}
+
+message ChainedOperator {
+  string operator_id = 1;
+  string operator_name = 2;
+  bytes operator_config = 3;
+}
+
+message FsNode {
+  int32 node_index = 1;
+  uint32 node_id = 2;
+  uint32 parallelism = 3;
+  string description = 4;
+  repeated ChainedOperator operators = 5;
+  repeated FsSchema edges = 6;
+}
+
+message FsEdge {
+  int32 source = 1;
+  int32 target = 2;
+  FsSchema schema = 4;
+  EdgeType edge_type = 5;
+}
