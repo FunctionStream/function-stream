@@ -1,8 +1,8 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-use thiserror::Error;
 use crossbeam_channel::TrySendError;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum StateEngineError {

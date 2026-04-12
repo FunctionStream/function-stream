@@ -337,15 +337,16 @@ impl PlanVisitor for Executor {
                     custom_interval.unwrap_or(0),
                 )
                 .map_err(|e| {
-                    ExecuteError::Internal(format!(
-                        "Streaming job persistence failed: {e}",
-                    ))
+                    ExecuteError::Internal(format!("Streaming job persistence failed: {e}",))
                 })?;
 
             let job_id = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(
-                    job_manager.submit_job(job_id, fs_program, custom_interval, None),
-                )
+                tokio::runtime::Handle::current().block_on(job_manager.submit_job(
+                    job_id,
+                    fs_program,
+                    custom_interval,
+                    None,
+                ))
             })
             .map_err(|e| ExecuteError::Internal(format!("Failed to submit streaming job: {e}")))?;
 

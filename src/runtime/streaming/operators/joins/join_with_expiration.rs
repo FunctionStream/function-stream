@@ -19,15 +19,16 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion_proto::{physical_plan::AsExecutionPlan, protobuf::PhysicalPlanNode};
 use futures::StreamExt;
 use prost::Message;
-use std::collections::VecDeque;
+use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
-use tracing::warn;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tracing::{info, warn};
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
+use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
 use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
@@ -35,49 +36,91 @@ use protocol::function_stream_graph::JoinOperator;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum JoinSide {
-    Left,
-    Right,
+    Left = 0,
+    Right = 1,
 }
 
 // ============================================================================
+// Persistent state buffer: composite key [Side(1B)] + [Timestamp(8B BE)]
 // ============================================================================
 
-struct StateBuffer {
-    batches: VecDeque<(SystemTime, RecordBatch)>,
+struct PersistentStateBuffer {
+    side: JoinSide,
     ttl: Duration,
+    active_timestamps: BTreeSet<u64>,
 }
 
-impl StateBuffer {
-    fn new(ttl: Duration) -> Self {
+impl PersistentStateBuffer {
+    fn new(side: JoinSide, ttl: Duration) -> Self {
         Self {
-            batches: VecDeque::new(),
+            side,
             ttl,
+            active_timestamps: BTreeSet::new(),
         }
     }
 
-    fn insert(&mut self, batch: RecordBatch, time: SystemTime) {
-        self.batches.push_back((time, batch));
+    fn build_key(side: JoinSide, ts_nanos: u64) -> Vec<u8> {
+        let mut key = Vec::with_capacity(9);
+        key.push(side as u8);
+        key.extend_from_slice(&ts_nanos.to_be_bytes());
+        key
     }
 
-    fn expire(&mut self, current_time: SystemTime) {
-        let cutoff = current_time
-            .checked_sub(self.ttl)
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-        while let Some((time, _)) = self.batches.front() {
-            if *time < cutoff {
-                self.batches.pop_front();
-            } else {
-                break;
-            }
+    fn extract_timestamp(key: &[u8]) -> Option<u64> {
+        if key.len() == 9 {
+            let mut ts_bytes = [0u8; 8];
+            ts_bytes.copy_from_slice(&key[1..]);
+            Some(u64::from_be_bytes(ts_bytes))
+        } else {
+            None
         }
     }
 
-    fn get_all_batches(&self) -> Vec<RecordBatch> {
-        self.batches.iter().map(|(_, b)| b.clone()).collect()
+    async fn insert(
+        &mut self,
+        batch: RecordBatch,
+        time: SystemTime,
+        store: &Arc<OperatorStateStore>,
+    ) -> Result<()> {
+        let ts_nanos = time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+        self.active_timestamps.insert(ts_nanos);
+        let key = Self::build_key(self.side, ts_nanos);
+        store.put(key, batch).await.map_err(|e| anyhow!("{e}"))
+    }
+
+    fn expire(&mut self, current_time: SystemTime, store: &Arc<OperatorStateStore>) -> Result<()> {
+        let cutoff = current_time.checked_sub(self.ttl).unwrap_or(UNIX_EPOCH);
+        let cutoff_nanos = cutoff.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+        let expired_ts: Vec<u64> = self
+            .active_timestamps
+            .iter()
+            .take_while(|&&ts| ts < cutoff_nanos)
+            .copied()
+            .collect();
+
+        for ts in expired_ts {
+            let key = Self::build_key(self.side, ts);
+            store.remove_batches(key).map_err(|e| anyhow!("{e}"))?;
+            self.active_timestamps.remove(&ts);
+        }
+
+        Ok(())
+    }
+
+    async fn get_all_batches(&self, store: &Arc<OperatorStateStore>) -> Result<Vec<RecordBatch>> {
+        let mut all_batches = Vec::new();
+        for &ts in &self.active_timestamps {
+            let key = Self::build_key(self.side, ts);
+            let batches = store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?;
+            all_batches.extend(batches);
+        }
+        Ok(all_batches)
     }
 }
 
 // ============================================================================
+// JoinWithExpirationOperator
 // ============================================================================
 
 pub struct JoinWithExpirationOperator {
@@ -90,8 +133,9 @@ pub struct JoinWithExpirationOperator {
     right_passer: Arc<RwLock<Option<RecordBatch>>>,
     join_exec_plan: Arc<dyn ExecutionPlan>,
 
-    left_state: StateBuffer,
-    right_state: StateBuffer,
+    left_state: PersistentStateBuffer,
+    right_state: PersistentStateBuffer,
+    state_store: Option<Arc<OperatorStateStore>>,
 }
 
 impl JoinWithExpirationOperator {
@@ -133,18 +177,30 @@ impl JoinWithExpirationOperator {
         ctx: &mut TaskContext,
     ) -> Result<Vec<StreamOutput>> {
         let current_time = ctx.current_watermark().unwrap_or_else(SystemTime::now);
+        let store = self
+            .state_store
+            .as_ref()
+            .expect("State store not initialized");
 
-        self.left_state.expire(current_time);
-        self.right_state.expire(current_time);
+        self.left_state.expire(current_time, store)?;
+        self.right_state.expire(current_time, store)?;
 
         match side {
-            JoinSide::Left => self.left_state.insert(batch.clone(), current_time),
-            JoinSide::Right => self.right_state.insert(batch.clone(), current_time),
+            JoinSide::Left => {
+                self.left_state
+                    .insert(batch.clone(), current_time, store)
+                    .await?
+            }
+            JoinSide::Right => {
+                self.right_state
+                    .insert(batch.clone(), current_time, store)
+                    .await?
+            }
         }
 
         let opposite_batches = match side {
-            JoinSide::Left => self.right_state.get_all_batches(),
-            JoinSide::Right => self.left_state.get_all_batches(),
+            JoinSide::Left => self.right_state.get_all_batches(store).await?,
+            JoinSide::Right => self.left_state.get_all_batches(store).await?,
         };
 
         if opposite_batches.is_empty() {
@@ -182,7 +238,39 @@ impl Operator for JoinWithExpirationOperator {
         "JoinWithExpiration"
     }
 
-    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
+    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
+        let store = OperatorStateStore::new(
+            ctx.pipeline_id,
+            ctx.state_dir.clone(),
+            ctx.memory_controller.clone(),
+            ctx.io_manager.clone(),
+        )
+        .map_err(|e| anyhow!("Failed to init state store: {e}"))?;
+
+        let safe_epoch = ctx.latest_safe_epoch();
+        let active_keys = store
+            .restore_metadata(safe_epoch)
+            .await
+            .map_err(|e| anyhow!("State recovery failed: {e}"))?;
+
+        for key in active_keys {
+            if let Some(ts) = PersistentStateBuffer::extract_timestamp(&key) {
+                if key[0] == JoinSide::Left as u8 {
+                    self.left_state.active_timestamps.insert(ts);
+                } else if key[0] == JoinSide::Right as u8 {
+                    self.right_state.active_timestamps.insert(ts);
+                }
+            }
+        }
+
+        info!(
+            pipeline_id = ctx.pipeline_id,
+            restored_left = self.left_state.active_timestamps.len(),
+            restored_right = self.right_state.active_timestamps.len(),
+            "Join Operator restored state from LSM-Tree."
+        );
+
+        self.state_store = Some(store);
         Ok(())
     }
 
@@ -210,9 +298,19 @@ impl Operator for JoinWithExpirationOperator {
 
     async fn snapshot_state(
         &mut self,
-        _barrier: CheckpointBarrier,
+        barrier: CheckpointBarrier,
         _ctx: &mut TaskContext,
     ) -> Result<()> {
+        let store = self
+            .state_store
+            .as_ref()
+            .expect("State store not initialized");
+
+        store
+            .snapshot_epoch(barrier.epoch as u64)
+            .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
+
+        info!(epoch = barrier.epoch, "Join Operator snapshotted state.");
         Ok(())
     }
 
@@ -222,6 +320,7 @@ impl Operator for JoinWithExpirationOperator {
 }
 
 // ============================================================================
+// Constructor
 // ============================================================================
 
 pub struct JoinWithExpirationConstructor;
@@ -273,8 +372,9 @@ impl JoinWithExpirationConstructor {
             left_passer,
             right_passer,
             join_exec_plan,
-            left_state: StateBuffer::new(ttl),
-            right_state: StateBuffer::new(ttl),
+            left_state: PersistentStateBuffer::new(JoinSide::Left, ttl),
+            right_state: PersistentStateBuffer::new(JoinSide::Right, ttl),
+            state_store: None,
         })
     }
 }

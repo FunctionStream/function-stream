@@ -11,15 +11,15 @@
 // limitations under the License.
 
 pub mod error;
-pub mod metrics;
 mod io_manager;
+pub mod metrics;
 mod operator_state;
 
 #[allow(unused_imports)]
-pub use error::{StateEngineError, Result};
-#[allow(unused_imports)]
-pub use metrics::{StateMetricsCollector, NoopMetricsCollector};
+pub use error::{Result, StateEngineError};
 #[allow(unused_imports)]
 pub use io_manager::{CompactJob, IoManager, IoPool, SpillJob};
+#[allow(unused_imports)]
+pub use metrics::{NoopMetricsCollector, StateMetricsCollector};
 #[allow(unused_imports)]
 pub use operator_state::{MemoryController, OperatorStateStore};

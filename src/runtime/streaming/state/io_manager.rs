@@ -5,8 +5,8 @@
 use super::error::StateEngineError;
 use super::metrics::StateMetricsCollector;
 use super::operator_state::{MemTable, OperatorStateStore, TombstoneMap};
-use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use crossbeam_channel::{Receiver, Sender, TrySendError, bounded};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
@@ -63,7 +63,11 @@ impl IoPool {
         };
 
         Ok((
-            Self { spill_tx: Some(spill_tx), compact_tx: Some(compact_tx), worker_handles },
+            Self {
+                spill_tx: Some(spill_tx),
+                compact_tx: Some(compact_tx),
+                worker_handles,
+            },
             manager,
         ))
     }
@@ -94,7 +98,9 @@ impl IoManager {
     pub fn try_send_compact(&self, job: CompactJob) -> Result<(), TrySendError<CompactJob>> {
         self.compact_tx.try_send(job)
     }
-    pub fn pending_spills(&self) -> usize { self.spill_tx.len() }
+    pub fn pending_spills(&self) -> usize {
+        self.spill_tx.len()
+    }
 }
 
 fn spill_worker_loop(rx: Receiver<SpillJob>, metrics: Arc<dyn StateMetricsCollector>) {
@@ -104,7 +110,8 @@ fn spill_worker_loop(rx: Receiver<SpillJob>, metrics: Arc<dyn StateMetricsCollec
         let start = Instant::now();
 
         let result = catch_unwind(AssertUnwindSafe(|| {
-            job.store.execute_spill_sync(job.epoch, job.data, job.tombstone_snapshot, &metrics)
+            job.store
+                .execute_spill_sync(job.epoch, job.data, job.tombstone_snapshot, &metrics)
         }));
 
         let duration_ms = start.elapsed().as_millis();

@@ -17,7 +17,7 @@ use datafusion::common::{Result as DFResult, internal_err, plan_err};
 use prost::Message;
 use protocol::function_stream_graph::FsProgram;
 use protocol::storage::{self as pb, table_definition};
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 use unicase::UniCase;
 
 use crate::sql::common::constants::sql_field;
@@ -144,9 +144,7 @@ impl CatalogManager {
     }
 
     /// Returns (table_name, program, checkpoint_interval_ms, latest_checkpoint_epoch).
-    pub fn load_streaming_job_definitions(
-        &self,
-    ) -> DFResult<Vec<(String, FsProgram, u64, u64)>> {
+    pub fn load_streaming_job_definitions(&self) -> DFResult<Vec<(String, FsProgram, u64, u64)>> {
         let records = self.store.scan_prefix(STREAMING_JOB_KEY_PREFIX)?;
         let mut out = Vec::with_capacity(records.len());
         for (key, payload) in records {

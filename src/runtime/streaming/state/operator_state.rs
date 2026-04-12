@@ -15,8 +15,8 @@ use parquet::file::properties::WriterProperties;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use tokio::sync::Notify;
 use uuid::Uuid;
 
@@ -37,7 +37,11 @@ pub struct MemoryController {
 
 impl MemoryController {
     pub fn new(soft_limit: usize, hard_limit: usize) -> Arc<Self> {
-        Arc::new(Self { current_usage: AtomicUsize::new(0), hard_limit, soft_limit })
+        Arc::new(Self {
+            current_usage: AtomicUsize::new(0),
+            hard_limit,
+            soft_limit,
+        })
     }
     pub fn exceeds_hard_limit(&self, incoming: usize) -> bool {
         self.current_usage.load(Ordering::Relaxed) + incoming > self.hard_limit
@@ -69,7 +73,7 @@ pub struct OperatorStateStore {
 
     mem_ctrl: Arc<MemoryController>,
     io_manager: IoManager,
-    
+
     data_dir: PathBuf,
     tombstone_dir: PathBuf,
 
@@ -88,7 +92,7 @@ impl OperatorStateStore {
         let op_dir = base_dir.as_ref().join(format!("op_{operator_id}"));
         let data_dir = op_dir.join("data");
         let tombstone_dir = op_dir.join("tombstones");
-        
+
         fs::create_dir_all(&data_dir).map_err(StateEngineError::IoError)?;
         fs::create_dir_all(&tombstone_dir).map_err(StateEngineError::IoError)?;
 
@@ -118,7 +122,11 @@ impl OperatorStateStore {
         }
 
         self.mem_ctrl.record_inc(size);
-        self.active_table.write().entry(key).or_default().push(batch);
+        self.active_table
+            .write()
+            .entry(key)
+            .or_default()
+            .push(batch);
 
         if self.mem_ctrl.should_spill() {
             self.downgrade_active_table(self.current_epoch.load(Ordering::Acquire));
@@ -130,7 +138,7 @@ impl OperatorStateStore {
     pub fn remove_batches(&self, key: PartitionKey) -> Result<()> {
         let current_ep = self.current_epoch.load(Ordering::Acquire);
         let tombstone_mem_size = key.len() + TOMBSTONE_ENTRY_OVERHEAD;
-        
+
         {
             let mut tb_guard = self.tombstones.write();
             if tb_guard.insert(key.clone(), current_ep).is_none() {
@@ -157,13 +165,16 @@ impl OperatorStateStore {
     pub fn snapshot_epoch(self: &Arc<Self>, epoch: u64) -> Result<()> {
         self.downgrade_active_table(epoch);
         self.trigger_spill();
-        self.current_epoch.store(epoch.saturating_add(1), Ordering::Release);
+        self.current_epoch
+            .store(epoch.saturating_add(1), Ordering::Release);
         Ok(())
     }
 
     fn downgrade_active_table(&self, epoch: u64) {
         let mut active_guard = self.active_table.write();
-        if active_guard.is_empty() { return; }
+        if active_guard.is_empty() {
+            return;
+        }
         let old_active = std::mem::take(&mut *active_guard);
         self.immutable_tables.lock().push_back((epoch, old_active));
     }
@@ -178,7 +189,9 @@ impl OperatorStateStore {
 
         for (table_epoch, table) in self.immutable_tables.lock().iter().rev() {
             if let Some(del_ep) = deleted_epoch {
-                if *table_epoch <= del_ep { continue; }
+                if *table_epoch <= del_ep {
+                    continue;
+                }
             }
             if let Some(batches) = table.get(key) {
                 out.extend(batches.clone());
@@ -186,7 +199,9 @@ impl OperatorStateStore {
         }
 
         let paths: Vec<PathBuf> = self.data_files.read().clone();
-        if paths.is_empty() { return Ok(out); }
+        if paths.is_empty() {
+            return Ok(out);
+        }
 
         let pk = key.to_vec();
         let merged = tokio::task::spawn_blocking(move || -> Result<Vec<RecordBatch>> {
@@ -194,7 +209,9 @@ impl OperatorStateStore {
             for path in paths {
                 let file_epoch = extract_epoch(&path);
                 if let Some(del_ep) = deleted_epoch {
-                    if file_epoch <= del_ep { continue; }
+                    if file_epoch <= del_ep {
+                        continue;
+                    }
                 }
 
                 // Native Bloom Filter intercepts empty reads here
@@ -207,7 +224,9 @@ impl OperatorStateStore {
                 }
             }
             Ok(acc)
-        }).await.map_err(|_| StateEngineError::Corruption("Tokio task panicked".into()))??;
+        })
+        .await
+        .map_err(|_| StateEngineError::Corruption("Tokio task panicked".into()))??;
 
         out.extend(merged);
         Ok(out)
@@ -223,7 +242,12 @@ impl OperatorStateStore {
             };
 
             let tombstone_snapshot = self.tombstones.read().clone();
-            let job = SpillJob { store: self.clone(), epoch, data, tombstone_snapshot };
+            let job = SpillJob {
+                store: self.clone(),
+                epoch,
+                data,
+                tombstone_snapshot,
+            };
 
             match self.io_manager.try_send_spill(job) {
                 Ok(()) => {}
@@ -238,13 +262,17 @@ impl OperatorStateStore {
 
     pub fn trigger_minor_compaction(self: &Arc<Self>) {
         if !self.is_compacting.swap(true, Ordering::SeqCst) {
-            let _ = self.io_manager.try_send_compact(CompactJob::Minor { store: self.clone() });
+            let _ = self.io_manager.try_send_compact(CompactJob::Minor {
+                store: self.clone(),
+            });
         }
     }
 
     pub fn trigger_major_compaction(self: &Arc<Self>) {
         if !self.is_compacting.swap(true, Ordering::SeqCst) {
-            let _ = self.io_manager.try_send_compact(CompactJob::Major { store: self.clone() });
+            let _ = self.io_manager.try_send_compact(CompactJob::Major {
+                store: self.clone(),
+            });
         }
     }
 
@@ -268,7 +296,9 @@ impl OperatorStateStore {
 
         if !batches_to_write.is_empty() {
             let path = self.data_dir.join(Self::generate_data_file_name(epoch));
-            if let Err(e) = write_parquet_with_bloom_atomic(&path, &batches_to_write, distinct_keys_count) {
+            if let Err(e) =
+                write_parquet_with_bloom_atomic(&path, &batches_to_write, distinct_keys_count)
+            {
                 metrics.inc_io_errors(self.operator_id);
                 let restored = restore_memtable_from_injected_batches(batches_to_write)?;
                 self.immutable_tables.lock().push_front((epoch, restored));
@@ -294,10 +324,16 @@ impl OperatorStateStore {
                 Field::new("deleted_epoch", DataType::UInt64, false),
             ]));
             let batch = RecordBatch::try_new(
-                schema, vec![Arc::new(key_builder.finish()), Arc::new(epoch_builder.finish())]
+                schema,
+                vec![
+                    Arc::new(key_builder.finish()),
+                    Arc::new(epoch_builder.finish()),
+                ],
             )?;
 
-            let path = self.tombstone_dir.join(Self::generate_tombstone_file_name(epoch));
+            let path = self
+                .tombstone_dir
+                .join(Self::generate_tombstone_file_name(epoch));
             if let Err(e) = write_parquet_with_bloom_atomic(&path, &[batch], tomb_ndv) {
                 metrics.inc_io_errors(self.operator_id);
                 return Err(e);
@@ -307,7 +343,7 @@ impl OperatorStateStore {
 
         self.mem_ctrl.record_dec(size_to_release);
         metrics.record_memory_usage(self.operator_id, self.mem_ctrl.usage_bytes());
-        
+
         self.is_spilling.store(false, Ordering::SeqCst);
         self.spill_notify.notify_waiters();
 
@@ -318,31 +354,45 @@ impl OperatorStateStore {
     }
 
     pub(crate) fn execute_compact_sync(
-        self: &Arc<Self>, 
+        self: &Arc<Self>,
         is_major: bool,
-        metrics: &Arc<dyn StateMetricsCollector>
+        metrics: &Arc<dyn StateMetricsCollector>,
     ) -> Result<()> {
         let result = (|| -> Result<()> {
             let files_to_merge = {
                 let df = self.data_files.read();
-                if df.len() < 2 { return Ok(()); }
-                if is_major { df.clone() } else { df.iter().take(2).cloned().collect() }
+                if df.len() < 2 {
+                    return Ok(());
+                }
+                if is_major {
+                    df.clone()
+                } else {
+                    df.iter().take(2).cloned().collect()
+                }
             };
 
             let tombstone_snapshot = self.tombstones.read().clone();
-            let compacted_watermark_epoch = files_to_merge.iter().map(|p| extract_epoch(p)).max().unwrap_or(0);
-            let new_path = self.data_dir.join(Self::generate_data_file_name(compacted_watermark_epoch));
+            let compacted_watermark_epoch = files_to_merge
+                .iter()
+                .map(|p| extract_epoch(p))
+                .max()
+                .unwrap_or(0);
+            let new_path = self
+                .data_dir
+                .join(Self::generate_data_file_name(compacted_watermark_epoch));
 
             let mut all_batches = Vec::new();
             let mut estimated_rows = 0;
-            
+
             for path in &files_to_merge {
                 let file_epoch = extract_epoch(path);
                 let file = File::open(path).map_err(StateEngineError::IoError)?;
                 let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
                 while let Some(batch) = reader.next() {
                     let b = batch?;
-                    if let Some(filtered) = filter_tombstones_from_batch(&b, &tombstone_snapshot, file_epoch)? {
+                    if let Some(filtered) =
+                        filter_tombstones_from_batch(&b, &tombstone_snapshot, file_epoch)?
+                    {
                         estimated_rows += filtered.num_rows() as u64;
                         all_batches.push(filtered);
                     }
@@ -350,7 +400,11 @@ impl OperatorStateStore {
             }
 
             if !all_batches.is_empty() {
-                if let Err(e) = write_parquet_with_bloom_atomic(&new_path, &all_batches, estimated_rows.max(100)) {
+                if let Err(e) = write_parquet_with_bloom_atomic(
+                    &new_path,
+                    &all_batches,
+                    estimated_rows.max(100),
+                ) {
                     metrics.inc_io_errors(self.operator_id);
                     return Err(e);
                 }
@@ -362,7 +416,9 @@ impl OperatorStateStore {
                 df.retain(|p| !files_to_merge.contains(p));
             }
 
-            for path in &files_to_merge { let _ = fs::remove_file(path); }
+            for path in &files_to_merge {
+                let _ = fs::remove_file(path);
+            }
 
             // Watermark GC
             {
@@ -373,7 +429,9 @@ impl OperatorStateStore {
                     if *deleted_epoch <= compacted_watermark_epoch {
                         memory_freed += key.len() + TOMBSTONE_ENTRY_OVERHEAD;
                         false
-                    } else { true }
+                    } else {
+                        true
+                    }
                 });
 
                 if memory_freed > 0 {
@@ -402,14 +460,18 @@ impl OperatorStateStore {
 
     pub async fn restore_metadata(&self, safe_epoch: u64) -> Result<HashSet<PartitionKey>> {
         self.active_table.write().clear();
-        self.immutable_tables.lock().retain(|(e, _)| *e <= safe_epoch);
+        self.immutable_tables
+            .lock()
+            .retain(|(e, _)| *e <= safe_epoch);
 
         let cleanup_future = |files: &mut Vec<PathBuf>| {
             files.retain(|path| {
                 if extract_epoch(path) > safe_epoch {
                     let _ = fs::remove_file(path);
                     false
-                } else { true }
+                } else {
+                    true
+                }
             });
         };
         cleanup_future(&mut self.data_files.write());
@@ -423,19 +485,31 @@ impl OperatorStateStore {
                 let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
                 while let Some(batch) = reader.next() {
                     let batch = batch?;
-                    let key_col = batch.column(0).as_any().downcast_ref::<BinaryArray>().unwrap();
-                    let ep_col = batch.column(1).as_any().downcast_ref::<UInt64Array>().unwrap();
+                    let key_col = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<BinaryArray>()
+                        .unwrap();
+                    let ep_col = batch
+                        .column(1)
+                        .as_any()
+                        .downcast_ref::<UInt64Array>()
+                        .unwrap();
 
                     for i in 0..key_col.len() {
                         let k = key_col.value(i).to_vec();
                         let e = ep_col.value(i);
                         let current_max = map.get(&k).copied().unwrap_or(0);
-                        if e > current_max { map.insert(k, e); }
+                        if e > current_max {
+                            map.insert(k, e);
+                        }
                     }
                 }
             }
             Ok(map)
-        }).await.map_err(|_| StateEngineError::Corruption("Task Panicked".into()))??;
+        })
+        .await
+        .map_err(|_| StateEngineError::Corruption("Task Panicked".into()))??;
 
         let mut total_tombstone_mem = 0;
         for key in loaded_tombstones.keys() {
@@ -457,19 +531,27 @@ impl OperatorStateStore {
 
                 while let Some(batch) = reader.next() {
                     let batch = batch?;
-                    let key_col = batch.column(0).as_any().downcast_ref::<BinaryArray>().unwrap();
+                    let key_col = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<BinaryArray>()
+                        .unwrap();
                     for i in 0..key_col.len() {
                         let k = key_col.value(i).to_vec();
                         let is_active = match loaded_tombstones.get(&k) {
                             Some(del_ep) => *del_ep < file_epoch,
                             None => true,
                         };
-                        if is_active { keys.insert(k); }
+                        if is_active {
+                            keys.insert(k);
+                        }
                     }
                 }
             }
             Ok(keys)
-        }).await.map_err(|_| StateEngineError::Corruption("Task Panicked".into()))??;
+        })
+        .await
+        .map_err(|_| StateEngineError::Corruption("Task Panicked".into()))??;
 
         self.current_epoch.store(safe_epoch + 1, Ordering::Release);
         Ok(active_keys)
@@ -478,7 +560,7 @@ impl OperatorStateStore {
     // ========================================================================
     // UUID-based file name generators
     // ========================================================================
-    
+
     fn generate_data_file_name(epoch: u64) -> String {
         format!("data-epoch-{}_uuid-{}.parquet", epoch, Uuid::now_v7())
     }
@@ -493,7 +575,9 @@ impl OperatorStateStore {
 // ============================================================================
 
 fn write_parquet_with_bloom_atomic(path: &Path, batches: &[RecordBatch], ndv: u64) -> Result<()> {
-    if batches.is_empty() { return Ok(()); }
+    if batches.is_empty() {
+        return Ok(());
+    }
     let tmp = path.with_extension("tmp");
     {
         let file = File::create(&tmp).map_err(StateEngineError::IoError)?;
@@ -503,7 +587,9 @@ fn write_parquet_with_bloom_atomic(path: &Path, batches: &[RecordBatch], ndv: u6
             .build();
 
         let mut writer = ArrowWriter::try_new(&file, batches[0].schema(), Some(props))?;
-        for b in batches { writer.write(b)?; }
+        for b in batches {
+            writer.write(b)?;
+        }
         writer.close()?;
         file.sync_all().map_err(StateEngineError::IoError)?;
     }
@@ -512,7 +598,11 @@ fn write_parquet_with_bloom_atomic(path: &Path, batches: &[RecordBatch], ndv: u6
 }
 
 fn extract_epoch(path: &Path) -> u64 {
-    let name = path.file_name().unwrap_or_default().to_str().unwrap_or_default();
+    let name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default();
     if let Some(start) = name.find("-epoch-") {
         let after = &name[start + 7..];
         if let Some(end) = after.find("_uuid-") {
@@ -524,9 +614,16 @@ fn extract_epoch(path: &Path) -> u64 {
 
 fn inject_partition_key(batch: &RecordBatch, key: &[u8]) -> Result<RecordBatch> {
     let mut fields = batch.schema().fields().to_vec();
-    fields.push(Arc::new(Field::new(PARTITION_KEY_COL, DataType::Binary, false)));
+    fields.push(Arc::new(Field::new(
+        PARTITION_KEY_COL,
+        DataType::Binary,
+        false,
+    )));
     let schema = Arc::new(Schema::new(fields));
-    let key_array = Arc::new(BinaryArray::from_iter_values(std::iter::repeat_n(key, batch.num_rows())));
+    let key_array = Arc::new(BinaryArray::from_iter_values(std::iter::repeat_n(
+        key,
+        batch.num_rows(),
+    )));
     let mut cols = batch.columns().to_vec();
     cols.push(key_array as Arc<dyn Array>);
     Ok(RecordBatch::try_new(schema, cols)?)
@@ -537,10 +634,18 @@ fn filter_tombstones_from_batch(
     tombstones: &TombstoneMap,
     file_epoch: u64,
 ) -> Result<Option<RecordBatch>> {
-    if tombstones.is_empty() { return Ok(Some(batch.clone())); }
-    let Ok(idx) = batch.schema().index_of(PARTITION_KEY_COL) else { return Ok(Some(batch.clone())); };
+    if tombstones.is_empty() {
+        return Ok(Some(batch.clone()));
+    }
+    let Ok(idx) = batch.schema().index_of(PARTITION_KEY_COL) else {
+        return Ok(Some(batch.clone()));
+    };
 
-    let key_col = batch.column(idx).as_any().downcast_ref::<BinaryArray>().unwrap();
+    let key_col = batch
+        .column(idx)
+        .as_any()
+        .downcast_ref::<BinaryArray>()
+        .unwrap();
     let mut mask_builder = BooleanBuilder::with_capacity(batch.num_rows());
     let mut has_valid = false;
 
@@ -551,22 +656,39 @@ fn filter_tombstones_from_batch(
             None => true,
         };
         mask_builder.append_value(keep);
-        if keep { has_valid = true; }
+        if keep {
+            has_valid = true;
+        }
     }
 
-    if !has_valid { return Ok(None); }
+    if !has_valid {
+        return Ok(None);
+    }
     let mask = mask_builder.finish();
     Ok(Some(arrow::compute::filter_record_batch(batch, &mask)?))
 }
 
-fn filter_and_strip_partition_key(batch: &RecordBatch, target_key: &[u8]) -> Result<Option<RecordBatch>> {
-    let Ok(idx) = batch.schema().index_of(PARTITION_KEY_COL) else { return Ok(Some(batch.clone())); };
-    let key_col = batch.column(idx).as_any().downcast_ref::<BinaryArray>().unwrap();
+fn filter_and_strip_partition_key(
+    batch: &RecordBatch,
+    target_key: &[u8],
+) -> Result<Option<RecordBatch>> {
+    let Ok(idx) = batch.schema().index_of(PARTITION_KEY_COL) else {
+        return Ok(Some(batch.clone()));
+    };
+    let key_col = batch
+        .column(idx)
+        .as_any()
+        .downcast_ref::<BinaryArray>()
+        .unwrap();
     let mut mask_builder = BooleanBuilder::with_capacity(batch.num_rows());
-    for i in 0..batch.num_rows() { mask_builder.append_value(key_col.value(i) == target_key); }
+    for i in 0..batch.num_rows() {
+        mask_builder.append_value(key_col.value(i) == target_key);
+    }
     let mask = mask_builder.finish();
     let filtered = arrow::compute::filter_record_batch(batch, &mask)?;
-    if filtered.num_rows() == 0 { return Ok(None); }
+    if filtered.num_rows() == 0 {
+        return Ok(None);
+    }
     let mut proj: Vec<usize> = (0..filtered.num_columns()).collect();
     proj.retain(|&i| i != idx);
     Ok(Some(filtered.project(&proj)?))
@@ -576,7 +698,11 @@ fn restore_memtable_from_injected_batches(batches: Vec<RecordBatch>) -> Result<M
     let mut m = MemTable::new();
     for batch in batches {
         let idx = batch.schema().index_of(PARTITION_KEY_COL).unwrap();
-        let key_col = batch.column(idx).as_any().downcast_ref::<BinaryArray>().unwrap();
+        let key_col = batch
+            .column(idx)
+            .as_any()
+            .downcast_ref::<BinaryArray>()
+            .unwrap();
         let pk = key_col.value(0).to_vec();
         let mut proj: Vec<usize> = (0..batch.num_columns()).collect();
         proj.retain(|&i| i != idx);

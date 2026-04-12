@@ -19,7 +19,7 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle as TokioJoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{error, info, warn, debug};
+use tracing::{debug, error, info, warn};
 
 use protocol::function_stream_graph::{ChainedOperator, FsProgram};
 
@@ -34,7 +34,7 @@ use crate::runtime::streaming::job::models::{
 };
 use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
-use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode, JobMasterEvent};
+use crate::runtime::streaming::protocol::control::{ControlCommand, JobMasterEvent, StopMode};
 use crate::runtime::streaming::protocol::event::CheckpointBarrier;
 use crate::runtime::streaming::state::{IoManager, IoPool, MemoryController, NoopMetricsCollector};
 use crate::storage::stream_catalog::CatalogManager;
@@ -132,7 +132,8 @@ impl JobManager {
             state_config.max_background_spills,
             state_config.max_background_compactions,
             metrics,
-        ).context("Failed to initialize state engine I/O pool")?;
+        )
+        .context("Failed to initialize state engine I/O pool")?;
 
         Ok(Self {
             active_jobs: Arc::new(RwLock::new(HashMap::new())),
@@ -153,7 +154,12 @@ impl JobManager {
         state_config: StateConfig,
     ) -> Result<()> {
         GLOBAL_JOB_MANAGER
-            .set(Arc::new(Self::new(factory, memory_bytes, state_base_dir, state_config)?))
+            .set(Arc::new(Self::new(
+                factory,
+                memory_bytes,
+                state_base_dir,
+                state_config,
+            )?))
             .map_err(|_| anyhow!("JobManager singleton already initialized"))
     }
 
@@ -217,8 +223,8 @@ impl JobManager {
             pipelines.insert(pipeline_id, pipeline);
         }
 
-        let interval_ms = custom_checkpoint_interval_ms
-            .unwrap_or(self.state_config.checkpoint_interval_ms);
+        let interval_ms =
+            custom_checkpoint_interval_ms.unwrap_or(self.state_config.checkpoint_interval_ms);
 
         self.spawn_checkpoint_coordinator(
             job_id.clone(),
@@ -425,9 +431,9 @@ impl JobManager {
         pipeline_id: u32,
         operators: &[ChainedOperator],
         edge_manager: &mut EdgeManager,
-        _job_state_dir: &Path,
+        job_state_dir: &Path,
         _job_master_tx: mpsc::Sender<JobMasterEvent>,
-        _recovery_epoch: u64,
+        recovery_epoch: u64,
     ) -> Result<(PhysicalPipeline, bool)> {
         let (raw_inboxes, raw_outboxes) =
             edge_manager.take_endpoints(pipeline_id).with_context(|| {
@@ -479,6 +485,10 @@ impl JobManager {
             parallelism,
             physical_outboxes,
             Arc::clone(&self.memory_pool),
+            Arc::clone(&self.memory_controller),
+            self.io_manager_client.clone(),
+            job_state_dir.to_path_buf(),
+            recovery_epoch,
         );
 
         let runner = if let Some(source) = chain.source {

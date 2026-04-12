@@ -11,9 +11,8 @@
 // limitations under the License.
 
 use anyhow::{Result, anyhow};
-use arrow::compute::{max, min, partition, sort_to_indices, take};
+use arrow::compute::{concat_batches, max, min, partition, sort_to_indices, take};
 use arrow_array::{RecordBatch, TimestampNanosecondArray};
-use datafusion::execution::SendableRecordBatchStream;
 use datafusion::execution::context::SessionContext;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use datafusion::physical_plan::ExecutionPlan;
@@ -21,80 +20,79 @@ use datafusion_proto::physical_plan::AsExecutionPlan;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use futures::StreamExt;
 use prost::Message;
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};
-use std::time::SystemTime;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-use tracing::warn;
+use std::time::UNIX_EPOCH;
+use tracing::{info, warn};
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
-use crate::sql::common::constants::mem_exec_join_side;
-use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark, from_nanos};
+use crate::runtime::streaming::state::OperatorStateStore;
+use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
 use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
 use protocol::function_stream_graph::JoinOperator;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum JoinSide {
-    Left,
-    Right,
+    Left = 0,
+    Right = 1,
 }
 
-impl JoinSide {
-    #[allow(dead_code)]
-    fn name(&self) -> &'static str {
-        match self {
-            JoinSide::Left => mem_exec_join_side::LEFT,
-            JoinSide::Right => mem_exec_join_side::RIGHT,
+// ============================================================================
+// Lightweight state index: composite key [Side(1B)] + [Timestamp(8B BE)]
+// ============================================================================
+
+struct InstantStateIndex {
+    side: JoinSide,
+    active_timestamps: BTreeSet<u64>,
+}
+
+impl InstantStateIndex {
+    fn new(side: JoinSide) -> Self {
+        Self {
+            side,
+            active_timestamps: BTreeSet::new(),
+        }
+    }
+
+    fn build_key(side: JoinSide, ts_nanos: u64) -> Vec<u8> {
+        let mut key = Vec::with_capacity(9);
+        key.push(side as u8);
+        key.extend_from_slice(&ts_nanos.to_be_bytes());
+        key
+    }
+
+    fn extract_timestamp(key: &[u8]) -> Option<u64> {
+        if key.len() == 9 {
+            let mut ts_bytes = [0u8; 8];
+            ts_bytes.copy_from_slice(&key[1..]);
+            Some(u64::from_be_bytes(ts_bytes))
+        } else {
+            None
         }
     }
 }
 
-struct JoinInstance {
-    left_tx: UnboundedSender<RecordBatch>,
-    right_tx: UnboundedSender<RecordBatch>,
-    result_stream: SendableRecordBatchStream,
-}
-
-impl JoinInstance {
-    fn feed_data(&self, batch: RecordBatch, side: JoinSide) -> Result<()> {
-        match side {
-            JoinSide::Left => self
-                .left_tx
-                .send(batch)
-                .map_err(|e| anyhow!("Left send err: {}", e)),
-            JoinSide::Right => self
-                .right_tx
-                .send(batch)
-                .map_err(|e| anyhow!("Right send err: {}", e)),
-        }
-    }
-
-    async fn close_and_drain(self) -> Result<Vec<RecordBatch>> {
-        drop(self.left_tx);
-        drop(self.right_tx);
-
-        let mut outputs = Vec::new();
-        let mut stream = self.result_stream;
-
-        while let Some(result_batch) = stream.next().await {
-            outputs.push(result_batch?);
-        }
-
-        Ok(outputs)
-    }
-}
+// ============================================================================
+// InstantJoinOperator (persistent state refactor)
+// ============================================================================
 
 pub struct InstantJoinOperator {
     left_input_schema: FsSchemaRef,
     right_input_schema: FsSchemaRef,
-    active_joins: BTreeMap<SystemTime, JoinInstance>,
-    left_receiver_hook: Arc<RwLock<Option<UnboundedReceiver<RecordBatch>>>>,
-    right_receiver_hook: Arc<RwLock<Option<UnboundedReceiver<RecordBatch>>>>,
+    left_schema: FsSchemaRef,
+    right_schema: FsSchemaRef,
+
+    left_passer: Arc<RwLock<Option<RecordBatch>>>,
+    right_passer: Arc<RwLock<Option<RecordBatch>>>,
     join_exec_plan: Arc<dyn ExecutionPlan>,
+
+    left_state: InstantStateIndex,
+    right_state: InstantStateIndex,
+    state_store: Option<Arc<OperatorStateStore>>,
 }
 
 impl InstantJoinOperator {
@@ -105,32 +103,26 @@ impl InstantJoinOperator {
         }
     }
 
-    fn get_or_create_join_instance(&mut self, time: SystemTime) -> Result<&mut JoinInstance> {
-        use std::collections::btree_map::Entry;
+    async fn compute_pair(
+        &mut self,
+        left: RecordBatch,
+        right: RecordBatch,
+    ) -> Result<Vec<RecordBatch>> {
+        self.left_passer.write().unwrap().replace(left);
+        self.right_passer.write().unwrap().replace(right);
 
-        if let Entry::Vacant(e) = self.active_joins.entry(time) {
-            let (left_tx, left_rx) = unbounded_channel();
-            let (right_tx, right_rx) = unbounded_channel();
+        self.join_exec_plan.reset().map_err(|e| anyhow!("{e}"))?;
 
-            *self.left_receiver_hook.write().unwrap() = Some(left_rx);
-            *self.right_receiver_hook.write().unwrap() = Some(right_rx);
+        let mut result_stream = self
+            .join_exec_plan
+            .execute(0, SessionContext::new().task_ctx())
+            .map_err(|e| anyhow!("{e}"))?;
 
-            self.join_exec_plan.reset().map_err(|e| anyhow!("{e}"))?;
-            let result_stream = self
-                .join_exec_plan
-                .execute(0, SessionContext::new().task_ctx())
-                .map_err(|e| anyhow!("{e}"))?;
-
-            e.insert(JoinInstance {
-                left_tx,
-                right_tx,
-                result_stream,
-            });
+        let mut outputs = Vec::new();
+        while let Some(batch) = result_stream.next().await {
+            outputs.push(batch.map_err(|e| anyhow!("{e}"))?);
         }
-
-        self.active_joins
-            .get_mut(&time)
-            .ok_or_else(|| anyhow!("join instance missing after insert"))
+        Ok(outputs)
     }
 
     async fn process_side_internal(
@@ -142,6 +134,10 @@ impl InstantJoinOperator {
         if batch.num_rows() == 0 {
             return Ok(());
         }
+        let store = self
+            .state_store
+            .as_ref()
+            .expect("State store not initialized");
 
         let time_column = batch
             .column(self.input_schema(side).timestamp_index)
@@ -152,19 +148,28 @@ impl InstantJoinOperator {
         let min_timestamp = min(time_column).ok_or_else(|| anyhow!("empty timestamp column"))?;
         let max_timestamp = max(time_column).ok_or_else(|| anyhow!("empty timestamp column"))?;
 
-        if let Some(watermark) = ctx.current_watermark()
-            && watermark > from_nanos(min_timestamp as u128)
-        {
-            warn!("Dropped late batch from {:?} before watermark", side);
-            return Ok(());
+        if let Some(watermark) = ctx.current_watermark() {
+            let watermark_nanos = watermark.duration_since(UNIX_EPOCH).unwrap().as_nanos() as i64;
+            if watermark_nanos > min_timestamp {
+                warn!("Dropped late batch from {:?} before watermark", side);
+                return Ok(());
+            }
         }
 
         let unkeyed_batch = self.input_schema(side).unkeyed_batch(&batch)?;
+        let state_index = match side {
+            JoinSide::Left => &mut self.left_state,
+            JoinSide::Right => &mut self.right_state,
+        };
 
         if max_timestamp == min_timestamp {
-            let time_key = from_nanos(max_timestamp as u128);
-            let join_instance = self.get_or_create_join_instance(time_key)?;
-            join_instance.feed_data(unkeyed_batch, side)?;
+            let ts_nanos = max_timestamp as u64;
+            let key = InstantStateIndex::build_key(side, ts_nanos);
+            store
+                .put(key, unkeyed_batch)
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+            state_index.active_timestamps.insert(ts_nanos);
             return Ok(());
         }
 
@@ -179,16 +184,21 @@ impl InstantJoinOperator {
         let typed_timestamps = sorted_timestamps
             .as_any()
             .downcast_ref::<TimestampNanosecondArray>()
-            .ok_or_else(|| anyhow!("sorted timestamps downcast failed"))?;
+            .unwrap();
+
         let ranges = partition(std::slice::from_ref(&sorted_timestamps))
             .unwrap()
             .ranges();
 
         for range in ranges {
             let sub_batch = sorted_batch.slice(range.start, range.end - range.start);
-            let time_key = from_nanos(typed_timestamps.value(range.start) as u128);
-            let join_instance = self.get_or_create_join_instance(time_key)?;
-            join_instance.feed_data(sub_batch, side)?;
+            let ts_nanos = typed_timestamps.value(range.start) as u64;
+            let key = InstantStateIndex::build_key(side, ts_nanos);
+            store
+                .put(key, sub_batch)
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+            state_index.active_timestamps.insert(ts_nanos);
         }
 
         Ok(())
@@ -201,7 +211,39 @@ impl Operator for InstantJoinOperator {
         "InstantJoin"
     }
 
-    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
+    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
+        let store = OperatorStateStore::new(
+            ctx.pipeline_id,
+            ctx.state_dir.clone(),
+            ctx.memory_controller.clone(),
+            ctx.io_manager.clone(),
+        )
+        .map_err(|e| anyhow!("Failed to init state store: {e}"))?;
+
+        let safe_epoch = ctx.latest_safe_epoch();
+        let active_keys = store
+            .restore_metadata(safe_epoch)
+            .await
+            .map_err(|e| anyhow!("State recovery failed: {e}"))?;
+
+        for key in active_keys {
+            if let Some(ts) = InstantStateIndex::extract_timestamp(&key) {
+                if key[0] == JoinSide::Left as u8 {
+                    self.left_state.active_timestamps.insert(ts);
+                } else if key[0] == JoinSide::Right as u8 {
+                    self.right_state.active_timestamps.insert(ts);
+                }
+            }
+        }
+
+        info!(
+            pipeline_id = ctx.pipeline_id,
+            restored_left = self.left_state.active_timestamps.len(),
+            restored_right = self.right_state.active_timestamps.len(),
+            "Instant Join Operator recovered state."
+        );
+
+        self.state_store = Some(store);
         Ok(())
     }
 
@@ -228,24 +270,76 @@ impl Operator for InstantJoinOperator {
         let Watermark::EventTime(current_time) = watermark else {
             return Ok(vec![]);
         };
+        let store = self.state_store.clone().unwrap();
+        let cutoff_nanos = current_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+        let mut all_active_ts = BTreeSet::new();
+        all_active_ts.extend(self.left_state.active_timestamps.iter());
+        all_active_ts.extend(self.right_state.active_timestamps.iter());
+
+        let expired_ts: Vec<u64> = all_active_ts
+            .into_iter()
+            .filter(|&ts| ts < cutoff_nanos)
+            .collect();
+
+        if expired_ts.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Phase 1: Harvest — extract all expired timestamp data from LSM-Tree
+        let mut pending_pairs: Vec<(u64, RecordBatch, RecordBatch)> =
+            Vec::with_capacity(expired_ts.len());
+
+        for &ts in &expired_ts {
+            let left_key = InstantStateIndex::build_key(JoinSide::Left, ts);
+            let right_key = InstantStateIndex::build_key(JoinSide::Right, ts);
+
+            let left_batches = store
+                .get_batches(&left_key)
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+            let right_batches = store
+                .get_batches(&right_key)
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+
+            let left_input = if left_batches.is_empty() {
+                RecordBatch::new_empty(self.left_schema.schema.clone())
+            } else {
+                concat_batches(&self.left_schema.schema, left_batches.iter())?
+            };
+            let right_input = if right_batches.is_empty() {
+                RecordBatch::new_empty(self.right_schema.schema.clone())
+            } else {
+                concat_batches(&self.right_schema.schema, right_batches.iter())?
+            };
+
+            pending_pairs.push((ts, left_input, right_input));
+        }
+
+        // Phase 2: Compute — all data extracted, no store reference held
         let mut emit_outputs = Vec::new();
 
-        let mut expired_times = Vec::new();
-        for key in self.active_joins.keys() {
-            if *key < current_time {
-                expired_times.push(*key);
-            } else {
-                break;
+        for (_, left_input, right_input) in pending_pairs {
+            if left_input.num_rows() == 0 && right_input.num_rows() == 0 {
+                continue;
+            }
+            let results = self.compute_pair(left_input, right_input).await?;
+            for batch in results {
+                emit_outputs.push(StreamOutput::Forward(batch));
             }
         }
 
-        for time_key in expired_times {
-            if let Some(join_instance) = self.active_joins.remove(&time_key) {
-                let joined_batches = join_instance.close_and_drain().await?;
-                for batch in joined_batches {
-                    emit_outputs.push(StreamOutput::Forward(batch));
-                }
-            }
+        // Phase 3: Cleanup — tombstone LSM-Tree entries and update in-memory index
+        for ts in expired_ts {
+            let left_key = InstantStateIndex::build_key(JoinSide::Left, ts);
+            let right_key = InstantStateIndex::build_key(JoinSide::Right, ts);
+            store.remove_batches(left_key).map_err(|e| anyhow!("{e}"))?;
+            store
+                .remove_batches(right_key)
+                .map_err(|e| anyhow!("{e}"))?;
+            self.left_state.active_timestamps.remove(&ts);
+            self.right_state.active_timestamps.remove(&ts);
         }
 
         Ok(emit_outputs)
@@ -253,12 +347,21 @@ impl Operator for InstantJoinOperator {
 
     async fn snapshot_state(
         &mut self,
-        _barrier: CheckpointBarrier,
+        barrier: CheckpointBarrier,
         _ctx: &mut TaskContext,
     ) -> Result<()> {
+        self.state_store
+            .as_ref()
+            .unwrap()
+            .snapshot_epoch(barrier.epoch as u64)
+            .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
         Ok(())
     }
 }
+
+// ============================================================================
+// Constructor
+// ============================================================================
 
 pub struct InstantJoinConstructor;
 
@@ -268,21 +371,23 @@ impl InstantJoinConstructor {
         config: JoinOperator,
         registry: Arc<Registry>,
     ) -> anyhow::Result<InstantJoinOperator> {
-        let join_physical_plan_node = PhysicalPlanNode::decode(&mut config.join_plan.as_slice())?;
-
         let left_input_schema: Arc<FsSchema> = Arc::new(config.left_schema.unwrap().try_into()?);
         let right_input_schema: Arc<FsSchema> = Arc::new(config.right_schema.unwrap().try_into()?);
 
-        let left_receiver_hook = Arc::new(RwLock::new(None));
-        let right_receiver_hook = Arc::new(RwLock::new(None));
+        let left_schema = Arc::new(left_input_schema.schema_without_keys()?);
+        let right_schema = Arc::new(right_input_schema.schema_without_keys()?);
+
+        let left_passer = Arc::new(RwLock::new(None));
+        let right_passer = Arc::new(RwLock::new(None));
 
         let codec = StreamingExtensionCodec {
-            context: StreamingDecodingContext::LockedJoinStream {
-                left: left_receiver_hook.clone(),
-                right: right_receiver_hook.clone(),
+            context: StreamingDecodingContext::LockedJoinPair {
+                left: left_passer.clone(),
+                right: right_passer.clone(),
             },
         };
 
+        let join_physical_plan_node = PhysicalPlanNode::decode(&mut config.join_plan.as_slice())?;
         let join_exec_plan = join_physical_plan_node.try_into_physical_plan(
             registry.as_ref(),
             &RuntimeEnvBuilder::new().build()?,
@@ -292,10 +397,14 @@ impl InstantJoinConstructor {
         Ok(InstantJoinOperator {
             left_input_schema,
             right_input_schema,
-            active_joins: BTreeMap::new(),
-            left_receiver_hook,
-            right_receiver_hook,
+            left_schema,
+            right_schema,
+            left_passer,
+            right_passer,
             join_exec_plan,
+            left_state: InstantStateIndex::new(JoinSide::Left),
+            right_state: InstantStateIndex::new(JoinSide::Right),
+            state_store: None,
         })
     }
 }

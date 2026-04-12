@@ -10,6 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -19,6 +20,7 @@ use arrow_array::RecordBatch;
 use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::endpoint::PhysicalSender;
 use crate::runtime::streaming::protocol::event::{StreamEvent, TrackedEvent};
+use crate::runtime::streaming::state::{IoManager, MemoryController};
 
 #[derive(Debug, Clone)]
 pub struct TaskContextConfig {
@@ -61,6 +63,18 @@ pub struct TaskContext {
 
     /// Subtask-level tunables.
     config: TaskContextConfig,
+
+    /// Root directory for operator state persistence (LSM-Tree data/tombstone files).
+    pub state_dir: PathBuf,
+
+    /// Shared memory controller for state engine back-pressure.
+    pub memory_controller: Arc<MemoryController>,
+
+    /// I/O thread pool handle for background spill/compaction.
+    pub io_manager: IoManager,
+
+    /// Last globally-committed safe epoch for crash recovery.
+    safe_epoch: u64,
 }
 
 impl TaskContext {
@@ -71,6 +85,10 @@ impl TaskContext {
         parallelism: u32,
         downstream_senders: Vec<PhysicalSender>,
         memory_pool: Arc<MemoryPool>,
+        memory_controller: Arc<MemoryController>,
+        io_manager: IoManager,
+        state_dir: PathBuf,
+        safe_epoch: u64,
     ) -> Self {
         let task_name = format!(
             "Task-[{}]-Pipe[{}]-Sub[{}/{}]",
@@ -87,7 +105,16 @@ impl TaskContext {
             memory_pool,
             current_watermark: None,
             config: TaskContextConfig::default(),
+            state_dir,
+            memory_controller,
+            io_manager,
+            safe_epoch,
         }
+    }
+
+    #[inline]
+    pub fn latest_safe_epoch(&self) -> u64 {
+        self.safe_epoch
     }
 
     #[inline]
