@@ -10,6 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+
 use super::{PlanNode, PlanVisitor, PlanVisitorContext, PlanVisitorResult};
 use crate::sql::logical_node::logical::LogicalProgram;
 
@@ -19,6 +21,7 @@ pub struct StreamingTable {
     pub name: String,
     pub comment: Option<String>,
     pub program: LogicalProgram,
+    pub with_options: Option<HashMap<String, String>>,
 }
 
 impl PlanNode for StreamingTable {

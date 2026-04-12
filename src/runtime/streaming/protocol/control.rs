@@ -79,3 +79,16 @@ pub enum StopMode {
 pub fn control_channel(capacity: usize) -> (Sender<ControlCommand>, Receiver<ControlCommand>) {
     mpsc::channel(capacity)
 }
+
+#[derive(Debug, Clone)]
+pub enum JobMasterEvent {
+    CheckpointAck {
+        pipeline_id: u32,
+        epoch: u64,
+    },
+    CheckpointDecline {
+        pipeline_id: u32,
+        epoch: u64,
+        reason: String,
+    },
+}

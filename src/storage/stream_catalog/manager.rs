@@ -17,7 +17,7 @@ use datafusion::common::{Result as DFResult, internal_err, plan_err};
 use prost::Message;
 use protocol::function_stream_graph::FsProgram;
 use protocol::storage::{self as pb, table_definition};
-use tracing::{info, warn};
+use tracing::{info, warn, debug};
 use unicase::UniCase;
 
 use crate::sql::common::constants::sql_field;
@@ -88,6 +88,7 @@ impl CatalogManager {
         table_name: &str,
         fs_program: &FsProgram,
         comment: &str,
+        checkpoint_interval_ms: u64,
     ) -> DFResult<()> {
         let program_bytes = fs_program.encode_to_vec();
         let def = pb::StreamingTableDefinition {
@@ -95,11 +96,13 @@ impl CatalogManager {
             created_at_millis: chrono::Utc::now().timestamp_millis(),
             fs_program_bytes: program_bytes,
             comment: comment.to_string(),
+            checkpoint_interval_ms,
+            latest_checkpoint_epoch: 0,
         };
         let payload = def.encode_to_vec();
         let key = Self::build_streaming_job_key(table_name);
         self.store.put(&key, payload)?;
-        info!(table = %table_name, "Streaming job definition persisted");
+        info!(table = %table_name, interval_ms = checkpoint_interval_ms, "Streaming job definition persisted");
         Ok(())
     }
 
@@ -110,7 +113,40 @@ impl CatalogManager {
         Ok(())
     }
 
-    pub fn load_streaming_job_definitions(&self) -> DFResult<Vec<(String, FsProgram)>> {
+    /// Persist the globally-completed checkpoint epoch after all operators ACK.
+    /// Only advances forward; stale epochs are silently ignored.
+    pub fn commit_job_checkpoint(&self, table_name: &str, epoch: u64) -> DFResult<()> {
+        let key = Self::build_streaming_job_key(table_name);
+
+        let current_payload = self.store.get(&key)?.ok_or_else(|| {
+            datafusion::common::DataFusionError::Plan(format!(
+                "Cannot commit checkpoint: Streaming job '{}' not found in catalog",
+                table_name
+            ))
+        })?;
+
+        let mut def =
+            pb::StreamingTableDefinition::decode(current_payload.as_slice()).map_err(|e| {
+                datafusion::common::DataFusionError::Execution(format!(
+                    "Protobuf decode error: {}",
+                    e
+                ))
+            })?;
+
+        if epoch > def.latest_checkpoint_epoch {
+            def.latest_checkpoint_epoch = epoch;
+            let new_payload = def.encode_to_vec();
+            self.store.put(&key, new_payload)?;
+            debug!(table = %table_name, epoch = epoch, "Checkpoint metadata committed to Catalog");
+        }
+
+        Ok(())
+    }
+
+    /// Returns (table_name, program, checkpoint_interval_ms, latest_checkpoint_epoch).
+    pub fn load_streaming_job_definitions(
+        &self,
+    ) -> DFResult<Vec<(String, FsProgram, u64, u64)>> {
         let records = self.store.scan_prefix(STREAMING_JOB_KEY_PREFIX)?;
         let mut out = Vec::with_capacity(records.len());
         for (key, payload) in records {
@@ -136,7 +172,12 @@ impl CatalogManager {
                     continue;
                 }
             };
-            out.push((def.table_name, program));
+            out.push((
+                def.table_name,
+                program,
+                def.checkpoint_interval_ms,
+                def.latest_checkpoint_epoch,
+            ));
         }
         Ok(out)
     }
@@ -522,12 +563,28 @@ pub fn restore_streaming_jobs_from_store() {
     let mut restored = 0usize;
     let mut failed = 0usize;
 
-    for (table_name, fs_program) in definitions {
+    for (table_name, fs_program, interval_ms, latest_epoch) in definitions {
         let jm = job_manager.clone();
         let name = table_name.clone();
-        match rt.block_on(jm.submit_job(name.clone(), fs_program)) {
+
+        let custom_interval = if interval_ms > 0 {
+            Some(interval_ms)
+        } else {
+            None
+        };
+        let recovery_epoch = if latest_epoch > 0 {
+            Some(latest_epoch)
+        } else {
+            None
+        };
+
+        match rt.block_on(jm.submit_job(name.clone(), fs_program, custom_interval, recovery_epoch))
+        {
             Ok(job_id) => {
-                info!(table = %table_name, job_id = %job_id, "Streaming job restored");
+                info!(
+                    table = %table_name, job_id = %job_id,
+                    epoch = latest_epoch, "Streaming job restored"
+                );
                 restored += 1;
             }
             Err(e) => {

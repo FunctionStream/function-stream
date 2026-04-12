@@ -2215,6 +2215,7 @@ dependencies = [
  "lru",
  "num_cpus",
  "parking_lot",
+ "parquet",
  "petgraph 0.7.1",
  "proctitle",
  "prost",

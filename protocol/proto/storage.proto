@@ -52,6 +52,14 @@ message StreamingTableDefinition {
   // Stored as opaque bytes to avoid coupling storage schema with runtime API protos.
   bytes  fs_program_bytes = 3;
   string comment = 4;
+
+  // User-specified checkpoint interval from WITH clause (e.g. 'checkpoint.interval' = '5000').
+  // 0 or unset means use system default.
+  uint64 checkpoint_interval_ms = 5;
+
+  // Last globally-committed checkpoint epoch.
+  // Updated by JobManager after all operators ACK. Used for crash recovery.
+  uint64 latest_checkpoint_epoch = 6;
 }
 
 // =============================================================================
