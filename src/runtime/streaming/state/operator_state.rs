@@ -188,10 +188,10 @@ impl OperatorStateStore {
         }
 
         for (table_epoch, table) in self.immutable_tables.lock().iter().rev() {
-            if let Some(del_ep) = deleted_epoch {
-                if *table_epoch <= del_ep {
-                    continue;
-                }
+            if let Some(del_ep) = deleted_epoch
+                && *table_epoch <= del_ep
+            {
+                continue;
             }
             if let Some(batches) = table.get(key) {
                 out.extend(batches.clone());
@@ -208,10 +208,10 @@ impl OperatorStateStore {
             let mut acc = Vec::new();
             for path in paths {
                 let file_epoch = extract_epoch(&path);
-                if let Some(del_ep) = deleted_epoch {
-                    if file_epoch <= del_ep {
-                        continue;
-                    }
+                if let Some(del_ep) = deleted_epoch
+                    && file_epoch <= del_ep
+                {
+                    continue;
                 }
 
                 // Native Bloom Filter intercepts empty reads here
@@ -387,8 +387,8 @@ impl OperatorStateStore {
             for path in &files_to_merge {
                 let file_epoch = extract_epoch(path);
                 let file = File::open(path).map_err(StateEngineError::IoError)?;
-                let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
-                while let Some(batch) = reader.next() {
+                let reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
+                for batch in reader {
                     let b = batch?;
                     if let Some(filtered) =
                         filter_tombstones_from_batch(&b, &tombstone_snapshot, file_epoch)?
@@ -482,8 +482,8 @@ impl OperatorStateStore {
             let mut map = HashMap::new();
             for path in tomb_paths {
                 let file = File::open(&path).map_err(StateEngineError::IoError)?;
-                let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
-                while let Some(batch) = reader.next() {
+                let reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
+                for batch in reader {
                     let batch = batch?;
                     let key_col = batch
                         .column(0)
@@ -527,9 +527,9 @@ impl OperatorStateStore {
                 let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
                 let schema = builder.parquet_schema();
                 let mask = ProjectionMask::leaves(schema, vec![schema.columns().len() - 1]);
-                let mut reader = builder.with_projection(mask).build()?;
+                let reader = builder.with_projection(mask).build()?;
 
-                while let Some(batch) = reader.next() {
+                for batch in reader {
                     let batch = batch?;
                     let key_col = batch
                         .column(0)

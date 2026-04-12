@@ -840,17 +840,16 @@ impl Operator for IncrementalAggregatingFunc {
                         );
                     }
 
-                    if let Some(accs) = self.accumulators.get_mut(&key) {
-                        if let Some(IncrementalState::Batch {
+                    if let Some(accs) = self.accumulators.get_mut(&key)
+                        && let Some(IncrementalState::Batch {
                             data,
                             changed_values,
                             ..
                         }) = accs.get_mut(acc_idx)
-                        {
-                            let vk = Key(Arc::new(args_row.clone()));
-                            data.insert(vk.clone(), BatchData { count, generation });
-                            changed_values.insert(vk);
-                        }
+                    {
+                        let vk = Key(Arc::new(args_row.clone()));
+                        data.insert(vk.clone(), BatchData { count, generation });
+                        changed_values.insert(vk);
                     }
                 }
                 info!(rows = combined.num_rows(), "Restored batch detail state.");

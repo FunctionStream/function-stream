@@ -425,6 +425,7 @@ impl JobManager {
             .collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_and_spawn_pipeline(
         &self,
         job_id: String,

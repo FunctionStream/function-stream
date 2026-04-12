@@ -78,6 +78,7 @@ pub struct TaskContext {
 }
 
 impl TaskContext {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         job_id: String,
         pipeline_id: u32,
