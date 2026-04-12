@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use anyhow::{Result, anyhow, bail};
-use arrow::compute::{partition, sort_to_indices, take};
+use arrow::compute::{concat_batches, partition, sort_to_indices, take};
 use arrow_array::{Array, PrimitiveArray, RecordBatch, types::TimestampNanosecondType};
 use arrow_schema::SchemaRef;
 use datafusion::common::ScalarValue;
@@ -27,20 +27,49 @@ use datafusion_proto::{
 };
 use futures::StreamExt;
 use prost::Message;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tracing::info;
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
+use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
 use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
 use protocol::function_stream_graph::SlidingWindowAggregateOperator;
 // ============================================================================
+// Dual-layer state key: [StateType(1B)] + [Timestamp(8B BE)]
+//   STATE_TYPE_RAW     = 0  (raw input data, pending partial aggregation)
+//   STATE_TYPE_PARTIAL  = 1  (pre-aggregated pane results)
+// ============================================================================
+
+const STATE_TYPE_RAW: u8 = 0;
+const STATE_TYPE_PARTIAL: u8 = 1;
+
+fn build_state_key(state_type: u8, ts_nanos: u64) -> Vec<u8> {
+    let mut key = Vec::with_capacity(9);
+    key.push(state_type);
+    key.extend_from_slice(&ts_nanos.to_be_bytes());
+    key
+}
+
+fn parse_state_key(key: &[u8]) -> Option<(u8, u64)> {
+    if key.len() == 9 {
+        let mut ts_bytes = [0u8; 8];
+        ts_bytes.copy_from_slice(&key[1..9]);
+        Some((key[0], u64::from_be_bytes(ts_bytes)))
+    } else {
+        None
+    }
+}
+
+// ============================================================================
+// RecordBatchTier & TieredRecordBatchHolder
 // ============================================================================
 
 #[derive(Default, Debug)]
@@ -263,6 +292,11 @@ pub struct SlidingWindowOperator {
 
     active_bins: BTreeMap<SystemTime, ActiveBin>,
     tiered_record_batches: TieredRecordBatchHolder,
+
+    // LSM-Tree state engine with dual-layer index
+    state_store: Option<Arc<OperatorStateStore>>,
+    pending_raw_bins: BTreeSet<u64>,
+    pending_partial_bins: BTreeSet<u64>,
 }
 
 impl SlidingWindowOperator {
@@ -309,10 +343,80 @@ impl Operator for SlidingWindowOperator {
         "SlidingWindow"
     }
 
-    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
+    // Recovery: restore dual-layer state (partial panes + raw active bins)
+    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
+        let store = OperatorStateStore::new(
+            ctx.pipeline_id,
+            ctx.state_dir.clone(),
+            ctx.memory_controller.clone(),
+            ctx.io_manager.clone(),
+        )
+        .map_err(|e| anyhow!("Failed to init state store: {e}"))?;
+
+        let safe_epoch = ctx.latest_safe_epoch();
+        let active_keys = store
+            .restore_metadata(safe_epoch)
+            .await
+            .map_err(|e| anyhow!("State recovery failed: {e}"))?;
+
+        let mut raw_recovery_batches = Vec::new();
+
+        for key in active_keys {
+            if let Some((state_type, ts_nanos)) = parse_state_key(&key) {
+                let batches = store
+                    .get_batches(&key)
+                    .await
+                    .map_err(|e| anyhow!("{e}"))?;
+                if batches.is_empty() {
+                    continue;
+                }
+
+                if state_type == STATE_TYPE_PARTIAL {
+                    let bin_start = from_nanos(ts_nanos as u128);
+                    for b in batches {
+                        self.tiered_record_batches.insert(b, bin_start)?;
+                    }
+                    self.pending_partial_bins.insert(ts_nanos);
+                } else if state_type == STATE_TYPE_RAW {
+                    let schema = batches[0].schema();
+                    let combined = concat_batches(&schema, &batches)?;
+                    raw_recovery_batches.push((ts_nanos, combined));
+                }
+            }
+        }
+
+        // Temporal ordering guarantees correct DataFusion session replay
+        raw_recovery_batches.sort_by_key(|(ts, _)| *ts);
+
+        for (ts_nanos, batch) in raw_recovery_batches {
+            let bin_start = from_nanos(ts_nanos as u128);
+            let slot = self.active_bins.entry(bin_start).or_default();
+            Self::ensure_bin_running(
+                slot,
+                self.partial_aggregation_plan.clone(),
+                &self.receiver_hook,
+            )?;
+
+            slot.sender
+                .as_ref()
+                .unwrap()
+                .send(batch)
+                .map_err(|e| anyhow!("{e}"))?;
+            self.pending_raw_bins.insert(ts_nanos);
+        }
+
+        info!(
+            pipeline_id = ctx.pipeline_id,
+            partial_bins = self.pending_partial_bins.len(),
+            raw_bins = self.pending_raw_bins.len(),
+            "Sliding Window Operator recovered state."
+        );
+
+        self.state_store = Some(store);
         Ok(())
     }
 
+    // Write-ahead: persist raw data (Type 0) before in-memory computation
     async fn process_data(
         &mut self,
         _input_idx: usize,
@@ -340,6 +444,7 @@ impl Operator for SlidingWindowOperator {
         let partition_ranges = partition(std::slice::from_ref(&sorted_bins))?.ranges();
 
         let watermark = ctx.current_watermark();
+        let store = self.state_store.clone().expect("State store not initialized");
 
         for range in partition_ranges {
             let bin_start = from_nanos(typed_bin.value(range.start) as u128);
@@ -351,8 +456,16 @@ impl Operator for SlidingWindowOperator {
             }
 
             let bin_batch = sorted.slice(range.start, range.end - range.start);
-            let slot = self.active_bins.entry(bin_start).or_default();
+            let bin_start_nanos = to_nanos(bin_start) as u64;
 
+            let key = build_state_key(STATE_TYPE_RAW, bin_start_nanos);
+            store
+                .put(key, bin_batch.clone())
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+            self.pending_raw_bins.insert(bin_start_nanos);
+
+            let slot = self.active_bins.entry(bin_start).or_default();
             Self::ensure_bin_running(
                 slot,
                 self.partial_aggregation_plan.clone(),
@@ -371,6 +484,7 @@ impl Operator for SlidingWindowOperator {
         Ok(vec![])
     }
 
+    // State morphing (Type 0 → Type 1) and dual-layer GC
     async fn process_watermark(
         &mut self,
         watermark: Watermark,
@@ -380,6 +494,7 @@ impl Operator for SlidingWindowOperator {
             return Ok(vec![]);
         };
         let watermark_bin = self.bin_start(current_time);
+        let store = self.state_store.clone().expect("State store not initialized");
 
         let mut final_outputs = Vec::new();
 
@@ -398,12 +513,36 @@ impl Operator for SlidingWindowOperator {
                 .remove(&bin_start)
                 .ok_or_else(|| anyhow!("missing active bin"))?;
             let bin_end = bin_start + self.slide;
+            let bin_start_nanos = to_nanos(bin_start) as u64;
 
+            // Phase 1: drain partial aggregation from DataFusion
             bin.close_and_drain().await?;
-            for b in bin.finished_batches {
-                self.tiered_record_batches.insert(b, bin_start)?;
+
+            // Phase 2: state morphing — persist partial result (Type 1), feed tiered holder
+            if !bin.finished_batches.is_empty() {
+                let schema = bin.finished_batches[0].schema();
+                let combined_partial = concat_batches(&schema, &bin.finished_batches)?;
+
+                let p_key = build_state_key(STATE_TYPE_PARTIAL, bin_start_nanos);
+                store
+                    .put(p_key, combined_partial)
+                    .await
+                    .map_err(|e| anyhow!("{e}"))?;
+                self.pending_partial_bins.insert(bin_start_nanos);
+
+                for b in bin.finished_batches {
+                    self.tiered_record_batches.insert(b, bin_start)?;
+                }
             }
 
+            // Phase 3: tombstone raw data (Type 0) — no longer needed after partial is saved
+            let r_key = build_state_key(STATE_TYPE_RAW, bin_start_nanos);
+            store
+                .remove_batches(r_key)
+                .map_err(|e| anyhow!("{e}"))?;
+            self.pending_raw_bins.remove(&bin_start_nanos);
+
+            // Phase 4: compute final sliding window result
             let interval_start = bin_end - self.width;
             let interval_end = bin_end;
 
@@ -436,8 +575,25 @@ impl Operator for SlidingWindowOperator {
                 final_outputs.push(StreamOutput::Forward(batch?));
             }
 
-            self.tiered_record_batches
-                .delete_before(bin_end + self.slide - self.width)?;
+            // Phase 5: GC expired partial bins (Type 1) that fall outside the window
+            let cutoff_time = bin_end + self.slide - self.width;
+            self.tiered_record_batches.delete_before(cutoff_time)?;
+
+            let cutoff_nanos = to_nanos(cutoff_time) as u64;
+            let expired_partials: Vec<u64> = self
+                .pending_partial_bins
+                .iter()
+                .take_while(|&&ts| ts < cutoff_nanos)
+                .copied()
+                .collect();
+
+            for ts in expired_partials {
+                let p_key = build_state_key(STATE_TYPE_PARTIAL, ts);
+                store
+                    .remove_batches(p_key)
+                    .map_err(|e| anyhow!("{e}"))?;
+                self.pending_partial_bins.remove(&ts);
+            }
         }
 
         Ok(final_outputs)
@@ -445,9 +601,14 @@ impl Operator for SlidingWindowOperator {
 
     async fn snapshot_state(
         &mut self,
-        _barrier: CheckpointBarrier,
+        barrier: CheckpointBarrier,
         _ctx: &mut TaskContext,
     ) -> Result<()> {
+        self.state_store
+            .as_ref()
+            .expect("State store not initialized")
+            .snapshot_epoch(barrier.epoch as u64)
+            .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
         Ok(())
     }
 
@@ -531,6 +692,9 @@ impl SlidingAggregatingWindowConstructor {
             final_batches_passer,
             active_bins: BTreeMap::new(),
             tiered_record_batches: TieredRecordBatchHolder::new(vec![slide])?,
+            state_store: None,
+            pending_raw_bins: BTreeSet::new(),
+            pending_partial_bins: BTreeSet::new(),
         })
     }
 }
