@@ -759,10 +759,7 @@ impl Operator for SessionWindowOperator {
                         .insert(ts);
                 }
 
-                let batches = store
-                    .get_batches(&key)
-                    .await
-                    .map_err(|e| anyhow!("{e}"))?;
+                let batches = store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?;
                 recovered_batches.extend(batches);
             }
 
@@ -836,8 +833,7 @@ impl Operator for SessionWindowOperator {
             if let Some(ts_set) = self.pending_timestamps.get_mut(row_key) {
                 for session_res in session_results {
                     let start_nanos = to_nanos(session_res.window_start) as u64;
-                    let end_nanos =
-                        to_nanos(session_res.window_end - self.config.gap) as u64;
+                    let end_nanos = to_nanos(session_res.window_end - self.config.gap) as u64;
 
                     let expired_ts: Vec<u64> =
                         ts_set.range(start_nanos..=end_nanos).copied().collect();
@@ -868,7 +864,10 @@ impl Operator for SessionWindowOperator {
             .snapshot_epoch(barrier.epoch as u64)
             .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
 
-        info!(epoch = barrier.epoch, "Session Window Operator snapshotted state.");
+        info!(
+            epoch = barrier.epoch,
+            "Session Window Operator snapshotted state."
+        );
         Ok(())
     }
 

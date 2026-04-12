@@ -363,10 +363,7 @@ impl Operator for SlidingWindowOperator {
 
         for key in active_keys {
             if let Some((state_type, ts_nanos)) = parse_state_key(&key) {
-                let batches = store
-                    .get_batches(&key)
-                    .await
-                    .map_err(|e| anyhow!("{e}"))?;
+                let batches = store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?;
                 if batches.is_empty() {
                     continue;
                 }
@@ -444,7 +441,10 @@ impl Operator for SlidingWindowOperator {
         let partition_ranges = partition(std::slice::from_ref(&sorted_bins))?.ranges();
 
         let watermark = ctx.current_watermark();
-        let store = self.state_store.clone().expect("State store not initialized");
+        let store = self
+            .state_store
+            .clone()
+            .expect("State store not initialized");
 
         for range in partition_ranges {
             let bin_start = from_nanos(typed_bin.value(range.start) as u128);
@@ -494,7 +494,10 @@ impl Operator for SlidingWindowOperator {
             return Ok(vec![]);
         };
         let watermark_bin = self.bin_start(current_time);
-        let store = self.state_store.clone().expect("State store not initialized");
+        let store = self
+            .state_store
+            .clone()
+            .expect("State store not initialized");
 
         let mut final_outputs = Vec::new();
 
@@ -537,9 +540,7 @@ impl Operator for SlidingWindowOperator {
 
             // Phase 3: tombstone raw data (Type 0) — no longer needed after partial is saved
             let r_key = build_state_key(STATE_TYPE_RAW, bin_start_nanos);
-            store
-                .remove_batches(r_key)
-                .map_err(|e| anyhow!("{e}"))?;
+            store.remove_batches(r_key).map_err(|e| anyhow!("{e}"))?;
             self.pending_raw_bins.remove(&bin_start_nanos);
 
             // Phase 4: compute final sliding window result
@@ -589,9 +590,7 @@ impl Operator for SlidingWindowOperator {
 
             for ts in expired_partials {
                 let p_key = build_state_key(STATE_TYPE_PARTIAL, ts);
-                store
-                    .remove_batches(p_key)
-                    .map_err(|e| anyhow!("{e}"))?;
+                store.remove_batches(p_key).map_err(|e| anyhow!("{e}"))?;
                 self.pending_partial_bins.remove(&ts);
             }
         }

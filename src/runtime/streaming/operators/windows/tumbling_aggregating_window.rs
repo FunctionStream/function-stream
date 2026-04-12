@@ -188,10 +188,7 @@ impl Operator for TumblingWindowOperator {
                 if let Some(ts_nanos) = Self::extract_timestamp(&key) {
                     let bin_start = from_nanos(ts_nanos as u128);
 
-                    let batches = store
-                        .get_batches(&key)
-                        .await
-                        .map_err(|e| anyhow!("{e}"))?;
+                    let batches = store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?;
                     if batches.is_empty() {
                         continue;
                     }

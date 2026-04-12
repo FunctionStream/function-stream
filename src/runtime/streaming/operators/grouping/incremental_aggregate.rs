@@ -466,8 +466,7 @@ impl IncrementalAggregatingFunc {
                 let state = accumulator.state().unwrap_or_else(|_| {
                     let state = accumulator.state().unwrap();
                     *accumulator = expr.create_sliding_accumulator().unwrap();
-                    let states: Vec<_> =
-                        state.iter().map(|s| s.to_array()).try_collect().unwrap();
+                    let states: Vec<_> = state.iter().map(|s| s.to_array()).try_collect().unwrap();
                     accumulator.merge_batch(&states).unwrap();
                     state
                 });
@@ -749,19 +748,11 @@ impl Operator for IncrementalAggregatingFunc {
 
             for key in active_keys {
                 if key == KEY_SLIDING_SNAPSHOT {
-                    sliding_batches.extend(
-                        store
-                            .get_batches(&key)
-                            .await
-                            .map_err(|e| anyhow!("{e}"))?,
-                    );
+                    sliding_batches
+                        .extend(store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?);
                 } else if key == KEY_BATCH_SNAPSHOT {
-                    batch_batches.extend(
-                        store
-                            .get_batches(&key)
-                            .await
-                            .map_err(|e| anyhow!("{e}"))?,
-                    );
+                    batch_batches
+                        .extend(store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?);
                 }
             }
 
@@ -774,8 +765,7 @@ impl Operator for IncrementalAggregatingFunc {
 
             // Restore sliding (reversible) accumulator state
             if !sliding_batches.is_empty() {
-                let combined =
-                    concat_batches(&self.sliding_state_schema.schema, &sliding_batches)?;
+                let combined = concat_batches(&self.sliding_state_schema.schema, &sliding_batches)?;
                 let key_cols: Vec<ArrayRef> = combined.columns()[0..num_keys].to_vec();
                 let aggregate_states: Vec<Vec<ArrayRef>> = self
                     .aggregates
@@ -807,8 +797,7 @@ impl Operator for IncrementalAggregatingFunc {
 
             // Restore batch (non-reversible) detail dictionaries
             if !batch_batches.is_empty() {
-                let combined =
-                    concat_batches(&self.batch_state_schema.schema, &batch_batches)?;
+                let combined = concat_batches(&self.batch_state_schema.schema, &batch_batches)?;
                 let key_cols: Vec<ArrayRef> = combined.columns()[0..num_keys].to_vec();
 
                 let acc_idx_col = combined
@@ -859,21 +848,12 @@ impl Operator for IncrementalAggregatingFunc {
                         }) = accs.get_mut(acc_idx)
                         {
                             let vk = Key(Arc::new(args_row.clone()));
-                            data.insert(
-                                vk.clone(),
-                                BatchData {
-                                    count,
-                                    generation,
-                                },
-                            );
+                            data.insert(vk.clone(), BatchData { count, generation });
                             changed_values.insert(vk);
                         }
                     }
                 }
-                info!(
-                    rows = combined.num_rows(),
-                    "Restored batch detail state."
-                );
+                info!(rows = combined.num_rows(), "Restored batch detail state.");
             }
 
             info!(
@@ -934,8 +914,7 @@ impl Operator for IncrementalAggregatingFunc {
 
         // Full snapshot of sliding (reversible) accumulator state
         if let Some(cols) = self.checkpoint_sliding()? {
-            let batch =
-                RecordBatch::try_new(self.sliding_state_schema.schema.clone(), cols)?;
+            let batch = RecordBatch::try_new(self.sliding_state_schema.schema.clone(), cols)?;
             store
                 .put(KEY_SLIDING_SNAPSHOT.to_vec(), batch)
                 .await
@@ -944,8 +923,7 @@ impl Operator for IncrementalAggregatingFunc {
 
         // Full snapshot of batch (non-reversible) detail state
         if let Some(cols) = self.checkpoint_batch()? {
-            let batch =
-                RecordBatch::try_new(self.batch_state_schema.schema.clone(), cols)?;
+            let batch = RecordBatch::try_new(self.batch_state_schema.schema.clone(), cols)?;
             store
                 .put(KEY_BATCH_SNAPSHOT.to_vec(), batch)
                 .await
@@ -957,7 +935,10 @@ impl Operator for IncrementalAggregatingFunc {
             .snapshot_epoch(barrier.epoch as u64)
             .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
 
-        info!(epoch = barrier.epoch, "Updating Aggregate snapshotted successfully.");
+        info!(
+            epoch = barrier.epoch,
+            "Updating Aggregate snapshotted successfully."
+        );
 
         self.updated_keys.clear();
 

@@ -227,10 +227,7 @@ impl Operator for WindowFunctionOperator {
         for ts in expired_ts {
             let key = Self::build_state_key(ts);
 
-            let batches = store
-                .get_batches(&key)
-                .await
-                .map_err(|e| anyhow!("{e}"))?;
+            let batches = store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?;
 
             if !batches.is_empty() {
                 let (tx, rx) = unbounded_channel();
@@ -252,9 +249,7 @@ impl Operator for WindowFunctionOperator {
                 }
             }
 
-            store
-                .remove_batches(key)
-                .map_err(|e| anyhow!("{e}"))?;
+            store.remove_batches(key).map_err(|e| anyhow!("{e}"))?;
             self.pending_timestamps.remove(&ts);
         }
 
