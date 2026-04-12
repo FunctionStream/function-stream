@@ -1,6 +1,5 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
-//
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
@@ -11,18 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Streaming actor runtime (vendored from Arroyo `arroyo-actor-runtime`).
-
-pub mod api;
 pub mod error;
-pub mod execution;
-pub mod factory;
-pub mod format;
-pub mod job;
-pub mod memory;
-pub mod network;
-pub mod operators;
-pub mod protocol;
-pub mod state;
+mod io_manager;
+pub mod metrics;
+mod operator_state;
 
-pub use protocol::StreamOutput;
+#[allow(unused_imports)]
+pub use error::{Result, StateEngineError};
+#[allow(unused_imports)]
+pub use io_manager::{CompactJob, IoManager, IoPool, SpillJob};
+#[allow(unused_imports)]
+pub use metrics::{NoopMetricsCollector, StateMetricsCollector};
+#[allow(unused_imports)]
+pub use operator_state::{MemoryController, OperatorStateStore};

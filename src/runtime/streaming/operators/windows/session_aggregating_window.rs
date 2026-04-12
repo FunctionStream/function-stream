@@ -30,15 +30,17 @@ use datafusion_proto::physical_plan::AsExecutionPlan;
 use datafusion_proto::protobuf::PhysicalPlanNode;
 use futures::StreamExt;
 use prost::Message;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tracing::info;
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
+use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::converter::Converter;
 use crate::sql::common::{
     CheckpointBarrier, FsSchema, FsSchemaRef, Watermark, from_nanos, to_nanos,
@@ -170,6 +172,7 @@ impl ActiveSession {
     }
 }
 
+#[derive(Clone)]
 struct SessionWindowResult {
     window_start: SystemTime,
     window_end: SystemTime,
@@ -389,9 +392,39 @@ pub struct SessionWindowOperator {
     session_states: HashMap<Vec<u8>, KeySessionState>,
     pq_watermark_actions: BTreeMap<SystemTime, HashSet<Vec<u8>>>,
     pq_start_times: BTreeMap<SystemTime, HashSet<Vec<u8>>>,
+
+    // LSM-Tree state engine and per-routing-key timestamp index
+    state_store: Option<Arc<OperatorStateStore>>,
+    pending_timestamps: HashMap<Vec<u8>, BTreeSet<u64>>,
 }
 
 impl SessionWindowOperator {
+    // State key: [RoutingKey bytes] + [8-byte big-endian timestamp]
+    fn build_state_key(routing_key: &[u8], ts_nanos: u64) -> Vec<u8> {
+        let mut key = Vec::with_capacity(routing_key.len() + 8);
+        key.extend_from_slice(routing_key);
+        key.extend_from_slice(&ts_nanos.to_be_bytes());
+        key
+    }
+
+    fn extract_timestamp(key: &[u8]) -> Option<u64> {
+        if key.len() >= 8 {
+            let mut ts_bytes = [0u8; 8];
+            ts_bytes.copy_from_slice(&key[key.len() - 8..]);
+            Some(u64::from_be_bytes(ts_bytes))
+        } else {
+            None
+        }
+    }
+
+    fn extract_routing_key(key: &[u8]) -> Vec<u8> {
+        if key.len() >= 8 {
+            key[..key.len() - 8].to_vec()
+        } else {
+            Vec::new()
+        }
+    }
+
     fn filter_batch_by_time(
         &self,
         batch: RecordBatch,
@@ -430,6 +463,7 @@ impl SessionWindowOperator {
         &mut self,
         sorted_batch: RecordBatch,
         watermark: Option<SystemTime>,
+        is_recovery_replay: bool,
     ) -> Result<()> {
         let partition_ranges = if !self.config.input_schema_ref.has_routing_keys() {
             std::iter::once(0..sorted_batch.num_rows()).collect::<Vec<_>>()
@@ -469,6 +503,32 @@ impl SessionWindowOperator {
                     .as_ref()
                     .to_vec()
             };
+
+            // Write-ahead persistence: skip during recovery replay to avoid duplicate writes
+            if !is_recovery_replay {
+                let ts_col = key_batch
+                    .column(self.config.input_schema_ref.timestamp_index)
+                    .as_any()
+                    .downcast_ref::<TimestampNanosecondArray>()
+                    .unwrap();
+                let ts_nanos = ts_col.value(0) as u64;
+
+                let state_key = Self::build_state_key(&row_key, ts_nanos);
+                let store = self
+                    .state_store
+                    .as_ref()
+                    .expect("State store not initialized");
+
+                store
+                    .put(state_key, key_batch.clone())
+                    .await
+                    .map_err(|e| anyhow!("{e}"))?;
+
+                self.pending_timestamps
+                    .entry(row_key.clone())
+                    .or_default()
+                    .insert(ts_nanos);
+            }
 
             let state = self
                 .session_states
@@ -529,7 +589,10 @@ impl SessionWindowOperator {
         Ok(())
     }
 
-    async fn evaluate_watermark(&mut self, watermark: SystemTime) -> Result<Vec<RecordBatch>> {
+    async fn evaluate_watermark_with_meta(
+        &mut self,
+        watermark: SystemTime,
+    ) -> Result<Vec<(Vec<u8>, Vec<SessionWindowResult>)>> {
         let mut emit_results: Vec<(Vec<u8>, Vec<SessionWindowResult>)> = Vec::new();
 
         loop {
@@ -588,11 +651,7 @@ impl SessionWindowOperator {
             }
         }
 
-        if emit_results.is_empty() {
-            return Ok(vec![]);
-        }
-
-        Ok(vec![self.format_to_arrow(emit_results)?])
+        Ok(emit_results)
     }
 
     fn format_to_arrow(
@@ -666,10 +725,68 @@ impl Operator for SessionWindowOperator {
         "SessionWindow"
     }
 
-    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
+    // Recovery & event sourcing: rebuild in-memory sessions from LSM-Tree
+    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
+        let store = OperatorStateStore::new(
+            ctx.pipeline_id,
+            ctx.state_dir.clone(),
+            ctx.memory_controller.clone(),
+            ctx.io_manager.clone(),
+        )
+        .map_err(|e| anyhow!("Failed to init state store: {e}"))?;
+
+        let safe_epoch = ctx.latest_safe_epoch();
+        let active_keys = store
+            .restore_metadata(safe_epoch)
+            .await
+            .map_err(|e| anyhow!("State recovery failed: {e}"))?;
+
+        if !active_keys.is_empty() {
+            info!(
+                pipeline_id = ctx.pipeline_id,
+                key_count = active_keys.len(),
+                "Session Operator recovering active state keys from LSM-Tree..."
+            );
+
+            let mut recovered_batches = Vec::new();
+
+            for key in active_keys {
+                if let Some(ts) = Self::extract_timestamp(&key) {
+                    let row_key = Self::extract_routing_key(&key);
+                    self.pending_timestamps
+                        .entry(row_key)
+                        .or_default()
+                        .insert(ts);
+                }
+
+                let batches = store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?;
+                recovered_batches.extend(batches);
+            }
+
+            // Temporal ordering is critical: replay must preserve watermark/session merge invariants
+            recovered_batches.sort_by_key(|b| {
+                b.column(self.config.input_schema_ref.timestamp_index)
+                    .as_any()
+                    .downcast_ref::<TimestampNanosecondArray>()
+                    .map(|ts| ts.value(0))
+                    .unwrap_or(0)
+            });
+
+            for batch in recovered_batches {
+                self.ingest_sorted_batch(batch, None, true).await?;
+            }
+
+            info!(
+                pipeline_id = ctx.pipeline_id,
+                "Session Window Operator successfully replayed events and rebuilt in-memory sessions."
+            );
+        }
+
+        self.state_store = Some(store);
         Ok(())
     }
 
+    // Write-ahead: persist raw data before in-memory ingestion
     async fn process_data(
         &mut self,
         _input_idx: usize,
@@ -685,12 +802,13 @@ impl Operator for SessionWindowOperator {
 
         let sorted_batch = self.sort_batch(&filtered_batch)?;
 
-        self.ingest_sorted_batch(sorted_batch, watermark_time)
+        self.ingest_sorted_batch(sorted_batch, watermark_time, false)
             .await?;
 
         Ok(vec![])
     }
 
+    // Watermark-driven session closure with precise LSM-Tree garbage collection
     async fn process_watermark(
         &mut self,
         watermark: Watermark,
@@ -700,18 +818,56 @@ impl Operator for SessionWindowOperator {
             return Ok(vec![]);
         };
 
-        let output_batches = self.evaluate_watermark(current_time).await?;
-        Ok(output_batches
-            .into_iter()
-            .map(StreamOutput::Forward)
-            .collect())
+        let completed_sessions = self.evaluate_watermark_with_meta(current_time).await?;
+        if completed_sessions.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let store = self
+            .state_store
+            .as_ref()
+            .expect("State store not initialized");
+
+        // GC: tombstone expired raw data covered by closed sessions
+        for (row_key, session_results) in &completed_sessions {
+            if let Some(ts_set) = self.pending_timestamps.get_mut(row_key) {
+                for session_res in session_results {
+                    let start_nanos = to_nanos(session_res.window_start) as u64;
+                    let end_nanos = to_nanos(session_res.window_end - self.config.gap) as u64;
+
+                    let expired_ts: Vec<u64> =
+                        ts_set.range(start_nanos..=end_nanos).copied().collect();
+
+                    for ts in expired_ts {
+                        let state_key = Self::build_state_key(row_key, ts);
+                        store
+                            .remove_batches(state_key)
+                            .map_err(|e| anyhow!("{e}"))?;
+                        ts_set.remove(&ts);
+                    }
+                }
+            }
+        }
+
+        let output_batch = self.format_to_arrow(completed_sessions)?;
+        Ok(vec![StreamOutput::Forward(output_batch)])
     }
 
     async fn snapshot_state(
         &mut self,
-        _barrier: CheckpointBarrier,
+        barrier: CheckpointBarrier,
         _ctx: &mut TaskContext,
     ) -> Result<()> {
+        self.state_store
+            .as_ref()
+            .expect("State store not initialized")
+            .snapshot_epoch(barrier.epoch as u64)
+            .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
+
+        info!(
+            epoch = barrier.epoch,
+            "Session Window Operator snapshotted state."
+        );
         Ok(())
     }
 
@@ -797,6 +953,8 @@ impl SessionAggregatingWindowConstructor {
             pq_start_times: BTreeMap::new(),
             pq_watermark_actions: BTreeMap::new(),
             row_converter,
+            state_store: None,
+            pending_timestamps: HashMap::new(),
         })
     }
 }

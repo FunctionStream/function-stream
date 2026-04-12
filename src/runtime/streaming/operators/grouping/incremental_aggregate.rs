@@ -11,15 +11,17 @@
 // limitations under the License.
 
 use crate::sql::common::constants::updating_state_field;
-use anyhow::{Result, bail};
-use arrow::compute::max_array;
+use anyhow::{Result, anyhow, bail};
+use arrow::compute::{concat_batches, max_array};
 use arrow::row::{RowConverter, SortField};
 use arrow_array::builder::{
     BinaryBuilder, TimestampNanosecondBuilder, UInt32Builder, UInt64Builder,
 };
 use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
-use arrow_array::{Array, ArrayRef, BooleanArray, RecordBatch, StructArray};
+use arrow_array::{
+    Array, ArrayRef, BinaryArray, BooleanArray, RecordBatch, StructArray, UInt32Array, UInt64Array,
+};
 use arrow_schema::{DataType, Field, FieldRef, Schema, SchemaBuilder, TimeUnit};
 use datafusion::common::{Result as DFResult, ScalarValue};
 use datafusion::physical_expr::aggregate::AggregateFunctionExpr;
@@ -36,7 +38,7 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant, SystemTime};
 use std::{collections::HashMap, mem, sync::Arc};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 // =========================================================================
 // =========================================================================
 use crate::runtime::streaming::StreamOutput;
@@ -44,6 +46,7 @@ use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::Operator;
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::streaming::operators::{Key, UpdatingCache};
+use crate::runtime::streaming::state::OperatorStateStore;
 use crate::runtime::util::decode_aggregate;
 use crate::sql::common::{
     CheckpointBarrier, FsSchema, TIMESTAMP_FIELD, UPDATING_META_FIELD, Watermark, to_nanos,
@@ -213,9 +216,14 @@ pub struct IncrementalAggregatingFunc {
     ttl: Duration,
     key_converter: RowConverter,
     new_generation: u64,
+
+    state_store: Option<Arc<OperatorStateStore>>,
 }
 
 static GLOBAL_KEY: LazyLock<Arc<Vec<u8>>> = LazyLock::new(|| Arc::new(Vec::new()));
+
+const KEY_SLIDING_SNAPSHOT: &[u8] = &[0x01];
+const KEY_BATCH_SNAPSHOT: &[u8] = &[0x02];
 
 impl IncrementalAggregatingFunc {
     fn update_batch(
@@ -437,40 +445,38 @@ impl IncrementalAggregatingFunc {
     // =========================================================================
 
     fn checkpoint_sliding(&mut self) -> DFResult<Option<Vec<ArrayRef>>> {
-        if self.updated_keys.is_empty() {
+        let keys = self.accumulators.keys();
+        if keys.is_empty() {
             return Ok(None);
         }
 
         let mut states = vec![vec![]; self.sliding_state_schema.schema.fields.len()];
         let parser = self.key_converter.parser();
-        let mut generation_builder = UInt64Builder::with_capacity(self.updated_keys.len());
+        let mut generation_builder = UInt64Builder::with_capacity(keys.len());
 
-        let mut cols = self
-            .key_converter
-            .convert_rows(self.updated_keys.keys().map(|k| {
-                let (accumulators, generation) =
-                    self.accumulators.get_mut_generation(k.0.as_ref()).unwrap();
-                generation_builder.append_value(generation);
+        let mut cols = self.key_converter.convert_rows(keys.iter().map(|k| {
+            let (accumulators, generation) =
+                self.accumulators.get_mut_generation(k.0.as_ref()).unwrap();
+            generation_builder.append_value(generation);
 
-                for (state, agg) in accumulators.iter_mut().zip(self.aggregates.iter()) {
-                    let IncrementalState::Sliding { expr, accumulator } = state else {
-                        continue;
-                    };
-                    let state = accumulator.state().unwrap_or_else(|_| {
-                        let state = accumulator.state().unwrap();
-                        *accumulator = expr.create_sliding_accumulator().unwrap();
-                        let states: Vec<_> =
-                            state.iter().map(|s| s.to_array()).try_collect().unwrap();
-                        accumulator.merge_batch(&states).unwrap();
-                        state
-                    });
+            for (state, agg) in accumulators.iter_mut().zip(self.aggregates.iter()) {
+                let IncrementalState::Sliding { expr, accumulator } = state else {
+                    continue;
+                };
+                let state = accumulator.state().unwrap_or_else(|_| {
+                    let state = accumulator.state().unwrap();
+                    *accumulator = expr.create_sliding_accumulator().unwrap();
+                    let states: Vec<_> = state.iter().map(|s| s.to_array()).try_collect().unwrap();
+                    accumulator.merge_batch(&states).unwrap();
+                    state
+                });
 
-                    for (idx, v) in agg.state_cols.iter().zip(state.into_iter()) {
-                        states[*idx].push(v);
-                    }
+                for (idx, v) in agg.state_cols.iter().zip(state.into_iter()) {
+                    states[*idx].push(v);
                 }
-                parser.parse(k.0.as_ref())
-            }))?;
+            }
+            parser.parse(k.0.as_ref())
+        }))?;
 
         cols.extend(
             states
@@ -482,7 +488,7 @@ impl IncrementalAggregatingFunc {
         let generations = generation_builder.finish();
         self.new_generation = self
             .new_generation
-            .max(max_array::<UInt64Type, _>(&generations).unwrap());
+            .max(max_array::<UInt64Type, _>(&generations).unwrap_or(0));
         cols.push(Arc::new(generations));
 
         Ok(Some(cols))
@@ -496,12 +502,22 @@ impl IncrementalAggregatingFunc {
         {
             return Ok(None);
         }
-        if self.updated_keys.is_empty() {
+
+        let keys = self.accumulators.keys();
+
+        let mut size = 0;
+        for k in &keys {
+            for state in self.accumulators.get_mut(k.0.as_ref()).unwrap().iter_mut() {
+                if let IncrementalState::Batch { data, .. } = state {
+                    size += data.len();
+                }
+            }
+        }
+        if size == 0 {
             return Ok(None);
         }
 
-        let size = self.updated_keys.len();
-        let mut rows = Vec::with_capacity(size);
+        let mut key_bytes_for_rows = Vec::with_capacity(size);
         let mut accumulator_builder = UInt32Builder::with_capacity(size);
         let mut args_row_builder = BinaryBuilder::with_capacity(size, size * 4);
         let mut count_builder = UInt64Builder::with_capacity(size);
@@ -509,10 +525,8 @@ impl IncrementalAggregatingFunc {
         let mut generation_builder = UInt64Builder::with_capacity(size);
 
         let now = to_nanos(SystemTime::now()) as i64;
-        let parser = self.key_converter.parser();
 
-        for k in self.updated_keys.keys() {
-            let row = parser.parse(&k.0);
+        for k in keys {
             for (i, state) in self
                 .accumulators
                 .get_mut(k.0.as_ref())
@@ -520,29 +534,27 @@ impl IncrementalAggregatingFunc {
                 .iter_mut()
                 .enumerate()
             {
-                let IncrementalState::Batch {
-                    data,
-                    changed_values,
-                    ..
-                } = state
-                else {
+                let IncrementalState::Batch { data, .. } = state else {
                     continue;
                 };
 
-                for vk in changed_values.iter() {
-                    if let Some(count) = data.get(vk) {
-                        accumulator_builder.append_value(i as u32);
-                        args_row_builder.append_value(&*vk.0);
-                        count_builder.append_value(count.count);
-                        generation_builder.append_value(count.generation);
-                        timestamp_builder.append_value(now);
-                        rows.push(row.to_owned())
-                    }
+                for (vk, count_data) in data.iter() {
+                    accumulator_builder.append_value(i as u32);
+                    args_row_builder.append_value(&*vk.0);
+                    count_builder.append_value(count_data.count);
+                    generation_builder.append_value(count_data.generation);
+                    timestamp_builder.append_value(now);
+                    key_bytes_for_rows.push(k.0.clone());
                 }
                 data.retain(|_, v| v.count > 0);
             }
         }
 
+        let parser = self.key_converter.parser();
+        let rows: Vec<_> = key_bytes_for_rows
+            .iter()
+            .map(|kb| parser.parse(kb).to_owned())
+            .collect();
         let mut cols = self.key_converter.convert_rows(rows.into_iter())?;
         cols.push(Arc::new(accumulator_builder.finish()));
         cols.push(Arc::new(args_row_builder.finish()));
@@ -552,7 +564,7 @@ impl IncrementalAggregatingFunc {
         let generations = generation_builder.finish();
         self.new_generation = self
             .new_generation
-            .max(max_array::<UInt64Type, _>(&generations).unwrap());
+            .max(max_array::<UInt64Type, _>(&generations).unwrap_or(0));
         cols.push(Arc::new(generations));
 
         Ok(Some(cols))
@@ -710,7 +722,147 @@ impl Operator for IncrementalAggregatingFunc {
     }
 
     async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
+        let store = OperatorStateStore::new(
+            ctx.pipeline_id,
+            ctx.state_dir.clone(),
+            ctx.memory_controller.clone(),
+            ctx.io_manager.clone(),
+        )
+        .map_err(|e| anyhow!("Failed to init state store: {e}"))?;
+
+        let safe_epoch = ctx.latest_safe_epoch();
+        let active_keys = store
+            .restore_metadata(safe_epoch)
+            .await
+            .map_err(|e| anyhow!("State recovery failed: {e}"))?;
+
+        if !active_keys.is_empty() {
+            info!(
+                pipeline_id = ctx.pipeline_id,
+                key_count = active_keys.len(),
+                "Updating Aggregate recovering state from LSM-Tree..."
+            );
+
+            let mut sliding_batches = Vec::new();
+            let mut batch_batches = Vec::new();
+
+            for key in active_keys {
+                if key == KEY_SLIDING_SNAPSHOT {
+                    sliding_batches
+                        .extend(store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?);
+                } else if key == KEY_BATCH_SNAPSHOT {
+                    batch_batches
+                        .extend(store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?);
+                }
+            }
+
+            let num_keys = self
+                .input_schema
+                .routing_keys()
+                .map(|k| k.len())
+                .unwrap_or(0);
+            let now = Instant::now();
+
+            // Restore sliding (reversible) accumulator state
+            if !sliding_batches.is_empty() {
+                let combined = concat_batches(&self.sliding_state_schema.schema, &sliding_batches)?;
+                let key_cols: Vec<ArrayRef> = combined.columns()[0..num_keys].to_vec();
+                let aggregate_states: Vec<Vec<ArrayRef>> = self
+                    .aggregates
+                    .iter()
+                    .map(|agg| {
+                        agg.state_cols
+                            .iter()
+                            .map(|&idx| combined.column(idx).clone())
+                            .collect()
+                    })
+                    .collect();
+                let gen_col = combined
+                    .column(combined.num_columns() - 1)
+                    .as_any()
+                    .downcast_ref::<UInt64Array>()
+                    .expect("generation column must be UInt64Array");
+
+                let rows = self.key_converter.convert_columns(&key_cols)?;
+                for i in 0..combined.num_rows() {
+                    let key = rows.row(i).as_ref().to_vec();
+                    let generation = gen_col.value(i);
+                    self.restore_sliding(&key, now, i, &aggregate_states, generation)?;
+                }
+                info!(
+                    rows = combined.num_rows(),
+                    "Restored sliding accumulator state."
+                );
+            }
+
+            // Restore batch (non-reversible) detail dictionaries
+            if !batch_batches.is_empty() {
+                let combined = concat_batches(&self.batch_state_schema.schema, &batch_batches)?;
+                let key_cols: Vec<ArrayRef> = combined.columns()[0..num_keys].to_vec();
+
+                let acc_idx_col = combined
+                    .column(num_keys)
+                    .as_any()
+                    .downcast_ref::<UInt32Array>()
+                    .expect("accumulator index column must be UInt32Array");
+                let args_col = combined
+                    .column(num_keys + 1)
+                    .as_any()
+                    .downcast_ref::<BinaryArray>()
+                    .expect("args_row column must be BinaryArray");
+                let count_col = combined
+                    .column(num_keys + 2)
+                    .as_any()
+                    .downcast_ref::<UInt64Array>()
+                    .expect("count column must be UInt64Array");
+                // column num_keys+3 is timestamp, skip
+                let gen_col = combined
+                    .column(num_keys + 4)
+                    .as_any()
+                    .downcast_ref::<UInt64Array>()
+                    .expect("generation column must be UInt64Array");
+
+                let rows = self.key_converter.convert_columns(&key_cols)?;
+
+                for i in 0..combined.num_rows() {
+                    let key = rows.row(i).as_ref().to_vec();
+                    let acc_idx = acc_idx_col.value(i) as usize;
+                    let args_row = args_col.value(i).to_vec();
+                    let count = count_col.value(i);
+                    let generation = gen_col.value(i);
+
+                    if !self.accumulators.contains_key(&key) {
+                        self.accumulators.insert(
+                            Arc::new(key.clone()),
+                            now,
+                            generation,
+                            self.make_accumulators(),
+                        );
+                    }
+
+                    if let Some(accs) = self.accumulators.get_mut(&key)
+                        && let Some(IncrementalState::Batch {
+                            data,
+                            changed_values,
+                            ..
+                        }) = accs.get_mut(acc_idx)
+                    {
+                        let vk = Key(Arc::new(args_row.clone()));
+                        data.insert(vk.clone(), BatchData { count, generation });
+                        changed_values.insert(vk);
+                    }
+                }
+                info!(rows = combined.num_rows(), "Restored batch detail state.");
+            }
+
+            info!(
+                groups = self.accumulators.keys().len(),
+                "Updating Aggregate successfully restored active groups."
+            );
+        }
+
         self.initialize(ctx).await?;
+        self.state_store = Some(store);
         Ok(())
     }
 
@@ -743,9 +895,52 @@ impl Operator for IncrementalAggregatingFunc {
 
     async fn snapshot_state(
         &mut self,
-        _barrier: CheckpointBarrier,
+        barrier: CheckpointBarrier,
         _ctx: &mut TaskContext,
     ) -> Result<()> {
+        let store = self
+            .state_store
+            .clone()
+            .expect("State store not initialized");
+
+        // Tombstone previous epoch snapshots for disk space reclamation
+        store
+            .remove_batches(KEY_SLIDING_SNAPSHOT.to_vec())
+            .map_err(|e| anyhow!("{e}"))?;
+        store
+            .remove_batches(KEY_BATCH_SNAPSHOT.to_vec())
+            .map_err(|e| anyhow!("{e}"))?;
+
+        // Full snapshot of sliding (reversible) accumulator state
+        if let Some(cols) = self.checkpoint_sliding()? {
+            let batch = RecordBatch::try_new(self.sliding_state_schema.schema.clone(), cols)?;
+            store
+                .put(KEY_SLIDING_SNAPSHOT.to_vec(), batch)
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+        }
+
+        // Full snapshot of batch (non-reversible) detail state
+        if let Some(cols) = self.checkpoint_batch()? {
+            let batch = RecordBatch::try_new(self.batch_state_schema.schema.clone(), cols)?;
+            store
+                .put(KEY_BATCH_SNAPSHOT.to_vec(), batch)
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+        }
+
+        // Flush to Parquet
+        store
+            .snapshot_epoch(barrier.epoch as u64)
+            .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
+
+        info!(
+            epoch = barrier.epoch,
+            "Updating Aggregate snapshotted successfully."
+        );
+
+        self.updated_keys.clear();
+
         Ok(())
     }
 
@@ -907,6 +1102,7 @@ impl IncrementalAggregatingConstructor {
             sliding_state_schema,
             batch_state_schema,
             new_generation: 0,
+            state_store: None,
         })
     }
 }

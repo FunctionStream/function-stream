@@ -168,10 +168,28 @@ impl LogicalPlanVisitor {
 
         let validated_program = self.validate_graph_topology(&final_logical_plan)?;
 
+        let streaming_with_options: Option<std::collections::HashMap<String, String>> =
+            if with_options.is_empty() {
+                None
+            } else {
+                let map: std::collections::HashMap<String, String> = with_options
+                    .iter()
+                    .filter_map(|opt| match opt {
+                        SqlOption::KeyValue { key, value } => Some((
+                            key.value.clone(),
+                            value.to_string().trim_matches('\'').to_string(),
+                        )),
+                        _ => None,
+                    })
+                    .collect();
+                if map.is_empty() { None } else { Some(map) }
+            };
+
         Ok(StreamingTable {
             name: sink_table_name,
             comment: comment.clone(),
             program: validated_program,
+            with_options: streaming_with_options,
         })
     }
 

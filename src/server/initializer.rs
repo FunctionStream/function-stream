@@ -158,7 +158,7 @@ fn initialize_python_service(config: &GlobalConfig) -> Result<()> {
 fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
     use crate::runtime::streaming::factory::OperatorFactory;
     use crate::runtime::streaming::factory::Registry;
-    use crate::runtime::streaming::job::JobManager;
+    use crate::runtime::streaming::job::{JobManager, StateConfig};
     use std::sync::Arc;
 
     let registry = Arc::new(Registry::new());
@@ -168,7 +168,11 @@ fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
         .max_memory_bytes
         .unwrap_or(256 * 1024 * 1024);
 
-    JobManager::init(factory, max_memory_bytes).context("JobManager service failed to start")?;
+    let state_base_dir = std::env::temp_dir().join("function-stream").join("state");
+    let state_config = StateConfig::default();
+
+    JobManager::init(factory, max_memory_bytes, state_base_dir, state_config)
+        .context("JobManager service failed to start")?;
 
     Ok(())
 }

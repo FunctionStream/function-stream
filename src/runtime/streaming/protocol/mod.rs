@@ -13,4 +13,6 @@
 pub mod control;
 pub mod event;
 
+#[allow(unused_imports)]
+pub use control::{ControlCommand, JobMasterEvent, StopMode};
 pub use event::{CheckpointBarrier, StreamOutput, Watermark};

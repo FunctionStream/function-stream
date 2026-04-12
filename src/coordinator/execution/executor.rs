@@ -322,24 +322,33 @@ impl PlanVisitor for Executor {
             let job_manager: Arc<JobManager> = Arc::clone(&self.job_manager);
 
             let job_id = plan.name.clone();
-            let job_id = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current()
-                    .block_on(job_manager.submit_job(job_id, fs_program.clone()))
-            })
-            .map_err(|e| ExecuteError::Internal(format!("Failed to submit streaming job: {e}")))?;
+
+            let custom_interval: Option<u64> = plan
+                .with_options
+                .as_ref()
+                .and_then(|opts| opts.get("checkpoint.interval"))
+                .and_then(|v| v.parse().ok());
 
             self.catalog_manager
                 .persist_streaming_job(
                     &plan.name,
                     &fs_program,
                     plan.comment.as_deref().unwrap_or(""),
+                    custom_interval.unwrap_or(0),
                 )
                 .map_err(|e| {
-                    ExecuteError::Internal(format!(
-                        "Streaming job '{}' submitted but persistence failed: {e}",
-                        plan.name
-                    ))
+                    ExecuteError::Internal(format!("Streaming job persistence failed: {e}",))
                 })?;
+
+            let job_id = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(job_manager.submit_job(
+                    job_id,
+                    fs_program,
+                    custom_interval,
+                    None,
+                ))
+            })
+            .map_err(|e| ExecuteError::Internal(format!("Failed to submit streaming job: {e}")))?;
 
             info!(
                 job_id = %job_id,
