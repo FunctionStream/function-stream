@@ -33,3 +33,7 @@ python/**/target/
 **/**.egg-info
 .cache/
 /.cursor/worktrees.json
+
+# Integration test output
+tests/integration/target/
+tests/integration/.venv/

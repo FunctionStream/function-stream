@@ -1,0 +1,71 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+"""
+InstanceConfig: builds and writes the config.yaml consumed by
+the FunctionStream binary via FUNCTION_STREAM_CONF.
+"""
+
+from pathlib import Path
+from typing import Any, Dict
+
+import yaml
+
+from .workspace import InstanceWorkspace
+
+
+class InstanceConfig:
+    """Generates and persists config.yaml for one FunctionStream instance."""
+
+    def __init__(self, host: str, port: int, workspace: InstanceWorkspace):
+        self._workspace = workspace
+        self._config: Dict[str, Any] = {
+            "service": {
+                "service_id": f"it-{port}",
+                "service_name": "function-stream",
+                "version": "1.0.0",
+                "host": host,
+                "port": port,
+                "debug": False,
+            },
+            "logging": {
+                "level": "info",
+                "format": "json",
+                "file_path": str(workspace.log_dir / "app.log"),
+                "max_file_size": 50,
+                "max_files": 3,
+            },
+            "state_storage": {
+                "storage_type": "memory",
+            },
+            "task_storage": {
+                "storage_type": "rocksdb",
+                "db_path": str(workspace.data_dir / "task"),
+            },
+            "stream_catalog": {
+                "persist": True,
+                "db_path": str(workspace.data_dir / "stream_catalog"),
+            },
+        }
+
+    @property
+    def raw(self) -> Dict[str, Any]:
+        return self._config
+
+    def override(self, overrides: Dict[str, Any]) -> None:
+        """
+        Apply overrides using dot-separated keys.
+        Example: {"service.debug": True, "logging.level": "debug"}
+        """
+        for dotted_key, value in overrides.items():
+            keys = dotted_key.split(".")
+            target = self._config
+            for k in keys[:-1]:
+                target = target.setdefault(k, {})
+            target[keys[-1]] = value
+
+    def write_to_workspace(self) -> Path:
+        """Serialize config to the workspace config.yaml and return its path."""
+        with open(self._workspace.config_file, "w", encoding="utf-8") as f:
+            yaml.dump(self._config, f, default_flow_style=False, sort_keys=False)
+        return self._workspace.config_file
