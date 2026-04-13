@@ -66,5 +66,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: integration-test-logs
-          path: tests/integration/target/
-          retention-days: 7
+          path: tests/integration/target/**/logs/
+          retention-days: 30
