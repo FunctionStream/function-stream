@@ -37,3 +37,4 @@ python/**/target/
 # Integration test output
 tests/integration/target/
 tests/integration/.venv/
+tests/integration/install
