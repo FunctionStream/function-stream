@@ -52,7 +52,9 @@ jobs:
             libcurl4-openssl-dev \
             pkg-config \
             libsasl2-dev \
-            protobuf-compiler
+            protobuf-compiler \
+            musl-tools
+          sudo ln -sf /usr/bin/musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
