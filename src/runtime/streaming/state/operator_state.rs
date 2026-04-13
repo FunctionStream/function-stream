@@ -710,3 +710,294 @@ fn restore_memtable_from_injected_batches(batches: Vec<RecordBatch>) -> Result<M
     }
     Ok(m)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::io_manager::IoPool;
+    use super::super::metrics::NoopMetricsCollector;
+    use super::*;
+    use arrow_array::Int64Array;
+    use tempfile::TempDir;
+
+    fn test_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Int64,
+            false,
+        )]))
+    }
+
+    fn make_batch(values: &[i64]) -> RecordBatch {
+        RecordBatch::try_new(
+            test_schema(),
+            vec![Arc::new(Int64Array::from(values.to_vec()))],
+        )
+        .unwrap()
+    }
+
+    fn setup() -> (TempDir, Arc<MemoryController>, IoManager, IoPool) {
+        let tmp = TempDir::new().unwrap();
+        let mem = MemoryController::new(1024 * 1024, 2 * 1024 * 1024);
+        let metrics: Arc<dyn StateMetricsCollector> = Arc::new(NoopMetricsCollector);
+        let (pool, mgr) = IoPool::try_new(1, 1, metrics).unwrap();
+        (tmp, mem, mgr, pool)
+    }
+
+    #[tokio::test]
+    async fn test_put_and_get() {
+        let (tmp, mem, mgr, _pool) = setup();
+        let store = OperatorStateStore::new(1, tmp.path(), mem, mgr).unwrap();
+
+        let key = b"key-a".to_vec();
+        let batch = make_batch(&[10, 20, 30]);
+        store.put(key.clone(), batch).await.unwrap();
+
+        let result = store.get_batches(&key).await.unwrap();
+        assert_eq!(result.len(), 1);
+        let col = result[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        assert_eq!(col.values(), &[10, 20, 30]);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_puts_same_key() {
+        let (tmp, mem, mgr, _pool) = setup();
+        let store = OperatorStateStore::new(1, tmp.path(), mem, mgr).unwrap();
+
+        let key = b"key-x".to_vec();
+        store.put(key.clone(), make_batch(&[1])).await.unwrap();
+        store.put(key.clone(), make_batch(&[2])).await.unwrap();
+
+        let result = store.get_batches(&key).await.unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_nonexistent_key() {
+        let (tmp, mem, mgr, _pool) = setup();
+        let store = OperatorStateStore::new(1, tmp.path(), mem, mgr).unwrap();
+
+        let result = store.get_batches(b"no-such-key").await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_remove_batches() {
+        let (tmp, mem, mgr, _pool) = setup();
+        let store = OperatorStateStore::new(1, tmp.path(), mem, mgr).unwrap();
+
+        let key = b"key-del".to_vec();
+        store.put(key.clone(), make_batch(&[42])).await.unwrap();
+
+        store.remove_batches(key.clone()).unwrap();
+
+        let result = store.get_batches(&key).await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_remove_does_not_affect_other_keys() {
+        let (tmp, mem, mgr, _pool) = setup();
+        let store = OperatorStateStore::new(1, tmp.path(), mem, mgr).unwrap();
+
+        let k1 = b"key-1".to_vec();
+        let k2 = b"key-2".to_vec();
+        store.put(k1.clone(), make_batch(&[1])).await.unwrap();
+        store.put(k2.clone(), make_batch(&[2])).await.unwrap();
+
+        store.remove_batches(k1.clone()).unwrap();
+
+        assert!(store.get_batches(&k1).await.unwrap().is_empty());
+        assert_eq!(store.get_batches(&k2).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_epoch_advances() {
+        let (tmp, mem, mgr, _pool) = setup();
+        let store = OperatorStateStore::new(1, tmp.path(), mem, mgr).unwrap();
+
+        store.put(b"k".to_vec(), make_batch(&[1])).await.unwrap();
+        store.snapshot_epoch(5).unwrap();
+
+        assert_eq!(store.current_epoch.load(Ordering::Acquire), 6);
+    }
+
+    #[tokio::test]
+    async fn test_data_survives_snapshot_via_spill() {
+        let (tmp, mem, mgr, _pool) = setup();
+        let store = OperatorStateStore::new(1, tmp.path(), mem, mgr).unwrap();
+
+        let key = b"persist".to_vec();
+        store.put(key.clone(), make_batch(&[99])).await.unwrap();
+        store.snapshot_epoch(1).unwrap();
+
+        // snapshot_epoch triggers a spill; wait for the background worker to
+        // flush the data to disk so get_batches can read it from parquet files.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let result = store.get_batches(&key).await.unwrap();
+        assert!(!result.is_empty());
+        let col = result[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        assert_eq!(col.values(), &[99]);
+    }
+
+    #[tokio::test]
+    async fn test_tombstone_hides_immutable_data() {
+        let (tmp, mem, mgr, _pool) = setup();
+        let store = OperatorStateStore::new(1, tmp.path(), mem, mgr).unwrap();
+
+        let key = b"will-die".to_vec();
+        store.put(key.clone(), make_batch(&[7])).await.unwrap();
+
+        // Move to immutable via snapshot
+        store.snapshot_epoch(1).unwrap();
+
+        // Tombstone at epoch 2 (> immutable epoch 1)
+        store.current_epoch.store(2, Ordering::Release);
+        store.remove_batches(key.clone()).unwrap();
+
+        let result = store.get_batches(&key).await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_memory_controller_tracking() {
+        let mem = MemoryController::new(1024, 2048);
+        assert_eq!(mem.usage_bytes(), 0);
+
+        mem.record_inc(100);
+        assert_eq!(mem.usage_bytes(), 100);
+
+        mem.record_dec(40);
+        assert_eq!(mem.usage_bytes(), 60);
+
+        assert!(!mem.should_spill());
+        mem.record_inc(1000);
+        assert!(mem.should_spill());
+    }
+
+    #[tokio::test]
+    async fn test_memory_controller_hard_limit() {
+        let mem = MemoryController::new(512, 1024);
+        assert!(!mem.exceeds_hard_limit(500));
+        assert!(mem.exceeds_hard_limit(1025));
+
+        mem.record_inc(800);
+        assert!(mem.exceeds_hard_limit(300));
+        assert!(!mem.exceeds_hard_limit(200));
+    }
+
+    #[test]
+    fn test_extract_epoch() {
+        let path = PathBuf::from("/tmp/data-epoch-42_uuid-abc123.parquet");
+        assert_eq!(extract_epoch(&path), 42);
+
+        let path2 = PathBuf::from("/tmp/tombstone-epoch-100_uuid-def456.parquet");
+        assert_eq!(extract_epoch(&path2), 100);
+
+        let path3 = PathBuf::from("/tmp/random-file.parquet");
+        assert_eq!(extract_epoch(&path3), 0);
+    }
+
+    #[test]
+    fn test_inject_and_strip_partition_key() {
+        let batch = make_batch(&[1, 2, 3]);
+        let key = b"pk-test";
+
+        let injected = inject_partition_key(&batch, key).unwrap();
+        assert_eq!(injected.num_columns(), 2);
+        assert!(injected.schema().index_of(PARTITION_KEY_COL).is_ok());
+
+        let stripped = filter_and_strip_partition_key(&injected, key)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stripped.num_columns(), 1);
+        let col = stripped
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        assert_eq!(col.values(), &[1, 2, 3]);
+    }
+
+    #[test]
+    fn test_filter_partition_key_mismatch() {
+        let batch = make_batch(&[1, 2]);
+        let injected = inject_partition_key(&batch, b"pk-a").unwrap();
+
+        let result = filter_and_strip_partition_key(&injected, b"pk-b").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_restore_memtable_roundtrip() {
+        let batch1 = inject_partition_key(&make_batch(&[10]), b"k1").unwrap();
+        let batch2 = inject_partition_key(&make_batch(&[20]), b"k2").unwrap();
+        let batch3 = inject_partition_key(&make_batch(&[30]), b"k1").unwrap();
+
+        let restored =
+            restore_memtable_from_injected_batches(vec![batch1, batch2, batch3]).unwrap();
+
+        assert_eq!(restored.len(), 2);
+        assert_eq!(restored[b"k1".as_ref()].len(), 2);
+        assert_eq!(restored[b"k2".as_ref()].len(), 1);
+    }
+
+    #[test]
+    fn test_write_and_read_parquet() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("test.parquet");
+
+        let batch = make_batch(&[100, 200, 300]);
+        write_parquet_with_bloom_atomic(&path, std::slice::from_ref(&batch), 1).unwrap();
+
+        let file = File::open(&path).unwrap();
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let read_batches: Vec<RecordBatch> = reader.map(|r| r.unwrap()).collect();
+        assert_eq!(read_batches.len(), 1);
+        let col = read_batches[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        assert_eq!(col.values(), &[100, 200, 300]);
+    }
+
+    #[test]
+    fn test_filter_tombstones_from_batch() {
+        let batch = make_batch(&[1, 2, 3]);
+        let key = b"victim";
+        let injected = inject_partition_key(&batch, key).unwrap();
+
+        let mut tombstones: TombstoneMap = HashMap::new();
+        tombstones.insert(key.to_vec(), 10);
+
+        // file_epoch <= tombstone epoch => fully filtered
+        let result = filter_tombstones_from_batch(&injected, &tombstones, 5).unwrap();
+        assert!(result.is_none());
+
+        // file_epoch > tombstone epoch => data survives
+        let result = filter_tombstones_from_batch(&injected, &tombstones, 15).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_write_empty_batches_is_noop() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("empty.parquet");
+
+        write_parquet_with_bloom_atomic(&path, &[], 0).unwrap();
+        assert!(!path.exists());
+    }
+}

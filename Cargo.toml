@@ -79,3 +79,6 @@ governor = "0.8.0"
 default = ["incremental-cache", "python"]
 incremental-cache = ["wasmtime/incremental-cache"]
 python = []
+
+[dev-dependencies]
+tempfile = "3.27.0"
