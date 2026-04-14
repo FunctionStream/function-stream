@@ -43,13 +43,11 @@ help:
 	@echo "  test    Setup Python env + run pytest (PYTEST_ARGS=...)"
 	@echo "  clean   Remove .venv and target/tests output"
 
-install $(VENV)/.installed: requirements.txt $(PYTHON_ROOT)/functionstream-api/pyproject.toml $(PYTHON_ROOT)/functionstream-client/pyproject.toml
+install: requirements.txt $(PYTHON_ROOT)/functionstream-api/pyproject.toml $(PYTHON_ROOT)/functionstream-client/pyproject.toml
 	$(call log,ENV,Setting up Python virtual environment)
 	@test -d $(VENV) || python3 -m venv $(VENV)
 	@$(PIP) install --quiet --upgrade pip
 	@$(PIP) install --quiet -r requirements.txt
-	@$(PIP) install --quiet -e $(PYTHON_ROOT)/functionstream-api
-	@$(PIP) install --quiet -e $(PYTHON_ROOT)/functionstream-client
 	@touch $@
 	$(call success,Python environment ready)
 
@@ -62,4 +60,5 @@ clean:
 	$(call log,CLEAN,Removing test artifacts)
 	@rm -rf $(VENV)
 	@rm -rf $(CURDIR)/target
+	@rm -rf $(CURDIR)/install
 	$(call success,Clean complete)

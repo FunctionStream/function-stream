@@ -10,7 +10,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Third-party dependencies
 pytest>=7.0
 pyyaml>=6.0
 grpcio>=1.60.0
 protobuf>=4.25.0
+
+# FunctionStream Python packages (local editable installs)
+-e ../../python/functionstream-api
+-e ../../python/functionstream-client

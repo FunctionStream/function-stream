@@ -22,6 +22,21 @@ import yaml
 
 from .workspace import InstanceWorkspace
 
+_INTEGRATION_DIR = Path(__file__).resolve().parents[1]
+_PROJECT_ROOT = _INTEGRATION_DIR.parents[1]
+
+
+def _find_python_wasm() -> str:
+    """Locate the Python WASM runtime for server initialisation."""
+    candidates = [
+        _PROJECT_ROOT / "python" / "functionstream-runtime" / "target" / "functionstream-python-runtime.wasm",
+        _PROJECT_ROOT / "dist" / "function-stream" / "data" / "cache" / "python-runner" / "functionstream-python-runtime.wasm",
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c.resolve())
+    return str(candidates[0])
+
 
 class InstanceConfig:
     """Generates and persists config.yaml for one FunctionStream instance."""
@@ -43,6 +58,11 @@ class InstanceConfig:
                 "file_path": str(workspace.log_dir / "app.log"),
                 "max_file_size": 50,
                 "max_files": 3,
+            },
+            "python": {
+                "wasm_path": _find_python_wasm(),
+                "cache_dir": str(workspace.data_dir / "cache" / "python-runner"),
+                "enable_cache": True,
             },
             "state_storage": {
                 "storage_type": "memory",
