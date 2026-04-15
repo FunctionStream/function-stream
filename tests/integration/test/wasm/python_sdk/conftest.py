@@ -11,33 +11,95 @@
 # limitations under the License.
 
 """
-Fixtures for Python SDK integration tests.
-A single FunctionStreamInstance is shared across the entire module.
+Global pytest fixtures for the FunctionStream Python SDK integration tests.
+Provides managed Kafka broker, server instances, client connections,
+and automated resource cleanup.
 """
 
 import sys
 from pathlib import Path
+from typing import Generator, List
 
 import pytest
 
+# tests/integration/test/wasm/python_sdk -> parents[3] = tests/integration
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+# Make the ``processors`` package importable from this directory
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from framework import FunctionStreamInstance
+from framework import FunctionStreamInstance, KafkaDockerManager  # noqa: E402
+from fs_client.client import FsClient  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
-PYTHON_EXAMPLE_DIR = PROJECT_ROOT / "examples" / "python-processor"
 
+
+# ======================================================================
+# Kafka broker (opt-in, independent of fs_server)
+# ======================================================================
 
 @pytest.fixture(scope="session")
-def fs_server():
-    """Start a FunctionStream server once for all Python SDK tests."""
-    instance = FunctionStreamInstance(test_name="wasm_python_sdk")
+def kafka() -> Generator[KafkaDockerManager, None, None]:
+    """
+    Session-scoped fixture: start a Docker-managed Kafka broker once
+    for the entire test session.
+
+    Tests that need a live Kafka broker should declare this fixture
+    as a parameter.  Tests that only register functions (without
+    producing / consuming data) do NOT need this fixture.
+    """
+    mgr = KafkaDockerManager()
+    mgr.setup_kafka()
+    yield mgr
+    mgr.clear_all_topics()
+    mgr.teardown_kafka()
+
+
+# ======================================================================
+# FunctionStream server
+# ======================================================================
+
+@pytest.fixture(scope="session")
+def fs_server() -> Generator[FunctionStreamInstance, None, None]:
+    """
+    Session-scoped fixture: start the FunctionStream server once for all tests.
+    """
+    instance = FunctionStreamInstance(test_name="wasm_python_sdk_integration")
     instance.start()
     yield instance
     instance.kill()
 
 
-@pytest.fixture(scope="session")
-def python_example_dir():
-    """Path to the Python processor example directory."""
-    return PYTHON_EXAMPLE_DIR
+# ======================================================================
+# Client & resource tracking
+# ======================================================================
+
+@pytest.fixture
+def fs_client(fs_server: FunctionStreamInstance) -> Generator[FsClient, None, None]:
+    """
+    Function-scoped fixture: provide a fresh client connected to the server.
+    The connection is automatically closed after each test.
+    """
+    with fs_server.get_client() as client:
+        yield client
+
+
+@pytest.fixture
+def function_registry(fs_client: FsClient) -> Generator[List[str], None, None]:
+    """
+    RAII Resource Manager: tracks registered function names.
+    Automatically stops and drops every tracked function after each test,
+    guaranteeing environment idempotency regardless of assertion failures.
+    """
+    registered_names: List[str] = []
+
+    yield registered_names
+
+    for name in registered_names:
+        try:
+            fs_client.stop_function(name)
+        except Exception:
+            pass
+        try:
+            fs_client.drop_function(name)
+        except Exception:
+            pass

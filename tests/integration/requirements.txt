@@ -16,6 +16,10 @@ pyyaml>=6.0
 grpcio>=1.60.0
 protobuf>=4.25.0
 
+# Docker + Kafka management for integration tests
+docker>=7.0
+confluent-kafka>=2.3.0
+
 # FunctionStream Python packages (local editable installs)
 -e ../../python/functionstream-api
 -e ../../python/functionstream-client

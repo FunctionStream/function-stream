@@ -10,7 +10,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .instance import FunctionStreamInstance
-from .kafka_manager import KafkaDockerManager
-
-__all__ = ["FunctionStreamInstance", "KafkaDockerManager"]
+"""
+Test processors package.
+Each module contains a specific implementation of FSProcessorDriver
+to test different engine capabilities.
+"""
