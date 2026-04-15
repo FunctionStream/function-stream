@@ -14,11 +14,13 @@
 InstanceWorkspace: manages the directory tree for a single
 FunctionStream test instance.
 
-Layout:
-    tests/integration/target/<test_name>/<timestamp>/FunctionStream-<port>/
+Layout (during test run):
+    tests/integration/target/<test_name>/<timestamp>/
         conf/config.yaml
         data/
         logs/stdout.log, stderr.log, app.log
+
+After cleanup only ``logs/`` is retained.
 """
 
 import shutil
@@ -36,10 +38,7 @@ class InstanceWorkspace:
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         self.root_dir = (
-            self.target_dir
-            / self.test_name
-            / self.timestamp
-            / f"FunctionStream-{self.port}"
+            self.target_dir / self.test_name / self.timestamp
         )
         self.conf_dir = self.root_dir / "conf"
         self.data_dir = self.root_dir / "data"
@@ -54,8 +53,8 @@ class InstanceWorkspace:
         for d in (self.conf_dir, self.data_dir, self.log_dir):
             d.mkdir(parents=True, exist_ok=True)
 
-    def cleanup_data(self) -> None:
-        """Remove the data directory but preserve logs for debugging."""
-        if self.data_dir.exists():
-            shutil.rmtree(self.data_dir)
-            self.data_dir.mkdir(parents=True, exist_ok=True)
+    def cleanup(self) -> None:
+        """Remove everything except logs/ so only diagnostic output remains."""
+        for d in (self.conf_dir, self.data_dir):
+            if d.exists():
+                shutil.rmtree(d)

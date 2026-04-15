@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 # Make the ``processors`` package importable from this directory
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from framework import FunctionStreamInstance, KafkaDockerManager  # noqa: E402
+from framework import FunctionStreamInstance  # noqa: E402
 from fs_client.client import FsClient  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
@@ -38,7 +38,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[5]
 # ======================================================================
 
 @pytest.fixture(scope="session")
-def kafka() -> Generator[KafkaDockerManager, None, None]:
+def kafka():
     """
     Session-scoped fixture: start a Docker-managed Kafka broker once
     for the entire test session.
@@ -47,6 +47,8 @@ def kafka() -> Generator[KafkaDockerManager, None, None]:
     as a parameter.  Tests that only register functions (without
     producing / consuming data) do NOT need this fixture.
     """
+    from framework import KafkaDockerManager
+
     mgr = KafkaDockerManager()
     mgr.setup_kafka()
     yield mgr
@@ -55,15 +57,27 @@ def kafka() -> Generator[KafkaDockerManager, None, None]:
 
 
 # ======================================================================
-# FunctionStream server
+# FunctionStream server (per-test instance with isolated logs)
 # ======================================================================
 
-@pytest.fixture(scope="session")
-def fs_server() -> Generator[FunctionStreamInstance, None, None]:
+def _derive_test_name(request: pytest.FixtureRequest) -> str:
+    """Build a human-readable path from the pytest node: wasm/python_sdk/<Class>/<method>."""
+    cls = request.node.cls
+    parts = ["wasm", "python_sdk"]
+    if cls is not None:
+        parts.append(cls.__name__)
+    parts.append(request.node.name)
+    return "/".join(parts)
+
+
+@pytest.fixture
+def fs_server(request: pytest.FixtureRequest) -> Generator[FunctionStreamInstance, None, None]:
     """
-    Session-scoped fixture: start the FunctionStream server once for all tests.
+    Function-scoped fixture: each test gets its own FunctionStream server
+    with isolated log directory named after the test class and method.
     """
-    instance = FunctionStreamInstance(test_name="wasm_python_sdk_integration")
+    test_name = _derive_test_name(request)
+    instance = FunctionStreamInstance(test_name=test_name)
     instance.start()
     yield instance
     instance.kill()

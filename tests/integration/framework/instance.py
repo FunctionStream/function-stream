@@ -115,12 +115,14 @@ class FunctionStreamInstance:
         return self
 
     def stop(self, timeout: float = 10.0) -> None:
-        """Graceful SIGTERM shutdown."""
+        """Graceful SIGTERM shutdown, then remove everything except logs."""
         self.process.stop(timeout=timeout)
+        self.workspace.cleanup()
 
     def kill(self) -> None:
-        """Immediate SIGKILL."""
+        """Immediate SIGKILL, then remove everything except logs."""
         self.process.kill()
+        self.workspace.cleanup()
 
     def restart(self, timeout: float = 10.0) -> "FunctionStreamInstance":
         """Stop then start (same port, same workspace)."""

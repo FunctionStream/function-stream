@@ -11,6 +11,12 @@
 # limitations under the License.
 
 from .instance import FunctionStreamInstance
-from .kafka_manager import KafkaDockerManager
 
 __all__ = ["FunctionStreamInstance", "KafkaDockerManager"]
+
+
+def __getattr__(name: str):
+    if name == "KafkaDockerManager":
+        from .kafka_manager import KafkaDockerManager
+        return KafkaDockerManager
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
