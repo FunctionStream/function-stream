@@ -10,31 +10,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Integration tests for basic CRUD operations and status state-machine transitions.
-
-Covers:
-  - Full lifecycle:  Create -> Show -> Stop -> Start -> Stop -> Drop
-  - Multiple function coexistence
-  - Rapid create / drop cycling
-  - show_functions listing correctness
-"""
-
 import uuid
-from typing import List
+from typing import Any, List, Optional
 
 from fs_client.client import FsClient
-from fs_client.config import WasmTaskBuilder, KafkaInput, KafkaOutput
-
+from fs_client.config import KafkaInput, KafkaOutput, WasmTaskBuilder
 from processors.counter_processor import CounterProcessor
 
+EXPECTED_STOPPED_STATES = frozenset(["STOPPED", "PAUSED", "INITIALIZED"])
+EXPECTED_RUNNING_STATES = frozenset(["RUNNING"])
 
-def _unique(prefix: str) -> str:
+
+def _generate_unique_name(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
-def _build_counter_config(fn_name: str, bootstrap: str) -> "WasmTaskBuilder":
-    """Return a ready-to-build builder pre-configured for CounterProcessor."""
+def _create_counter_task_builder(fn_name: str, bootstrap: str) -> WasmTaskBuilder:
     return (
         WasmTaskBuilder()
         .set_name(fn_name)
@@ -44,176 +35,135 @@ def _build_counter_config(fn_name: str, bootstrap: str) -> "WasmTaskBuilder":
     )
 
 
-class TestFunctionLifecycle:
-    """
-    Integration tests for basic CRUD operations and status state machine
-    transitions.
-    """
+def _get_function_info(fs_client: FsClient, fn_name: str) -> Optional[Any]:
+    listing = fs_client.show_functions()
+    for fn in listing.functions:
+        if fn.name == fn_name:
+            return fn
+    return None
 
-    # ------------------------------------------------------------------
-    # Golden-path lifecycle
-    # ------------------------------------------------------------------
+
+class TestFunctionLifecycle:
 
     def test_full_lifecycle_transitions(
-        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
-    ):
-        """Test the golden path: Create -> Show -> Stop -> Start -> Stop -> Drop."""
-        fn_name = _unique("lifecycle")
+            self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
+    ) -> None:
+        fn_name = _generate_unique_name("lifecycle")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name, kafka_topics).add_init_config("test_mode", "true").build()
+        config = _create_counter_task_builder(fn_name, kafka_topics).add_init_config("test_mode", "true").build()
 
-        # 1. Create
         assert fs_client.create_python_function_from_config(config, CounterProcessor) is True
 
-        # 2. Verify visibility
-        listing = fs_client.show_functions()
-        fn_info = next((f for f in listing.functions if f.name == fn_name), None)
-        assert fn_info is not None, "Function must be listed after creation"
-        assert fn_info.status, "Status must be a non-empty string"
+        fn_info = _get_function_info(fs_client, fn_name)
+        assert fn_info is not None
+        assert bool(fn_info.status)
 
-        # 3. Stop (server may auto-start on creation; stop first to get a known state)
         assert fs_client.stop_function(fn_name) is True
 
-        # 4. Start
         assert fs_client.start_function(fn_name) is True
-        listing = fs_client.show_functions()
-        fn_info = next(f for f in listing.functions if f.name == fn_name)
-        assert fn_info.status.upper() == "RUNNING", (
-            f"Expected RUNNING after start, got {fn_info.status}"
-        )
+        fn_info = _get_function_info(fs_client, fn_name)
+        assert fn_info is not None
+        assert fn_info.status.upper() in EXPECTED_RUNNING_STATES
 
-        # 5. Stop again
         assert fs_client.stop_function(fn_name) is True
-        listing = fs_client.show_functions()
-        fn_info = next(f for f in listing.functions if f.name == fn_name)
-        assert fn_info.status.upper() in ("STOPPED", "PAUSED", "INITIALIZED"), (
-            f"Expected STOPPED/PAUSED after stop, got {fn_info.status}"
-        )
+        fn_info = _get_function_info(fs_client, fn_name)
+        assert fn_info is not None
+        assert fn_info.status.upper() in EXPECTED_STOPPED_STATES
 
-        # 6. Drop
         assert fs_client.drop_function(fn_name) is True
-        listing = fs_client.show_functions()
-        assert fn_name not in [f.name for f in listing.functions], (
-            "Function must be removed from registry after drop"
-        )
-        function_registry.remove(fn_name)
+        assert _get_function_info(fs_client, fn_name) is None
 
-    # ------------------------------------------------------------------
-    # show_functions consistency
-    # ------------------------------------------------------------------
+        if fn_name in function_registry:
+            function_registry.remove(fn_name)
 
     def test_show_functions_returns_created_function(
-        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
-    ):
-        """show_functions must contain the newly created function."""
-        fn_name = _unique("show")
+            self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
+    ) -> None:
+        fn_name = _generate_unique_name("show")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name, kafka_topics).build()
+        config = _create_counter_task_builder(fn_name, kafka_topics).build()
         fs_client.create_python_function_from_config(config, CounterProcessor)
 
-        listing = fs_client.show_functions()
-        names = [f.name for f in listing.functions]
-        assert fn_name in names
+        assert _get_function_info(fs_client, fn_name) is not None
 
     def test_show_functions_result_fields(
-        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
-    ):
-        """Each FunctionInfo must carry name, task_type, and status."""
-        fn_name = _unique("fields")
+            self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
+    ) -> None:
+        fn_name = _generate_unique_name("fields")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name, kafka_topics).build()
+        config = _create_counter_task_builder(fn_name, kafka_topics).build()
         fs_client.create_python_function_from_config(config, CounterProcessor)
 
-        listing = fs_client.show_functions()
-        fn_info = next(f for f in listing.functions if f.name == fn_name)
-
+        fn_info = _get_function_info(fs_client, fn_name)
+        assert fn_info is not None
         assert fn_info.name == fn_name
-        assert fn_info.task_type, "task_type must not be empty"
-        assert fn_info.status, "status must not be empty"
-
-    # ------------------------------------------------------------------
-    # Multiple function coexistence
-    # ------------------------------------------------------------------
+        assert bool(fn_info.task_type)
+        assert bool(fn_info.status)
 
     def test_multiple_functions_coexist(
-        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
-    ):
-        """Several independently created functions must all be listed."""
-        names = [_unique("multi") for _ in range(3)]
+            self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
+    ) -> None:
+        names = [_generate_unique_name("multi") for _ in range(3)]
         function_registry.extend(names)
 
         for name in names:
-            config = _build_counter_config(name, kafka_topics).build()
+            config = _create_counter_task_builder(name, kafka_topics).build()
             fs_client.create_python_function_from_config(config, CounterProcessor)
 
         listing = fs_client.show_functions()
         listed_names = {f.name for f in listing.functions}
-        for name in names:
-            assert name in listed_names, f"{name} missing from listing"
 
-    # ------------------------------------------------------------------
-    # Rapid create / drop cycling
-    # ------------------------------------------------------------------
+        for name in names:
+            assert name in listed_names
 
     def test_rapid_create_drop_cycle(
-        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
-    ):
-        """Rapidly creating and dropping functions must not corrupt server state."""
+            self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
+    ) -> None:
         for i in range(5):
-            fn_name = _unique(f"rapid-{i}")
+            fn_name = _generate_unique_name(f"rapid-{i}")
+            config = _create_counter_task_builder(fn_name, kafka_topics).build()
 
-            config = _build_counter_config(fn_name, kafka_topics).build()
             fs_client.create_python_function_from_config(config, CounterProcessor)
-
             fs_client.stop_function(fn_name)
             assert fs_client.drop_function(fn_name) is True
 
         listing = fs_client.show_functions()
         remaining = [f.name for f in listing.functions if f.name.startswith("rapid-")]
-        assert remaining == [], f"Stale functions remain: {remaining}"
-
-    # ------------------------------------------------------------------
-    # Restart (stop + start) resilience
-    # ------------------------------------------------------------------
+        assert not remaining
 
     def test_restart_preserves_identity(
-        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
-    ):
-        """Stopping and restarting a function should keep its name and type."""
-        fn_name = _unique("restart")
+            self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
+    ) -> None:
+        fn_name = _generate_unique_name("restart")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name, kafka_topics).build()
+        config = _create_counter_task_builder(fn_name, kafka_topics).build()
         fs_client.create_python_function_from_config(config, CounterProcessor)
 
         fs_client.stop_function(fn_name)
         fs_client.start_function(fn_name)
 
-        listing = fs_client.show_functions()
-        fn_info = next(f for f in listing.functions if f.name == fn_name)
+        fn_info = _get_function_info(fs_client, fn_name)
+        assert fn_info is not None
         assert fn_info.name == fn_name
-        assert fn_info.status.upper() == "RUNNING"
-
-    # ------------------------------------------------------------------
-    # Drop after stop (explicit two-phase teardown)
-    # ------------------------------------------------------------------
+        assert fn_info.status.upper() in EXPECTED_RUNNING_STATES
 
     def test_stop_then_drop(
-        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
-    ):
-        """Explicitly stopping, then dropping must always succeed."""
-        fn_name = _unique("stop-drop")
+            self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
+    ) -> None:
+        fn_name = _generate_unique_name("stop-drop")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name, kafka_topics).build()
+        config = _create_counter_task_builder(fn_name, kafka_topics).build()
         fs_client.create_python_function_from_config(config, CounterProcessor)
 
         assert fs_client.stop_function(fn_name) is True
         assert fs_client.drop_function(fn_name) is True
 
-        listing = fs_client.show_functions()
-        assert fn_name not in [f.name for f in listing.functions]
-        function_registry.remove(fn_name)
+        assert _get_function_info(fs_client, fn_name) is None
+
+        if fn_name in function_registry:
+            function_registry.remove(fn_name)

@@ -19,23 +19,42 @@ import logging
 import os
 import signal
 import subprocess
+import sys
 from pathlib import Path
-from typing import Optional
+from typing import IO, Any, Dict, Optional
 
 from .workspace import InstanceWorkspace
 
 logger = logging.getLogger(__name__)
 
 
+class ProcessManagerError(Exception):
+    """Base exception for process management errors."""
+    pass
+
+
+class BinaryNotFoundError(ProcessManagerError):
+    """Raised when the target binary executable does not exist."""
+    pass
+
+
+class ProcessAlreadyRunningError(ProcessManagerError):
+    """Raised when attempting to start a process that is already running."""
+    pass
+
+
 class FunctionStreamProcess:
-    """Manages the lifecycle of a single FunctionStream OS process."""
+    """
+    Manages the lifecycle of a single FunctionStream OS process safely.
+    Fully cross-platform compatible (Windows, macOS, Linux).
+    """
 
     def __init__(self, binary_path: Path, workspace: InstanceWorkspace):
-        self._binary = binary_path
+        self._binary = binary_path.resolve()
         self._workspace = workspace
-        self._process: Optional[subprocess.Popen] = None
-        self._stdout_fh = None
-        self._stderr_fh = None
+        self._process: Optional[subprocess.Popen[Any]] = None
+        self._stdout_fh: Optional[IO[Any]] = None
+        self._stderr_fh: Optional[IO[Any]] = None
 
     @property
     def pid(self) -> Optional[int]:
@@ -43,74 +62,124 @@ class FunctionStreamProcess:
 
     @property
     def is_running(self) -> bool:
-        return self._process is not None and self._process.poll() is None
+        """Check if the process is currently running without blocking."""
+        if self._process is None:
+            return False
+        # poll() returns None if process is still running, else returns exit code
+        return self._process.poll() is None
 
     def start(self) -> None:
-        """Launch the binary, redirecting stdout/stderr to log files."""
-        if not self._binary.exists():
-            raise FileNotFoundError(
+        """Launch the binary, redirecting stdout/stderr to log files safely."""
+        if self.is_running:
+            raise ProcessAlreadyRunningError(
+                f"Process is already running with PID {self.pid}."
+            )
+
+        if not self._binary.is_file():
+            raise BinaryNotFoundError(
                 f"Binary not found: {self._binary}. "
                 "Run 'make integration-build' first."
             )
 
-        env = os.environ.copy()
+        env: Dict[str, str] = os.environ.copy()
         env["FUNCTION_STREAM_CONF"] = str(self._workspace.config_file)
         env["FUNCTION_STREAM_HOME"] = str(self._workspace.root_dir)
 
-        self._stdout_fh = open(self._workspace.stdout_file, "w")
-        self._stderr_fh = open(self._workspace.stderr_file, "w")
+        popen_kwargs: Dict[str, Any] = {}
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["preexec_fn"] = os.setsid
+        try:
+            self._stdout_fh = open(self._workspace.stdout_file, "w", encoding="utf-8")
+            self._stderr_fh = open(self._workspace.stderr_file, "w", encoding="utf-8")
 
-        self._process = subprocess.Popen(
-            [str(self._binary)],
-            env=env,
-            cwd=str(self._workspace.root_dir),
-            stdout=self._stdout_fh,
-            stderr=self._stderr_fh,
-            preexec_fn=os.setsid if os.name != "nt" else None,
-        )
-        logger.info("Process started [pid=%d]", self._process.pid)
+            self._process = subprocess.Popen(
+                [str(self._binary)],
+                env=env,
+                cwd=str(self._workspace.root_dir),
+                stdout=self._stdout_fh,
+                stderr=self._stderr_fh,
+                **popen_kwargs,
+            )
+            logger.info("Process started successfully [pid=%d]", self._process.pid)
+
+        except Exception as e:
+            self._close_handles()
+            logger.error("Failed to start process: %s", e)
+            raise ProcessManagerError(f"Process initialization failed: {e}") from e
 
     def stop(self, timeout: float = 10.0) -> None:
-        """Graceful shutdown via SIGTERM, falls back to SIGKILL on timeout."""
-        if not self.is_running:
+        """
+        Graceful shutdown via SIGTERM (POSIX) or CTRL_BREAK (Windows).
+        Falls back to immediate Kill on timeout.
+        """
+        if not self.is_running or self._process is None:
             self._close_handles()
             return
 
-        logger.info("Sending SIGTERM [pid=%d]", self._process.pid)
+        logger.debug("Attempting graceful shutdown [pid=%d]...", self._process.pid)
         try:
-            os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
+            self._send_termination_signal()
             self._process.wait(timeout=timeout)
+            logger.info("Process stopped gracefully [pid=%d].", self._process.pid)
         except (ProcessLookupError, PermissionError):
+            # Process already died or OS denied access
             pass
         except subprocess.TimeoutExpired:
-            logger.warning("SIGTERM timed out, escalating to SIGKILL [pid=%d]", self._process.pid)
+            logger.warning("Graceful shutdown timed out (%.1fs). Escalating to Kill [pid=%d].",
+                           timeout, self._process.pid)
             self.kill()
             return
-
-        self._close_handles()
+        finally:
+            self._close_handles()
 
     def kill(self) -> None:
-        """Immediately SIGKILL the process group."""
-        if not self.is_running:
+        """Immediately terminate the process group across all platforms."""
+        if not self.is_running or self._process is None:
             self._close_handles()
             return
 
-        logger.info("Sending SIGKILL [pid=%d]", self._process.pid)
+        logger.debug("Executing force kill [pid=%d]...", self._process.pid)
         try:
-            os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
-            self._process.wait(timeout=5)
+            self._send_kill_signal()
+            self._process.wait(timeout=5.0)
+            logger.info("Process forcefully killed [pid=%d].", self._process.pid)
         except (ProcessLookupError, PermissionError):
             pass
         except subprocess.TimeoutExpired:
+            logger.error("Process group kill timed out. Falling back to base kill.")
             self._process.kill()
-            self._process.wait(timeout=5)
+            self._process.wait(timeout=2.0)
+        finally:
+            self._close_handles()
 
-        self._close_handles()
+    # ------------------------------------------------------------------
+    # OS-Specific Signal Implementations
+    # ------------------------------------------------------------------
+
+    def _send_termination_signal(self) -> None:
+        """Cross-platform implementation for graceful termination."""
+        if sys.platform == "win32":
+            self._process.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
+
+    def _send_kill_signal(self) -> None:
+        if sys.platform == "win32":
+            self._process.kill()
+        else:
+            os.killpg(os.getpgid(self._process.pid), signal.SIGKILL)
 
     def _close_handles(self) -> None:
+        """Safely close open file handles and clear state."""
         for fh in (self._stdout_fh, self._stderr_fh):
-            if fh and not fh.closed:
-                fh.close()
+            if fh is not None and not fh.closed:
+                try:
+                    fh.close()
+                except Exception as e:
+                    logger.debug("Failed to close file handle: %s", e)
+
         self._stdout_fh = None
         self._stderr_fh = None
         self._process = None

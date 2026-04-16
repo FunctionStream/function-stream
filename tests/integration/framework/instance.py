@@ -17,47 +17,84 @@ and process into a single easy-to-use API for test cases.
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Optional, Type
 
+from .paths import PathManager
 from .config import InstanceConfig
 from .process import FunctionStreamProcess
 from .utils import find_free_port, wait_for_port
 from .workspace import InstanceWorkspace
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from fs_client import FsClient
+    from fs_client._proto.function_stream_pb2 import SqlResponse
 
-_INTEGRATION_DIR = Path(__file__).resolve().parents[1]
-_PROJECT_ROOT = _INTEGRATION_DIR.parents[1]
-_TARGET_DIR = _INTEGRATION_DIR / "target"
-_BINARY_PATH = _PROJECT_ROOT / "target" / "release" / "function-stream"
+
+class FunctionStreamInstanceError(Exception):
+    """Base exception for FunctionStream instance errors."""
+    pass
+
+
+class ServerStartupError(FunctionStreamInstanceError):
+    """Raised when the server fails to start or bind to the port within the timeout."""
+    pass
+
+
+class MissingDependencyError(FunctionStreamInstanceError):
+    """Raised when an optional client dependency (e.g., grpc) is missing."""
+    pass
 
 
 class FunctionStreamInstance:
     """
     Facade for a single FunctionStream server used in integration tests.
 
+    Designed to be used as a context manager to guarantee resource cleanup.
+
     Usage:
-        inst = FunctionStreamInstance("my_test")
-        inst.configure(**{"service.debug": True}).start()
-        client = inst.get_client()
-        ...
-        inst.kill()
+        with FunctionStreamInstance("my_test").configure(**{"service.debug": True}) as inst:
+            client = inst.get_client()
+            inst.execute_sql("SELECT 1;")
     """
 
     def __init__(
-        self,
-        test_name: str = "unnamed",
-        host: str = "127.0.0.1",
-        binary_path: Optional[Path] = None,
+            self,
+            test_name: str = "unnamed",
+            host: str = "127.0.0.1",
+            binary_path: Optional[Path] = None,
     ):
+        self.test_name = test_name
         self.host = host
         self.port = find_free_port()
 
-        binary = binary_path or _BINARY_PATH
+        self._logger = logging.getLogger(f"{__name__}.{self.test_name}-{self.port}")
 
-        self.workspace = InstanceWorkspace(_TARGET_DIR, test_name, self.port)
+        actual_binary = binary_path or PathManager.get_binary_path()
+        target_dir = PathManager.get_target_dir()
+
+        self.workspace = InstanceWorkspace(target_dir, test_name, self.port)
         self.config = InstanceConfig(self.host, self.port, self.workspace)
-        self.process = FunctionStreamProcess(binary, self.workspace)
+        self.process = FunctionStreamProcess(actual_binary, self.workspace)
+
+    # ------------------------------------------------------------------
+    # Context Manager Protocol (Replaces __del__)
+    # ------------------------------------------------------------------
+
+    def __enter__(self) -> "FunctionStreamInstance":
+        """Start the instance when entering the 'with' block."""
+        self.start()
+        return self
+
+    def __exit__(
+            self,
+            exc_type: Optional[Type[BaseException]],
+            exc_val: Optional[BaseException],
+            exc_tb: Optional[TracebackType],
+    ) -> None:
+        """Ensure absolute cleanup when exiting the 'with' block."""
+        self._logger.debug("Tearing down instance due to context exit.")
+        self.kill()
 
     # ------------------------------------------------------------------
     # Properties
@@ -68,7 +105,7 @@ class FunctionStreamInstance:
         return self.process.is_running
 
     @property
-    def pid(self):
+    def pid(self) -> Optional[int]:
         return self.process.pid
 
     # ------------------------------------------------------------------
@@ -76,7 +113,10 @@ class FunctionStreamInstance:
     # ------------------------------------------------------------------
 
     def configure(self, **overrides: Any) -> "FunctionStreamInstance":
-        """Apply config overrides. Chainable: inst.configure(k=v).start()."""
+        """
+        Apply config overrides. Chainable.
+        Example: inst.configure(service__debug=True).start()
+        """
         self.config.override(overrides)
         return self
 
@@ -87,12 +127,13 @@ class FunctionStreamInstance:
     def start(self, timeout: float = 30.0) -> "FunctionStreamInstance":
         """Prepare workspace, write config, launch binary, wait for ready."""
         if self.is_running:
+            self._logger.debug("Instance is already running. Skipping start.")
             return self
 
         self.workspace.setup()
         self.config.write_to_workspace()
 
-        logger.info(
+        self._logger.info(
             "Starting FunctionStream [port=%d, dir=%s]",
             self.port,
             self.workspace.root_dir,
@@ -102,30 +143,31 @@ class FunctionStreamInstance:
         if not wait_for_port(self.host, self.port, timeout):
             stderr_tail = self._read_tail(self.workspace.stderr_file)
             self.process.kill()
-            raise RuntimeError(
+            raise ServerStartupError(
                 f"Server did not become ready within {timeout}s on port {self.port}.\n"
-                f"stderr tail:\n{stderr_tail}"
+                f"Process stderr tail:\n{stderr_tail}"
             )
 
-        logger.info(
-            "FunctionStream ready [port=%d, pid=%d]",
-            self.port,
-            self.process.pid,
-        )
+        self._logger.info("FunctionStream ready [pid=%s]", self.pid)
         return self
 
     def stop(self, timeout: float = 10.0) -> None:
         """Graceful SIGTERM shutdown, then remove everything except logs."""
-        self.process.stop(timeout=timeout)
+        if self.is_running:
+            self._logger.debug("Stopping instance gracefully...")
+            self.process.stop(timeout=timeout)
         self.workspace.cleanup()
 
     def kill(self) -> None:
         """Immediate SIGKILL, then remove everything except logs."""
-        self.process.kill()
+        if self.is_running:
+            self._logger.debug("Killing instance immediately...")
+            self.process.kill()
         self.workspace.cleanup()
 
     def restart(self, timeout: float = 10.0) -> "FunctionStreamInstance":
         """Stop then start (same port, same workspace)."""
+        self._logger.info("Restarting instance...")
         self.stop(timeout=timeout)
         return self.start()
 
@@ -133,35 +175,33 @@ class FunctionStreamInstance:
     # Client access
     # ------------------------------------------------------------------
 
-    def get_client(self):
+    def get_client(self) -> "FsClient":
         """Return a connected FsClient. Caller should close it when done."""
         try:
             from fs_client import FsClient
-        except ImportError:
-            raise ImportError(
+        except ImportError as e:
+            raise MissingDependencyError(
                 "functionstream-client is not installed. "
                 "Run: pip install -e python/functionstream-client"
-            )
+            ) from e
         return FsClient(host=self.host, port=self.port)
 
-    def execute_sql(self, sql: str, timeout: float = 30.0):
+    def execute_sql(self, sql: str, timeout: float = 30.0) -> "SqlResponse":
         """Convenience helper: send a SQL statement via gRPC ExecuteSql."""
         try:
             import grpc
             from fs_client._proto import function_stream_pb2, function_stream_pb2_grpc
-        except ImportError:
-            raise ImportError(
-                "functionstream-client is not installed. "
-                "Run: pip install -e python/functionstream-client"
-            )
+        except ImportError as e:
+            raise MissingDependencyError(
+                "gRPC dependencies or proto definitions are not available."
+            ) from e
 
-        channel = grpc.insecure_channel(f"{self.host}:{self.port}")
-        try:
+        # Use context manager for channel to prevent socket leaks
+        with grpc.insecure_channel(f"{self.host}:{self.port}") as channel:
             stub = function_stream_pb2_grpc.FunctionStreamServiceStub(channel)
             request = function_stream_pb2.SqlRequest(sql=sql)
+            self._logger.debug("Executing SQL: %s", sql)
             return stub.ExecuteSql(request, timeout=timeout)
-        finally:
-            channel.close()
 
     # ------------------------------------------------------------------
     # Internals
@@ -169,15 +209,15 @@ class FunctionStreamInstance:
 
     @staticmethod
     def _read_tail(path: Path, chars: int = 2000) -> str:
-        if not path.exists():
-            return "<file not found>"
-        text = path.read_text(errors="replace")
-        return text[-chars:] if len(text) > chars else text
+        """Reads the end of a file safely, useful for pulling crash logs."""
+        if not path.is_file():
+            return "<file not found or not a regular file>"
+        try:
+            text = path.read_text(errors="replace")
+            return text[-chars:] if len(text) > chars else text
+        except Exception as e:
+            return f"<failed to read log: {e}>"
 
     def __repr__(self) -> str:
         status = "running" if self.is_running else "stopped"
-        return f"<FunctionStreamInstance port={self.port} pid={self.pid} {status}>"
-
-    def __del__(self):
-        if hasattr(self, "process") and self.process.is_running:
-            self.process.kill()
+        return f"<FunctionStreamInstance test='{self.test_name}' port={self.port} pid={self.pid} [{status}]>"

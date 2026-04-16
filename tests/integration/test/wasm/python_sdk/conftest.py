@@ -10,104 +10,71 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Global pytest fixtures for the FunctionStream Python SDK integration tests.
-Provides managed Kafka broker, server instances, client connections,
-and automated resource cleanup.
-"""
-
+import logging
+import re
 import sys
 from pathlib import Path
 from typing import Generator, List
 
+_CURRENT_DIR = Path(__file__).resolve().parent
+_INTEGRATION_ROOT = Path(__file__).resolve().parents[3]
+
+if str(_INTEGRATION_ROOT) not in sys.path:
+    sys.path.insert(0, str(_INTEGRATION_ROOT))
+if str(_CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(_CURRENT_DIR))
+
 import pytest
+from framework import FunctionStreamInstance, KafkaDockerManager
+from fs_client.client import FsClient
 
-# tests/integration/test/wasm/python_sdk -> parents[3] = tests/integration
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-# Make the ``processors`` package importable from this directory
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+logger = logging.getLogger(__name__)
 
-from framework import FunctionStreamInstance  # noqa: E402
-from fs_client.client import FsClient  # noqa: E402
-
-PROJECT_ROOT = Path(__file__).resolve().parents[5]
-
-
-# ======================================================================
-# Kafka broker (opt-in, independent of fs_server)
-# ======================================================================
 
 @pytest.fixture(scope="session")
-def kafka():
+def kafka() -> Generator[KafkaDockerManager, None, None]:
     """
-    Session-scoped fixture: start a Docker-managed Kafka broker once
-    for the entire test session.
-
-    Tests that need a live Kafka broker should declare this fixture
-    as a parameter.  Tests that only register functions (without
-    producing / consuming data) do NOT need this fixture.
+    Session-scoped Kafka broker manager.
+    Leverages Context Manager for guaranteed teardown.
     """
-    from framework import KafkaDockerManager
+    with KafkaDockerManager() as mgr:
+        yield mgr
+        try:
+            mgr.clear_all_topics()
+        except Exception as e:
+            logger.warning("Failed to clear topics during Kafka teardown: %s", e)
 
-    mgr = KafkaDockerManager()
-    mgr.setup_kafka()
-    yield mgr
-    mgr.clear_all_topics()
-    mgr.teardown_kafka()
-
-
-# ======================================================================
-# Kafka topics (depends on kafka broker)
-# ======================================================================
 
 @pytest.fixture(scope="session")
-def kafka_topics(kafka):
+def kafka_topics(kafka: KafkaDockerManager) -> str:
     """
-    Session-scoped fixture: ensure the Kafka broker is running and
-    pre-create the standard input/output topics used by tests.
-
-    Returns the bootstrap servers string for use in WasmTaskBuilder configs.
+    Pre-creates standard topics and returns the bootstrap server address.
     """
     kafka.create_topics_if_not_exist(["in", "out", "events", "counts"])
-    return kafka.bootstrap_servers
+    return kafka.config.bootstrap_servers
 
 
-# ======================================================================
-# FunctionStream server (per-test instance with isolated logs)
-# ======================================================================
-
-def _derive_test_name(request: pytest.FixtureRequest) -> str:
-    """Build a human-readable path from the pytest node: wasm/python_sdk/<Class>/<method>."""
-    cls = request.node.cls
-    parts = ["wasm", "python_sdk"]
-    if cls is not None:
-        parts.append(cls.__name__)
-    parts.append(request.node.name)
-    return "/".join(parts)
+def _sanitize_node_id(nodeid: str) -> str:
+    """Converts a pytest nodeid into a safe directory name."""
+    clean_name = re.sub(r"[^\w\-]+", "-", nodeid)
+    return clean_name.strip("-")
 
 
 @pytest.fixture
 def fs_server(request: pytest.FixtureRequest) -> Generator[FunctionStreamInstance, None, None]:
     """
-    Function-scoped fixture: each test gets its own FunctionStream server
-    with isolated log directory named after the test class and method.
+    Function-scoped FunctionStream instance.
+    Uses Context Manager to ensure SIGKILL and workspace cleanup.
     """
-    test_name = _derive_test_name(request)
-    instance = FunctionStreamInstance(test_name=test_name)
-    instance.start()
-    yield instance
-    instance.kill()
+    test_name = _sanitize_node_id(request.node.nodeid)
+    with FunctionStreamInstance(test_name=test_name) as instance:
+        yield instance
 
-
-# ======================================================================
-# Client & resource tracking
-# ======================================================================
 
 @pytest.fixture
 def fs_client(fs_server: FunctionStreamInstance) -> Generator[FsClient, None, None]:
     """
-    Function-scoped fixture: provide a fresh client connected to the server.
-    The connection is automatically closed after each test.
+    Function-scoped FsClient connected to the isolated fs_server.
     """
     with fs_server.get_client() as client:
         yield client
@@ -116,9 +83,8 @@ def fs_client(fs_server: FunctionStreamInstance) -> Generator[FsClient, None, No
 @pytest.fixture
 def function_registry(fs_client: FsClient) -> Generator[List[str], None, None]:
     """
-    RAII Resource Manager: tracks registered function names.
-    Automatically stops and drops every tracked function after each test,
-    guaranteeing environment idempotency regardless of assertion failures.
+    RAII-style registry for FunctionStream tasks.
+    Ensures absolute teardown of functions to prevent state leakage.
     """
     registered_names: List[str] = []
 
@@ -127,9 +93,10 @@ def function_registry(fs_client: FsClient) -> Generator[List[str], None, None]:
     for name in registered_names:
         try:
             fs_client.stop_function(name)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to stop function '%s' during cleanup: %s", name, e)
+
         try:
             fs_client.drop_function(name)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to drop function '%s' during cleanup: %s", name, e)

@@ -11,34 +11,102 @@
 # limitations under the License.
 
 """
-Stateless utility functions: port allocation, health checks.
+Stateless utility functions: resilient port allocation and health checks.
 """
 
-import random
+import logging
 import socket
 import time
+from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
-def find_free_port(start: int = 18000, end: int = 28000) -> int:
-    """Find a random available TCP port in the given range."""
-    for _ in range(200):
-        port = random.randint(start, end)
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError(f"Could not find a free port in [{start}, {end}]")
+class NetworkUtilityError(Exception):
+    """Base exception for network utility functions."""
+    pass
 
 
-def wait_for_port(host: str, port: int, timeout: float = 30.0) -> bool:
-    """Block until the given TCP port is accepting connections."""
+class PortAllocationError(NetworkUtilityError):
+    """Raised when a free port cannot be allocated."""
+    pass
+
+
+def find_free_port(host: str = "127.0.0.1", port_range: Optional[tuple[int, int]] = None) -> int:
+    """
+    Finds a reliable, available TCP port.
+
+    By default, relies on the OS kernel to allocate an ephemeral port (binding to port 0).
+    This guarantees no immediate collision and is extremely fast.
+
+    Args:
+        host: The interface IP to bind against.
+        port_range: Optional tuple of (start, end). If provided, falls back to scanning
+                    this specific range instead of OS assignment.
+
+    Raises:
+        PortAllocationError: If binding fails or no ports are available in the range.
+    """
+    if port_range is not None:
+        start, end = port_range
+        import random
+        candidates = list(range(start, end + 1))
+        random.shuffle(candidates)
+
+        for port in candidates:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                try:
+                    s.bind((host, port))
+                    return port
+                except OSError:
+                    continue
+
+        raise PortAllocationError(f"Exhausted all ports in requested range [{start}, {end}].")
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, 0))
+            allocated_port = s.getsockname()[1]
+            return allocated_port
+        except OSError as e:
+            raise PortAllocationError(f"OS failed to allocate an ephemeral port on {host}: {e}") from e
+
+
+def wait_for_port(
+        host: str,
+        port: int,
+        timeout: float = 30.0,
+        poll_interval: float = 0.5
+) -> bool:
+    """
+    Blocks until the given TCP port is accepting connections.
+
+    Uses `socket.create_connection` for robust DNS resolution and
+    transparent IPv4/IPv6 dual-stack support.
+
+    Args:
+        host: Hostname or IP address.
+        port: Target TCP port.
+        timeout: Max seconds to wait.
+        poll_interval: Seconds to wait between retries.
+
+    Returns:
+        True if connection succeeded within timeout, False otherwise.
+    """
+    logger.debug("Waiting up to %.1fs for %s:%d to become responsive...", timeout, host, port)
     deadline = time.monotonic() + timeout
+
     while time.monotonic() < deadline:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.5)
-            if s.connect_ex((host, port)) == 0:
+        try:
+            with socket.create_connection((host, port), timeout=poll_interval):
+                logger.debug("Successfully connected to %s:%d", host, port)
                 return True
-        time.sleep(0.3)
+        except (OSError, ConnectionRefusedError):
+            pass
+
+        time.sleep(poll_interval)
+
+    logger.error("Timeout reached: %s:%d did not accept connections after %.1fs.", host, port, timeout)
     return False

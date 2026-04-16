@@ -15,35 +15,86 @@ InstanceConfig: builds and writes the config.yaml consumed by
 the FunctionStream binary via FUNCTION_STREAM_CONF.
 """
 
+import logging
+import os
+import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import yaml
 
 from .workspace import InstanceWorkspace
 
-_INTEGRATION_DIR = Path(__file__).resolve().parents[1]
-_PROJECT_ROOT = _INTEGRATION_DIR.parents[1]
-_SHARED_CACHE_DIR = _INTEGRATION_DIR / "target" / ".shared_cache"
+logger = logging.getLogger(__name__)
 
 
-def _find_python_wasm() -> str:
-    """Locate the Python WASM runtime for server initialisation."""
-    candidates = [
-        _PROJECT_ROOT / "python" / "functionstream-runtime" / "target" / "functionstream-python-runtime.wasm",
-        _PROJECT_ROOT / "dist" / "function-stream" / "data" / "cache" / "python-runner" / "functionstream-python-runtime.wasm",
-    ]
-    for c in candidates:
-        if c.exists():
-            return str(c.resolve())
-    return str(candidates[0])
+class ConfigurationError(Exception):
+    """Base exception for all configuration-related errors."""
+    pass
+
+
+class WasmRuntimeNotFoundError(ConfigurationError):
+    """Raised when the required Python WASM runtime cannot be located."""
+    pass
+
+
+class PathManager:
+    """
+    Utility class for resolving and managing cross-platform paths.
+    All outputs are standardized to POSIX format for safe YAML serialization.
+    """
+
+    _INTEGRATION_DIR = Path(__file__).resolve().parents[1]
+    _PROJECT_ROOT = _INTEGRATION_DIR.parents[1]
+
+    @classmethod
+    def get_shared_cache_dir(cls) -> Path:
+        return cls._INTEGRATION_DIR / "target" / ".shared_cache"
+
+    @classmethod
+    def build_posix_path(cls, base: Path, *segments: str) -> str:
+        """
+        Safely joins a base Path with string segments and returns a POSIX-compliant string.
+        Eliminates manual string concatenation and Windows backslash issues.
+        """
+        target_path = base
+        for segment in segments:
+            target_path = target_path / segment
+        return target_path.as_posix()
+
+    @classmethod
+    def find_python_wasm_posix(cls) -> str:
+        """Locates the Python WASM runtime and returns its POSIX path."""
+        candidates: List[Path] = [
+            cls._PROJECT_ROOT / "python" / "functionstream-runtime" / "target" / "functionstream-python-runtime.wasm",
+            cls._PROJECT_ROOT / "dist" / "function-stream" / "data" / "cache" / "python-runner" / "functionstream-python-runtime.wasm",
+            ]
+
+        for candidate in candidates:
+            if candidate.is_file():
+                logger.debug("Found Python WASM runtime at: %s", candidate)
+                return candidate.resolve().as_posix()
+
+        raise WasmRuntimeNotFoundError(
+            "Could not find python-runtime.wasm. Checked locations:\n" +
+            "\n".join(f" - {c}" for c in candidates)
+        )
 
 
 class InstanceConfig:
-    """Generates and persists config.yaml for one FunctionStream instance."""
+    """
+    Generates and persists config.yaml for one FunctionStream instance.
+    """
 
     def __init__(self, host: str, port: int, workspace: InstanceWorkspace):
         self._workspace = workspace
+
+        wasm_path = PathManager.find_python_wasm_posix()
+        cache_dir = PathManager.build_posix_path(PathManager.get_shared_cache_dir(), "python-runner")
+        log_file = PathManager.build_posix_path(workspace.log_dir, "app.log")
+        task_db_path = PathManager.build_posix_path(workspace.data_dir, "task")
+        catalog_db_path = PathManager.build_posix_path(workspace.data_dir, "stream_catalog")
+
         self._config: Dict[str, Any] = {
             "service": {
                 "service_id": f"it-{port}",
@@ -56,13 +107,13 @@ class InstanceConfig:
             "logging": {
                 "level": "info",
                 "format": "json",
-                "file_path": str(workspace.log_dir / "app.log"),
+                "file_path": log_file,
                 "max_file_size": 50,
                 "max_files": 3,
             },
             "python": {
-                "wasm_path": _find_python_wasm(),
-                "cache_dir": str(_SHARED_CACHE_DIR / "python-runner"),
+                "wasm_path": wasm_path,
+                "cache_dir": cache_dir,
                 "enable_cache": True,
             },
             "state_storage": {
@@ -70,32 +121,55 @@ class InstanceConfig:
             },
             "task_storage": {
                 "storage_type": "rocksdb",
-                "db_path": str(workspace.data_dir / "task"),
+                "db_path": task_db_path,
             },
             "stream_catalog": {
                 "persist": True,
-                "db_path": str(workspace.data_dir / "stream_catalog"),
+                "db_path": catalog_db_path,
             },
         }
 
     @property
     def raw(self) -> Dict[str, Any]:
-        return self._config
+        return self._config.copy()
 
     def override(self, overrides: Dict[str, Any]) -> None:
-        """
-        Apply overrides using dot-separated keys.
-        Example: {"service.debug": True, "logging.level": "debug"}
-        """
+        """Apply overrides using dot-separated keys."""
         for dotted_key, value in overrides.items():
             keys = dotted_key.split(".")
             target = self._config
+
             for k in keys[:-1]:
                 target = target.setdefault(k, {})
+                if not isinstance(target, dict):
+                    raise ConfigurationError(f"Cannot override key '{dotted_key}': '{k}' is not a dictionary.")
+
             target[keys[-1]] = value
 
     def write_to_workspace(self) -> Path:
-        """Serialize config to the workspace config.yaml and return its path."""
-        with open(self._workspace.config_file, "w", encoding="utf-8") as f:
-            yaml.dump(self._config, f, default_flow_style=False, sort_keys=False)
-        return self._workspace.config_file
+        """Serialize config to the workspace config.yaml safely."""
+        target_file = Path(self._workspace.config_file)
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+
+        fd, temp_path = tempfile.mkstemp(
+            dir=target_file.parent,
+            prefix=".config-",
+            suffix=".yaml",
+            text=True
+        )
+
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                yaml.safe_dump(
+                    self._config,
+                    f,
+                    default_flow_style=False,
+                    sort_keys=False
+                )
+            os.replace(temp_path, target_file)
+        except Exception as e:
+            Path(temp_path).unlink(missing_ok=True)
+            logger.error("Failed to write configuration file: %s", e)
+            raise ConfigurationError(f"Configuration write failed: {e}") from e
+
+        return target_file
