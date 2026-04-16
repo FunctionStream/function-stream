@@ -59,7 +59,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build Release Binary
-        run: cargo build --release --features python
+        run: make env && make dist
 
       - name: Pre-pull Kafka Image
         run: docker pull apache/kafka:3.7.0
