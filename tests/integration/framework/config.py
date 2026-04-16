@@ -24,6 +24,7 @@ from .workspace import InstanceWorkspace
 
 _INTEGRATION_DIR = Path(__file__).resolve().parents[1]
 _PROJECT_ROOT = _INTEGRATION_DIR.parents[1]
+_SHARED_CACHE_DIR = _INTEGRATION_DIR / "target" / ".shared_cache"
 
 
 def _find_python_wasm() -> str:
@@ -61,7 +62,7 @@ class InstanceConfig:
             },
             "python": {
                 "wasm_path": _find_python_wasm(),
-                "cache_dir": str(workspace.data_dir / "cache" / "python-runner"),
+                "cache_dir": str(_SHARED_CACHE_DIR / "python-runner"),
                 "enable_cache": True,
             },
             "state_storage": {

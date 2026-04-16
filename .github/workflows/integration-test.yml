@@ -32,6 +32,9 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
+      - name: Verify Docker
+        run: docker version
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -56,7 +59,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build Release Binary
-        run: cargo build --release --no-default-features --features incremental-cache
+        run: cargo build --release --features python
+
+      - name: Pre-pull Kafka Image
+        run: docker pull apache/kafka:3.7.0
 
       - name: Run Integration Tests
         run: make integration-test

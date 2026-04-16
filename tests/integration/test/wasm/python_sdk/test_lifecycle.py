@@ -33,14 +33,14 @@ def _unique(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
-def _build_counter_config(fn_name: str) -> "WasmTaskBuilder":
+def _build_counter_config(fn_name: str, bootstrap: str) -> "WasmTaskBuilder":
     """Return a ready-to-build builder pre-configured for CounterProcessor."""
     return (
         WasmTaskBuilder()
         .set_name(fn_name)
         .add_init_config("class_name", "CounterProcessor")
-        .add_input_group([KafkaInput("localhost:9092", "in", "grp", 0)])
-        .add_output(KafkaOutput("localhost:9092", "out", 0))
+        .add_input_group([KafkaInput(bootstrap, "in", "grp", 0)])
+        .add_output(KafkaOutput(bootstrap, "out", 0))
     )
 
 
@@ -55,13 +55,13 @@ class TestFunctionLifecycle:
     # ------------------------------------------------------------------
 
     def test_full_lifecycle_transitions(
-        self, fs_client: FsClient, function_registry: List[str]
+        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
     ):
         """Test the golden path: Create -> Show -> Stop -> Start -> Stop -> Drop."""
         fn_name = _unique("lifecycle")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name).add_init_config("test_mode", "true").build()
+        config = _build_counter_config(fn_name, kafka_topics).add_init_config("test_mode", "true").build()
 
         # 1. Create
         assert fs_client.create_python_function_from_config(config, CounterProcessor) is True
@@ -104,13 +104,13 @@ class TestFunctionLifecycle:
     # ------------------------------------------------------------------
 
     def test_show_functions_returns_created_function(
-        self, fs_client: FsClient, function_registry: List[str]
+        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
     ):
         """show_functions must contain the newly created function."""
         fn_name = _unique("show")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name).build()
+        config = _build_counter_config(fn_name, kafka_topics).build()
         fs_client.create_python_function_from_config(config, CounterProcessor)
 
         listing = fs_client.show_functions()
@@ -118,13 +118,13 @@ class TestFunctionLifecycle:
         assert fn_name in names
 
     def test_show_functions_result_fields(
-        self, fs_client: FsClient, function_registry: List[str]
+        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
     ):
         """Each FunctionInfo must carry name, task_type, and status."""
         fn_name = _unique("fields")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name).build()
+        config = _build_counter_config(fn_name, kafka_topics).build()
         fs_client.create_python_function_from_config(config, CounterProcessor)
 
         listing = fs_client.show_functions()
@@ -139,14 +139,14 @@ class TestFunctionLifecycle:
     # ------------------------------------------------------------------
 
     def test_multiple_functions_coexist(
-        self, fs_client: FsClient, function_registry: List[str]
+        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
     ):
         """Several independently created functions must all be listed."""
         names = [_unique("multi") for _ in range(3)]
         function_registry.extend(names)
 
         for name in names:
-            config = _build_counter_config(name).build()
+            config = _build_counter_config(name, kafka_topics).build()
             fs_client.create_python_function_from_config(config, CounterProcessor)
 
         listing = fs_client.show_functions()
@@ -159,13 +159,13 @@ class TestFunctionLifecycle:
     # ------------------------------------------------------------------
 
     def test_rapid_create_drop_cycle(
-        self, fs_client: FsClient, function_registry: List[str]
+        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
     ):
         """Rapidly creating and dropping functions must not corrupt server state."""
         for i in range(5):
             fn_name = _unique(f"rapid-{i}")
 
-            config = _build_counter_config(fn_name).build()
+            config = _build_counter_config(fn_name, kafka_topics).build()
             fs_client.create_python_function_from_config(config, CounterProcessor)
 
             fs_client.stop_function(fn_name)
@@ -180,13 +180,13 @@ class TestFunctionLifecycle:
     # ------------------------------------------------------------------
 
     def test_restart_preserves_identity(
-        self, fs_client: FsClient, function_registry: List[str]
+        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
     ):
         """Stopping and restarting a function should keep its name and type."""
         fn_name = _unique("restart")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name).build()
+        config = _build_counter_config(fn_name, kafka_topics).build()
         fs_client.create_python_function_from_config(config, CounterProcessor)
 
         fs_client.stop_function(fn_name)
@@ -202,13 +202,13 @@ class TestFunctionLifecycle:
     # ------------------------------------------------------------------
 
     def test_stop_then_drop(
-        self, fs_client: FsClient, function_registry: List[str]
+        self, fs_client: FsClient, function_registry: List[str], kafka_topics: str
     ):
         """Explicitly stopping, then dropping must always succeed."""
         fn_name = _unique("stop-drop")
         function_registry.append(fn_name)
 
-        config = _build_counter_config(fn_name).build()
+        config = _build_counter_config(fn_name, kafka_topics).build()
         fs_client.create_python_function_from_config(config, CounterProcessor)
 
         assert fs_client.stop_function(fn_name) is True

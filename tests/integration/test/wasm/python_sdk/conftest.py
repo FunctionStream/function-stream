@@ -57,6 +57,22 @@ def kafka():
 
 
 # ======================================================================
+# Kafka topics (depends on kafka broker)
+# ======================================================================
+
+@pytest.fixture(scope="session")
+def kafka_topics(kafka):
+    """
+    Session-scoped fixture: ensure the Kafka broker is running and
+    pre-create the standard input/output topics used by tests.
+
+    Returns the bootstrap servers string for use in WasmTaskBuilder configs.
+    """
+    kafka.create_topics_if_not_exist(["in", "out", "events", "counts"])
+    return kafka.bootstrap_servers
+
+
+# ======================================================================
 # FunctionStream server (per-test instance with isolated logs)
 # ======================================================================
 
