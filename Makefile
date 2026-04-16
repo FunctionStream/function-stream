@@ -32,9 +32,8 @@ OS_NAME     := $(shell uname -s)
 # 2. Configure RUSTFLAGS and target triple per platform
 DIST_ROOT   := dist
 ifeq ($(OS_NAME), Linux)
-    # Linux: static-link musl for a truly self-contained, zero-dependency binary
-    TRIPLE := $(ARCH)-unknown-linux-musl
-    STATIC_FLAGS := -C target-feature=+crt-static
+    TRIPLE := $(ARCH)-unknown-linux-gnu
+    STATIC_FLAGS :=
 else ifeq ($(OS_NAME), Darwin)
     # macOS: strip symbols but keep dynamic linking (Apple system restriction)
     TRIPLE := $(ARCH)-apple-darwin
