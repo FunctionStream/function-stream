@@ -20,8 +20,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional, Type
 
-from .paths import PathManager
-from .config import InstanceConfig
+from .config import InstanceConfig, PathManager
 from .process import FunctionStreamProcess
 from .utils import find_free_port, wait_for_port
 from .workspace import InstanceWorkspace
