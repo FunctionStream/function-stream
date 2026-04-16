@@ -471,7 +471,7 @@ impl IncrementalAggregatingFunc {
                     state
                 });
 
-                for (idx, v) in agg.state_cols.iter().zip(state.into_iter()) {
+                for (idx, v) in agg.state_cols.iter().zip(state) {
                     states[*idx].push(v);
                 }
             }
@@ -555,7 +555,7 @@ impl IncrementalAggregatingFunc {
             .iter()
             .map(|kb| parser.parse(kb).to_owned())
             .collect();
-        let mut cols = self.key_converter.convert_rows(rows.into_iter())?;
+        let mut cols = self.key_converter.convert_rows(rows)?;
         cols.push(Arc::new(accumulator_builder.finish()));
         cols.push(Arc::new(args_row_builder.finish()));
         cols.push(Arc::new(count_builder.finish()));
@@ -624,7 +624,7 @@ impl IncrementalAggregatingFunc {
             mem::take(&mut self.updated_keys).into_iter().unzip();
         let mut deleted_keys = vec![];
 
-        for (k, retract) in updated_keys.iter().zip(updated_values.into_iter()) {
+        for (k, retract) in updated_keys.iter().zip(updated_values) {
             let append = self.evaluate(&k.0)?;
 
             if let Some(v) = retract {
