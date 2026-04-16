@@ -48,6 +48,48 @@ class PathManager:
     _PROJECT_ROOT = _INTEGRATION_DIR.parents[1]
 
     @classmethod
+    def get_target_dir(cls) -> Path:
+        """Return the integration-test workspace root (tests/integration/target)."""
+        return cls._INTEGRATION_DIR / "target"
+
+    @classmethod
+    def get_binary_path(cls) -> Path:
+        """Locate the compiled function-stream binary under the project target dir."""
+        import platform
+        import struct
+
+        system = platform.system()
+        machine = platform.machine().lower()
+        arch_map = {"arm64": "aarch64", "amd64": "x86_64"}
+        arch = arch_map.get(machine, machine)
+
+        if system == "Linux":
+            triple = f"{arch}-unknown-linux-gnu"
+        elif system == "Darwin":
+            triple = f"{arch}-apple-darwin"
+        elif system == "Windows":
+            triple = f"{arch}-pc-windows-msvc"
+        else:
+            triple = f"{arch}-unknown-linux-gnu"
+
+        binary_name = "function-stream.exe" if system == "Windows" else "function-stream"
+        candidate = cls._PROJECT_ROOT / "target" / triple / "release" / binary_name
+
+        if candidate.is_file():
+            return candidate
+
+        fallback = cls._PROJECT_ROOT / "target" / "release" / binary_name
+        if fallback.is_file():
+            return fallback
+
+        raise FileNotFoundError(
+            f"Cannot find function-stream binary. Checked:\n"
+            f"  - {candidate}\n"
+            f"  - {fallback}\n"
+            f"Build first with: make build (or make build-lite)"
+        )
+
+    @classmethod
     def get_shared_cache_dir(cls) -> Path:
         return cls._INTEGRATION_DIR / "target" / ".shared_cache"
 
