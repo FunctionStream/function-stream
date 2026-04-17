@@ -170,6 +170,12 @@ impl OperatorStateStore {
         Ok(())
     }
 
+    pub async fn await_spill_complete(&self) {
+        while self.is_spilling.load(Ordering::SeqCst) {
+            self.spill_notify.notified().await;
+        }
+    }
+
     fn downgrade_active_table(&self, epoch: u64) {
         let mut active_guard = self.active_table.write();
         if active_guard.is_empty() {
@@ -833,10 +839,7 @@ mod tests {
         let key = b"persist".to_vec();
         store.put(key.clone(), make_batch(&[99])).await.unwrap();
         store.snapshot_epoch(1).unwrap();
-
-        // snapshot_epoch triggers a spill; wait for the background worker to
-        // flush the data to disk so get_batches can read it from parquet files.
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        store.await_spill_complete().await;
 
         let result = store.get_batches(&key).await.unwrap();
         assert!(!result.is_empty());
