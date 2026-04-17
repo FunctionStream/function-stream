@@ -341,7 +341,7 @@ impl PlanToGraphVisitor<'_> {
         let node_index = self.graph.add_node(execution_unit);
         self.add_index_to_traversal(node_index);
 
-        for (source, edge) in input_nodes.into_iter().zip(routing_edges.into_iter()) {
+        for (source, edge) in input_nodes.into_iter().zip(routing_edges) {
             self.graph.add_edge(source, node_index, edge);
         }
 

@@ -42,7 +42,7 @@ C_0 := \033[0m
 log = @printf "$(C_B)[-]$(C_0) %-15s %s\n" "$(1)" "$(2)"
 success = @printf "$(C_G)[✔]$(C_0) %s\n" "$(1)"
 
-.PHONY: all help build build-lite dist dist-lite clean test env env-clean go-sdk-env go-sdk-build go-sdk-clean docker docker-run docker-push .check-env .build-wasm
+.PHONY: all help build build-lite dist dist-lite clean test env env-clean go-sdk-env go-sdk-build go-sdk-clean docker docker-run docker-push .check-env .build-wasm integration-test
 
 all: build
 
@@ -62,6 +62,8 @@ help:
 	@echo "  docker      Build Docker image"
 	@echo "  docker-run  Run container (port 8080, mount logs)"
 	@echo "  docker-push Push image to registry"
+	@echo ""
+	@echo "  integration-test   Run integration tests (delegates to tests/integration)"
 	@echo ""
 	@echo "  Version: $(VERSION) | Arch: $(ARCH) | OS: $(OS)"
 
@@ -145,6 +147,7 @@ clean:
 	@cargo clean
 	@rm -rf $(DIST_ROOT) data logs
 	@./scripts/clean.sh 2>/dev/null || true
+	@$(MAKE) -C tests/integration clean 2>/dev/null || true
 	$(call success,Done)
 
 .check-env:
@@ -167,3 +170,6 @@ docker-push:
 	$(call log,DOCKER,Pushing $(IMAGE_NAME))
 	@docker push $(IMAGE_NAME)
 	$(call success,Push Complete)
+
+integration-test:
+	@$(MAKE) -C tests/integration test PYTEST_ARGS="$(PYTEST_ARGS)"
