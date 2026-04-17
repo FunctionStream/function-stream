@@ -91,6 +91,25 @@ impl FunctionStreamServiceImpl {
         }
     }
 
+    fn classify_error(message: &str) -> StatusCode {
+        let lower = message.to_lowercase();
+        if lower.contains("not found") || lower.contains("not exist") {
+            StatusCode::NotFound
+        } else if lower.contains("uniqueness violation")
+            || lower.contains("already exists")
+            || lower.contains("duplicate")
+        {
+            StatusCode::Conflict
+        } else if lower.contains("invalid")
+            || lower.contains("unsupported")
+            || lower.contains("missing")
+        {
+            StatusCode::BadRequest
+        } else {
+            StatusCode::InternalServerError
+        }
+    }
+
     async fn execute_statement(
         &self,
         stmt: &dyn Statement,
@@ -101,7 +120,8 @@ impl FunctionStreamServiceImpl {
         if result.success {
             Self::build_success_response(success_status, result.message, result.data)
         } else {
-            Self::build_error_response(StatusCode::InternalServerError, result.message)
+            let status = Self::classify_error(&result.message);
+            Self::build_error_response(status, result.message)
         }
     }
 }
@@ -139,8 +159,9 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
 
             if !result.success {
                 error!("SQL execution aborted: {}", result.message);
+                let status = Self::classify_error(&result.message);
                 return Ok(TonicResponse::new(Self::build_error_response(
-                    StatusCode::InternalServerError,
+                    status,
                     result.message,
                 )));
             }
@@ -235,8 +256,9 @@ impl FunctionStreamService for FunctionStreamServiceImpl {
 
         if !result.success {
             error!("show_functions execution failed: {}", result.message);
+            let status = Self::classify_error(&result.message);
             return Ok(TonicResponse::new(ShowFunctionsResponse {
-                status_code: StatusCode::InternalServerError as i32,
+                status_code: status as i32,
                 message: result.message,
                 functions: vec![],
             }));

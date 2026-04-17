@@ -392,10 +392,27 @@ impl WasmTask {
     ) -> ControlAction {
         match signal {
             TaskControlSignal::Start { completion_flag } => {
-                for input in inputs.iter_mut() {
-                    let _ = input.start();
+                for (idx, input) in inputs.iter_mut().enumerate() {
+                    if let Err(e) = input.start() {
+                        let msg = format!("Failed to start input {}: {}", idx, e);
+                        log::error!("{}", msg);
+                        *failure_cause.lock().unwrap() = Some(msg.clone());
+                        *shared_state.lock().unwrap() =
+                            ComponentState::Error { error: msg.clone() };
+                        *execution_state.lock().unwrap() = ExecutionState::Failed;
+                        completion_flag.mark_error(msg);
+                        return ControlAction::Pause;
+                    }
                 }
-                let _ = processor.start_outputs();
+                if let Err(e) = processor.start_outputs() {
+                    let msg = format!("Failed to start outputs: {}", e);
+                    log::error!("{}", msg);
+                    *failure_cause.lock().unwrap() = Some(msg.clone());
+                    *shared_state.lock().unwrap() = ComponentState::Error { error: msg.clone() };
+                    *execution_state.lock().unwrap() = ExecutionState::Failed;
+                    completion_flag.mark_error(msg);
+                    return ControlAction::Pause;
+                }
                 *state = TaskState::Running;
                 *shared_state.lock().unwrap() = ComponentState::Running;
                 completion_flag.mark_completed();
