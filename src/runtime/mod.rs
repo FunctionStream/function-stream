@@ -12,11 +12,9 @@
 
 // Runtime module
 
-pub mod buffer_and_event;
 pub mod common;
+pub mod memory;
 pub mod streaming;
-pub mod task;
-pub mod taskexecutor;
 pub mod util;
 pub mod wasm;
 

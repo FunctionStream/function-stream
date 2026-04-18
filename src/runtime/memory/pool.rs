@@ -1,5 +1,6 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
+//
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
@@ -12,47 +13,48 @@
 
 use parking_lot::Mutex;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Notify;
 use tracing::{debug, warn};
 
-use super::ticket::MemoryTicket;
+use super::block::MemoryBlock;
 
 #[derive(Debug)]
 pub struct MemoryPool {
-    max_bytes: usize,
-    used_bytes: AtomicUsize,
-    available_bytes: Mutex<usize>,
+    max_bytes: u64,
+    used_bytes: AtomicU64,
+    available_bytes: Mutex<u64>,
     notify: Notify,
 }
 
 impl MemoryPool {
-    pub fn new(max_bytes: usize) -> Arc<Self> {
+    pub fn new(max_bytes: u64) -> Arc<Self> {
         Arc::new(Self {
             max_bytes,
-            used_bytes: AtomicUsize::new(0),
+            used_bytes: AtomicU64::new(0),
             available_bytes: Mutex::new(max_bytes),
             notify: Notify::new(),
         })
     }
 
-    pub fn usage_metrics(&self) -> (usize, usize) {
+    pub fn usage_metrics(&self) -> (u64, u64) {
         (self.used_bytes.load(Ordering::Relaxed), self.max_bytes)
     }
 
-    pub async fn request_memory(self: &Arc<Self>, bytes: usize) -> MemoryTicket {
+    pub async fn request_block(self: &Arc<Self>, bytes: u64) -> Arc<MemoryBlock> {
         if bytes == 0 {
-            return MemoryTicket::new(0, self.clone());
+            return MemoryBlock::new(0, self.clone());
         }
 
         if bytes > self.max_bytes {
             warn!(
-                "Requested memory ({} B) exceeds total pool size ({} B)! \
-                Permitting to avoid pipeline deadlock, but OOM risk is critical.",
-                bytes, self.max_bytes
+                request_bytes = bytes,
+                max_bytes = self.max_bytes,
+                "Requested memory block exceeds total pool size! \
+                Permitting to avoid pipeline deadlock, but critical OOM risk exists."
             );
             self.used_bytes.fetch_add(bytes, Ordering::Relaxed);
-            return MemoryTicket::new(bytes, self.clone());
+            return MemoryBlock::new(bytes, self.clone());
         }
 
         loop {
@@ -61,19 +63,32 @@ impl MemoryPool {
                 if *available >= bytes {
                     *available -= bytes;
                     self.used_bytes.fetch_add(bytes, Ordering::Relaxed);
-                    return MemoryTicket::new(bytes, self.clone());
+                    return MemoryBlock::new(bytes, self.clone());
                 }
             }
 
-            debug!(
-                "Backpressure engaged: waiting for {} bytes to be freed...",
-                bytes
-            );
+            debug!(bytes = bytes, "Global backpressure engaged: waiting for memory...");
             self.notify.notified().await;
         }
     }
 
-    pub(crate) fn release(&self, bytes: usize) {
+    pub fn force_reserve(&self, bytes: u64) {
+        if bytes == 0 {
+            return;
+        }
+        let mut available = self.available_bytes.lock();
+        *available = available.saturating_sub(bytes);
+        self.used_bytes.fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    pub fn force_release(&self, bytes: u64) {
+        if bytes == 0 {
+            return;
+        }
+        self.release_block(bytes);
+    }
+
+    pub(crate) fn release_block(&self, bytes: u64) {
         if bytes == 0 {
             return;
         }

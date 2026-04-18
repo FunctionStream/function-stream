@@ -13,13 +13,13 @@
 use super::input_strategy::{InputStrategy, RoundRobinStrategy, from_selector_name};
 use super::thread_pool::ThreadGroup;
 use super::wasm_processor_trait::WasmProcessor;
-use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::common::{ComponentState, TaskCompletionFlag};
 use crate::runtime::input::Input;
 use crate::runtime::output::Output;
 use crate::runtime::processor::function_error::FunctionErrorReport;
-use crate::runtime::task::ProcessorRuntimeConfig;
-use crate::runtime::task::{ControlMailBox, TaskControlSignal, TaskLifecycle};
+use crate::runtime::wasm::buffer_and_event::BufferOrEvent;
+use crate::runtime::wasm::task::ProcessorRuntimeConfig;
+use crate::runtime::wasm::task::{ControlMailBox, TaskControlSignal, TaskLifecycle};
 use crate::storage::task::FunctionInfo;
 use crossbeam_channel::{Receiver, after, select, unbounded};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -120,7 +120,7 @@ impl WasmTask {
 
     pub fn init_with_context(
         &mut self,
-        init_context: &crate::runtime::taskexecutor::InitContext,
+        init_context: &crate::runtime::wasm::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
         let mut inputs = self.inputs.take().ok_or_else(|| {
             Box::new(std::io::Error::other("inputs already moved to thread"))
@@ -262,7 +262,7 @@ impl WasmTask {
         shared_state: Arc<Mutex<ComponentState>>,
         failure_cause: Arc<Mutex<Option<String>>>,
         execution_state: Arc<Mutex<ExecutionState>>,
-        _init_context: crate::runtime::taskexecutor::InitContext,
+        _init_context: crate::runtime::wasm::taskexecutor::InitContext,
     ) {
         let mut state = TaskState::Initialized;
         let mut last_idx: usize = 0;
@@ -729,7 +729,7 @@ impl WasmTask {
 impl TaskLifecycle for WasmTask {
     fn init_with_context(
         &mut self,
-        init_context: &crate::runtime::taskexecutor::InitContext,
+        init_context: &crate::runtime::wasm::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
         <WasmTask>::init_with_context(self, init_context)
     }

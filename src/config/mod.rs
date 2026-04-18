@@ -17,6 +17,7 @@ pub mod paths;
 pub mod python_config;
 pub mod service_config;
 pub mod storage;
+pub mod system;
 pub mod wasm_config;
 
 pub use global_config::GlobalConfig;

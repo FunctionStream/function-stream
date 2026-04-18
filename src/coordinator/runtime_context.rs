@@ -17,7 +17,7 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::runtime::streaming::job::JobManager;
-use crate::runtime::taskexecutor::TaskManager;
+use crate::runtime::wasm::taskexecutor::TaskManager;
 use crate::sql::schema::StreamSchemaProvider;
 use crate::storage::stream_catalog::CatalogManager;
 

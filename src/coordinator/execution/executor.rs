@@ -30,7 +30,7 @@ use crate::coordinator::plan::{
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
 use crate::runtime::streaming::job::JobManager;
 use crate::runtime::streaming::protocol::control::StopMode;
-use crate::runtime::taskexecutor::TaskManager;
+use crate::runtime::wasm::taskexecutor::TaskManager;
 use crate::sql::schema::show_create_catalog_table;
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::storage::stream_catalog::CatalogManager;

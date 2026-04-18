@@ -11,8 +11,8 @@
 // limitations under the License.
 
 use super::config::KafkaConfig;
-use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::input::input_protocol::InputProtocol;
+use crate::runtime::wasm::buffer_and_event::BufferOrEvent;
 use rdkafka::Message;
 use rdkafka::TopicPartitionList;
 use rdkafka::config::ClientConfig;

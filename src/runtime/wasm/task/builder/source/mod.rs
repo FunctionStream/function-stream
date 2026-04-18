@@ -10,20 +10,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Sink Builder - Sink type task builder
+// Source Builder - Source type task builder
 //
-// Specifically handles building logic for Sink type configuration (future support)
+// Specifically handles building logic for Source type configuration (future support)
 
 use crate::runtime::processor::wasm::wasm_task::WasmTask;
-use crate::runtime::task::yaml_keys::{TYPE, type_values};
+use crate::runtime::wasm::task::yaml_keys::{TYPE, type_values};
 use serde_yaml::Value;
 use std::sync::Arc;
 
-/// SinkBuilder - Sink type task builder
-pub struct SinkBuilder;
+/// SourceBuilder - Source type task builder
+pub struct SourceBuilder;
 
-impl SinkBuilder {
-    /// Create Sink type task from YAML configuration
+impl SourceBuilder {
+    /// Create Source type task from YAML configuration
     ///
     /// # Arguments
     /// - `task_name`: Task name
@@ -50,21 +50,21 @@ impl SinkBuilder {
                 )) as Box<dyn std::error::Error + Send>
             })?;
 
-        if config_type != type_values::SINK {
+        if config_type != type_values::SOURCE {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!(
                     "Invalid config type '{}', expected '{}'",
                     config_type,
-                    type_values::SINK
+                    type_values::SOURCE
                 ),
             )) as Box<dyn std::error::Error + Send>);
         }
 
-        // TODO: Implement Sink type task building logic
+        // TODO: Implement Source type task building logic
         Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "Sink type task builder is not yet implemented",
+            "Source type task builder is not yet implemented",
         )) as Box<dyn std::error::Error + Send>)
     }
 }

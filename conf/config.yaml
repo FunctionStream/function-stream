@@ -49,6 +49,19 @@ wasm:
   # When cache exceeds this size, least recently used items will be evicted
   max_cache_size: 104857600
 
+# Streaming Runtime Configuration
+streaming:
+  # Global memory pool size for the streaming runtime (network buffering, backpressure).
+  # When not set, auto-detected as 70% of physical memory.
+  # Fallback: 256 MiB if detection fails.
+  # max_memory_bytes: 268435456
+  
+  # Memory budget per stateful operator (aggregation, join, window).
+  # Each operator gets its own independent memory controller with this limit.
+  # When exceeded, the operator spills state to disk automatically.
+  # Default: 67108864 (64 MiB)
+  per_operator_state_memory_bytes: 67108864
+
 # State Storage Configuration
 # Used to store runtime state data for tasks
 state_storage:

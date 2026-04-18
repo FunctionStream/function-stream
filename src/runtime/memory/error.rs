@@ -1,5 +1,6 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
+//
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
@@ -10,24 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
+use std::fmt;
 
-use super::pool::MemoryPool;
-
-#[derive(Debug)]
-pub struct MemoryTicket {
-    bytes: usize,
-    pool: Arc<MemoryPool>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryError {
+    AlreadyInitialized,
+    Uninitialized,
 }
 
-impl MemoryTicket {
-    pub(crate) fn new(bytes: usize, pool: Arc<MemoryPool>) -> Self {
-        Self { bytes, pool }
+impl fmt::Display for MemoryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MemoryError::AlreadyInitialized => {
+                write!(f, "Global memory pool is already initialized")
+            }
+            MemoryError::Uninitialized => {
+                write!(f, "Global memory pool is not initialized")
+            }
+        }
     }
 }
 
-impl Drop for MemoryTicket {
-    fn drop(&mut self) {
-        self.pool.release(self.bytes);
-    }
-}
+impl std::error::Error for MemoryError {}

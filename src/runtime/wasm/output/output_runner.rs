@@ -10,13 +10,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::common::{ComponentState, TaskCompletionFlag};
 use crate::runtime::output::Output;
 use crate::runtime::output::output_protocol::OutputProtocol;
 use crate::runtime::processor::function_error::FunctionErrorReport;
-use crate::runtime::task::ControlMailBox;
-use crate::runtime::task::OutputRuntimeConfig;
+use crate::runtime::wasm::buffer_and_event::BufferOrEvent;
+use crate::runtime::wasm::task::ControlMailBox;
+use crate::runtime::wasm::task::OutputRuntimeConfig;
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -288,7 +288,7 @@ impl<P: OutputProtocol> OutputRunner<P> {
 impl<P: OutputProtocol> Output for OutputRunner<P> {
     fn init_with_context(
         &mut self,
-        ctx: &crate::runtime::taskexecutor::InitContext,
+        ctx: &crate::runtime::wasm::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn std::error::Error + Send>> {
         if !matches!(*self.state.lock().unwrap(), ComponentState::Uninitialized) {
             return Ok(());

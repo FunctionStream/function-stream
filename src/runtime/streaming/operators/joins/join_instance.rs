@@ -215,7 +215,6 @@ impl Operator for InstantJoinOperator {
         let store = OperatorStateStore::new(
             ctx.pipeline_id,
             ctx.state_dir.clone(),
-            ctx.memory_controller.clone(),
             ctx.io_manager.clone(),
         )
         .map_err(|e| anyhow!("Failed to init state store: {e}"))?;

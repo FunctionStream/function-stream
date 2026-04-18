@@ -21,9 +21,9 @@ use crate::config::wasm_config::WasmConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StreamingConfig {
-    /// Maximum heap memory (in bytes) available to the streaming runtime's memory pool.
-    /// Defaults to 256 MiB when absent.
-    pub max_memory_bytes: Option<usize>,
+    pub max_memory_bytes: Option<u64>,
+    /// Total bytes for the global operator-state [`MemoryPool`](crate::runtime::memory::MemoryPool) (all stores share this quota).
+    pub per_operator_state_memory_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

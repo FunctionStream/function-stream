@@ -32,11 +32,11 @@ use crate::runtime::streaming::job::edge_manager::EdgeManager;
 use crate::runtime::streaming::job::models::{
     PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus, StreamingJobRollupStatus,
 };
-use crate::runtime::streaming::memory::MemoryPool;
+use crate::runtime::memory::global_memory_pool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
 use crate::runtime::streaming::protocol::control::{ControlCommand, JobMasterEvent, StopMode};
 use crate::runtime::streaming::protocol::event::CheckpointBarrier;
-use crate::runtime::streaming::state::{IoManager, IoPool, MemoryController, NoopMetricsCollector};
+use crate::runtime::streaming::state::{IoManager, IoPool, NoopMetricsCollector};
 use crate::storage::stream_catalog::CatalogManager;
 
 #[derive(Debug, Clone)]
@@ -69,6 +69,8 @@ pub struct StateConfig {
     pub max_background_compactions: usize,
     pub soft_limit_ratio: f64,
     pub checkpoint_interval_ms: u64,
+    /// Total bytes shared by all [`crate::runtime::streaming::state::OperatorStateStore`] (global pool).
+    pub per_operator_memory_bytes: u64,
 }
 
 impl Default for StateConfig {
@@ -78,6 +80,7 @@ impl Default for StateConfig {
             max_background_compactions: 2,
             soft_limit_ratio: 0.7,
             checkpoint_interval_ms: 10_000,
+            per_operator_memory_bytes: 64 * 1024 * 1024,
         }
     }
 }
@@ -87,11 +90,6 @@ static GLOBAL_JOB_MANAGER: OnceLock<Arc<JobManager>> = OnceLock::new();
 pub struct JobManager {
     active_jobs: Arc<RwLock<HashMap<String, PhysicalExecutionGraph>>>,
     operator_factory: Arc<OperatorFactory>,
-    memory_pool: Arc<MemoryPool>,
-
-    #[allow(dead_code)]
-    memory_controller: Arc<MemoryController>,
-    #[allow(dead_code)]
     io_manager_client: IoManager,
     io_pool: Mutex<Option<IoPool>>,
     state_base_dir: PathBuf,
@@ -120,13 +118,9 @@ impl PipelineRunner {
 impl JobManager {
     pub fn new(
         operator_factory: Arc<OperatorFactory>,
-        max_memory_bytes: usize,
         state_base_dir: impl AsRef<Path>,
         state_config: StateConfig,
     ) -> Result<Self> {
-        let soft_limit_bytes = (max_memory_bytes as f64 * state_config.soft_limit_ratio) as usize;
-        let memory_controller = MemoryController::new(soft_limit_bytes, max_memory_bytes);
-
         let metrics = Arc::new(NoopMetricsCollector);
         let (io_pool, io_manager_client) = IoPool::try_new(
             state_config.max_background_spills,
@@ -138,8 +132,6 @@ impl JobManager {
         Ok(Self {
             active_jobs: Arc::new(RwLock::new(HashMap::new())),
             operator_factory,
-            memory_pool: MemoryPool::new(max_memory_bytes),
-            memory_controller,
             io_manager_client,
             io_pool: Mutex::new(Some(io_pool)),
             state_base_dir: state_base_dir.as_ref().to_path_buf(),
@@ -149,17 +141,11 @@ impl JobManager {
 
     pub fn init(
         factory: Arc<OperatorFactory>,
-        memory_bytes: usize,
         state_base_dir: PathBuf,
         state_config: StateConfig,
     ) -> Result<()> {
         GLOBAL_JOB_MANAGER
-            .set(Arc::new(Self::new(
-                factory,
-                memory_bytes,
-                state_base_dir,
-                state_config,
-            )?))
+            .set(Arc::new(Self::new(factory, state_base_dir, state_config)?))
             .map_err(|_| anyhow!("JobManager singleton already initialized"))
     }
 
@@ -485,8 +471,7 @@ impl JobManager {
             subtask_index,
             parallelism,
             physical_outboxes,
-            Arc::clone(&self.memory_pool),
-            Arc::clone(&self.memory_controller),
+            Arc::clone(&global_memory_pool()),
             self.io_manager_client.clone(),
             job_state_dir.to_path_buf(),
             recovery_epoch,

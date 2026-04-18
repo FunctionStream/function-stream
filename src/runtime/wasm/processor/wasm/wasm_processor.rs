@@ -134,7 +134,7 @@ impl WasmProcessorImpl {
 impl WasmProcessor for WasmProcessorImpl {
     fn init_with_context(
         &mut self,
-        _init_context: &crate::runtime::taskexecutor::InitContext,
+        _init_context: &crate::runtime::wasm::taskexecutor::InitContext,
     ) -> Result<(), Box<dyn Error + Send>> {
         if self.initialized {
             log::warn!("WasmProcessor '{}' already initialized", self.name);
@@ -405,7 +405,7 @@ impl WasmProcessor for WasmProcessorImpl {
     fn init_wasm_host(
         &mut self,
         outputs: Vec<Box<dyn Output>>,
-        init_context: &crate::runtime::taskexecutor::InitContext,
+        init_context: &crate::runtime::wasm::taskexecutor::InitContext,
         task_name: String,
         create_time: u64,
     ) -> Result<(), Box<dyn Error + Send>> {

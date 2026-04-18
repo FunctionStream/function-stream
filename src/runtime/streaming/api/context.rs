@@ -14,13 +14,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use arrow_array::RecordBatch;
 
-use crate::runtime::streaming::memory::MemoryPool;
+use crate::runtime::memory::{get_array_memory_size, MemoryPool};
 use crate::runtime::streaming::network::endpoint::PhysicalSender;
 use crate::runtime::streaming::protocol::event::{StreamEvent, TrackedEvent};
-use crate::runtime::streaming::state::{IoManager, MemoryController};
+use crate::runtime::streaming::state::IoManager;
 
 #[derive(Debug, Clone)]
 pub struct TaskContextConfig {
@@ -55,7 +55,7 @@ pub struct TaskContext {
     /// Downstream physical senders (outbound edges).
     downstream_senders: Vec<PhysicalSender>,
 
-    /// Global memory pool for back-pressure and accounting.
+    /// Job-wide shared pool; memory is accounted only when [`Self::collect`] / [`Self::collect_keyed`] run.
     memory_pool: Arc<MemoryPool>,
 
     /// Latest aligned event-time watermark for this subtask.
@@ -64,13 +64,7 @@ pub struct TaskContext {
     /// Subtask-level tunables.
     config: TaskContextConfig,
 
-    /// Root directory for operator state persistence (LSM-Tree data/tombstone files).
     pub state_dir: PathBuf,
-
-    /// Shared memory controller for state engine back-pressure.
-    pub memory_controller: Arc<MemoryController>,
-
-    /// I/O thread pool handle for background spill/compaction.
     pub io_manager: IoManager,
 
     /// Last globally-committed safe epoch for crash recovery.
@@ -86,7 +80,6 @@ impl TaskContext {
         parallelism: u32,
         downstream_senders: Vec<PhysicalSender>,
         memory_pool: Arc<MemoryPool>,
-        memory_controller: Arc<MemoryController>,
         io_manager: IoManager,
         state_dir: PathBuf,
         safe_epoch: u64,
@@ -107,7 +100,6 @@ impl TaskContext {
             current_watermark: None,
             config: TaskContextConfig::default(),
             state_dir,
-            memory_controller,
             io_manager,
             safe_epoch,
         }
@@ -150,13 +142,19 @@ impl TaskContext {
     // -------------------------------------------------------------------------
 
     /// Fan-out a data batch to all downstreams (forward / broadcast).
+    ///
+    /// Back-pressure and memory accounting happen here via [`MemoryPool::request_block`], not
+    /// when building the pipeline.
     pub async fn collect(&self, batch: RecordBatch) -> Result<()> {
         if self.downstream_senders.is_empty() {
             return Ok(());
         }
 
-        let bytes_required = batch.get_array_memory_size();
-        let ticket = self.memory_pool.request_memory(bytes_required).await;
+        let bytes_required = get_array_memory_size(&batch);
+        let block = self.memory_pool.request_block(bytes_required).await;
+        let ticket = block
+            .try_allocate(bytes_required)
+            .ok_or_else(|| anyhow!("memory block allocation failed"))?;
         let tracked_event = TrackedEvent::new(StreamEvent::Data(batch), Some(ticket));
 
         self.broadcast_event(tracked_event).await
@@ -169,8 +167,11 @@ impl TaskContext {
             return Ok(());
         }
 
-        let bytes_required = batch.get_array_memory_size();
-        let ticket = self.memory_pool.request_memory(bytes_required).await;
+        let bytes_required = get_array_memory_size(&batch);
+        let block = self.memory_pool.request_block(bytes_required).await;
+        let ticket = block
+            .try_allocate(bytes_required)
+            .ok_or_else(|| anyhow!("memory block allocation failed"))?;
         let event = TrackedEvent::new(StreamEvent::Data(batch), Some(ticket));
 
         let target_idx = (key_hash as usize) % num_downstreams;

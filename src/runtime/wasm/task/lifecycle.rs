@@ -15,8 +15,8 @@
 // Defines the complete lifecycle management interface for Task, including initialization, start, stop, checkpoint and close
 
 use crate::runtime::common::ComponentState;
-use crate::runtime::task::control_mailbox::ControlMailBox;
-use crate::runtime::taskexecutor::InitContext;
+use crate::runtime::wasm::task::control_mailbox::ControlMailBox;
+use crate::runtime::wasm::taskexecutor::InitContext;
 use crate::storage::task::FunctionInfo;
 use std::sync::Arc;
 
