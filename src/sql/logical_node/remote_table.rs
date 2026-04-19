@@ -119,7 +119,7 @@ impl StreamingOperatorBlueprint for RemoteTableBoundaryNode {
             OperatorName::Value,
             operator_payload,
             self.table_identifier.to_string(),
-            1,
+            planner.default_parallelism(),
         );
 
         let routing_edges: Vec<LogicalEdge> = input_schemas

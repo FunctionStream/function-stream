@@ -58,6 +58,8 @@ streaming:
   # Per stateful operator (join / agg / window): in-memory state store cap; spill when exceeded.
   # Omitted → 100 MiB.
   operator_state_store_memory_bytes: 104857600
+  checkpoint_interval_ms: 60000
+  pipeline_parallelism: 1
 
 # State Storage Configuration
 # Used to store runtime state data for tasks

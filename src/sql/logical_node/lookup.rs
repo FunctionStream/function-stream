@@ -199,7 +199,7 @@ impl StreamingOperatorBlueprint for StreamReferenceJoinNode {
                 "DictionaryJoin<{}>",
                 self.external_dictionary.table_identifier
             ),
-            1,
+            planner.default_parallelism(),
         );
 
         let incoming_edge =

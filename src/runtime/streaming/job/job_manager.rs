@@ -24,7 +24,10 @@ use tracing::{debug, error, info, warn};
 
 use protocol::function_stream_graph::{ChainedOperator, FsProgram};
 
-use crate::config::DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES;
+use crate::config::{
+    DEFAULT_CHECKPOINT_INTERVAL_MS, DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
+    DEFAULT_PIPELINE_PARALLELISM,
+};
 use crate::runtime::memory::global_memory_pool;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::{ConstructedOperator, Operator};
@@ -66,14 +69,13 @@ pub struct StreamingJobDetail {
     pub program: FsProgram,
 }
 
-pub const DEFAULT_CHECKPOINT_INTERVAL_MS: u64 = 60 * 1000;
-
 #[derive(Debug, Clone)]
 pub struct StateConfig {
     pub max_background_spills: usize,
     pub max_background_compactions: usize,
     pub soft_limit_ratio: f64,
     pub checkpoint_interval_ms: u64,
+    pub pipeline_parallelism: u32,
     /// Total bytes shared by all [`crate::runtime::streaming::state::OperatorStateStore`] (global pool).
     pub per_operator_memory_bytes: u64,
 }
@@ -85,6 +87,7 @@ impl Default for StateConfig {
             max_background_compactions: 2,
             soft_limit_ratio: 0.7,
             checkpoint_interval_ms: DEFAULT_CHECKPOINT_INTERVAL_MS,
+            pipeline_parallelism: DEFAULT_PIPELINE_PARALLELISM,
             per_operator_memory_bytes: DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
         }
     }
@@ -190,6 +193,11 @@ impl JobManager {
         }
     }
 
+    #[inline]
+    pub fn default_pipeline_parallelism(&self) -> u32 {
+        self.state_config.pipeline_parallelism
+    }
+
     pub async fn submit_job(
         &self,
         job_id: String,
@@ -218,6 +226,7 @@ impl JobManager {
                     job_id.clone(),
                     pipeline_id,
                     &node.operators,
+                    node.parallelism,
                     &mut edge_manager,
                     &job_state_dir,
                     job_master_tx.clone(),
@@ -445,6 +454,7 @@ impl JobManager {
         job_id: String,
         pipeline_id: u32,
         operators: &[ChainedOperator],
+        declared_parallelism: u32,
         edge_manager: &mut EdgeManager,
         job_state_dir: &Path,
         _job_master_tx: mpsc::Sender<JobMasterEvent>,
@@ -492,7 +502,12 @@ impl JobManager {
         let status = Arc::new(RwLock::new(PipelineStatus::Initializing));
 
         let subtask_index = 0;
-        let parallelism = 1;
+        let parallelism = if declared_parallelism > 0 {
+            declared_parallelism
+        } else {
+            self.state_config.pipeline_parallelism
+        }
+        .max(1);
 
         let per_op = self.state_config.per_operator_memory_bytes;
         let n_state_ops = pipeline_state_store_operator_count(operators);

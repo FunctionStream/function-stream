@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::config::log_config::LogConfig;
 use crate::config::python_config::PythonConfig;
 use crate::config::service_config::ServiceConfig;
+use crate::config::streaming_job::{ResolvedStreamingJobConfig, StreamingJobConfig};
 use crate::config::wasm_config::WasmConfig;
 
 /// Default for [`StreamingConfig::streaming_runtime_memory_bytes`] when unset. **200 MiB.**
@@ -27,6 +28,8 @@ pub const DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES: u64 = 100 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StreamingConfig {
+    #[serde(flatten)]
+    pub job: StreamingJobConfig,
     /// Bytes reserved in the global memory pool for streaming execution (pipeline buffers,
     /// batch collect, backpressure).
     #[serde(default)]
@@ -34,6 +37,13 @@ pub struct StreamingConfig {
     /// Per stateful operator: in-memory state store cap before spill.
     #[serde(default)]
     pub operator_state_store_memory_bytes: Option<u64>,
+}
+
+impl StreamingConfig {
+    #[inline]
+    pub fn resolved_job(&self) -> ResolvedStreamingJobConfig {
+        self.job.resolve()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

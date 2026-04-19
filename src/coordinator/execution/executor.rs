@@ -20,6 +20,9 @@ use crate::coordinator::dataset::{
     ExecuteResult, ShowCatalogTablesResult, ShowCreateStreamingTableResult, ShowCreateTableResult,
     ShowFunctionsResult, ShowStreamingTablesResult, empty_record_batch,
 };
+use crate::coordinator::streaming_table_options::{
+    parse_checkpoint_interval_ms, parse_pipeline_parallelism,
+};
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, CreateTablePlanBody,
     DropFunctionPlan, DropStreamingTablePlan, DropTablePlan, LookupTablePlan, PlanNode,
@@ -318,16 +321,18 @@ impl PlanVisitor for Executor {
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
         let execute = || -> Result<ExecuteResult, ExecuteError> {
-            let fs_program: FsProgram = plan.program.clone().into();
+            let mut fs_program: FsProgram = plan.program.clone().into();
             let job_manager: Arc<JobManager> = Arc::clone(&self.job_manager);
+            let pipeline_parallelism = parse_pipeline_parallelism(plan.with_options.as_ref())
+                .unwrap_or_else(|| job_manager.default_pipeline_parallelism())
+                .max(1);
+            for node in &mut fs_program.nodes {
+                node.parallelism = pipeline_parallelism;
+            }
 
             let job_id = plan.name.clone();
 
-            let custom_interval: Option<u64> = plan
-                .with_options
-                .as_ref()
-                .and_then(|opts| opts.get("checkpoint.interval"))
-                .and_then(|v| v.parse().ok());
+            let custom_interval = parse_checkpoint_interval_ms(plan.with_options.as_ref());
 
             self.catalog_manager
                 .persist_streaming_job(

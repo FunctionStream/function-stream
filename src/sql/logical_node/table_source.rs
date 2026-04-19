@@ -147,7 +147,7 @@ impl StreamingOperatorBlueprint for StreamIngestionNode {
 
     fn compile_to_graph_node(
         &self,
-        _compiler_context: &Planner,
+        compiler_context: &Planner,
         node_id_sequence: usize,
         upstream_schemas: Vec<FsSchemaRef>,
     ) -> Result<CompiledTopologyNode> {
@@ -167,7 +167,7 @@ impl StreamingOperatorBlueprint for StreamIngestionNode {
             OperatorName::ConnectorSource,
             connector_payload,
             operator_description,
-            1,
+            compiler_context.default_parallelism(),
         );
 
         Ok(CompiledTopologyNode::new(execution_unit, vec![]))

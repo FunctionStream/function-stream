@@ -126,7 +126,7 @@ impl StreamWindowAggregateNode {
             OperatorName::TumblingWindowAggregate,
             operator_config.encode_to_vec(),
             format!("TumblingWindow<{}>", operator_config.name),
-            1,
+            planner.default_parallelism(),
         ))
     }
 
@@ -176,7 +176,7 @@ impl StreamWindowAggregateNode {
             OperatorName::SlidingWindowAggregate,
             operator_config.encode_to_vec(),
             proto_operator_name::SLIDING_WINDOW_LABEL.to_string(),
-            1,
+            planner.default_parallelism(),
         ))
     }
 
@@ -243,7 +243,7 @@ impl StreamWindowAggregateNode {
             OperatorName::SessionWindowAggregate,
             operator_config.encode_to_vec(),
             operator_config.name.clone(),
-            1,
+            planner.default_parallelism(),
         ))
     }
 
@@ -299,7 +299,7 @@ impl StreamWindowAggregateNode {
             OperatorName::TumblingWindowAggregate,
             operator_config.encode_to_vec(),
             proto_operator_name::INSTANT_WINDOW_LABEL.to_string(),
-            1,
+            planner.default_parallelism(),
         ))
     }
 }

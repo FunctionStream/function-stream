@@ -169,7 +169,7 @@ impl StreamingOperatorBlueprint for StreamingWindowFunctionNode {
             OperatorName::WindowFunction,
             operator_config.encode_to_vec(),
             runtime_operator_kind::STREAMING_WINDOW_EVALUATOR.to_string(),
-            1,
+            planner.default_parallelism(),
         );
 
         let routing_edge =

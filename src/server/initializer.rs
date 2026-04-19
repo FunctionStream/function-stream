@@ -170,12 +170,15 @@ fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
         .streaming
         .operator_state_store_memory_bytes
         .unwrap_or(crate::config::DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES);
+    let job = config.streaming.resolved_job();
 
     let registry = Arc::new(Registry::new());
     let factory = Arc::new(OperatorFactory::new(registry));
 
     let state_base_dir = std::env::temp_dir().join("function-stream").join("state");
     let state_config = StateConfig {
+        checkpoint_interval_ms: job.checkpoint_interval_ms,
+        pipeline_parallelism: job.pipeline_parallelism,
         per_operator_memory_bytes,
         ..StateConfig::default()
     };

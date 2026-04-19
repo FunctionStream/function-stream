@@ -107,7 +107,7 @@ pub mod sql_field {
 }
 
 pub mod sql_planning_default {
-    pub const DEFAULT_PARALLELISM: usize = 4;
+    pub const DEFAULT_PARALLELISM: usize = 1;
     pub const PLANNING_TTL_SECS: u64 = 24 * 60 * 60;
 }
 

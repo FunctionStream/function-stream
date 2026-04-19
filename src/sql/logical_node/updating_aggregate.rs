@@ -224,7 +224,7 @@ impl StreamingOperatorBlueprint for ContinuousAggregateNode {
             OperatorName::UpdatingAggregate,
             operator_config.encode_to_vec(),
             proto_operator_name::UPDATING_AGGREGATE.to_string(),
-            1,
+            planner.default_parallelism(),
         );
 
         let shuffle_edge =

@@ -96,6 +96,11 @@ pub(crate) struct Planner<'a> {
 }
 
 impl<'a> Planner<'a> {
+    #[inline]
+    pub(crate) fn default_parallelism(&self) -> usize {
+        self.schema_provider.default_parallelism()
+    }
+
     pub(crate) fn new(
         schema_provider: &'a StreamSchemaProvider,
         session_state: &'a SessionState,

@@ -160,7 +160,7 @@ impl StreamingOperatorBlueprint for AsyncFunctionExecutionNode {
             OperatorName::AsyncUdf,
             operator_config.encode_to_vec(),
             format!("AsyncUdf<{}>", self.operator_name),
-            1,
+            planner.default_parallelism(),
         );
 
         let upstream_schema = input_schemas.remove(0);
