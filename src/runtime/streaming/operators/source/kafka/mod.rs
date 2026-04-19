@@ -480,13 +480,15 @@ impl SourceOperator for KafkaSourceOperator {
         }
 
         let epoch = u64::from(barrier.epoch);
-        let kafka_subtask = if self.current_offsets.is_empty() {
-            None
-        } else {
+        if self.current_offsets.is_empty() {
+            return Ok(SourceCheckpointReport::default());
+        }
+
+        let kafka_subtask = {
             let mut parts: Vec<(i32, i64)> =
                 self.current_offsets.iter().map(|(&p, &o)| (p, o)).collect();
             parts.sort_by_key(|x| x.0);
-            Some(KafkaSourceSubtaskCheckpoint {
+            KafkaSourceSubtaskCheckpoint {
                 pipeline_id: ctx.pipeline_id,
                 subtask_index: ctx.subtask_index,
                 checkpoint_epoch: epoch,
@@ -494,10 +496,10 @@ impl SourceOperator for KafkaSourceOperator {
                     .into_iter()
                     .map(|(partition, offset)| KafkaPartitionOffset { partition, offset })
                     .collect(),
-            })
+            }
         };
 
-        Ok(SourceCheckpointReport { kafka_subtask })
+        Ok(SourceCheckpointReport::from_kafka_checkpoint(kafka_subtask))
     }
 
     async fn on_close(&mut self, _ctx: &mut TaskContext) -> Result<()> {

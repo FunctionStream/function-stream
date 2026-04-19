@@ -58,6 +58,13 @@ message KafkaSourceSubtaskCheckpoint {
   repeated KafkaPartitionOffset partitions = 4;
 }
 
+// Generic source checkpoint payload envelope (enum-like via oneof).
+message SourceCheckpointPayload {
+  oneof checkpoint {
+    KafkaSourceSubtaskCheckpoint kafka = 1;
+  }
+}
+
 // Persisted record for one streaming table (CREATE STREAMING TABLE).
 // On restart, the engine re-submits each record to JobManager to resume the pipeline.
 message StreamingTableDefinition {

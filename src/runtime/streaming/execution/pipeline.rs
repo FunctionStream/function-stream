@@ -124,7 +124,7 @@ impl Pipeline {
                                                 active_streams.insert(i, stream);
                                             }
                                         }
-                                        self.ctx.send_checkpoint_ack(epoch, None).await;
+                                        self.ctx.send_checkpoint_ack(epoch, vec![]).await;
                                     }
                                 }
                             }

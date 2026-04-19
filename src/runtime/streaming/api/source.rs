@@ -14,7 +14,7 @@ use crate::runtime::streaming::api::context::TaskContext;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
-use protocol::storage::KafkaSourceSubtaskCheckpoint;
+use protocol::storage::{KafkaSourceSubtaskCheckpoint, SourceCheckpointPayload, source_checkpoint_payload};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SourceOffset {
@@ -35,7 +35,17 @@ pub enum SourceEvent {
 /// Optional metadata returned when a source completes a checkpoint barrier snapshot.
 #[derive(Debug, Default, Clone)]
 pub struct SourceCheckpointReport {
-    pub kafka_subtask: Option<KafkaSourceSubtaskCheckpoint>,
+    pub payloads: Vec<SourceCheckpointPayload>,
+}
+
+impl SourceCheckpointReport {
+    pub fn from_kafka_checkpoint(kafka: KafkaSourceSubtaskCheckpoint) -> Self {
+        Self {
+            payloads: vec![SourceCheckpointPayload {
+                checkpoint: Some(source_checkpoint_payload::Checkpoint::Kafka(kafka)),
+            }],
+        }
+    }
 }
 
 #[async_trait]

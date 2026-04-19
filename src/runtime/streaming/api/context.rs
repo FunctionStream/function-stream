@@ -16,7 +16,7 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, anyhow};
 use arrow_array::RecordBatch;
-use protocol::storage::KafkaSourceSubtaskCheckpoint;
+use protocol::storage::SourceCheckpointPayload;
 use tokio::sync::mpsc;
 
 use crate::runtime::memory::{MemoryBlock, MemoryPool, get_array_memory_size};
@@ -131,14 +131,14 @@ impl TaskContext {
     pub async fn send_checkpoint_ack(
         &self,
         epoch: u64,
-        kafka_subtask: Option<KafkaSourceSubtaskCheckpoint>,
+        source_payloads: Vec<SourceCheckpointPayload>,
     ) {
         if let Some(tx) = &self.checkpoint_ack_tx {
             let _ = tx
                 .send(JobMasterEvent::CheckpointAck {
                     pipeline_id: self.pipeline_id,
                     epoch,
-                    kafka_subtask,
+                    source_payloads,
                 })
                 .await;
         }

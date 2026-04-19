@@ -187,7 +187,7 @@ impl SourceDriver {
 
         if let Some((epoch, report)) = pending_source_checkpoint {
             self.ctx
-                .send_checkpoint_ack(epoch, report.kafka_subtask)
+                .send_checkpoint_ack(epoch, report.payloads)
                 .await;
         }
 

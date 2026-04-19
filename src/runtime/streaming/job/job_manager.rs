@@ -23,7 +23,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error, info, warn};
 
 use protocol::function_stream_graph::{ChainedOperator, FsProgram};
-use protocol::storage::KafkaSourceSubtaskCheckpoint;
+use protocol::storage::{
+    KafkaSourceSubtaskCheckpoint, SourceCheckpointPayload, source_checkpoint_payload,
+};
 
 use crate::config::{
     DEFAULT_CHECKPOINT_INTERVAL_MS, DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
@@ -156,6 +158,25 @@ impl PipelineRunner {
             PipelineRunner::Standard(pipeline) => pipeline.run().await,
         }
     }
+}
+
+fn decode_kafka_checkpoints_from_source_payloads(
+    payloads: Vec<SourceCheckpointPayload>,
+    epoch: u64,
+) -> Vec<KafkaSourceSubtaskCheckpoint> {
+    let mut out = Vec::new();
+    for p in payloads {
+        match p.checkpoint {
+            Some(source_checkpoint_payload::Checkpoint::Kafka(mut cp)) => {
+                if cp.checkpoint_epoch != epoch {
+                    cp.checkpoint_epoch = epoch;
+                }
+                out.push(cp);
+            }
+            None => warn!("Skip empty source checkpoint payload"),
+        }
+    }
+    out
 }
 
 impl JobManager {
@@ -721,7 +742,7 @@ impl JobManager {
 
             let mut current_epoch: u64 = start_epoch;
             let mut pending_checkpoints: HashMap<u64, HashSet<u32>> = HashMap::new();
-            let mut kafka_reports: HashMap<u64, Vec<KafkaSourceSubtaskCheckpoint>> = HashMap::new();
+            let mut source_reports: HashMap<u64, Vec<SourceCheckpointPayload>> = HashMap::new();
 
             async fn broadcast_checkpoint_phase2(
                 txs: &[mpsc::Sender<ControlCommand>],
@@ -741,10 +762,13 @@ impl JobManager {
                             JobMasterEvent::CheckpointAck {
                                 pipeline_id,
                                 epoch,
-                                kafka_subtask,
+                                source_payloads,
                             } => {
-                                if let Some(k) = kafka_subtask {
-                                    kafka_reports.entry(epoch).or_default().push(k);
+                                if !source_payloads.is_empty() {
+                                    source_reports
+                                        .entry(epoch)
+                                        .or_default()
+                                        .extend(source_payloads);
                                 }
                                 if let Some(pending_set) = pending_checkpoints.get_mut(&epoch) {
                                     pending_set.remove(&pipeline_id);
@@ -755,7 +779,8 @@ impl JobManager {
                                             "Checkpoint Epoch is GLOBALLY COMPLETED (phase 1); persisting metadata and notifying operators (phase 2)"
                                         );
 
-                                        let kf = kafka_reports.remove(&epoch).unwrap_or_default();
+                                        let payloads = source_reports.remove(&epoch).unwrap_or_default();
+                                        let kf = decode_kafka_checkpoints_from_source_payloads(payloads, epoch);
                                         let epoch_u32 = u32::try_from(epoch).unwrap_or(u32::MAX);
 
                                         let mut catalog_ok = true;
@@ -797,7 +822,7 @@ impl JobManager {
                                     reason = %reason, "Checkpoint FAILED!"
                                 );
                                 if pending_checkpoints.remove(&epoch).is_some() {
-                                    kafka_reports.remove(&epoch);
+                                    source_reports.remove(&epoch);
                                     let epoch_u32 = u32::try_from(epoch).unwrap_or(u32::MAX);
                                     broadcast_checkpoint_phase2(
                                         &all_pipeline_control_txs,

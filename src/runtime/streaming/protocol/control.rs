@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use super::event::CheckpointBarrier;
-use protocol::storage::KafkaSourceSubtaskCheckpoint;
+use protocol::storage::SourceCheckpointPayload;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -99,8 +99,8 @@ pub enum JobMasterEvent {
     CheckpointAck {
         pipeline_id: u32,
         epoch: u64,
-        /// Kafka source subtask progress at this barrier (only source pipelines set this).
-        kafka_subtask: Option<KafkaSourceSubtaskCheckpoint>,
+        /// Source protocol checkpoint payloads (enum-style oneof envelope).
+        source_payloads: Vec<SourceCheckpointPayload>,
     },
     CheckpointDecline {
         pipeline_id: u32,
