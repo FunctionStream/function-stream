@@ -66,6 +66,8 @@ pub struct StreamingJobDetail {
     pub program: FsProgram,
 }
 
+pub const DEFAULT_CHECKPOINT_INTERVAL_MS: u64 = 60 * 1000;
+
 #[derive(Debug, Clone)]
 pub struct StateConfig {
     pub max_background_spills: usize,
@@ -82,7 +84,7 @@ impl Default for StateConfig {
             max_background_spills: 4,
             max_background_compactions: 2,
             soft_limit_ratio: 0.7,
-            checkpoint_interval_ms: 10_000,
+            checkpoint_interval_ms: DEFAULT_CHECKPOINT_INTERVAL_MS,
             per_operator_memory_bytes: DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
         }
     }
