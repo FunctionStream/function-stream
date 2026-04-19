@@ -103,10 +103,7 @@ mod sys {
             .arg(name)
             .output()?;
         if !output.status.success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("sysctl {name} failed"),
-            ));
+            return Err(io::Error::other(format!("sysctl {name} failed")));
         }
         String::from_utf8_lossy(&output.stdout)
             .trim()
@@ -166,13 +163,13 @@ mod sys {
         let mut total = 0u64;
         let mut used = 0u64;
         for part in text.split_whitespace() {
-            if let Some(mb_str) = part.strip_suffix("M") {
-                if let Ok(mb) = mb_str.parse::<f64>() {
-                    if total == 0 {
-                        total = (mb * 1024.0 * 1024.0) as u64;
-                    } else if used == 0 {
-                        used = (mb * 1024.0 * 1024.0) as u64;
-                    }
+            if let Some(mb_str) = part.strip_suffix("M")
+                && let Ok(mb) = mb_str.parse::<f64>()
+            {
+                if total == 0 {
+                    total = (mb * 1024.0 * 1024.0) as u64;
+                } else if used == 0 {
+                    used = (mb * 1024.0 * 1024.0) as u64;
                 }
             }
         }
