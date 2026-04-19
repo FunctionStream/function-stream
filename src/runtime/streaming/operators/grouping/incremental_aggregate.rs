@@ -936,7 +936,7 @@ impl Operator for IncrementalAggregatingFunc {
 
         // Flush to Parquet
         store
-            .snapshot_epoch(barrier.epoch as u64)
+            .prepare_checkpoint_epoch(barrier.epoch as u64)
             .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
 
         info!(
@@ -946,6 +946,15 @@ impl Operator for IncrementalAggregatingFunc {
 
         self.updated_keys.clear();
 
+        Ok(())
+    }
+
+    async fn commit_checkpoint(&mut self, epoch: u32, _ctx: &mut TaskContext) -> Result<()> {
+        self.state_store
+            .as_ref()
+            .expect("state store not initialized")
+            .commit_checkpoint_epoch(epoch as u64)
+            .map_err(|e| anyhow!("Commit checkpoint failed: {e}"))?;
         Ok(())
     }
 

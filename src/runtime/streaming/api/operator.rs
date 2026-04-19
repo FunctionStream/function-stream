@@ -54,11 +54,24 @@ pub trait Operator: Send + 'static {
         ctx: &mut TaskContext,
     ) -> anyhow::Result<()>;
 
+    /// Global checkpoint **phase 2** (after metadata is durable): finalize external side effects.
+    ///
+    /// Default is no-op. Examples of overrides: transactional Kafka sink calls
+    /// `commit_transaction` on the producer stashed during [`Self::snapshot_state`].
     async fn commit_checkpoint(
         &mut self,
-        _epoch: u32,
+        epoch: u32,
         _ctx: &mut TaskContext,
     ) -> anyhow::Result<()> {
+        let _ = epoch;
+        Ok(())
+    }
+
+    /// Global checkpoint **rollback** when phase 2 must not commit (e.g. catalog persist failed).
+    ///
+    /// Default is no-op. Transactional Kafka sink overrides with `abort_transaction` on the stashed producer.
+    async fn abort_checkpoint(&mut self, epoch: u32, _ctx: &mut TaskContext) -> anyhow::Result<()> {
+        let _ = epoch;
         Ok(())
     }
 

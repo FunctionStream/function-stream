@@ -158,6 +158,9 @@ impl OperatorDrive for IntermediateDriver {
             ControlCommand::Commit { epoch } => {
                 self.operator.commit_checkpoint(*epoch, ctx).await?;
             }
+            ControlCommand::AbortCheckpoint { epoch } => {
+                self.operator.abort_checkpoint(*epoch, ctx).await?;
+            }
             ControlCommand::Stop { mode } if *mode == StopMode::Immediate => {
                 stop = true;
             }
@@ -272,6 +275,9 @@ impl OperatorDrive for TailDriver {
             }
             ControlCommand::Commit { epoch } => {
                 self.operator.commit_checkpoint(*epoch, ctx).await?;
+            }
+            ControlCommand::AbortCheckpoint { epoch } => {
+                self.operator.abort_checkpoint(*epoch, ctx).await?;
             }
             ControlCommand::Stop { mode } if *mode == StopMode::Immediate => {
                 stop = true;

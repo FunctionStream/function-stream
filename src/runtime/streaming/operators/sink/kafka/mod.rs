@@ -10,6 +10,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! ## Exactly-once Kafka sink and checkpoint 2PC
+//!
+//! - **Pre-commit (barrier / `snapshot_state`)**: flush in-flight sends, rotate to a new transactional
+//!   producer for post-barrier records, and stash the producer that covered this checkpoint interval.
+//! - **Commit (`commit_checkpoint`)**: after the job coordinator persists checkpoint metadata (catalog),
+//!   it broadcasts `ControlCommand::Commit`; this operator calls `commit_transaction` on the stashed
+//!   producer so consumers with `isolation.level=read_committed` observe the batch.
+//! - **Abort (`abort_checkpoint`)**: if metadata commit fails or the checkpoint is declined, the
+//!   coordinator broadcasts `AbortCheckpoint` and this operator calls `abort_transaction` on the
+//!   stashed producer.
+
 use anyhow::{Result, anyhow, bail};
 use arrow_array::Array;
 use arrow_array::RecordBatch;
@@ -115,6 +126,12 @@ impl KafkaSinkOperator {
 
         if let Some(idx) = tx_index {
             config.set("enable.idempotence", "true");
+            if config.get("acks").is_none() {
+                config.set("acks", "all");
+            }
+            if config.get("transaction.timeout.ms").is_none() {
+                config.set("transaction.timeout.ms", "600000");
+            }
             let transactional_id = format!(
                 "fs-tx-{}-{}-{}-{}",
                 ctx.job_id, self.topic, ctx.subtask_index, idx
@@ -356,6 +373,34 @@ impl Operator for KafkaSinkOperator {
                     sleep(Duration::from_secs(2)).await;
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    async fn abort_checkpoint(&mut self, epoch: u32, _ctx: &mut TaskContext) -> Result<()> {
+        if matches!(self.consistency_mode, ConsistencyMode::AtLeastOnce) {
+            return Ok(());
+        }
+
+        let state = self.transactional_state.as_mut().unwrap();
+        let Some(stale) = state.producer_awaiting_commit.take() else {
+            warn!(
+                "AbortCheckpoint epoch {} but no stashed transactional producer (already committed or duplicate signal)",
+                epoch
+            );
+            return Ok(());
+        };
+
+        match stale.abort_transaction(Timeout::After(Duration::from_secs(30))) {
+            Ok(()) => info!(
+                "Aborted Kafka transaction for epoch {} (checkpoint metadata did not commit)",
+                epoch
+            ),
+            Err(e) => warn!(
+                "Kafka abort_transaction for epoch {} returned error (producer dropped): {}",
+                epoch, e
+            ),
         }
 
         Ok(())

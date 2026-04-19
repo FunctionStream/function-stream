@@ -16,9 +16,12 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, anyhow};
 use arrow_array::RecordBatch;
+use protocol::storage::KafkaSourceSubtaskCheckpoint;
+use tokio::sync::mpsc;
 
 use crate::runtime::memory::{MemoryBlock, MemoryPool, get_array_memory_size};
 use crate::runtime::streaming::network::endpoint::PhysicalSender;
+use crate::runtime::streaming::protocol::control::JobMasterEvent;
 use crate::runtime::streaming::protocol::event::{StreamEvent, TrackedEvent};
 use crate::runtime::streaming::state::IoManager;
 
@@ -74,6 +77,9 @@ pub struct TaskContext {
 
     /// Last globally-committed safe epoch for crash recovery.
     safe_epoch: u64,
+
+    /// When set, pipelines report checkpoint completion (and optional Kafka offsets) to the job coordinator.
+    checkpoint_ack_tx: Option<mpsc::Sender<JobMasterEvent>>,
 }
 
 impl TaskContext {
@@ -90,6 +96,7 @@ impl TaskContext {
         pipeline_state_memory_block: Option<Arc<MemoryBlock>>,
         operator_state_memory_bytes: u64,
         safe_epoch: u64,
+        checkpoint_ack_tx: Option<mpsc::Sender<JobMasterEvent>>,
     ) -> Self {
         let task_name = format!(
             "Task-[{}]-Pipe[{}]-Sub[{}/{}]",
@@ -111,12 +118,30 @@ impl TaskContext {
             pipeline_state_memory_block,
             operator_state_memory_bytes,
             safe_epoch,
+            checkpoint_ack_tx,
         }
     }
 
     #[inline]
     pub fn latest_safe_epoch(&self) -> u64 {
         self.safe_epoch
+    }
+
+    /// Notify the job checkpoint coordinator that this pipeline has finished the barrier for `epoch`.
+    pub async fn send_checkpoint_ack(
+        &self,
+        epoch: u64,
+        kafka_subtask: Option<KafkaSourceSubtaskCheckpoint>,
+    ) {
+        if let Some(tx) = &self.checkpoint_ack_tx {
+            let _ = tx
+                .send(JobMasterEvent::CheckpointAck {
+                    pipeline_id: self.pipeline_id,
+                    epoch,
+                    kafka_subtask,
+                })
+                .await;
+        }
     }
 
     #[inline]

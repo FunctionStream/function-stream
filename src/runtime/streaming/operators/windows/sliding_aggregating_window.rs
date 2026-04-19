@@ -611,8 +611,17 @@ impl Operator for SlidingWindowOperator {
         self.state_store
             .as_ref()
             .expect("State store not initialized")
-            .snapshot_epoch(barrier.epoch as u64)
+            .prepare_checkpoint_epoch(barrier.epoch as u64)
             .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
+        Ok(())
+    }
+
+    async fn commit_checkpoint(&mut self, epoch: u32, _ctx: &mut TaskContext) -> Result<()> {
+        self.state_store
+            .as_ref()
+            .expect("State store not initialized")
+            .commit_checkpoint_epoch(epoch as u64)
+            .map_err(|e| anyhow!("Commit checkpoint failed: {e}"))?;
         Ok(())
     }
 

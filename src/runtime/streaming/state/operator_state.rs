@@ -220,11 +220,31 @@ impl OperatorStateStore {
         Ok(())
     }
 
-    pub fn snapshot_epoch(self: &Arc<Self>, epoch: u64) -> Result<()> {
+    /// Checkpoint phase 1: flush mutable in-memory state into an epoch-tagged immutable table and
+    /// trigger spill. This does NOT advance `current_epoch`.
+    pub fn prepare_checkpoint_epoch(self: &Arc<Self>, epoch: u64) -> Result<()> {
         self.downgrade_active_table(epoch);
         self.trigger_spill();
+        Ok(())
+    }
+
+    /// Checkpoint phase 2: once global metadata commit succeeds, advance the durable safe epoch.
+    pub fn commit_checkpoint_epoch(self: &Arc<Self>, epoch: u64) -> Result<()> {
         self.current_epoch
             .store(epoch.saturating_add(1), Ordering::Release);
+        Ok(())
+    }
+
+    /// Checkpoint rollback: do not advance `current_epoch`. Any already-spilled files are kept and
+    /// filtered by safe epoch during restore.
+    pub fn abort_checkpoint_epoch(self: &Arc<Self>, _epoch: u64) -> Result<()> {
+        Ok(())
+    }
+
+    /// Backward-compatible helper (phase1 + phase2 in one call).
+    pub fn snapshot_epoch(self: &Arc<Self>, epoch: u64) -> Result<()> {
+        self.prepare_checkpoint_epoch(epoch)?;
+        self.commit_checkpoint_epoch(epoch)?;
         Ok(())
     }
 

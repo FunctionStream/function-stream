@@ -200,7 +200,13 @@ impl KafkaConnectorDispatcher {
         let client_configs = merge_client_configs(&cfg.auth, &cfg.client_configs);
 
         let consistency = match cfg.commit_mode() {
-            KafkaSinkCommitMode::KafkaSinkExactlyOnce => ConsistencyMode::ExactlyOnce,
+            KafkaSinkCommitMode::KafkaSinkExactlyOnce => {
+                info!(
+                    topic = %cfg.topic,
+                    "Kafka sink exactly-once: transactional producer + checkpoint 2PC. Downstream Kafka consumers of this topic should set isolation.level=read_committed."
+                );
+                ConsistencyMode::ExactlyOnce
+            }
             KafkaSinkCommitMode::KafkaSinkAtLeastOnce => ConsistencyMode::AtLeastOnce,
         };
 

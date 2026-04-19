@@ -14,6 +14,7 @@ use crate::runtime::streaming::api::context::TaskContext;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
+use protocol::storage::KafkaSourceSubtaskCheckpoint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SourceOffset {
@@ -29,6 +30,12 @@ pub enum SourceEvent {
     Watermark(Watermark),
     Idle,
     EndOfStream,
+}
+
+/// Optional metadata returned when a source completes a checkpoint barrier snapshot.
+#[derive(Debug, Default, Clone)]
+pub struct SourceCheckpointReport {
+    pub kafka_subtask: Option<KafkaSourceSubtaskCheckpoint>,
 }
 
 #[async_trait]
@@ -49,13 +56,22 @@ pub trait SourceOperator: Send + 'static {
         &mut self,
         barrier: CheckpointBarrier,
         ctx: &mut TaskContext,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<SourceCheckpointReport>;
 
+    /// Same checkpoint **phase 2** hook as [`super::operator::Operator::commit_checkpoint`].
+    /// Kafka source keeps the default: offsets are reported at the barrier in [`Self::snapshot_state`].
     async fn commit_checkpoint(
         &mut self,
-        _epoch: u32,
+        epoch: u32,
         _ctx: &mut TaskContext,
     ) -> anyhow::Result<()> {
+        let _ = epoch;
+        Ok(())
+    }
+
+    /// Same rollback hook as [`super::operator::Operator::abort_checkpoint`].
+    async fn abort_checkpoint(&mut self, epoch: u32, _ctx: &mut TaskContext) -> anyhow::Result<()> {
+        let _ = epoch;
         Ok(())
     }
 

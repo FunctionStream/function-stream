@@ -23,6 +23,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error, info, warn};
 
 use protocol::function_stream_graph::{ChainedOperator, FsProgram};
+use protocol::storage::KafkaSourceSubtaskCheckpoint;
 
 use crate::config::{
     DEFAULT_CHECKPOINT_INTERVAL_MS, DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
@@ -137,6 +138,17 @@ enum PipelineRunner {
     Standard(Pipeline),
 }
 
+struct CheckpointCoordinatorConfig {
+    job_id: String,
+    source_control_txs: Vec<mpsc::Sender<ControlCommand>>,
+    all_pipeline_control_txs: Vec<mpsc::Sender<ControlCommand>>,
+    job_master_rx: mpsc::Receiver<JobMasterEvent>,
+    expected_pipeline_ids: HashSet<u32>,
+    interval_ms: u64,
+    start_epoch: u64,
+    job_state_dir: PathBuf,
+}
+
 impl PipelineRunner {
     async fn run(self) -> Result<(), crate::runtime::streaming::error::RunError> {
         match self {
@@ -198,6 +210,12 @@ impl JobManager {
         self.state_config.pipeline_parallelism
     }
 
+    /// Per-job state directory (Kafka offset snapshots, operator state roots, etc.).
+    #[inline]
+    pub fn job_state_directory(&self, job_id: &str) -> PathBuf {
+        self.state_base_dir.join(job_id)
+    }
+
     pub async fn submit_job(
         &self,
         job_id: String,
@@ -209,6 +227,7 @@ impl JobManager {
         let mut pipelines = HashMap::with_capacity(program.nodes.len());
 
         let mut source_control_txs = Vec::new();
+        let mut all_pipeline_control_txs = Vec::new();
         let mut expected_pipeline_ids = HashSet::new();
 
         let job_state_dir = self.state_base_dir.join(&job_id);
@@ -242,6 +261,7 @@ impl JobManager {
             if is_source {
                 source_control_txs.push(pipeline.control_tx.clone());
             }
+            all_pipeline_control_txs.push(pipeline.control_tx.clone());
             expected_pipeline_ids.insert(pipeline_id);
             pipelines.insert(pipeline_id, pipeline);
         }
@@ -249,14 +269,16 @@ impl JobManager {
         let interval_ms =
             custom_checkpoint_interval_ms.unwrap_or(self.state_config.checkpoint_interval_ms);
 
-        self.spawn_checkpoint_coordinator(
-            job_id.clone(),
+        self.spawn_checkpoint_coordinator(CheckpointCoordinatorConfig {
+            job_id: job_id.clone(),
             source_control_txs,
+            all_pipeline_control_txs,
             job_master_rx,
             expected_pipeline_ids,
             interval_ms,
-            safe_epoch + 1,
-        );
+            start_epoch: safe_epoch + 1,
+            job_state_dir: job_state_dir.clone(),
+        });
 
         let graph = PhysicalExecutionGraph {
             job_id: job_id.clone(),
@@ -457,7 +479,7 @@ impl JobManager {
         declared_parallelism: u32,
         edge_manager: &mut EdgeManager,
         job_state_dir: &Path,
-        _job_master_tx: mpsc::Sender<JobMasterEvent>,
+        job_master_tx: mpsc::Sender<JobMasterEvent>,
         recovery_epoch: u64,
     ) -> Result<(PhysicalPipeline, bool)> {
         let (raw_inboxes, raw_outboxes) =
@@ -536,6 +558,7 @@ impl JobManager {
             pipeline_state_memory_block,
             per_op,
             recovery_epoch,
+            Some(job_master_tx.clone()),
         );
 
         let runner = if let Some(source) = chain.source {
@@ -676,15 +699,17 @@ impl JobManager {
     // Chandy-Lamport distributed snapshot barrier coordinator
     // ========================================================================
 
-    fn spawn_checkpoint_coordinator(
-        &self,
-        job_id: String,
-        source_control_txs: Vec<mpsc::Sender<ControlCommand>>,
-        mut job_master_rx: mpsc::Receiver<JobMasterEvent>,
-        expected_pipeline_ids: HashSet<u32>,
-        interval_ms: u64,
-        start_epoch: u64,
-    ) -> TokioJoinHandle<()> {
+    fn spawn_checkpoint_coordinator(&self, cfg: CheckpointCoordinatorConfig) -> TokioJoinHandle<()> {
+        let CheckpointCoordinatorConfig {
+            job_id,
+            source_control_txs,
+            all_pipeline_control_txs,
+            mut job_master_rx,
+            expected_pipeline_ids,
+            interval_ms,
+            start_epoch,
+            job_state_dir,
+        } = cfg;
         tokio::spawn(async move {
             if interval_ms == 0 {
                 info!(job_id = %job_id, "Checkpoint disabled for this job");
@@ -696,10 +721,95 @@ impl JobManager {
 
             let mut current_epoch: u64 = start_epoch;
             let mut pending_checkpoints: HashMap<u64, HashSet<u32>> = HashMap::new();
+            let mut kafka_reports: HashMap<u64, Vec<KafkaSourceSubtaskCheckpoint>> = HashMap::new();
+
+            async fn broadcast_checkpoint_phase2(
+                txs: &[mpsc::Sender<ControlCommand>],
+                cmd: ControlCommand,
+            ) {
+                for tx in txs {
+                    let _ = tx.send(cmd.clone()).await;
+                }
+            }
 
             loop {
                 tokio::select! {
-                    _ = interval.tick() => {
+                    biased;
+
+                    Some(event) = job_master_rx.recv() => {
+                        match event {
+                            JobMasterEvent::CheckpointAck {
+                                pipeline_id,
+                                epoch,
+                                kafka_subtask,
+                            } => {
+                                if let Some(k) = kafka_subtask {
+                                    kafka_reports.entry(epoch).or_default().push(k);
+                                }
+                                if let Some(pending_set) = pending_checkpoints.get_mut(&epoch) {
+                                    pending_set.remove(&pipeline_id);
+
+                                    if pending_set.is_empty() {
+                                        info!(
+                                            job_id = %job_id, epoch = epoch,
+                                            "Checkpoint Epoch is GLOBALLY COMPLETED (phase 1); persisting metadata and notifying operators (phase 2)"
+                                        );
+
+                                        let kf = kafka_reports.remove(&epoch).unwrap_or_default();
+                                        let epoch_u32 = u32::try_from(epoch).unwrap_or(u32::MAX);
+
+                                        let mut catalog_ok = true;
+                                        if let Some(catalog) = CatalogManager::try_global() {
+                                            if let Err(e) = catalog.commit_job_checkpoint(
+                                                &job_id,
+                                                epoch,
+                                                &job_state_dir,
+                                                kf,
+                                            ) {
+                                                catalog_ok = false;
+                                                error!(
+                                                    job_id = %job_id, epoch = epoch,
+                                                    error = %e,
+                                                    "Failed to commit checkpoint metadata to Catalog — aborting transactional sinks"
+                                                );
+                                            }
+                                        } else {
+                                            warn!(
+                                                job_id = %job_id, epoch = epoch,
+                                                "CatalogManager not available; proceeding with operator Commit (Kafka transactional commit) only"
+                                            );
+                                        }
+
+                                        let phase2 = if catalog_ok {
+                                            ControlCommand::Commit { epoch: epoch_u32 }
+                                        } else {
+                                            ControlCommand::AbortCheckpoint { epoch: epoch_u32 }
+                                        };
+                                        broadcast_checkpoint_phase2(&all_pipeline_control_txs, phase2).await;
+
+                                        pending_checkpoints.remove(&epoch);
+                                    }
+                                }
+                            }
+                            JobMasterEvent::CheckpointDecline { pipeline_id, epoch, reason } => {
+                                error!(
+                                    job_id = %job_id, epoch = epoch, pipeline_id = pipeline_id,
+                                    reason = %reason, "Checkpoint FAILED!"
+                                );
+                                if pending_checkpoints.remove(&epoch).is_some() {
+                                    kafka_reports.remove(&epoch);
+                                    let epoch_u32 = u32::try_from(epoch).unwrap_or(u32::MAX);
+                                    broadcast_checkpoint_phase2(
+                                        &all_pipeline_control_txs,
+                                        ControlCommand::AbortCheckpoint { epoch: epoch_u32 },
+                                    )
+                                    .await;
+                                }
+                            }
+                        }
+                    }
+
+                    _ = interval.tick(), if pending_checkpoints.is_empty() => {
                         info!(job_id = %job_id, epoch = current_epoch, "Triggering global Checkpoint Barrier.");
                         pending_checkpoints.insert(current_epoch, expected_pipeline_ids.clone());
 
@@ -718,47 +828,6 @@ impl JobManager {
                             }
                         }
                         current_epoch += 1;
-                    }
-
-                    Some(event) = job_master_rx.recv() => {
-                        match event {
-                            JobMasterEvent::CheckpointAck { pipeline_id, epoch } => {
-                                if let Some(pending_set) = pending_checkpoints.get_mut(&epoch) {
-                                    pending_set.remove(&pipeline_id);
-
-                                    if pending_set.is_empty() {
-                                        info!(
-                                            job_id = %job_id, epoch = epoch,
-                                            "Checkpoint Epoch is GLOBALLY COMPLETED!"
-                                        );
-
-                                        if let Some(catalog) = CatalogManager::try_global() {
-                                            if let Err(e) = catalog.commit_job_checkpoint(&job_id, epoch) {
-                                                error!(
-                                                    job_id = %job_id, epoch = epoch,
-                                                    error = %e,
-                                                    "Failed to commit checkpoint metadata to Catalog"
-                                                );
-                                            }
-                                        } else {
-                                            warn!(
-                                                job_id = %job_id, epoch = epoch,
-                                                "CatalogManager not available, checkpoint not persisted globally"
-                                            );
-                                        }
-
-                                        pending_checkpoints.remove(&epoch);
-                                    }
-                                }
-                            }
-                            JobMasterEvent::CheckpointDecline { pipeline_id, epoch, reason } => {
-                                error!(
-                                    job_id = %job_id, epoch = epoch, pipeline_id = pipeline_id,
-                                    reason = %reason, "Checkpoint FAILED!"
-                                );
-                                pending_checkpoints.remove(&epoch);
-                            }
-                        }
                     }
                 }
             }

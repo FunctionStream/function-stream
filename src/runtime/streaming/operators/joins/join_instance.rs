@@ -358,8 +358,17 @@ impl Operator for InstantJoinOperator {
         self.state_store
             .as_ref()
             .unwrap()
-            .snapshot_epoch(barrier.epoch as u64)
+            .prepare_checkpoint_epoch(barrier.epoch as u64)
             .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
+        Ok(())
+    }
+
+    async fn commit_checkpoint(&mut self, epoch: u32, _ctx: &mut TaskContext) -> Result<()> {
+        self.state_store
+            .as_ref()
+            .unwrap()
+            .commit_checkpoint_epoch(epoch as u64)
+            .map_err(|e| anyhow!("Commit checkpoint failed: {e}"))?;
         Ok(())
     }
 }
