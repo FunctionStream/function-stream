@@ -22,11 +22,10 @@ pub mod ticket;
 #[allow(unused_imports)]
 pub use block::MemoryBlock;
 #[allow(unused_imports)]
-pub use error::MemoryError;
+pub use error::{MemoryAllocationError, MemoryError};
 #[allow(unused_imports)]
 pub use global::{
-    get_memory_metrics, global_memory_pool, global_state_memory_pool, init_global_memory_pool,
-    init_global_state_memory_pool, try_global_memory_pool, try_global_state_memory_pool,
+    get_memory_metrics, global_memory_pool, init_global_memory_pool, try_global_memory_pool,
 };
 pub use pool::MemoryPool;
 pub use ticket::MemoryTicket;

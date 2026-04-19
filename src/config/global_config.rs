@@ -19,11 +19,21 @@ use crate::config::python_config::PythonConfig;
 use crate::config::service_config::ServiceConfig;
 use crate::config::wasm_config::WasmConfig;
 
+/// Default for [`StreamingConfig::streaming_runtime_memory_bytes`] when unset. **200 MiB.**
+pub const DEFAULT_STREAMING_RUNTIME_MEMORY_BYTES: u64 = 200 * 1024 * 1024;
+
+/// Default for [`StreamingConfig::operator_state_store_memory_bytes`] when unset. **100 MiB.**
+pub const DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES: u64 = 100 * 1024 * 1024;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StreamingConfig {
-    pub max_memory_bytes: Option<u64>,
-    /// Total bytes for the global operator-state [`MemoryPool`](crate::runtime::memory::MemoryPool) (all stores share this quota).
-    pub per_operator_state_memory_bytes: Option<u64>,
+    /// Bytes reserved in the global memory pool for streaming execution (pipeline buffers,
+    /// batch collect, backpressure).
+    #[serde(default)]
+    pub streaming_runtime_memory_bytes: Option<u64>,
+    /// Per stateful operator: in-memory state store cap before spill.
+    #[serde(default)]
+    pub operator_state_store_memory_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

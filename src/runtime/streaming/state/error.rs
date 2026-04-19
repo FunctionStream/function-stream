@@ -4,6 +4,8 @@
 use crossbeam_channel::TrySendError;
 use thiserror::Error;
 
+use crate::runtime::memory::MemoryAllocationError;
+
 #[derive(Error, Debug)]
 pub enum StateEngineError {
     #[error("I/O error during state persistence: {0}")]
@@ -23,6 +25,9 @@ pub enum StateEngineError {
 
     #[error("State metadata corrupted: {0}")]
     Corruption(String),
+
+    #[error("State memory block reservation failed: {0}")]
+    MemoryReservation(#[from] MemoryAllocationError),
 }
 
 pub type Result<T> = std::result::Result<T, StateEngineError>;

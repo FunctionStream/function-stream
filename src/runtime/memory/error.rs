@@ -17,6 +17,7 @@ use std::fmt;
 pub enum MemoryError {
     AlreadyInitialized,
     Uninitialized,
+    OsAllocationFailed { bytes: u64 },
 }
 
 impl fmt::Display for MemoryError {
@@ -28,8 +29,36 @@ impl fmt::Display for MemoryError {
             MemoryError::Uninitialized => {
                 write!(f, "Global memory pool is not initialized")
             }
+            MemoryError::OsAllocationFailed { bytes } => {
+                write!(
+                    f,
+                    "insufficient memory: failed to reserve {} bytes (virtual capacity for pool cap) from the OS allocator",
+                    bytes
+                )
+            }
         }
     }
 }
 
 impl std::error::Error for MemoryError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryAllocationError {
+    InsufficientCapacity,
+    RequestLargerThanPool,
+}
+
+impl fmt::Display for MemoryAllocationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MemoryAllocationError::InsufficientCapacity => {
+                write!(f, "Insufficient capacity in memory pool")
+            }
+            MemoryAllocationError::RequestLargerThanPool => {
+                write!(f, "Requested block exceeds memory pool maximum")
+            }
+        }
+    }
+}
+
+impl std::error::Error for MemoryAllocationError {}

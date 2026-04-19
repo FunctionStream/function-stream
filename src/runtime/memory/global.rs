@@ -17,11 +17,11 @@ use super::error::MemoryError;
 use super::pool::MemoryPool;
 
 static GLOBAL_POOL: OnceLock<Arc<MemoryPool>> = OnceLock::new();
-static GLOBAL_STATE_POOL: OnceLock<Arc<MemoryPool>> = OnceLock::new();
 
 pub fn init_global_memory_pool(max_bytes: u64) -> Result<(), MemoryError> {
+    let pool = MemoryPool::try_new(max_bytes)?;
     GLOBAL_POOL
-        .set(MemoryPool::new(max_bytes))
+        .set(pool)
         .map_err(|_| MemoryError::AlreadyInitialized)
 }
 
@@ -31,26 +31,9 @@ pub fn try_global_memory_pool() -> Result<Arc<MemoryPool>, MemoryError> {
 
 #[inline]
 pub fn global_memory_pool() -> Arc<MemoryPool> {
-    try_global_memory_pool().expect("Global streaming pool must be initialized before use")
+    try_global_memory_pool().expect("Global memory pool must be initialized before use")
 }
 
-pub fn init_global_state_memory_pool(max_bytes: u64) -> Result<(), MemoryError> {
-    GLOBAL_STATE_POOL
-        .set(MemoryPool::new(max_bytes))
-        .map_err(|_| MemoryError::AlreadyInitialized)
-}
-
-pub fn try_global_state_memory_pool() -> Result<Arc<MemoryPool>, MemoryError> {
-    GLOBAL_STATE_POOL.get().cloned().ok_or(MemoryError::Uninitialized)
-}
-
-#[inline]
-pub fn global_state_memory_pool() -> Arc<MemoryPool> {
-    try_global_state_memory_pool().expect("Global state pool must be initialized before use")
-}
-
-pub fn get_memory_metrics() -> (Option<(u64, u64)>, Option<(u64, u64)>) {
-    let stream_metrics = GLOBAL_POOL.get().map(|p| p.usage_metrics());
-    let state_metrics = GLOBAL_STATE_POOL.get().map(|p| p.usage_metrics());
-    (stream_metrics, state_metrics)
+pub fn get_memory_metrics() -> Option<(u64, u64)> {
+    GLOBAL_POOL.get().map(|p| p.usage_metrics())
 }

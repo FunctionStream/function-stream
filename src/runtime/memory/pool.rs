@@ -18,6 +18,7 @@ use tokio::sync::Notify;
 use tracing::{debug, warn};
 
 use super::block::MemoryBlock;
+use super::error::{MemoryAllocationError, MemoryError};
 
 #[derive(Debug)]
 pub struct MemoryPool {
@@ -28,17 +29,48 @@ pub struct MemoryPool {
 }
 
 impl MemoryPool {
-    pub fn new(max_bytes: u64) -> Arc<Self> {
-        Arc::new(Self {
+    pub fn try_new(max_bytes: u64) -> Result<Arc<Self>, MemoryError> {
+        if max_bytes > 0 {
+            let n = usize::try_from(max_bytes)
+                .map_err(|_| MemoryError::OsAllocationFailed { bytes: max_bytes })?;
+            let mut v = Vec::<u8>::new();
+            v.try_reserve_exact(n)
+                .map_err(|_| MemoryError::OsAllocationFailed { bytes: max_bytes })?;
+        }
+        Ok(Arc::new(Self {
             max_bytes,
             used_bytes: AtomicU64::new(0),
             available_bytes: Mutex::new(max_bytes),
             notify: Notify::new(),
-        })
+        }))
+    }
+
+    pub fn new(max_bytes: u64) -> Arc<Self> {
+        Self::try_new(max_bytes).expect("MemoryPool::try_new failed")
     }
 
     pub fn usage_metrics(&self) -> (u64, u64) {
         (self.used_bytes.load(Ordering::Relaxed), self.max_bytes)
+    }
+
+    pub fn try_request_block(
+        self: &Arc<Self>,
+        bytes: u64,
+    ) -> Result<Arc<MemoryBlock>, MemoryAllocationError> {
+        if bytes == 0 {
+            return Ok(MemoryBlock::new(0, self.clone()));
+        }
+        if bytes > self.max_bytes {
+            return Err(MemoryAllocationError::RequestLargerThanPool);
+        }
+        let mut available = self.available_bytes.lock();
+        if *available >= bytes {
+            *available -= bytes;
+            self.used_bytes.fetch_add(bytes, Ordering::Relaxed);
+            Ok(MemoryBlock::new(bytes, self.clone()))
+        } else {
+            Err(MemoryAllocationError::InsufficientCapacity)
+        }
     }
 
     pub async fn request_block(self: &Arc<Self>, bytes: u64) -> Arc<MemoryBlock> {
@@ -67,7 +99,10 @@ impl MemoryPool {
                 }
             }
 
-            debug!(bytes = bytes, "Global backpressure engaged: waiting for memory...");
+            debug!(
+                bytes = bytes,
+                "Global backpressure engaged: waiting for memory..."
+            );
             self.notify.notified().await;
         }
     }

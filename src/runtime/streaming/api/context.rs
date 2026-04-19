@@ -14,10 +14,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use arrow_array::RecordBatch;
 
-use crate::runtime::memory::{get_array_memory_size, MemoryPool};
+use crate::runtime::memory::{MemoryBlock, MemoryPool, get_array_memory_size};
 use crate::runtime::streaming::network::endpoint::PhysicalSender;
 use crate::runtime::streaming::protocol::event::{StreamEvent, TrackedEvent};
 use crate::runtime::streaming::state::IoManager;
@@ -67,6 +67,11 @@ pub struct TaskContext {
     pub state_dir: PathBuf,
     pub io_manager: IoManager,
 
+    /// Pipeline-wide slab from the global pool; each stateful operator sub-allocates a ticket.
+    pub pipeline_state_memory_block: Option<Arc<MemoryBlock>>,
+    /// Bytes reserved per stateful operator from [`Self::pipeline_state_memory_block`].
+    pub operator_state_memory_bytes: u64,
+
     /// Last globally-committed safe epoch for crash recovery.
     safe_epoch: u64,
 }
@@ -82,6 +87,8 @@ impl TaskContext {
         memory_pool: Arc<MemoryPool>,
         io_manager: IoManager,
         state_dir: PathBuf,
+        pipeline_state_memory_block: Option<Arc<MemoryBlock>>,
+        operator_state_memory_bytes: u64,
         safe_epoch: u64,
     ) -> Self {
         let task_name = format!(
@@ -101,6 +108,8 @@ impl TaskContext {
             config: TaskContextConfig::default(),
             state_dir,
             io_manager,
+            pipeline_state_memory_block,
+            operator_state_memory_bytes,
             safe_epoch,
         }
     }

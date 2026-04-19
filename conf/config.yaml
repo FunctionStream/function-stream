@@ -51,16 +51,13 @@ wasm:
 
 # Streaming Runtime Configuration
 streaming:
-  # Global memory pool size for the streaming runtime (network buffering, backpressure).
-  # When not set, auto-detected as 70% of physical memory.
-  # Fallback: 256 MiB if detection fails.
-  # max_memory_bytes: 268435456
-  
-  # Memory budget per stateful operator (aggregation, join, window).
-  # Each operator gets its own independent memory controller with this limit.
-  # When exceeded, the operator spills state to disk automatically.
-  # Default: 67108864 (64 MiB)
-  per_operator_state_memory_bytes: 67108864
+  # Bytes in the global memory pool for streaming execution: pipeline buffers, batch collect,
+  # backpressure. Omitted → 200 MiB.
+  streaming_runtime_memory_bytes: 209715200
+
+  # Per stateful operator (join / agg / window): in-memory state store cap; spill when exceeded.
+  # Omitted → 100 MiB.
+  operator_state_store_memory_bytes: 104857600
 
 # State Storage Configuration
 # Used to store runtime state data for tasks

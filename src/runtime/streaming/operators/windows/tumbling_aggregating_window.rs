@@ -163,10 +163,16 @@ impl Operator for TumblingWindowOperator {
 
     // Recovery: replay raw data from LSM-Tree into DataFusion sessions
     async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
+        let pipeline_block = ctx
+            .pipeline_state_memory_block
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing pipeline state memory block"))?;
         let store = OperatorStateStore::new(
             ctx.pipeline_id,
             ctx.state_dir.clone(),
             ctx.io_manager.clone(),
+            Arc::clone(pipeline_block),
+            ctx.operator_state_memory_bytes,
         )
         .map_err(|e| anyhow!("Failed to init state store: {e}"))?;
 

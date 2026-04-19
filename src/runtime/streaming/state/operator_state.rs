@@ -4,7 +4,7 @@
 use super::error::{Result, StateEngineError};
 use super::io_manager::{CompactJob, IoManager, SpillJob};
 use super::metrics::StateMetricsCollector;
-use crate::runtime::memory::{global_state_memory_pool, MemoryPool};
+use crate::runtime::memory::{MemoryBlock, MemoryTicket};
 use arrow_array::builder::{BinaryBuilder, BooleanBuilder, UInt64Builder};
 use arrow_array::{Array, BinaryArray, RecordBatch, UInt64Array};
 use arrow_schema::{DataType, Field, Schema};
@@ -18,6 +18,7 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use uuid::Uuid;
 
@@ -40,7 +41,9 @@ pub struct OperatorStateStore {
     tombstone_files: RwLock<Vec<PathBuf>>,
     tombstones: RwLock<TombstoneMap>,
 
-    state_block: Arc<MemoryPool>,
+    state_ticket: Arc<MemoryTicket>,
+    state_used: AtomicU64,
+    state_quota: u64,
     soft_limit: u64,
     io_manager: IoManager,
 
@@ -55,10 +58,24 @@ pub struct OperatorStateStore {
 const DEFAULT_SOFT_LIMIT_RATIO: f64 = 0.7;
 
 impl OperatorStateStore {
-    pub fn new(operator_id: u32, base_dir: impl AsRef<Path>, io_manager: IoManager) -> Result<Arc<Self>> {
-        let state_block = global_state_memory_pool();
-        let (_, quota) = state_block.usage_metrics();
-        let soft_limit = (quota as f64 * DEFAULT_SOFT_LIMIT_RATIO) as u64;
+    /// `pipeline_state_memory_block` is the pipeline-wide slab reserved at job spawn; this store
+    /// takes one ticket of `operator_state_memory_bytes` from it.
+    pub fn new(
+        operator_id: u32,
+        base_dir: impl AsRef<Path>,
+        io_manager: IoManager,
+        pipeline_state_memory_block: Arc<MemoryBlock>,
+        operator_state_memory_bytes: u64,
+    ) -> Result<Arc<Self>> {
+        let ticket = pipeline_state_memory_block
+            .try_allocate(operator_state_memory_bytes)
+            .ok_or_else(|| {
+                StateEngineError::Corruption(
+                    "pipeline state memory block exhausted (operator state ticket)".into(),
+                )
+            })?;
+        let state_ticket = Arc::new(ticket);
+        let soft_limit = (operator_state_memory_bytes as f64 * DEFAULT_SOFT_LIMIT_RATIO) as u64;
 
         let op_dir = base_dir.as_ref().join(format!("op_{operator_id}"));
         let data_dir = op_dir.join("data");
@@ -75,7 +92,9 @@ impl OperatorStateStore {
             data_files: RwLock::new(Vec::new()),
             tombstone_files: RwLock::new(Vec::new()),
             tombstones: RwLock::new(HashMap::new()),
-            state_block,
+            state_ticket,
+            state_used: AtomicU64::new(0),
+            state_quota: operator_state_memory_bytes,
             soft_limit,
             io_manager,
             data_dir,
@@ -86,23 +105,60 @@ impl OperatorStateStore {
         }))
     }
 
-    fn state_exceeds_hard_limit(&self, incoming: usize) -> bool {
-        let (used, quota) = self.state_block.usage_metrics();
-        used + incoming as u64 > quota
+    fn state_bytes_used(&self) -> u64 {
+        self.state_used.load(Ordering::Relaxed)
     }
 
     fn state_should_spill(&self) -> bool {
-        self.state_block.usage_metrics().0 > self.soft_limit
+        self.state_bytes_used() > self.soft_limit
     }
 
-    pub async fn put(self: &Arc<Self>, key: PartitionKey, batch: RecordBatch) -> Result<()> {
-        let size = batch.get_array_memory_size();
-        while self.state_exceeds_hard_limit(size) {
+    fn rebuild_state_used_from_tables(&self) {
+        let mut n = 0u64;
+        for rows in self.active_table.read().values() {
+            for b in rows {
+                n += b.get_array_memory_size() as u64;
+            }
+        }
+        for (_, table) in self.immutable_tables.lock().iter() {
+            for rows in table.values() {
+                for b in rows {
+                    n += b.get_array_memory_size() as u64;
+                }
+            }
+        }
+        self.state_used.store(n, Ordering::Release);
+    }
+
+    async fn wait_until_memory_available_async(self: Arc<Self>, need: u64) {
+        while self.state_used.load(Ordering::Relaxed).saturating_add(need) > self.state_quota {
             self.trigger_spill();
             self.spill_notify.notified().await;
         }
+    }
 
-        self.state_block.force_reserve(size as u64);
+    fn wait_until_memory_available_blocking(self: &Arc<Self>, need: u64) -> Result<()> {
+        loop {
+            if self.state_used.load(Ordering::Relaxed).saturating_add(need) <= self.state_quota {
+                return Ok(());
+            }
+            self.trigger_spill();
+            let start = Instant::now();
+            while self.is_spilling.load(Ordering::SeqCst) {
+                if start.elapsed() > Duration::from_secs(120) {
+                    return Err(StateEngineError::Corruption(
+                        "state memory wait for spill timed out".into(),
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+    }
+
+    pub async fn put(self: &Arc<Self>, key: PartitionKey, batch: RecordBatch) -> Result<()> {
+        let size = batch.get_array_memory_size() as u64;
+        self.clone().wait_until_memory_available_async(size).await;
+        self.state_used.fetch_add(size, Ordering::Relaxed);
         self.active_table
             .write()
             .entry(key)
@@ -116,28 +172,40 @@ impl OperatorStateStore {
         Ok(())
     }
 
-    pub fn remove_batches(&self, key: PartitionKey) -> Result<()> {
+    pub fn remove_batches(self: &Arc<Self>, key: PartitionKey) -> Result<()> {
         let current_ep = self.current_epoch.load(Ordering::Acquire);
-        let tombstone_mem_size = key.len() + TOMBSTONE_ENTRY_OVERHEAD;
+        let tombstone_mem_size = (key.len() + TOMBSTONE_ENTRY_OVERHEAD) as u64;
 
         {
             let mut tb_guard = self.tombstones.write();
-            if tb_guard.insert(key.clone(), current_ep).is_none() {
-                self.state_block.force_reserve(tombstone_mem_size as u64);
+            if !tb_guard.contains_key(&key) {
+                self.wait_until_memory_available_blocking(tombstone_mem_size)?;
+                self.state_used
+                    .fetch_add(tombstone_mem_size, Ordering::Relaxed);
+                tb_guard.insert(key.clone(), current_ep);
             }
         }
 
-        if let Some(batches) = self.active_table.write().remove(&key) {
-            let released: usize = batches.iter().map(|b| b.get_array_memory_size()).sum();
-            self.state_block.force_release(released as u64);
+        let released_active: u64 = self
+            .active_table
+            .write()
+            .remove(&key)
+            .map(|rows| rows.iter().map(|b| b.get_array_memory_size() as u64).sum())
+            .unwrap_or(0);
+
+        let mut released_imm = 0u64;
+        for (_, table) in self.immutable_tables.lock().iter_mut() {
+            if let Some(rows) = table.remove(&key) {
+                released_imm += rows
+                    .iter()
+                    .map(|b| b.get_array_memory_size() as u64)
+                    .sum::<u64>();
+            }
         }
 
-        let mut imm = self.immutable_tables.lock();
-        for (_, table) in imm.iter_mut() {
-            if let Some(batches) = table.remove(&key) {
-                let released: usize = batches.iter().map(|b| b.get_array_memory_size()).sum();
-                self.state_block.force_release(released as u64);
-            }
+        let released = released_active.saturating_add(released_imm);
+        if released > 0 {
+            self.state_used.fetch_sub(released, Ordering::Relaxed);
         }
 
         Ok(())
@@ -271,12 +339,12 @@ impl OperatorStateStore {
         metrics: &Arc<dyn StateMetricsCollector>,
     ) -> Result<()> {
         let mut batches_to_write = Vec::new();
-        let mut size_to_release: usize = 0;
+        let mut spilled_bytes: u64 = 0;
         let distinct_keys_count = data.len() as u64;
 
         for (key, batches) in data {
             for batch in batches {
-                size_to_release += batch.get_array_memory_size();
+                spilled_bytes += batch.get_array_memory_size() as u64;
                 batches_to_write.push(inject_partition_key(&batch, &key)?);
             }
         }
@@ -289,6 +357,7 @@ impl OperatorStateStore {
                 metrics.inc_io_errors(self.operator_id);
                 let restored = restore_memtable_from_injected_batches(batches_to_write)?;
                 self.immutable_tables.lock().push_front((epoch, restored));
+                self.rebuild_state_used_from_tables();
                 self.is_spilling.store(false, Ordering::SeqCst);
                 self.spill_notify.notify_waiters();
                 return Err(e);
@@ -328,8 +397,11 @@ impl OperatorStateStore {
             self.tombstone_files.write().push(path);
         }
 
-        self.state_block.force_release(size_to_release as u64);
-        metrics.record_memory_usage(self.operator_id, self.state_block.usage_metrics().0);
+        if spilled_bytes > 0 {
+            self.state_used.fetch_sub(spilled_bytes, Ordering::Relaxed);
+        }
+
+        metrics.record_memory_usage(self.operator_id, self.state_bytes_used());
 
         self.is_spilling.store(false, Ordering::SeqCst);
         self.spill_notify.notify_waiters();
@@ -407,24 +479,20 @@ impl OperatorStateStore {
                 let _ = fs::remove_file(path);
             }
 
-            // Watermark GC
             {
                 let mut tg = self.tombstones.write();
-                let mut memory_freed = 0;
-
-                tg.retain(|key, deleted_epoch| {
-                    if *deleted_epoch <= compacted_watermark_epoch {
-                        memory_freed += key.len() + TOMBSTONE_ENTRY_OVERHEAD;
-                        false
-                    } else {
-                        true
+                let keys_before: Vec<PartitionKey> = tg.keys().cloned().collect();
+                tg.retain(|_key, deleted_epoch| *deleted_epoch > compacted_watermark_epoch);
+                let mut tomb_freed = 0u64;
+                for k in keys_before {
+                    if !tg.contains_key(&k) {
+                        tomb_freed += (k.len() + TOMBSTONE_ENTRY_OVERHEAD) as u64;
                     }
-                });
-
-                if memory_freed > 0 {
-                    self.state_block.force_release(memory_freed as u64);
-                    metrics.record_memory_usage(self.operator_id, self.state_block.usage_metrics().0);
                 }
+                if tomb_freed > 0 {
+                    self.state_used.fetch_sub(tomb_freed, Ordering::Relaxed);
+                }
+                metrics.record_memory_usage(self.operator_id, self.state_bytes_used());
             }
 
             {
@@ -445,7 +513,11 @@ impl OperatorStateStore {
         result
     }
 
-    pub async fn restore_metadata(&self, safe_epoch: u64) -> Result<HashSet<PartitionKey>> {
+    pub async fn restore_metadata(
+        self: &Arc<Self>,
+        safe_epoch: u64,
+    ) -> Result<HashSet<PartitionKey>> {
+        self.state_used.store(0, Ordering::Release);
         self.active_table.write().clear();
         self.immutable_tables
             .lock()
@@ -465,8 +537,9 @@ impl OperatorStateStore {
         cleanup_future(&mut self.tombstone_files.write());
 
         let tomb_paths = self.tombstone_files.read().clone();
-        let loaded_tombstones = tokio::task::spawn_blocking(move || -> Result<TombstoneMap> {
-            let mut map = HashMap::new();
+        type RawTombstones = HashMap<PartitionKey, u64>;
+        let raw_tombstones = tokio::task::spawn_blocking(move || -> Result<RawTombstones> {
+            let mut map = RawTombstones::new();
             for path in tomb_paths {
                 let file = File::open(&path).map_err(StateEngineError::IoError)?;
                 let reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
@@ -498,12 +571,19 @@ impl OperatorStateStore {
         .await
         .map_err(|_| StateEngineError::Corruption("Task Panicked".into()))??;
 
-        let mut total_tombstone_mem = 0;
-        for key in loaded_tombstones.keys() {
-            total_tombstone_mem += key.len() + TOMBSTONE_ENTRY_OVERHEAD;
+        let tomb_epoch_map = raw_tombstones.clone();
+
+        *self.tombstones.write() = raw_tombstones;
+        self.rebuild_state_used_from_tables();
+        let tomb_overhead: u64 = self
+            .tombstones
+            .read()
+            .keys()
+            .map(|k| (k.len() + TOMBSTONE_ENTRY_OVERHEAD) as u64)
+            .sum();
+        if tomb_overhead > 0 {
+            self.state_used.fetch_add(tomb_overhead, Ordering::Relaxed);
         }
-        self.state_block.force_reserve(total_tombstone_mem as u64);
-        *self.tombstones.write() = loaded_tombstones.clone();
 
         let data_paths = self.data_files.read().clone();
         let active_keys = tokio::task::spawn_blocking(move || -> Result<HashSet<PartitionKey>> {
@@ -525,7 +605,7 @@ impl OperatorStateStore {
                         .unwrap();
                     for i in 0..key_col.len() {
                         let k = key_col.value(i).to_vec();
-                        let is_active = match loaded_tombstones.get(&k) {
+                        let is_active = match tomb_epoch_map.get(&k) {
                             Some(del_ep) => *del_ep < file_epoch,
                             None => true,
                         };
@@ -693,7 +773,8 @@ fn restore_memtable_from_injected_batches(batches: Vec<RecordBatch>) -> Result<M
         let pk = key_col.value(0).to_vec();
         let mut proj: Vec<usize> = (0..batch.num_columns()).collect();
         proj.retain(|&i| i != idx);
-        m.entry(pk).or_default().push(batch.project(&proj)?);
+        let projected = batch.project(&proj)?;
+        m.entry(pk).or_default().push(projected);
     }
     Ok(m)
 }
@@ -703,6 +784,7 @@ mod tests {
     use super::super::io_manager::IoPool;
     use super::super::metrics::NoopMetricsCollector;
     use super::*;
+    use crate::runtime::memory::{MemoryBlock, MemoryPool, global_memory_pool};
     use arrow_array::Int64Array;
     use tempfile::TempDir;
 
@@ -724,19 +806,27 @@ mod tests {
 
     const TEST_OPERATOR_MEMORY: u64 = 2 * 1024 * 1024;
 
-    fn ensure_global_state_pool() {
+    fn ensure_global_memory_pool() {
+        use crate::runtime::memory::{init_global_memory_pool, try_global_memory_pool};
         use std::sync::Once;
-        use crate::runtime::memory::{init_global_state_memory_pool, try_global_state_memory_pool};
         static INIT: Once = Once::new();
         INIT.call_once(|| {
-            if try_global_state_memory_pool().is_err() {
-                init_global_state_memory_pool(TEST_OPERATOR_MEMORY).expect("state pool init");
+            if try_global_memory_pool().is_err() {
+                init_global_memory_pool(TEST_OPERATOR_MEMORY.saturating_mul(64))
+                    .expect("global memory pool init");
             }
         });
     }
 
+    fn state_block(bytes: u64) -> Arc<MemoryBlock> {
+        ensure_global_memory_pool();
+        global_memory_pool()
+            .try_request_block(bytes)
+            .expect("test pipeline state memory block")
+    }
+
     fn setup() -> (TempDir, IoManager, IoPool) {
-        ensure_global_state_pool();
+        ensure_global_memory_pool();
         let tmp = TempDir::new().unwrap();
         let metrics: Arc<dyn StateMetricsCollector> = Arc::new(NoopMetricsCollector);
         let (pool, mgr) = IoPool::try_new(1, 1, metrics).unwrap();
@@ -746,7 +836,14 @@ mod tests {
     #[tokio::test]
     async fn test_put_and_get() {
         let (tmp, mgr, _pool) = setup();
-        let store = OperatorStateStore::new(1, tmp.path(), mgr).unwrap();
+        let store = OperatorStateStore::new(
+            1,
+            tmp.path(),
+            mgr,
+            state_block(TEST_OPERATOR_MEMORY),
+            TEST_OPERATOR_MEMORY,
+        )
+        .unwrap();
 
         let key = b"key-a".to_vec();
         let batch = make_batch(&[10, 20, 30]);
@@ -765,7 +862,14 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_puts_same_key() {
         let (tmp, mgr, _pool) = setup();
-        let store = OperatorStateStore::new(1, tmp.path(), mgr).unwrap();
+        let store = OperatorStateStore::new(
+            1,
+            tmp.path(),
+            mgr,
+            state_block(TEST_OPERATOR_MEMORY),
+            TEST_OPERATOR_MEMORY,
+        )
+        .unwrap();
 
         let key = b"key-x".to_vec();
         store.put(key.clone(), make_batch(&[1])).await.unwrap();
@@ -778,7 +882,14 @@ mod tests {
     #[tokio::test]
     async fn test_get_nonexistent_key() {
         let (tmp, mgr, _pool) = setup();
-        let store = OperatorStateStore::new(1, tmp.path(), mgr).unwrap();
+        let store = OperatorStateStore::new(
+            1,
+            tmp.path(),
+            mgr,
+            state_block(TEST_OPERATOR_MEMORY),
+            TEST_OPERATOR_MEMORY,
+        )
+        .unwrap();
 
         let result = store.get_batches(b"no-such-key").await.unwrap();
         assert!(result.is_empty());
@@ -787,7 +898,14 @@ mod tests {
     #[tokio::test]
     async fn test_remove_batches() {
         let (tmp, mgr, _pool) = setup();
-        let store = OperatorStateStore::new(1, tmp.path(), mgr).unwrap();
+        let store = OperatorStateStore::new(
+            1,
+            tmp.path(),
+            mgr,
+            state_block(TEST_OPERATOR_MEMORY),
+            TEST_OPERATOR_MEMORY,
+        )
+        .unwrap();
 
         let key = b"key-del".to_vec();
         store.put(key.clone(), make_batch(&[42])).await.unwrap();
@@ -801,7 +919,14 @@ mod tests {
     #[tokio::test]
     async fn test_remove_does_not_affect_other_keys() {
         let (tmp, mgr, _pool) = setup();
-        let store = OperatorStateStore::new(1, tmp.path(), mgr).unwrap();
+        let store = OperatorStateStore::new(
+            1,
+            tmp.path(),
+            mgr,
+            state_block(TEST_OPERATOR_MEMORY),
+            TEST_OPERATOR_MEMORY,
+        )
+        .unwrap();
 
         let k1 = b"key-1".to_vec();
         let k2 = b"key-2".to_vec();
@@ -817,7 +942,14 @@ mod tests {
     #[tokio::test]
     async fn test_snapshot_epoch_advances() {
         let (tmp, mgr, _pool) = setup();
-        let store = OperatorStateStore::new(1, tmp.path(), mgr).unwrap();
+        let store = OperatorStateStore::new(
+            1,
+            tmp.path(),
+            mgr,
+            state_block(TEST_OPERATOR_MEMORY),
+            TEST_OPERATOR_MEMORY,
+        )
+        .unwrap();
 
         store.put(b"k".to_vec(), make_batch(&[1])).await.unwrap();
         store.snapshot_epoch(5).unwrap();
@@ -828,7 +960,14 @@ mod tests {
     #[tokio::test]
     async fn test_data_survives_snapshot_via_spill() {
         let (tmp, mgr, _pool) = setup();
-        let store = OperatorStateStore::new(1, tmp.path(), mgr).unwrap();
+        let store = OperatorStateStore::new(
+            1,
+            tmp.path(),
+            mgr,
+            state_block(TEST_OPERATOR_MEMORY),
+            TEST_OPERATOR_MEMORY,
+        )
+        .unwrap();
 
         let key = b"persist".to_vec();
         store.put(key.clone(), make_batch(&[99])).await.unwrap();
@@ -848,7 +987,14 @@ mod tests {
     #[tokio::test]
     async fn test_tombstone_hides_immutable_data() {
         let (tmp, mgr, _pool) = setup();
-        let store = OperatorStateStore::new(1, tmp.path(), mgr).unwrap();
+        let store = OperatorStateStore::new(
+            1,
+            tmp.path(),
+            mgr,
+            state_block(TEST_OPERATOR_MEMORY),
+            TEST_OPERATOR_MEMORY,
+        )
+        .unwrap();
 
         let key = b"will-die".to_vec();
         store.put(key.clone(), make_batch(&[7])).await.unwrap();

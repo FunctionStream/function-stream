@@ -12,6 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Duration;
 
@@ -23,6 +24,8 @@ use tracing::{debug, error, info, warn};
 
 use protocol::function_stream_graph::{ChainedOperator, FsProgram};
 
+use crate::config::DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES;
+use crate::runtime::memory::global_memory_pool;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::{ConstructedOperator, Operator};
 use crate::runtime::streaming::api::source::SourceOperator;
@@ -32,11 +35,11 @@ use crate::runtime::streaming::job::edge_manager::EdgeManager;
 use crate::runtime::streaming::job::models::{
     PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus, StreamingJobRollupStatus,
 };
-use crate::runtime::memory::global_memory_pool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
 use crate::runtime::streaming::protocol::control::{ControlCommand, JobMasterEvent, StopMode};
 use crate::runtime::streaming::protocol::event::CheckpointBarrier;
 use crate::runtime::streaming::state::{IoManager, IoPool, NoopMetricsCollector};
+use crate::sql::logical_node::logical::OperatorName;
 use crate::storage::stream_catalog::CatalogManager;
 
 #[derive(Debug, Clone)]
@@ -80,12 +83,35 @@ impl Default for StateConfig {
             max_background_compactions: 2,
             soft_limit_ratio: 0.7,
             checkpoint_interval_ms: 10_000,
-            per_operator_memory_bytes: 64 * 1024 * 1024,
+            per_operator_memory_bytes: DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
         }
     }
 }
 
 static GLOBAL_JOB_MANAGER: OnceLock<Arc<JobManager>> = OnceLock::new();
+
+/// Operators that create an [`crate::runtime::streaming::state::OperatorStateStore`] at runtime.
+fn pipeline_state_store_operator_count(operators: &[ChainedOperator]) -> usize {
+    operators
+        .iter()
+        .filter(|op| {
+            OperatorName::from_str(op.operator_name.as_str())
+                .ok()
+                .is_some_and(|n| {
+                    matches!(
+                        n,
+                        OperatorName::Join
+                            | OperatorName::InstantJoin
+                            | OperatorName::WindowFunction
+                            | OperatorName::TumblingWindowAggregate
+                            | OperatorName::SlidingWindowAggregate
+                            | OperatorName::SessionWindowAggregate
+                            | OperatorName::UpdatingAggregate
+                    )
+                })
+        })
+        .count()
+}
 
 pub struct JobManager {
     active_jobs: Arc<RwLock<HashMap<String, PhysicalExecutionGraph>>>,
@@ -465,6 +491,22 @@ impl JobManager {
 
         let subtask_index = 0;
         let parallelism = 1;
+
+        let per_op = self.state_config.per_operator_memory_bytes;
+        let n_state_ops = pipeline_state_store_operator_count(operators);
+        let pipeline_state_memory_block = if n_state_ops > 0 {
+            let bytes = per_op
+                .checked_mul(n_state_ops as u64)
+                .ok_or_else(|| anyhow!("pipeline state memory byte size overflow"))?;
+            Some(
+                global_memory_pool()
+                    .try_request_block(bytes)
+                    .map_err(|e| anyhow!("pipeline state memory reservation failed: {e}"))?,
+            )
+        } else {
+            None
+        };
+
         let ctx = TaskContext::new(
             job_id.clone(),
             pipeline_id,
@@ -474,6 +516,8 @@ impl JobManager {
             Arc::clone(&global_memory_pool()),
             self.io_manager_client.clone(),
             job_state_dir.to_path_buf(),
+            pipeline_state_memory_block,
+            per_op,
             recovery_epoch,
         );
 

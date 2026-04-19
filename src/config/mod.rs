@@ -20,7 +20,9 @@ pub mod storage;
 pub mod system;
 pub mod wasm_config;
 
-pub use global_config::GlobalConfig;
+pub use global_config::{
+    DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES, DEFAULT_STREAMING_RUNTIME_MEMORY_BYTES, GlobalConfig,
+};
 pub use loader::load_global_config;
 pub use log_config::LogConfig;
 #[allow(unused_imports)]

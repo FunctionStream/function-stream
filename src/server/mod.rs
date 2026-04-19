@@ -14,6 +14,7 @@
 
 mod handler;
 mod initializer;
+pub mod memory_service;
 mod service;
 
 pub use handler::FunctionStreamServiceImpl;

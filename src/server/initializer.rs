@@ -96,7 +96,7 @@ pub fn build_core_registry() -> ComponentRegistry {
         let b = ComponentRegistryBuilder::new()
             .register("WasmCache", initialize_wasm_cache)
             .register("TaskManager", initialize_task_manager)
-            .register("GlobalMemoryPool", initialize_global_memory_pool)
+            .register("MemoryService", initialize_memory_service)
             .register("JobManager", initialize_job_manager);
         #[cfg(feature = "python")]
         let b = b.register("PythonService", initialize_python_service);
@@ -156,60 +156,8 @@ fn initialize_python_service(config: &GlobalConfig) -> Result<()> {
     Ok(())
 }
 
-// Streaming heap limits from config + host probe; shared by GlobalMemoryPool and JobManager.
-fn resolve_streaming_memory_limits(config: &GlobalConfig) -> (u64, u64) {
-    use crate::config::system::system_memory_info;
-
-    let mem_info = system_memory_info().ok();
-    let total_physical = mem_info.as_ref().map(|m| m.total_physical).unwrap_or(0);
-    let auto_runtime_bytes = (total_physical as f64 * 0.8) as u64;
-
-    let max_memory_bytes = config
-        .streaming
-        .max_memory_bytes
-        .unwrap_or(if auto_runtime_bytes > 0 {
-            auto_runtime_bytes
-        } else {
-            256 * 1024 * 1024
-        });
-
-    let per_operator_memory_bytes = config
-        .streaming
-        .per_operator_state_memory_bytes
-        .unwrap_or(64 * 1024 * 1024);
-
-    (max_memory_bytes, per_operator_memory_bytes)
-}
-
-// Singleton global memory pools (streaming + operator state); registered before JobManager.
-fn initialize_global_memory_pool(config: &GlobalConfig) -> Result<()> {
-    use crate::config::system::system_memory_info;
-
-    let mem_info = system_memory_info().ok();
-    let total_physical = mem_info.as_ref().map(|m| m.total_physical).unwrap_or(0);
-    let avail_physical = mem_info.as_ref().map(|m| m.available_physical).unwrap_or(0);
-    let total_virtual = mem_info.as_ref().map(|m| m.total_virtual).unwrap_or(0);
-    let avail_virtual = mem_info.as_ref().map(|m| m.available_virtual).unwrap_or(0);
-
-    let (max_memory_bytes, per_operator_memory_bytes) = resolve_streaming_memory_limits(config);
-
-    info!(
-        total_physical_mb = total_physical / (1024 * 1024),
-        available_physical_mb = avail_physical / (1024 * 1024),
-        total_virtual_mb = total_virtual / (1024 * 1024),
-        available_virtual_mb = avail_virtual / (1024 * 1024),
-        runtime_memory_mb = max_memory_bytes / (1024 * 1024),
-        shared_state_memory_mb = per_operator_memory_bytes / (1024 * 1024),
-        "GlobalMemoryPool: streaming + operator state limits (singleton)"
-    );
-
-    crate::runtime::memory::init_global_memory_pool(max_memory_bytes)
-        .context("Global streaming memory pool initialization failed")?;
-    crate::runtime::memory::init_global_state_memory_pool(per_operator_memory_bytes)
-        .context("Global operator state memory pool initialization failed")?;
-
-    info!("GlobalMemoryPool component initialized");
-    Ok(())
+fn initialize_memory_service(config: &GlobalConfig) -> Result<()> {
+    crate::server::memory_service::MemoryService::initialize(config)
 }
 
 fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
@@ -218,7 +166,10 @@ fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
     use crate::runtime::streaming::job::{JobManager, StateConfig};
     use std::sync::Arc;
 
-    let (_, per_operator_memory_bytes) = resolve_streaming_memory_limits(config);
+    let per_operator_memory_bytes = config
+        .streaming
+        .operator_state_store_memory_bytes
+        .unwrap_or(crate::config::DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES);
 
     let registry = Arc::new(Registry::new());
     let factory = Arc::new(OperatorFactory::new(registry));
@@ -240,9 +191,7 @@ fn initialize_coordinator(_config: &GlobalConfig) -> Result<()> {
         .context("Dependency violation: Coordinator requires TaskManager")?;
 
     crate::runtime::memory::try_global_memory_pool()
-        .context("Dependency violation: Coordinator requires GlobalMemoryPool")?;
-    crate::runtime::memory::try_global_state_memory_pool()
-        .context("Dependency violation: Coordinator requires GlobalMemoryPool (state sub-pool)")?;
+        .context("Dependency violation: Coordinator requires MemoryService")?;
 
     crate::storage::stream_catalog::CatalogManager::global()
         .context("Dependency violation: Coordinator requires StreamCatalog")?;

@@ -61,6 +61,11 @@ impl MemoryBlock {
         self.available_bytes.load(Ordering::Relaxed)
     }
 
+    #[inline]
+    pub fn capacity(&self) -> u64 {
+        self.capacity
+    }
+
     pub(crate) fn release_ticket(&self, bytes: u64) {
         if bytes > 0 {
             self.available_bytes.fetch_add(bytes, Ordering::Release);
