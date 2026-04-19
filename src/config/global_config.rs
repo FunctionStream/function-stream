@@ -20,21 +20,21 @@ use crate::config::service_config::ServiceConfig;
 use crate::config::streaming_job::{ResolvedStreamingJobConfig, StreamingJobConfig};
 use crate::config::wasm_config::WasmConfig;
 
-/// Default for [`StreamingConfig::streaming_runtime_memory_bytes`] when unset. **200 MiB.**
-pub const DEFAULT_STREAMING_RUNTIME_MEMORY_BYTES: u64 = 200 * 1024 * 1024;
+/// Default for [`StreamingConfig::streaming_runtime_memory_bytes`] when unset. **10 MiB** (pipeline buffers, backpressure).
+pub const DEFAULT_STREAMING_RUNTIME_MEMORY_BYTES: u64 = 10 * 1024 * 1024;
 
-/// Default for [`StreamingConfig::operator_state_store_memory_bytes`] when unset. **100 MiB.**
-pub const DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES: u64 = 100 * 1024 * 1024;
+/// Default for [`StreamingConfig::operator_state_store_memory_bytes`] when unset. **5 MiB** per stateful operator cap.
+pub const DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES: u64 = 5 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StreamingConfig {
     #[serde(flatten)]
     pub job: StreamingJobConfig,
-    /// Bytes reserved in the global memory pool for streaming execution (pipeline buffers,
-    /// batch collect, backpressure).
+    /// Bytes reserved in the global memory pool for streaming pipeline execution (buffers,
+    /// batch collect, backpressure). Default 10 MiB.
     #[serde(default)]
     pub streaming_runtime_memory_bytes: Option<u64>,
-    /// Per stateful operator: in-memory state store cap before spill.
+    /// Per stateful operator: in-memory state store cap before spill. Default 5 MiB.
     #[serde(default)]
     pub operator_state_store_memory_bytes: Option<u64>,
 }

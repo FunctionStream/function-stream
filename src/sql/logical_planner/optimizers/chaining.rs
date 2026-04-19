@@ -45,9 +45,14 @@ impl Optimizer for ChainingOptimizer {
             let source_node = plan.node_weight(node_idx).expect("Source node missing");
             let target_node = plan.node_weight(target_idx).expect("Target node missing");
 
+            let parallelism_ok = source_node.parallelism == target_node.parallelism
+                || target_node
+                    .operator_chain
+                    .is_parallelism_upstream_expandable();
+
             if source_node.operator_chain.is_source()
                 || target_node.operator_chain.is_sink()
-                || source_node.parallelism != target_node.parallelism
+                || !parallelism_ok
             {
                 continue;
             }
@@ -92,6 +97,10 @@ impl Optimizer for ChainingOptimizer {
 
             source_node.description =
                 format!("{} -> {}", source_node.description, target_node.description);
+
+            source_node.parallelism = source_node
+                .parallelism
+                .max(target_node.parallelism);
 
             source_node
                 .operator_chain
@@ -148,6 +157,28 @@ mod tests {
             "source".into(),
             1,
         )
+    }
+
+    /// Window aggregate at higher default parallelism may forward into projection @ 1: still fuse
+    /// so each branch does not reserve a separate global state-memory block for the same sub-chain.
+    #[test]
+    fn fusion_stateful_high_parallelism_into_expandable_low() {
+        let mut g = LogicalGraph::new();
+        let n0 = g.add_node(source_node());
+        let n1 = g.add_node(proj_node(1, "tumble"));
+        let n2 = g.add_node(proj_node(2, "proj"));
+        let n1w = g.node_weight_mut(n1).unwrap();
+        n1w.parallelism = 8;
+        let e = forward_edge();
+        g.add_edge(n0, n1, e.clone());
+        g.add_edge(n1, n2, e);
+
+        let changed = ChainingOptimizer {}.optimize_once(&mut g);
+        assert!(changed);
+        assert_eq!(g.node_count(), 2);
+        let fused = g.node_weights().find(|n| n.description.contains("->")).unwrap();
+        assert_eq!(fused.parallelism, 8);
+        assert_eq!(fused.operator_chain.len(), 2);
     }
 
     /// Regression: upstream at last `NodeIndex` + remove non-last downstream swaps indices.

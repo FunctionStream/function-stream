@@ -38,12 +38,15 @@ pub enum ProcessingMode {
 #[derive(Clone, Debug)]
 pub struct SqlConfig {
     pub default_parallelism: usize,
+    /// Physical pipeline parallelism for [`KeyExtractionNode`](crate::sql::logical_node::key_calculation::KeyExtractionNode) / KeyBy.
+    pub key_by_parallelism: usize,
 }
 
 impl Default for SqlConfig {
     fn default() -> Self {
         Self {
             default_parallelism: sql_planning_default::DEFAULT_PARALLELISM,
+            key_by_parallelism: sql_planning_default::DEFAULT_KEY_BY_PARALLELISM,
         }
     }
 }

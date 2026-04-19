@@ -238,7 +238,7 @@ impl StreamingOperatorBlueprint for KeyExtractionNode {
             engine_operator_name,
             protobuf_payload,
             format!("Key<{}>", self.operator_label.as_deref().unwrap_or("_")),
-            planner.default_parallelism(),
+            planner.key_by_parallelism(),
         );
 
         let data_edge =

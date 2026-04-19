@@ -102,6 +102,11 @@ impl<'a> Planner<'a> {
         self.schema_provider.default_parallelism()
     }
 
+    #[inline]
+    pub(crate) fn key_by_parallelism(&self) -> usize {
+        self.schema_provider.key_by_parallelism()
+    }
+
     /// Parallelism for operators that consume a keyed shuffle (non-empty partition keys).
     #[inline]
     pub(crate) fn keyed_aggregate_parallelism(&self) -> usize {

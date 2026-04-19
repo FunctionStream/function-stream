@@ -145,14 +145,21 @@ impl StreamPlanningContext {
         self.sql_config.default_parallelism
     }
 
+    #[inline]
+    pub fn key_by_parallelism(&self) -> usize {
+        self.sql_config.key_by_parallelism
+    }
+
     /// Same registration order as the historical `StreamSchemaProvider::new` (placeholders, then DataFusion defaults).
     pub fn new() -> Self {
-        Self::builder()
+        let mut ctx = Self::builder()
             .with_streaming_extensions()
             .expect("streaming extensions")
             .with_default_functions()
             .expect("default functions")
-            .build()
+            .build();
+        ctx.sql_config = crate::sql::planning_runtime::sql_planning_snapshot();
+        ctx
     }
 
     pub fn register_stream_table(&mut self, table: StreamTable) {

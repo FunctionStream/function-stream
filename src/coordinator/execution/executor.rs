@@ -323,11 +323,16 @@ impl PlanVisitor for Executor {
         let execute = || -> Result<ExecuteResult, ExecuteError> {
             let mut fs_program: FsProgram = plan.program.clone().into();
             let job_manager: Arc<JobManager> = Arc::clone(&self.job_manager);
-            let pipeline_parallelism = parse_pipeline_parallelism(plan.with_options.as_ref())
-                .unwrap_or_else(|| job_manager.default_pipeline_parallelism())
-                .max(1);
-            for node in &mut fs_program.nodes {
-                node.parallelism = pipeline_parallelism;
+            // Only override per-node parallelism when CREATE STREAMING TABLE specifies
+            // `WITH (parallelism = N)`. Otherwise keep planner-assigned values (e.g. keyed
+            // aggregates defaulting to a higher parallelism than the job-wide default).
+            if let Some(pipeline_parallelism) =
+                parse_pipeline_parallelism(plan.with_options.as_ref())
+            {
+                let p = pipeline_parallelism.max(1);
+                for node in &mut fs_program.nodes {
+                    node.parallelism = p;
+                }
             }
 
             let job_id = plan.name.clone();

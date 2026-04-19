@@ -19,6 +19,12 @@ use crate::config::GlobalConfig;
 
 pub type InitializerFn = fn(&GlobalConfig) -> Result<()>;
 
+fn initialize_streaming_sql_planning(config: &GlobalConfig) -> Result<()> {
+    let job = config.streaming.resolved_job();
+    crate::sql::planning_runtime::install_sql_planning_from_streaming_job(&job);
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct Component {
     pub name: &'static str,
@@ -94,6 +100,7 @@ impl ComponentRegistry {
 pub fn build_core_registry() -> ComponentRegistry {
     let builder = {
         let b = ComponentRegistryBuilder::new()
+            .register("StreamingSqlPlanning", initialize_streaming_sql_planning)
             .register("WasmCache", initialize_wasm_cache)
             .register("TaskManager", initialize_task_manager)
             .register("MemoryService", initialize_memory_service)

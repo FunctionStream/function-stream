@@ -19,6 +19,7 @@ pub mod logical_node;
 pub mod logical_planner;
 pub mod parse;
 pub mod physical;
+pub(crate) mod planning_runtime;
 pub mod schema;
 pub mod types;
 

@@ -64,12 +64,11 @@ multifield_partial_ord!(
 );
 
 impl StreamWindowAggregateNode {
+    /// This node is only emitted after `KeyExtractionNode` in streaming rewrites; `partition_keys`
+    /// may be empty when GROUP BY is only a window call (window column stripped from key list),
+    /// but the pipeline still consumes a shuffle — use keyed aggregate parallelism.
     fn parallelism_after_keyed_shuffle(&self, planner: &Planner) -> usize {
-        if self.partition_keys.is_empty() {
-            planner.default_parallelism()
-        } else {
-            planner.keyed_aggregate_parallelism()
-        }
+        planner.keyed_aggregate_parallelism()
     }
 
     /// Safely constructs a new node, computing the final projection without panicking.

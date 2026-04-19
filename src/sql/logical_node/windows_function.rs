@@ -163,11 +163,7 @@ impl StreamingOperatorBlueprint for StreamingWindowFunctionNode {
             window_function_plan: evaluation_plan_payload,
         };
 
-        let parallelism = if self.partition_key_indices.is_empty() {
-            planner.default_parallelism()
-        } else {
-            planner.keyed_aggregate_parallelism()
-        };
+        let parallelism = planner.keyed_aggregate_parallelism();
 
         let logical_node = LogicalNode::single(
             node_index as u32,
