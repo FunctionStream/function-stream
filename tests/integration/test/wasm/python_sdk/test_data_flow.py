@@ -74,6 +74,13 @@ def consume_messages(
     deadline = time.time() + timeout
 
     try:
+        logger.info(
+            "Start consuming topic=%s expected_count=%d timeout=%.1fs bootstrap=%s",
+            topic,
+            expected_count,
+            timeout,
+            bootstrap,
+        )
         while len(collected) < expected_count and time.time() < deadline:
             msg = consumer.poll(timeout=POLL_INTERVAL_S)
             if msg is None:
@@ -85,11 +92,15 @@ def consume_messages(
 
             payload = msg.value().decode("utf-8")
             collected.append(json.loads(payload))
+            logger.info("Consumed topic=%s count=%d payload=%s", topic, len(collected), payload)
     finally:
         consumer.close()
 
     if len(collected) < expected_count:
-        raise TimeoutError(f"Expected {expected_count} messages, received {len(collected)}")
+        raise TimeoutError(
+            f"Expected {expected_count} messages, received {len(collected)}. "
+            f"topic={topic}, collected={collected}"
+        )
 
     return collected
 
