@@ -720,7 +720,10 @@ impl JobManager {
     // Chandy-Lamport distributed snapshot barrier coordinator
     // ========================================================================
 
-    fn spawn_checkpoint_coordinator(&self, cfg: CheckpointCoordinatorConfig) -> TokioJoinHandle<()> {
+    fn spawn_checkpoint_coordinator(
+        &self,
+        cfg: CheckpointCoordinatorConfig,
+    ) -> TokioJoinHandle<()> {
         let CheckpointCoordinatorConfig {
             job_id,
             source_control_txs,

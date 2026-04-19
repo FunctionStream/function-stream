@@ -14,7 +14,9 @@ use crate::runtime::streaming::api::context::TaskContext;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
-use protocol::storage::{KafkaSourceSubtaskCheckpoint, SourceCheckpointPayload, source_checkpoint_payload};
+use protocol::storage::{
+    KafkaSourceSubtaskCheckpoint, SourceCheckpointPayload, source_checkpoint_payload,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SourceOffset {
