@@ -38,7 +38,7 @@ use tracing::info;
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::converter::Converter;
@@ -797,12 +797,13 @@ impl Operator for SessionWindowOperator {
         _input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
         let watermark_time = ctx.current_watermark();
 
         let filtered_batch = self.filter_batch_by_time(batch, watermark_time)?;
         if filtered_batch.num_rows() == 0 {
-            return Ok(vec![]);
+            return Ok(());
         }
 
         let sorted_batch = self.sort_batch(&filtered_batch)?;
@@ -810,7 +811,7 @@ impl Operator for SessionWindowOperator {
         self.ingest_sorted_batch(sorted_batch, watermark_time, false)
             .await?;
 
-        Ok(vec![])
+        Ok(())
     }
 
     // Watermark-driven session closure with precise LSM-Tree garbage collection
@@ -818,14 +819,15 @@ impl Operator for SessionWindowOperator {
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let Watermark::EventTime(current_time) = watermark else {
-            return Ok(vec![]);
+            return Ok(());
         };
 
         let completed_sessions = self.evaluate_watermark_with_meta(current_time).await?;
         if completed_sessions.is_empty() {
-            return Ok(vec![]);
+            return Ok(());
         }
 
         let store = self
@@ -855,7 +857,10 @@ impl Operator for SessionWindowOperator {
         }
 
         let output_batch = self.format_to_arrow(completed_sessions)?;
-        Ok(vec![StreamOutput::Forward(output_batch)])
+        collector
+            .collect(StreamOutput::Forward(output_batch), _ctx)
+            .await?;
+        Ok(())
     }
 
     async fn snapshot_state(

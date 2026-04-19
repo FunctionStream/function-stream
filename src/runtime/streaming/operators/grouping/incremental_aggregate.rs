@@ -43,7 +43,7 @@ use tracing::{debug, info, warn};
 // =========================================================================
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::streaming::operators::{Key, UpdatingCache};
 use crate::runtime::streaming::state::OperatorStateStore;
@@ -876,26 +876,29 @@ impl Operator for IncrementalAggregatingFunc {
         _input_idx: usize,
         batch: RecordBatch,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
         if self.has_routing_keys {
             self.keyed_aggregate(&batch)?;
         } else {
             self.global_aggregate(&batch)?;
         }
 
-        Ok(vec![])
+        Ok(())
     }
 
     async fn process_watermark(
         &mut self,
         _watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         if let Some(changelog_batch) = self.generate_changelog()? {
-            Ok(vec![StreamOutput::Forward(changelog_batch)])
-        } else {
-            Ok(vec![])
+            collector
+                .collect(StreamOutput::Forward(changelog_batch), _ctx)
+                .await?;
         }
+        Ok(())
     }
 
     async fn snapshot_state(

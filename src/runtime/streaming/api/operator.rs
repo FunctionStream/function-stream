@@ -16,7 +16,6 @@ use crate::runtime::streaming::protocol::event::StreamOutput;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 use arrow_array::RecordBatch;
 use async_trait::async_trait;
-use std::time::Duration;
 
 // ---------------------------------------------------------------------------
 // ConstructedOperator
@@ -25,6 +24,11 @@ use std::time::Duration;
 pub enum ConstructedOperator {
     Source(Box<dyn SourceOperator>),
     Operator(Box<dyn Operator>),
+}
+
+#[async_trait]
+pub trait Collector: Send {
+    async fn collect(&mut self, out: StreamOutput, ctx: &mut TaskContext) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -40,13 +44,15 @@ pub trait Operator: Send + 'static {
         input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> anyhow::Result<Vec<StreamOutput>>;
+        collector: &mut dyn Collector,
+    ) -> anyhow::Result<()>;
 
     async fn process_watermark(
         &mut self,
         watermark: Watermark,
         ctx: &mut TaskContext,
-    ) -> anyhow::Result<Vec<StreamOutput>>;
+        collector: &mut dyn Collector,
+    ) -> anyhow::Result<()>;
 
     async fn snapshot_state(
         &mut self,
@@ -73,18 +79,6 @@ pub trait Operator: Send + 'static {
     async fn abort_checkpoint(&mut self, epoch: u32, _ctx: &mut TaskContext) -> anyhow::Result<()> {
         let _ = epoch;
         Ok(())
-    }
-
-    fn tick_interval(&self) -> Option<Duration> {
-        None
-    }
-
-    async fn process_tick(
-        &mut self,
-        _tick_index: u64,
-        _ctx: &mut TaskContext,
-    ) -> anyhow::Result<Vec<StreamOutput>> {
-        Ok(vec![])
     }
 
     async fn on_close(&mut self, _ctx: &mut TaskContext) -> anyhow::Result<Vec<StreamOutput>> {

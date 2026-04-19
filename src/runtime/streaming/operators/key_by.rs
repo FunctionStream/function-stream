@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
 use protocol::function_stream_graph::KeyPlanOperator;
@@ -57,10 +57,11 @@ impl Operator for KeyByOperator {
         _input_idx: usize,
         batch: RecordBatch,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let num_rows = batch.num_rows();
         if num_rows == 0 {
-            return Ok(vec![]);
+            return Ok(());
         }
 
         let mut key_columns = Vec::with_capacity(self.key_extractors.len());
@@ -110,15 +111,22 @@ impl Operator for KeyByOperator {
             start_idx = end_idx;
         }
 
-        Ok(outputs)
+        for out in outputs {
+            collector.collect(out, _ctx).await?;
+        }
+        Ok(())
     }
 
     async fn process_watermark(
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        Ok(vec![StreamOutput::Watermark(watermark)])
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
+        collector
+            .collect(StreamOutput::Watermark(watermark), _ctx)
+            .await?;
+        Ok(())
     }
 
     async fn snapshot_state(

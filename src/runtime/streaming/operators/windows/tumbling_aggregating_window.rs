@@ -36,7 +36,7 @@ use tracing::{info, warn};
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::time_utils::print_time;
@@ -232,7 +232,8 @@ impl Operator for TumblingWindowOperator {
         _input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
         let bin_array = self
             .binning_function
             .evaluate(&batch)?
@@ -298,7 +299,7 @@ impl Operator for TumblingWindowOperator {
                 .map_err(|e| anyhow!("partial channel send: {e}"))?;
         }
 
-        Ok(vec![])
+        Ok(())
     }
 
     // Watermark-driven window closure with LSM-Tree GC
@@ -306,16 +307,15 @@ impl Operator for TumblingWindowOperator {
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let Watermark::EventTime(current_time) = watermark else {
-            return Ok(vec![]);
+            return Ok(());
         };
         let store = self
             .state_store
             .as_ref()
             .expect("State store not initialized");
-
-        let mut final_outputs = Vec::new();
 
         let mut expired_bins = Vec::new();
         for &k in self.active_bins.keys() {
@@ -353,7 +353,9 @@ impl Operator for TumblingWindowOperator {
                 )?;
 
                 if self.final_projection.is_none() {
-                    final_outputs.push(StreamOutput::Forward(with_timestamp));
+                    collector
+                        .collect(StreamOutput::Forward(with_timestamp), _ctx)
+                        .await?;
                 } else {
                     aggregate_results.push(with_timestamp);
                 }
@@ -366,7 +368,9 @@ impl Operator for TumblingWindowOperator {
                     final_projection.execute(0, SessionContext::new().task_ctx())?;
 
                 while let Some(batch) = proj_exec.next().await {
-                    final_outputs.push(StreamOutput::Forward(batch?));
+                    collector
+                        .collect(StreamOutput::Forward(batch?), _ctx)
+                        .await?;
                 }
             }
 
@@ -378,7 +382,7 @@ impl Operator for TumblingWindowOperator {
             self.pending_bins.remove(&bin_start_nanos);
         }
 
-        Ok(final_outputs)
+        Ok(())
     }
 
     async fn snapshot_state(

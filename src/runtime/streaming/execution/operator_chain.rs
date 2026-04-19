@@ -13,7 +13,7 @@
 use async_trait::async_trait;
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::error::RunError;
 use crate::runtime::streaming::protocol::{
     control::{ControlCommand, StopMode},
@@ -120,13 +120,103 @@ impl OperatorDrive for IntermediateDriver {
     ) -> Result<bool, RunError> {
         match tracked.event {
             StreamEvent::Data(batch) => {
-                let outputs = self.operator.process_data(input_idx, batch, ctx).await?;
-                self.dispatch_outputs(outputs, ctx).await?;
+                struct NextCollector<'a> {
+                    next: &'a mut Box<dyn OperatorDrive>,
+                    op_name: String,
+                }
+                #[async_trait]
+                impl Collector for NextCollector<'_> {
+                    async fn collect(
+                        &mut self,
+                        out: StreamOutput,
+                        ctx: &mut TaskContext,
+                    ) -> anyhow::Result<()> {
+                        match out {
+                            StreamOutput::Forward(b) => {
+                                self.next
+                                    .process_event(
+                                        0,
+                                        TrackedEvent::control(StreamEvent::Data(b)),
+                                        ctx,
+                                    )
+                                    .await?;
+                            }
+                            StreamOutput::Watermark(wm) => {
+                                self.next
+                                    .process_event(
+                                        0,
+                                        TrackedEvent::control(StreamEvent::Watermark(wm)),
+                                        ctx,
+                                    )
+                                    .await?;
+                            }
+                            StreamOutput::Keyed(_, _) | StreamOutput::Broadcast(_) => {
+                                return Err(anyhow::anyhow!(
+                                    "Topology Violation: Keyed or Broadcast output emitted in the middle of chain by '{}'",
+                                    self.op_name
+                                ));
+                            }
+                        }
+                        Ok(())
+                    }
+                }
+                let mut collector = NextCollector {
+                    next: &mut self.next,
+                    op_name: self.operator.name().to_string(),
+                };
+                self.operator
+                    .process_data(input_idx, batch, ctx, &mut collector)
+                    .await?;
                 Ok(false)
             }
             StreamEvent::Watermark(wm) => {
-                let outputs = self.operator.process_watermark(wm, ctx).await?;
-                self.dispatch_outputs(outputs, ctx).await?;
+                struct NextCollector<'a> {
+                    next: &'a mut Box<dyn OperatorDrive>,
+                    op_name: String,
+                }
+                #[async_trait]
+                impl Collector for NextCollector<'_> {
+                    async fn collect(
+                        &mut self,
+                        out: StreamOutput,
+                        ctx: &mut TaskContext,
+                    ) -> anyhow::Result<()> {
+                        match out {
+                            StreamOutput::Forward(b) => {
+                                self.next
+                                    .process_event(
+                                        0,
+                                        TrackedEvent::control(StreamEvent::Data(b)),
+                                        ctx,
+                                    )
+                                    .await?;
+                            }
+                            StreamOutput::Watermark(wm) => {
+                                self.next
+                                    .process_event(
+                                        0,
+                                        TrackedEvent::control(StreamEvent::Watermark(wm)),
+                                        ctx,
+                                    )
+                                    .await?;
+                            }
+                            StreamOutput::Keyed(_, _) | StreamOutput::Broadcast(_) => {
+                                return Err(anyhow::anyhow!(
+                                    "Topology Violation: Keyed or Broadcast output emitted in the middle of chain by '{}'",
+                                    self.op_name
+                                ));
+                            }
+                        }
+                        Ok(())
+                    }
+                }
+                let mut collector = NextCollector {
+                    next: &mut self.next,
+                    op_name: self.operator.name().to_string(),
+                };
+                self.operator
+                    .process_watermark(wm, ctx, &mut collector)
+                    .await?;
                 self.forward_signal(StreamEvent::Watermark(wm), ctx).await?;
                 Ok(false)
             }
@@ -237,13 +327,55 @@ impl OperatorDrive for TailDriver {
     ) -> Result<bool, RunError> {
         match tracked.event {
             StreamEvent::Data(batch) => {
-                let outputs = self.operator.process_data(input_idx, batch, ctx).await?;
-                self.dispatch_outputs(outputs, ctx).await?;
+                struct FinalCollector;
+                #[async_trait]
+                impl Collector for FinalCollector {
+                    async fn collect(
+                        &mut self,
+                        out: StreamOutput,
+                        ctx: &mut TaskContext,
+                    ) -> anyhow::Result<()> {
+                        match out {
+                            StreamOutput::Forward(b) => ctx.collect(b).await?,
+                            StreamOutput::Keyed(hash, b) => ctx.collect_keyed(hash, b).await?,
+                            StreamOutput::Broadcast(b) => ctx.collect(b).await?,
+                            StreamOutput::Watermark(wm) => {
+                                ctx.broadcast(StreamEvent::Watermark(wm)).await?
+                            }
+                        }
+                        Ok(())
+                    }
+                }
+                let mut collector = FinalCollector;
+                self.operator
+                    .process_data(input_idx, batch, ctx, &mut collector)
+                    .await?;
                 Ok(false)
             }
             StreamEvent::Watermark(wm) => {
-                let outputs = self.operator.process_watermark(wm, ctx).await?;
-                self.dispatch_outputs(outputs, ctx).await?;
+                struct FinalCollector;
+                #[async_trait]
+                impl Collector for FinalCollector {
+                    async fn collect(
+                        &mut self,
+                        out: StreamOutput,
+                        ctx: &mut TaskContext,
+                    ) -> anyhow::Result<()> {
+                        match out {
+                            StreamOutput::Forward(b) => ctx.collect(b).await?,
+                            StreamOutput::Keyed(hash, b) => ctx.collect_keyed(hash, b).await?,
+                            StreamOutput::Broadcast(b) => ctx.collect(b).await?,
+                            StreamOutput::Watermark(wm) => {
+                                ctx.broadcast(StreamEvent::Watermark(wm)).await?
+                            }
+                        }
+                        Ok(())
+                    }
+                }
+                let mut collector = FinalCollector;
+                self.operator
+                    .process_watermark(wm, ctx, &mut collector)
+                    .await?;
                 self.forward_signal(StreamEvent::Watermark(wm), ctx).await?;
                 Ok(false)
             }

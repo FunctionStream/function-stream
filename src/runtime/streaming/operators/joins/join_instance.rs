@@ -27,7 +27,7 @@ use tracing::{info, warn};
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
@@ -257,23 +257,25 @@ impl Operator for InstantJoinOperator {
         input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
         let side = if input_idx == 0 {
             JoinSide::Left
         } else {
             JoinSide::Right
         };
         self.process_side_internal(side, batch, ctx).await?;
-        Ok(vec![])
+        Ok(())
     }
 
     async fn process_watermark(
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let Watermark::EventTime(current_time) = watermark else {
-            return Ok(vec![]);
+            return Ok(());
         };
         let store = self.state_store.clone().unwrap();
         let cutoff_nanos = current_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
@@ -288,7 +290,7 @@ impl Operator for InstantJoinOperator {
             .collect();
 
         if expired_ts.is_empty() {
-            return Ok(vec![]);
+            return Ok(());
         }
 
         // Phase 1: Harvest — extract all expired timestamp data from LSM-Tree
@@ -323,15 +325,15 @@ impl Operator for InstantJoinOperator {
         }
 
         // Phase 2: Compute — all data extracted, no store reference held
-        let mut emit_outputs = Vec::new();
-
         for (_, left_input, right_input) in pending_pairs {
             if left_input.num_rows() == 0 && right_input.num_rows() == 0 {
                 continue;
             }
             let results = self.compute_pair(left_input, right_input).await?;
             for batch in results {
-                emit_outputs.push(StreamOutput::Forward(batch));
+                collector
+                    .collect(StreamOutput::Forward(batch), _ctx)
+                    .await?;
             }
         }
 
@@ -347,7 +349,7 @@ impl Operator for InstantJoinOperator {
             self.right_state.active_timestamps.remove(&ts);
         }
 
-        Ok(emit_outputs)
+        Ok(())
     }
 
     async fn snapshot_state(

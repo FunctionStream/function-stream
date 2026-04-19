@@ -28,7 +28,7 @@ use tracing::{info, warn};
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::time_utils::print_time;
@@ -182,7 +182,8 @@ impl Operator for WindowFunctionOperator {
         _input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
         let current_watermark = ctx.current_watermark();
         let split_batches = self.filter_and_split_batches(batch, current_watermark)?;
         let store = self
@@ -202,7 +203,7 @@ impl Operator for WindowFunctionOperator {
             self.pending_timestamps.insert(ts_nanos);
         }
 
-        Ok(vec![])
+        Ok(())
     }
 
     // On-demand compute & GC: pull data from LSM-Tree, run DataFusion, tombstone
@@ -210,9 +211,10 @@ impl Operator for WindowFunctionOperator {
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let Watermark::EventTime(current_time) = watermark else {
-            return Ok(vec![]);
+            return Ok(());
         };
         let store = self
             .state_store
@@ -226,8 +228,6 @@ impl Operator for WindowFunctionOperator {
             .take_while(|&&ts| ts < current_nanos)
             .copied()
             .collect();
-
-        let mut final_outputs = Vec::new();
 
         for ts in expired_ts {
             let key = Self::build_state_key(ts);
@@ -250,7 +250,7 @@ impl Operator for WindowFunctionOperator {
                 drop(tx);
 
                 while let Some(res) = stream.next().await {
-                    final_outputs.push(StreamOutput::Forward(res?));
+                    collector.collect(StreamOutput::Forward(res?), _ctx).await?;
                 }
             }
 
@@ -258,7 +258,7 @@ impl Operator for WindowFunctionOperator {
             self.pending_timestamps.remove(&ts);
         }
 
-        Ok(final_outputs)
+        Ok(())
     }
 
     async fn snapshot_state(

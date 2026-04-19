@@ -26,7 +26,7 @@ use tracing::{info, warn};
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
@@ -175,7 +175,8 @@ impl JoinWithExpirationOperator {
         side: JoinSide,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let current_time = ctx.current_watermark().unwrap_or_else(SystemTime::now);
         let store = self
             .state_store
@@ -204,7 +205,7 @@ impl JoinWithExpirationOperator {
         };
 
         if opposite_batches.is_empty() {
-            return Ok(vec![]);
+            return Ok(());
         }
 
         let opposite_schema = match side {
@@ -224,11 +225,10 @@ impl JoinWithExpirationOperator {
         };
 
         let result_batches = self.compute_pair(left_input, right_input).await?;
-
-        Ok(result_batches
-            .into_iter()
-            .map(StreamOutput::Forward)
-            .collect())
+        for b in result_batches {
+            collector.collect(StreamOutput::Forward(b), ctx).await?;
+        }
+        Ok(())
     }
 }
 
@@ -284,21 +284,23 @@ impl Operator for JoinWithExpirationOperator {
         input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let side = if input_idx == 0 {
             JoinSide::Left
         } else {
             JoinSide::Right
         };
-        self.process_side(side, batch, ctx).await
+        self.process_side(side, batch, ctx, collector).await
     }
 
     async fn process_watermark(
         &mut self,
         _watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        Ok(vec![])
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
+        Ok(())
     }
 
     async fn snapshot_state(

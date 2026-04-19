@@ -35,7 +35,7 @@ use tracing::info;
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
 use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
@@ -424,7 +424,8 @@ impl Operator for SlidingWindowOperator {
         _input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
         let bin_array = self
             .binning_function
             .evaluate(&batch)?
@@ -486,7 +487,7 @@ impl Operator for SlidingWindowOperator {
                 .map_err(|e| anyhow!("partial channel send: {e}"))?;
         }
 
-        Ok(vec![])
+        Ok(())
     }
 
     // State morphing (Type 0 → Type 1) and dual-layer GC
@@ -494,17 +495,16 @@ impl Operator for SlidingWindowOperator {
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let Watermark::EventTime(current_time) = watermark else {
-            return Ok(vec![]);
+            return Ok(());
         };
         let watermark_bin = self.bin_start(current_time);
         let store = self
             .state_store
             .clone()
             .expect("State store not initialized");
-
-        let mut final_outputs = Vec::new();
 
         let mut expired_bins = Vec::new();
         for &k in self.active_bins.keys() {
@@ -578,7 +578,9 @@ impl Operator for SlidingWindowOperator {
                 .execute(0, SessionContext::new().task_ctx())?;
 
             while let Some(batch) = proj_exec.next().await {
-                final_outputs.push(StreamOutput::Forward(batch?));
+                collector
+                    .collect(StreamOutput::Forward(batch?), _ctx)
+                    .await?;
             }
 
             // Phase 5: GC expired partial bins (Type 1) that fall outside the window
@@ -600,7 +602,7 @@ impl Operator for SlidingWindowOperator {
             }
         }
 
-        Ok(final_outputs)
+        Ok(())
     }
 
     async fn snapshot_state(

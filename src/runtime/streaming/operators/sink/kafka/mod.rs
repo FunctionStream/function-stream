@@ -38,7 +38,7 @@ use tracing::{info, warn};
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::format::DataSerializer;
 use crate::sql::common::constants::factory_operator_name;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
@@ -260,7 +260,8 @@ impl Operator for KafkaSinkOperator {
         _input_idx: usize,
         batch: RecordBatch,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
         let payloads = self.serializer.serialize(&batch)?;
         let producer = self.current_producer().clone();
 
@@ -298,15 +299,16 @@ impl Operator for KafkaSinkOperator {
             }
         }
 
-        Ok(vec![])
+        Ok(())
     }
 
     async fn process_watermark(
         &mut self,
         _watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        Ok(vec![])
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
+        Ok(())
     }
 
     async fn snapshot_state(
