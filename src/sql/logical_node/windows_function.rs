@@ -163,13 +163,19 @@ impl StreamingOperatorBlueprint for StreamingWindowFunctionNode {
             window_function_plan: evaluation_plan_payload,
         };
 
+        let parallelism = if self.partition_key_indices.is_empty() {
+            planner.default_parallelism()
+        } else {
+            planner.keyed_aggregate_parallelism()
+        };
+
         let logical_node = LogicalNode::single(
             node_index as u32,
             format!("window_function_{node_index}"),
             OperatorName::WindowFunction,
             operator_config.encode_to_vec(),
             runtime_operator_kind::STREAMING_WINDOW_EVALUATOR.to_string(),
-            planner.default_parallelism(),
+            parallelism,
         );
 
         let routing_edge =

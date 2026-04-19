@@ -64,6 +64,14 @@ multifield_partial_ord!(
 );
 
 impl StreamWindowAggregateNode {
+    fn parallelism_after_keyed_shuffle(&self, planner: &Planner) -> usize {
+        if self.partition_keys.is_empty() {
+            planner.default_parallelism()
+        } else {
+            planner.keyed_aggregate_parallelism()
+        }
+    }
+
     /// Safely constructs a new node, computing the final projection without panicking.
     pub fn try_new(
         window_spec: WindowBehavior,
@@ -126,7 +134,7 @@ impl StreamWindowAggregateNode {
             OperatorName::TumblingWindowAggregate,
             operator_config.encode_to_vec(),
             format!("TumblingWindow<{}>", operator_config.name),
-            planner.default_parallelism(),
+            self.parallelism_after_keyed_shuffle(planner),
         ))
     }
 
@@ -176,7 +184,7 @@ impl StreamWindowAggregateNode {
             OperatorName::SlidingWindowAggregate,
             operator_config.encode_to_vec(),
             proto_operator_name::SLIDING_WINDOW_LABEL.to_string(),
-            planner.default_parallelism(),
+            self.parallelism_after_keyed_shuffle(planner),
         ))
     }
 
@@ -243,7 +251,7 @@ impl StreamWindowAggregateNode {
             OperatorName::SessionWindowAggregate,
             operator_config.encode_to_vec(),
             operator_config.name.clone(),
-            planner.default_parallelism(),
+            self.parallelism_after_keyed_shuffle(planner),
         ))
     }
 
@@ -299,7 +307,7 @@ impl StreamWindowAggregateNode {
             OperatorName::TumblingWindowAggregate,
             operator_config.encode_to_vec(),
             proto_operator_name::INSTANT_WINDOW_LABEL.to_string(),
-            planner.default_parallelism(),
+            self.parallelism_after_keyed_shuffle(planner),
         ))
     }
 }

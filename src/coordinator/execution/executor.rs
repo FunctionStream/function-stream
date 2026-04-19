@@ -20,9 +20,6 @@ use crate::coordinator::dataset::{
     ExecuteResult, ShowCatalogTablesResult, ShowCreateStreamingTableResult, ShowCreateTableResult,
     ShowFunctionsResult, ShowStreamingTablesResult, empty_record_batch,
 };
-use crate::coordinator::streaming_table_options::{
-    parse_checkpoint_interval_ms, parse_pipeline_parallelism,
-};
 use crate::coordinator::plan::{
     CreateFunctionPlan, CreatePythonFunctionPlan, CreateTablePlan, CreateTablePlanBody,
     DropFunctionPlan, DropStreamingTablePlan, DropTablePlan, LookupTablePlan, PlanNode,
@@ -31,6 +28,9 @@ use crate::coordinator::plan::{
     StartFunctionPlan, StopFunctionPlan, StreamingTable, StreamingTableConnectorPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
+use crate::coordinator::streaming_table_options::{
+    parse_checkpoint_interval_ms, parse_pipeline_parallelism,
+};
 use crate::runtime::streaming::job::JobManager;
 use crate::runtime::streaming::protocol::control::StopMode;
 use crate::runtime::wasm::taskexecutor::TaskManager;

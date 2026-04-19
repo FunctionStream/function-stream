@@ -42,6 +42,7 @@ use datafusion_common::TableReference;
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
 use datafusion_proto::physical_plan::to_proto::serialize_physical_expr;
 
+use crate::sql::common::constants::sql_planning_default;
 use crate::sql::common::{FsSchema, FsSchemaRef};
 use crate::sql::logical_node::debezium::{
     PACK_NODE_NAME, UNROLL_NODE_NAME, UnrollDebeziumPayloadNode,
@@ -99,6 +100,12 @@ impl<'a> Planner<'a> {
     #[inline]
     pub(crate) fn default_parallelism(&self) -> usize {
         self.schema_provider.default_parallelism()
+    }
+
+    /// Parallelism for operators that consume a keyed shuffle (non-empty partition keys).
+    #[inline]
+    pub(crate) fn keyed_aggregate_parallelism(&self) -> usize {
+        sql_planning_default::KEYED_AGGREGATE_DEFAULT_PARALLELISM
     }
 
     pub(crate) fn new(

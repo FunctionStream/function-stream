@@ -218,13 +218,19 @@ impl StreamingOperatorBlueprint for ContinuousAggregateNode {
 
         let operator_config = self.compile_operator_config(planner, &upstream_schema)?;
 
+        let parallelism = if self.partition_key_indices.is_empty() {
+            planner.default_parallelism()
+        } else {
+            planner.keyed_aggregate_parallelism()
+        };
+
         let logical_node = LogicalNode::single(
             node_index as u32,
             format!("updating_aggregate_{node_index}"),
             OperatorName::UpdatingAggregate,
             operator_config.encode_to_vec(),
             proto_operator_name::UPDATING_AGGREGATE.to_string(),
-            planner.default_parallelism(),
+            parallelism,
         );
 
         let shuffle_edge =
