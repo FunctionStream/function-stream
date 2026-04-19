@@ -15,13 +15,13 @@
 //! Provides unified factory methods to create TaskLifecycle instances from YAML config.
 //! Dispatches to specific builders (Processor, Source, Sink, Python) based on task type.
 
-use crate::runtime::task::TaskLifecycle;
-use crate::runtime::task::builder::processor::ProcessorBuilder;
+use crate::runtime::wasm::task::TaskLifecycle;
+use crate::runtime::wasm::task::builder::processor::ProcessorBuilder;
 #[cfg(feature = "python")]
-use crate::runtime::task::builder::python::PythonBuilder;
-use crate::runtime::task::builder::sink::SinkBuilder;
-use crate::runtime::task::builder::source::SourceBuilder;
-use crate::runtime::task::yaml_keys::{NAME, TYPE, type_values};
+use crate::runtime::wasm::task::builder::python::PythonBuilder;
+use crate::runtime::wasm::task::builder::sink::SinkBuilder;
+use crate::runtime::wasm::task::builder::source::SourceBuilder;
+use crate::runtime::wasm::task::yaml_keys::{NAME, TYPE, type_values};
 use serde_yaml::Value;
 use std::sync::Arc;
 

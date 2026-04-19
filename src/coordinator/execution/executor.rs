@@ -28,9 +28,12 @@ use crate::coordinator::plan::{
     StartFunctionPlan, StopFunctionPlan, StreamingTable, StreamingTableConnectorPlan,
 };
 use crate::coordinator::statement::{ConfigSource, FunctionSource};
+use crate::coordinator::streaming_table_options::{
+    parse_checkpoint_interval_ms, parse_pipeline_parallelism,
+};
 use crate::runtime::streaming::job::JobManager;
 use crate::runtime::streaming::protocol::control::StopMode;
-use crate::runtime::taskexecutor::TaskManager;
+use crate::runtime::wasm::taskexecutor::TaskManager;
 use crate::sql::schema::show_create_catalog_table;
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::storage::stream_catalog::CatalogManager;
@@ -318,28 +321,44 @@ impl PlanVisitor for Executor {
         _context: &PlanVisitorContext,
     ) -> PlanVisitorResult {
         let execute = || -> Result<ExecuteResult, ExecuteError> {
-            let fs_program: FsProgram = plan.program.clone().into();
+            let mut fs_program: FsProgram = plan.program.clone().into();
             let job_manager: Arc<JobManager> = Arc::clone(&self.job_manager);
+            // Only override per-node parallelism when CREATE STREAMING TABLE specifies
+            // `WITH (parallelism = N)`. Otherwise keep planner-assigned values (e.g. keyed
+            // aggregates defaulting to a higher parallelism than the job-wide default).
+            if let Some(pipeline_parallelism) =
+                parse_pipeline_parallelism(plan.with_options.as_ref())
+            {
+                let p = pipeline_parallelism.max(1);
+                for node in &mut fs_program.nodes {
+                    node.parallelism = p;
+                }
+            }
 
             let job_id = plan.name.clone();
-            let job_id = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current()
-                    .block_on(job_manager.submit_job(job_id, fs_program.clone()))
-            })
-            .map_err(|e| ExecuteError::Internal(format!("Failed to submit streaming job: {e}")))?;
+
+            let custom_interval = parse_checkpoint_interval_ms(plan.with_options.as_ref());
 
             self.catalog_manager
                 .persist_streaming_job(
                     &plan.name,
                     &fs_program,
                     plan.comment.as_deref().unwrap_or(""),
+                    custom_interval.unwrap_or(0),
                 )
                 .map_err(|e| {
-                    ExecuteError::Internal(format!(
-                        "Streaming job '{}' submitted but persistence failed: {e}",
-                        plan.name
-                    ))
+                    ExecuteError::Internal(format!("Streaming job persistence failed: {e}",))
                 })?;
+
+            let job_id = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(job_manager.submit_job(
+                    job_id,
+                    fs_program,
+                    custom_interval,
+                    None,
+                ))
+            })
+            .map_err(|e| ExecuteError::Internal(format!("Failed to submit streaming job: {e}")))?;
 
             info!(
                 job_id = %job_id,

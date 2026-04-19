@@ -20,6 +20,7 @@ use std::sync::Arc;
 use crate::sql::analysis::streaming_window_analzer::StreamingWindowAnalzer;
 use crate::sql::logical_node::aggregate::StreamWindowAggregateNode;
 use crate::sql::logical_node::key_calculation::{KeyExtractionNode, KeyExtractionStrategy};
+use crate::sql::logical_node::updating_aggregate::ContinuousAggregateNode;
 use crate::sql::schema::StreamSchemaProvider;
 use crate::sql::types::{
     QualifiedField, TIMESTAMP_FIELD, WindowBehavior, WindowType, build_df_schema_with_metadata,
@@ -70,10 +71,10 @@ impl TreeNodeRewriter for AggregateRewriter<'_> {
             })
             .collect();
 
-        // 3. Dispatch to Updating Aggregate if no windowing is detected.
+        // 3. Dispatch to ContinuousAggregateNode (UpdatingAggregate) if no windowing is detected.
         let input_window = StreamingWindowAnalzer::get_window(&agg.input)?;
         if window_exprs.is_empty() && input_window.is_none() {
-            return self.rewrite_as_updating_aggregate(
+            return self.rewrite_as_continuous_updating_aggregate(
                 agg.input,
                 key_fields,
                 agg.group_expr,
@@ -174,9 +175,9 @@ impl<'a> AggregateRewriter<'a> {
         }))
     }
 
-    /// [Strategy] Rewrites standard GROUP BY into a non-windowed updating aggregate.
+    /// [Strategy] Rewrites standard GROUP BY into a ContinuousAggregateNode with retraction semantics.
     /// Injected max(_timestamp) ensures the streaming pulse (Watermark) continues to propagate.
-    fn rewrite_as_updating_aggregate(
+    fn rewrite_as_continuous_updating_aggregate(
         &self,
         input: Arc<LogicalPlan>,
         key_fields: Vec<QualifiedField>,
@@ -184,6 +185,7 @@ impl<'a> AggregateRewriter<'a> {
         mut aggr_expr: Vec<Expr>,
         schema: Arc<DFSchema>,
     ) -> Result<Transformed<LogicalPlan>> {
+        let key_count = key_fields.len();
         let keyed_input = self.build_keyed_input(input, &group_expr, &key_fields)?;
 
         // Ensure the updating stream maintains time awareness.
@@ -207,14 +209,23 @@ impl<'a> AggregateRewriter<'a> {
             schema.metadata().clone(),
         )?);
 
-        let aggregate = Aggregate::try_new_with_schema(
+        let base_aggregate = Aggregate::try_new_with_schema(
             Arc::new(keyed_input),
             group_expr,
             aggr_expr,
             output_schema,
         )?;
 
-        Ok(Transformed::yes(LogicalPlan::Aggregate(aggregate)))
+        let continuous_node = ContinuousAggregateNode::try_new(
+            LogicalPlan::Aggregate(base_aggregate),
+            (0..key_count).collect(),
+            None,
+            self.schema_provider.planning_options.ttl,
+        )?;
+
+        Ok(Transformed::yes(LogicalPlan::Extension(Extension {
+            node: Arc::new(continuous_node),
+        })))
     }
 
     /// [Strategy] Reconciles window definitions between the input stream and the current GROUP BY.
@@ -232,24 +243,16 @@ impl<'a> AggregateRewriter<'a> {
         let has_group_window = !window_expr_info.is_empty();
 
         match (input_window, has_group_window) {
-            // Re-aggregation or subquery with an existing window.
             (Some(i_win), true) => {
                 let (idx, g_win) = window_expr_info.pop().unwrap();
                 if i_win != g_win {
-                    return plan_err!(
-                        "Inconsistent windowing: input is {:?}, but group by is {:?}",
-                        i_win,
-                        g_win
-                    );
+                    return plan_err!("Inconsistent windowing detected");
                 }
 
                 if let Some(field) = visitor.fields.iter().next() {
                     group_expr[idx] = Expr::Column(field.qualified_column());
                     Ok(WindowBehavior::InData)
                 } else {
-                    if matches!(i_win, WindowType::Session { .. }) {
-                        return plan_err!("Nested session windows are not supported");
-                    }
                     group_expr.remove(idx);
                     Ok(WindowBehavior::FromOperator {
                         window: i_win,
@@ -259,7 +262,6 @@ impl<'a> AggregateRewriter<'a> {
                     })
                 }
             }
-            // First-time windowing defined in this aggregate.
             (None, true) => {
                 let (idx, g_win) = window_expr_info.pop().unwrap();
                 group_expr.remove(idx);
@@ -270,9 +272,8 @@ impl<'a> AggregateRewriter<'a> {
                     is_nested: false,
                 })
             }
-            // Passthrough: input is already windowed, no new window in group by.
             (Some(_), false) => Ok(WindowBehavior::InData),
-            _ => unreachable!("Dispatched to non-windowed path previously"),
+            _ => unreachable!("Handled by updating path"),
         }
     }
 }

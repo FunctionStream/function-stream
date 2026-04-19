@@ -107,7 +107,11 @@ pub mod sql_field {
 }
 
 pub mod sql_planning_default {
-    pub const DEFAULT_PARALLELISM: usize = 4;
+    pub const DEFAULT_PARALLELISM: usize = 1;
+    /// Default physical parallelism for `KeyBy` / key-extraction pipelines (configurable via YAML).
+    pub const DEFAULT_KEY_BY_PARALLELISM: usize = 1;
+    /// Parallelism for aggregations that run after `KeyBy` / shuffle on non-empty routing keys.
+    pub const KEYED_AGGREGATE_DEFAULT_PARALLELISM: usize = 8;
     pub const PLANNING_TTL_SECS: u64 = 24 * 60 * 60;
 }
 

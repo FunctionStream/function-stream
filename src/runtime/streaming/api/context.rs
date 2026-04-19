@@ -10,15 +10,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use arrow_array::RecordBatch;
+use protocol::storage::SourceCheckpointPayload;
+use tokio::sync::mpsc;
 
-use crate::runtime::streaming::memory::MemoryPool;
+use crate::runtime::memory::{MemoryBlock, MemoryPool, get_array_memory_size};
 use crate::runtime::streaming::network::endpoint::PhysicalSender;
+use crate::runtime::streaming::protocol::control::JobMasterEvent;
 use crate::runtime::streaming::protocol::event::{StreamEvent, TrackedEvent};
+use crate::runtime::streaming::state::IoManager;
 
 #[derive(Debug, Clone)]
 pub struct TaskContextConfig {
@@ -53,7 +58,7 @@ pub struct TaskContext {
     /// Downstream physical senders (outbound edges).
     downstream_senders: Vec<PhysicalSender>,
 
-    /// Global memory pool for back-pressure and accounting.
+    /// Job-wide shared pool; memory is accounted only when [`Self::collect`] / [`Self::collect_keyed`] run.
     memory_pool: Arc<MemoryPool>,
 
     /// Latest aligned event-time watermark for this subtask.
@@ -61,9 +66,24 @@ pub struct TaskContext {
 
     /// Subtask-level tunables.
     config: TaskContextConfig,
+
+    pub state_dir: PathBuf,
+    pub io_manager: IoManager,
+
+    /// Pipeline-wide slab from the global pool; each stateful operator sub-allocates a ticket.
+    pub pipeline_state_memory_block: Option<Arc<MemoryBlock>>,
+    /// Bytes reserved per stateful operator from [`Self::pipeline_state_memory_block`].
+    pub operator_state_memory_bytes: u64,
+
+    /// Last globally-committed safe epoch for crash recovery.
+    safe_epoch: u64,
+
+    /// When set, pipelines report checkpoint completion (and optional Kafka offsets) to the job coordinator.
+    checkpoint_ack_tx: Option<mpsc::Sender<JobMasterEvent>>,
 }
 
 impl TaskContext {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         job_id: String,
         pipeline_id: u32,
@@ -71,6 +91,12 @@ impl TaskContext {
         parallelism: u32,
         downstream_senders: Vec<PhysicalSender>,
         memory_pool: Arc<MemoryPool>,
+        io_manager: IoManager,
+        state_dir: PathBuf,
+        pipeline_state_memory_block: Option<Arc<MemoryBlock>>,
+        operator_state_memory_bytes: u64,
+        safe_epoch: u64,
+        checkpoint_ack_tx: Option<mpsc::Sender<JobMasterEvent>>,
     ) -> Self {
         let task_name = format!(
             "Task-[{}]-Pipe[{}]-Sub[{}/{}]",
@@ -87,6 +113,34 @@ impl TaskContext {
             memory_pool,
             current_watermark: None,
             config: TaskContextConfig::default(),
+            state_dir,
+            io_manager,
+            pipeline_state_memory_block,
+            operator_state_memory_bytes,
+            safe_epoch,
+            checkpoint_ack_tx,
+        }
+    }
+
+    #[inline]
+    pub fn latest_safe_epoch(&self) -> u64 {
+        self.safe_epoch
+    }
+
+    /// Notify the job checkpoint coordinator that this pipeline has finished the barrier for `epoch`.
+    pub async fn send_checkpoint_ack(
+        &self,
+        epoch: u64,
+        source_payloads: Vec<SourceCheckpointPayload>,
+    ) {
+        if let Some(tx) = &self.checkpoint_ack_tx {
+            let _ = tx
+                .send(JobMasterEvent::CheckpointAck {
+                    pipeline_id: self.pipeline_id,
+                    epoch,
+                    source_payloads,
+                })
+                .await;
         }
     }
 
@@ -122,13 +176,19 @@ impl TaskContext {
     // -------------------------------------------------------------------------
 
     /// Fan-out a data batch to all downstreams (forward / broadcast).
+    ///
+    /// Back-pressure and memory accounting happen here via [`MemoryPool::request_block`], not
+    /// when building the pipeline.
     pub async fn collect(&self, batch: RecordBatch) -> Result<()> {
         if self.downstream_senders.is_empty() {
             return Ok(());
         }
 
-        let bytes_required = batch.get_array_memory_size();
-        let ticket = self.memory_pool.request_memory(bytes_required).await;
+        let bytes_required = get_array_memory_size(&batch);
+        let block = self.memory_pool.request_block(bytes_required).await;
+        let ticket = block
+            .try_allocate(bytes_required)
+            .ok_or_else(|| anyhow!("memory block allocation failed"))?;
         let tracked_event = TrackedEvent::new(StreamEvent::Data(batch), Some(ticket));
 
         self.broadcast_event(tracked_event).await
@@ -141,8 +201,11 @@ impl TaskContext {
             return Ok(());
         }
 
-        let bytes_required = batch.get_array_memory_size();
-        let ticket = self.memory_pool.request_memory(bytes_required).await;
+        let bytes_required = get_array_memory_size(&batch);
+        let block = self.memory_pool.request_block(bytes_required).await;
+        let ticket = block
+            .try_allocate(bytes_required)
+            .ok_or_else(|| anyhow!("memory block allocation failed"))?;
         let event = TrackedEvent::new(StreamEvent::Data(batch), Some(ticket));
 
         let target_idx = (key_hash as usize) % num_downstreams;

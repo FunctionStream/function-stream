@@ -64,6 +64,10 @@ impl<T: Send + Sync> Iterator for TTLIter<'_, T> {
 }
 
 impl<T: Send + Sync> UpdatingCache<T> {
+    pub fn keys(&self) -> Vec<Key> {
+        self.map.keys().cloned().collect()
+    }
+
     pub fn with_time_to_idle(ttl: Duration) -> Self {
         Self {
             map: HashMap::new(),

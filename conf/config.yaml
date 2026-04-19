@@ -49,6 +49,20 @@ wasm:
   # When cache exceeds this size, least recently used items will be evicted
   max_cache_size: 104857600
 
+# Streaming Runtime Configuration
+streaming:
+  # Global memory pool for streaming pipeline execution (buffers, batch collect, backpressure).
+  # Default / example: 10 MiB (10485760 bytes).
+  streaming_runtime_memory_bytes: 10485760
+
+  # Per stateful operator (join / agg / window): in-memory state store cap before spill.
+  # Default / example: 5 MiB (5242880 bytes).
+  operator_state_store_memory_bytes: 5242880
+  checkpoint_interval_ms: 60000
+  pipeline_parallelism: 1
+  # KeyBy (key extraction) operator pipeline parallelism in planned streaming jobs.
+  key_by_parallelism: 1
+
 # State Storage Configuration
 # Used to store runtime state data for tasks
 state_storage:

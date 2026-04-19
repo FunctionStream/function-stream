@@ -209,7 +209,7 @@ impl StreamingOperatorBlueprint for EventTimeWatermarkNode {
             OperatorName::ExpressionWatermark,
             operator_config.encode_to_vec(),
             runtime_operator_kind::WATERMARK_GENERATOR.to_string(),
-            1,
+            planner.default_parallelism(),
         );
 
         let incoming_edge = LogicalEdge::project_all(

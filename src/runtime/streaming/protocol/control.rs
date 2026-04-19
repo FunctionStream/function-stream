@@ -11,6 +11,7 @@
 // limitations under the License.
 
 use super::event::CheckpointBarrier;
+use protocol::storage::SourceCheckpointPayload;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -55,11 +56,24 @@ impl From<CheckpointBarrierWire> for CheckpointBarrier {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ControlCommand {
     Start,
-    Stop { mode: StopMode },
+    Stop {
+        mode: StopMode,
+    },
     DropState,
-    Commit { epoch: u32 },
-    UpdateConfig { config_json: String },
-    TriggerCheckpoint { barrier: CheckpointBarrierWire },
+    /// Phase 2 of checkpoint 2PC: metadata durable; transactional Kafka sink should `commit_transaction`.
+    Commit {
+        epoch: u32,
+    },
+    /// Roll back pre-committed transactional Kafka writes when checkpoint metadata commit failed or barrier declined.
+    AbortCheckpoint {
+        epoch: u32,
+    },
+    UpdateConfig {
+        config_json: String,
+    },
+    TriggerCheckpoint {
+        barrier: CheckpointBarrierWire,
+    },
 }
 
 impl ControlCommand {
@@ -78,4 +92,19 @@ pub enum StopMode {
 
 pub fn control_channel(capacity: usize) -> (Sender<ControlCommand>, Receiver<ControlCommand>) {
     mpsc::channel(capacity)
+}
+
+#[derive(Debug, Clone)]
+pub enum JobMasterEvent {
+    CheckpointAck {
+        pipeline_id: u32,
+        epoch: u64,
+        /// Source protocol checkpoint payloads (enum-style oneof envelope).
+        source_payloads: Vec<SourceCheckpointPayload>,
+    },
+    CheckpointDecline {
+        pipeline_id: u32,
+        epoch: u64,
+        reason: String,
+    },
 }

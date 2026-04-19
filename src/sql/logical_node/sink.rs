@@ -149,7 +149,7 @@ impl StreamingOperatorBlueprint for StreamEgressNode {
 
     fn compile_to_graph_node(
         &self,
-        _planner: &Planner,
+        planner: &Planner,
         node_index: usize,
         input_schemas: Vec<FsSchemaRef>,
     ) -> Result<CompiledTopologyNode> {
@@ -167,7 +167,7 @@ impl StreamingOperatorBlueprint for StreamEgressNode {
             OperatorName::ConnectorSink,
             operator_payload,
             operator_description,
-            1,
+            planner.default_parallelism(),
         );
 
         let routing_edges: Vec<LogicalEdge> = input_schemas

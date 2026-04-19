@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use crate::runtime::input::Input;
-use crate::runtime::task::InputConfig;
+use crate::runtime::wasm::task::InputConfig;
 
 pub struct InputProvider;
 

@@ -170,7 +170,7 @@ impl StreamingOperatorBlueprint for StreamProjectionNode {
             OperatorName::Projection,
             operator_config.encode_to_vec(),
             label,
-            1,
+            planner.default_parallelism(),
         );
 
         let routing_strategy = if self.requires_shuffle {

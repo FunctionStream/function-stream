@@ -10,16 +10,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle as TokioJoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use protocol::function_stream_graph::{ChainedOperator, FsProgram};
+use protocol::storage::{
+    KafkaSourceSubtaskCheckpoint, SourceCheckpointPayload, source_checkpoint_payload,
+};
 
+use crate::config::{
+    DEFAULT_CHECKPOINT_INTERVAL_MS, DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
+    DEFAULT_PIPELINE_PARALLELISM,
+};
+use crate::runtime::memory::global_memory_pool;
 use crate::runtime::streaming::api::context::TaskContext;
 use crate::runtime::streaming::api::operator::{ConstructedOperator, Operator};
 use crate::runtime::streaming::api::source::SourceOperator;
@@ -29,9 +41,12 @@ use crate::runtime::streaming::job::edge_manager::EdgeManager;
 use crate::runtime::streaming::job::models::{
     PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus, StreamingJobRollupStatus,
 };
-use crate::runtime::streaming::memory::MemoryPool;
 use crate::runtime::streaming::network::endpoint::{BoxedEventStream, PhysicalSender};
-use crate::runtime::streaming::protocol::control::{ControlCommand, StopMode};
+use crate::runtime::streaming::protocol::control::{ControlCommand, JobMasterEvent, StopMode};
+use crate::runtime::streaming::protocol::event::CheckpointBarrier;
+use crate::runtime::streaming::state::{IoManager, IoPool, NoopMetricsCollector};
+use crate::sql::logical_node::logical::OperatorName;
+use crate::storage::stream_catalog::CatalogManager;
 
 #[derive(Debug, Clone)]
 pub struct StreamingJobSummary {
@@ -57,12 +72,62 @@ pub struct StreamingJobDetail {
     pub program: FsProgram,
 }
 
+#[derive(Debug, Clone)]
+pub struct StateConfig {
+    pub max_background_spills: usize,
+    pub max_background_compactions: usize,
+    pub soft_limit_ratio: f64,
+    pub checkpoint_interval_ms: u64,
+    pub pipeline_parallelism: u32,
+    /// Total bytes shared by all [`crate::runtime::streaming::state::OperatorStateStore`] (global pool).
+    pub per_operator_memory_bytes: u64,
+}
+
+impl Default for StateConfig {
+    fn default() -> Self {
+        Self {
+            max_background_spills: 4,
+            max_background_compactions: 2,
+            soft_limit_ratio: 0.7,
+            checkpoint_interval_ms: DEFAULT_CHECKPOINT_INTERVAL_MS,
+            pipeline_parallelism: DEFAULT_PIPELINE_PARALLELISM,
+            per_operator_memory_bytes: DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
+        }
+    }
+}
+
 static GLOBAL_JOB_MANAGER: OnceLock<Arc<JobManager>> = OnceLock::new();
+
+/// Operators that create an [`crate::runtime::streaming::state::OperatorStateStore`] at runtime.
+fn pipeline_state_store_operator_count(operators: &[ChainedOperator]) -> usize {
+    operators
+        .iter()
+        .filter(|op| {
+            OperatorName::from_str(op.operator_name.as_str())
+                .ok()
+                .is_some_and(|n| {
+                    matches!(
+                        n,
+                        OperatorName::Join
+                            | OperatorName::InstantJoin
+                            | OperatorName::WindowFunction
+                            | OperatorName::TumblingWindowAggregate
+                            | OperatorName::SlidingWindowAggregate
+                            | OperatorName::SessionWindowAggregate
+                            | OperatorName::UpdatingAggregate
+                    )
+                })
+        })
+        .count()
+}
 
 pub struct JobManager {
     active_jobs: Arc<RwLock<HashMap<String, PhysicalExecutionGraph>>>,
     operator_factory: Arc<OperatorFactory>,
-    memory_pool: Arc<MemoryPool>,
+    io_manager_client: IoManager,
+    io_pool: Mutex<Option<IoPool>>,
+    state_base_dir: PathBuf,
+    state_config: StateConfig,
 }
 
 struct PreparedChain {
@@ -75,6 +140,17 @@ enum PipelineRunner {
     Standard(Pipeline),
 }
 
+struct CheckpointCoordinatorConfig {
+    job_id: String,
+    source_control_txs: Vec<mpsc::Sender<ControlCommand>>,
+    all_pipeline_control_txs: Vec<mpsc::Sender<ControlCommand>>,
+    job_master_rx: mpsc::Receiver<JobMasterEvent>,
+    expected_pipeline_ids: HashSet<u32>,
+    interval_ms: u64,
+    start_epoch: u64,
+    job_state_dir: PathBuf,
+}
+
 impl PipelineRunner {
     async fn run(self) -> Result<(), crate::runtime::streaming::error::RunError> {
         match self {
@@ -84,18 +160,56 @@ impl PipelineRunner {
     }
 }
 
-impl JobManager {
-    pub fn new(operator_factory: Arc<OperatorFactory>, max_memory_bytes: usize) -> Self {
-        Self {
-            active_jobs: Arc::new(RwLock::new(HashMap::new())),
-            operator_factory,
-            memory_pool: MemoryPool::new(max_memory_bytes),
+fn decode_kafka_checkpoints_from_source_payloads(
+    payloads: Vec<SourceCheckpointPayload>,
+    epoch: u64,
+) -> Vec<KafkaSourceSubtaskCheckpoint> {
+    let mut out = Vec::new();
+    for p in payloads {
+        match p.checkpoint {
+            Some(source_checkpoint_payload::Checkpoint::Kafka(mut cp)) => {
+                if cp.checkpoint_epoch != epoch {
+                    cp.checkpoint_epoch = epoch;
+                }
+                out.push(cp);
+            }
+            None => warn!("Skip empty source checkpoint payload"),
         }
     }
+    out
+}
 
-    pub fn init(factory: Arc<OperatorFactory>, memory_bytes: usize) -> Result<()> {
+impl JobManager {
+    pub fn new(
+        operator_factory: Arc<OperatorFactory>,
+        state_base_dir: impl AsRef<Path>,
+        state_config: StateConfig,
+    ) -> Result<Self> {
+        let metrics = Arc::new(NoopMetricsCollector);
+        let (io_pool, io_manager_client) = IoPool::try_new(
+            state_config.max_background_spills,
+            state_config.max_background_compactions,
+            metrics,
+        )
+        .context("Failed to initialize state engine I/O pool")?;
+
+        Ok(Self {
+            active_jobs: Arc::new(RwLock::new(HashMap::new())),
+            operator_factory,
+            io_manager_client,
+            io_pool: Mutex::new(Some(io_pool)),
+            state_base_dir: state_base_dir.as_ref().to_path_buf(),
+            state_config,
+        })
+    }
+
+    pub fn init(
+        factory: Arc<OperatorFactory>,
+        state_base_dir: PathBuf,
+        state_config: StateConfig,
+    ) -> Result<()> {
         GLOBAL_JOB_MANAGER
-            .set(Arc::new(Self::new(factory, memory_bytes)))
+            .set(Arc::new(Self::new(factory, state_base_dir, state_config)?))
             .map_err(|_| anyhow!("JobManager singleton already initialized"))
     }
 
@@ -106,19 +220,57 @@ impl JobManager {
             .ok_or_else(|| anyhow!("JobManager not initialized. Call init() first."))
     }
 
-    pub async fn submit_job(&self, job_id: String, program: FsProgram) -> Result<String> {
+    pub fn shutdown(&self) {
+        if let Some(pool) = self.io_pool.lock().unwrap().take() {
+            pool.shutdown();
+        }
+    }
+
+    #[inline]
+    pub fn default_pipeline_parallelism(&self) -> u32 {
+        self.state_config.pipeline_parallelism
+    }
+
+    /// Per-job state directory (Kafka offset snapshots, operator state roots, etc.).
+    #[inline]
+    pub fn job_state_directory(&self, job_id: &str) -> PathBuf {
+        self.state_base_dir.join(job_id)
+    }
+
+    pub async fn submit_job(
+        &self,
+        job_id: String,
+        program: FsProgram,
+        custom_checkpoint_interval_ms: Option<u64>,
+        recovery_epoch: Option<u64>,
+    ) -> Result<String> {
         let mut edge_manager = EdgeManager::build(&program.nodes, &program.edges);
         let mut pipelines = HashMap::with_capacity(program.nodes.len());
+
+        let mut source_control_txs = Vec::new();
+        let mut all_pipeline_control_txs = Vec::new();
+        let mut expected_pipeline_ids = HashSet::new();
+
+        let job_state_dir = self.state_base_dir.join(&job_id);
+        std::fs::create_dir_all(&job_state_dir).context("Failed to create job state dir")?;
+
+        let (job_master_tx, job_master_rx) = mpsc::channel(256);
+
+        let safe_epoch = recovery_epoch.unwrap_or(0);
 
         for node in &program.nodes {
             let pipeline_id = node.node_index as u32;
 
-            let pipeline = self
+            let (pipeline, is_source) = self
                 .build_and_spawn_pipeline(
                     job_id.clone(),
                     pipeline_id,
                     &node.operators,
+                    node.parallelism,
                     &mut edge_manager,
+                    &job_state_dir,
+                    job_master_tx.clone(),
+                    safe_epoch,
                 )
                 .with_context(|| {
                     format!(
@@ -127,8 +279,27 @@ impl JobManager {
                     )
                 })?;
 
+            if is_source {
+                source_control_txs.push(pipeline.control_tx.clone());
+            }
+            all_pipeline_control_txs.push(pipeline.control_tx.clone());
+            expected_pipeline_ids.insert(pipeline_id);
             pipelines.insert(pipeline_id, pipeline);
         }
+
+        let interval_ms =
+            custom_checkpoint_interval_ms.unwrap_or(self.state_config.checkpoint_interval_ms);
+
+        self.spawn_checkpoint_coordinator(CheckpointCoordinatorConfig {
+            job_id: job_id.clone(),
+            source_control_txs,
+            all_pipeline_control_txs,
+            job_master_rx,
+            expected_pipeline_ids,
+            interval_ms,
+            start_epoch: safe_epoch + 1,
+            job_state_dir: job_state_dir.clone(),
+        });
 
         let graph = PhysicalExecutionGraph {
             job_id: job_id.clone(),
@@ -143,7 +314,7 @@ impl JobManager {
             .map_err(|e| anyhow!("Active jobs lock poisoned: {}", e))?;
         jobs_guard.insert(job_id.clone(), graph);
 
-        info!(job_id = %job_id, "Job submitted successfully.");
+        info!(job_id = %job_id, interval_ms, recovery_epoch = safe_epoch, "Job submitted successfully.");
         Ok(job_id)
     }
 
@@ -320,13 +491,18 @@ impl JobManager {
             .collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_and_spawn_pipeline(
         &self,
         job_id: String,
         pipeline_id: u32,
         operators: &[ChainedOperator],
+        declared_parallelism: u32,
         edge_manager: &mut EdgeManager,
-    ) -> Result<PhysicalPipeline> {
+        job_state_dir: &Path,
+        job_master_tx: mpsc::Sender<JobMasterEvent>,
+        recovery_epoch: u64,
+    ) -> Result<(PhysicalPipeline, bool)> {
         let (raw_inboxes, raw_outboxes) =
             edge_manager.take_endpoints(pipeline_id).with_context(|| {
                 format!(
@@ -352,6 +528,8 @@ impl JobManager {
             )
         })?;
 
+        let is_source = chain.source.is_some();
+
         ensure!(
             chain.source.is_some() || !physical_inboxes.is_empty(),
             "Topology Error: Pipeline '{}' contains no source and has no upstream inputs (Dead end).",
@@ -367,14 +545,41 @@ impl JobManager {
         let status = Arc::new(RwLock::new(PipelineStatus::Initializing));
 
         let subtask_index = 0;
-        let parallelism = 1;
+        let parallelism = if declared_parallelism > 0 {
+            declared_parallelism
+        } else {
+            self.state_config.pipeline_parallelism
+        }
+        .max(1);
+
+        let per_op = self.state_config.per_operator_memory_bytes;
+        let n_state_ops = pipeline_state_store_operator_count(operators);
+        let pipeline_state_memory_block = if n_state_ops > 0 {
+            let bytes = per_op
+                .checked_mul(n_state_ops as u64)
+                .ok_or_else(|| anyhow!("pipeline state memory byte size overflow"))?;
+            Some(
+                global_memory_pool()
+                    .try_request_block(bytes)
+                    .map_err(|e| anyhow!("pipeline state memory reservation failed: {e}"))?,
+            )
+        } else {
+            None
+        };
+
         let ctx = TaskContext::new(
             job_id.clone(),
             pipeline_id,
             subtask_index,
             parallelism,
             physical_outboxes,
-            Arc::clone(&self.memory_pool),
+            Arc::clone(&global_memory_pool()),
+            self.io_manager_client.clone(),
+            job_state_dir.to_path_buf(),
+            pipeline_state_memory_block,
+            per_op,
+            recovery_epoch,
+            Some(job_master_tx.clone()),
         );
 
         let runner = if let Some(source) = chain.source {
@@ -392,12 +597,13 @@ impl JobManager {
             .spawn_worker_thread(job_id, pipeline_id, runner, Arc::clone(&status))
             .with_context(|| format!("Failed to spawn OS thread for pipeline {}", pipeline_id))?;
 
-        Ok(PhysicalPipeline {
+        let pipeline = PhysicalPipeline {
             pipeline_id,
             handle: Some(handle),
             status,
             control_tx,
-        })
+        };
+        Ok((pipeline, is_source))
     }
 
     fn build_operator_chain(&self, operator_configs: &[ChainedOperator]) -> Result<PreparedChain> {
@@ -508,5 +714,151 @@ impl JobManager {
         if is_fatal {
             warn!(job_id = %job_id, pipeline_id = pipeline_id, "Pipeline failure detected. Job degraded.");
         }
+    }
+
+    // ========================================================================
+    // Chandy-Lamport distributed snapshot barrier coordinator
+    // ========================================================================
+
+    fn spawn_checkpoint_coordinator(
+        &self,
+        cfg: CheckpointCoordinatorConfig,
+    ) -> TokioJoinHandle<()> {
+        let CheckpointCoordinatorConfig {
+            job_id,
+            source_control_txs,
+            all_pipeline_control_txs,
+            mut job_master_rx,
+            expected_pipeline_ids,
+            interval_ms,
+            start_epoch,
+            job_state_dir,
+        } = cfg;
+        tokio::spawn(async move {
+            if interval_ms == 0 {
+                info!(job_id = %job_id, "Checkpoint disabled for this job");
+                return;
+            }
+
+            let mut interval = tokio::time::interval(Duration::from_millis(interval_ms));
+            interval.tick().await;
+
+            let mut current_epoch: u64 = start_epoch;
+            let mut pending_checkpoints: HashMap<u64, HashSet<u32>> = HashMap::new();
+            let mut source_reports: HashMap<u64, Vec<SourceCheckpointPayload>> = HashMap::new();
+
+            async fn broadcast_checkpoint_phase2(
+                txs: &[mpsc::Sender<ControlCommand>],
+                cmd: ControlCommand,
+            ) {
+                for tx in txs {
+                    let _ = tx.send(cmd.clone()).await;
+                }
+            }
+
+            loop {
+                tokio::select! {
+                    biased;
+
+                    Some(event) = job_master_rx.recv() => {
+                        match event {
+                            JobMasterEvent::CheckpointAck {
+                                pipeline_id,
+                                epoch,
+                                source_payloads,
+                            } => {
+                                if !source_payloads.is_empty() {
+                                    source_reports
+                                        .entry(epoch)
+                                        .or_default()
+                                        .extend(source_payloads);
+                                }
+                                if let Some(pending_set) = pending_checkpoints.get_mut(&epoch) {
+                                    pending_set.remove(&pipeline_id);
+
+                                    if pending_set.is_empty() {
+                                        info!(
+                                            job_id = %job_id, epoch = epoch,
+                                            "Checkpoint Epoch is GLOBALLY COMPLETED (phase 1); persisting metadata and notifying operators (phase 2)"
+                                        );
+
+                                        let payloads = source_reports.remove(&epoch).unwrap_or_default();
+                                        let kf = decode_kafka_checkpoints_from_source_payloads(payloads, epoch);
+                                        let epoch_u32 = u32::try_from(epoch).unwrap_or(u32::MAX);
+
+                                        let mut catalog_ok = true;
+                                        if let Some(catalog) = CatalogManager::try_global() {
+                                            if let Err(e) = catalog.commit_job_checkpoint(
+                                                &job_id,
+                                                epoch,
+                                                &job_state_dir,
+                                                kf,
+                                            ) {
+                                                catalog_ok = false;
+                                                error!(
+                                                    job_id = %job_id, epoch = epoch,
+                                                    error = %e,
+                                                    "Failed to commit checkpoint metadata to Catalog — aborting transactional sinks"
+                                                );
+                                            }
+                                        } else {
+                                            warn!(
+                                                job_id = %job_id, epoch = epoch,
+                                                "CatalogManager not available; proceeding with operator Commit (Kafka transactional commit) only"
+                                            );
+                                        }
+
+                                        let phase2 = if catalog_ok {
+                                            ControlCommand::Commit { epoch: epoch_u32 }
+                                        } else {
+                                            ControlCommand::AbortCheckpoint { epoch: epoch_u32 }
+                                        };
+                                        broadcast_checkpoint_phase2(&all_pipeline_control_txs, phase2).await;
+
+                                        pending_checkpoints.remove(&epoch);
+                                    }
+                                }
+                            }
+                            JobMasterEvent::CheckpointDecline { pipeline_id, epoch, reason } => {
+                                error!(
+                                    job_id = %job_id, epoch = epoch, pipeline_id = pipeline_id,
+                                    reason = %reason, "Checkpoint FAILED!"
+                                );
+                                if pending_checkpoints.remove(&epoch).is_some() {
+                                    source_reports.remove(&epoch);
+                                    let epoch_u32 = u32::try_from(epoch).unwrap_or(u32::MAX);
+                                    broadcast_checkpoint_phase2(
+                                        &all_pipeline_control_txs,
+                                        ControlCommand::AbortCheckpoint { epoch: epoch_u32 },
+                                    )
+                                    .await;
+                                }
+                            }
+                        }
+                    }
+
+                    _ = interval.tick(), if pending_checkpoints.is_empty() => {
+                        info!(job_id = %job_id, epoch = current_epoch, "Triggering global Checkpoint Barrier.");
+                        pending_checkpoints.insert(current_epoch, expected_pipeline_ids.clone());
+
+                        let barrier = CheckpointBarrier {
+                            epoch: current_epoch as u32,
+                            min_epoch: 0,
+                            timestamp: std::time::SystemTime::now(),
+                            then_stop: false,
+                        };
+
+                        for tx in &source_control_txs {
+                            let cmd = ControlCommand::trigger_checkpoint(barrier);
+                            if tx.send(cmd).await.is_err() {
+                                debug!(job_id = %job_id, "Source disconnected. Shutting down coordinator.");
+                                return;
+                            }
+                        }
+                        current_epoch += 1;
+                    }
+                }
+            }
+        })
     }
 }

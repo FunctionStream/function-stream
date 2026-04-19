@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use crate::runtime::output::Output;
-use crate::runtime::taskexecutor::InitContext;
+use crate::runtime::wasm::taskexecutor::InitContext;
 
 pub trait WasmProcessor: Send + Sync {
     fn process(

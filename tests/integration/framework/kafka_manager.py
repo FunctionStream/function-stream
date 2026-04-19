@@ -19,7 +19,7 @@ topic lifecycle management, and data cleanup via KRaft-mode single-node Kafka.
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 import docker
@@ -27,6 +27,8 @@ from docker.errors import APIError, DockerException, NotFound
 from confluent_kafka import Consumer, KafkaError, KafkaException
 from confluent_kafka import TopicPartition as _new_topic_partition
 from confluent_kafka.admin import AdminClient, NewTopic
+
+from .utils import find_free_port
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +99,10 @@ class KafkaDockerManager:
             config: Optional[KafkaConfig] = None,
             docker_client: Optional[docker.DockerClient] = None,
     ) -> None:
-        self.config = config or KafkaConfig()
+        if config is None:
+            host_port = find_free_port()
+            config = KafkaConfig(bootstrap_servers=f"127.0.0.1:{host_port}")
+        self.config = config
         # Dependency Injection: Allow passing an existing client, or create a lazy one.
         self._docker_client = docker_client
 
@@ -173,7 +178,11 @@ class KafkaDockerManager:
             self.docker_client.containers.run(
                 image=self.config.image,
                 name=self.config.container_name,
-                ports={f"{self.config.internal_port}/tcp": self.config.internal_port},
+                ports={
+                    f"{self.config.internal_port}/tcp": int(
+                        self.config.bootstrap_servers.rsplit(":", 1)[1]
+                    )
+                },
                 environment=self.config.environment_vars,
                 detach=True,
                 remove=True, # Auto-remove on stop

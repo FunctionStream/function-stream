@@ -43,6 +43,28 @@ message CatalogSourceTable {
 // Streaming table storage (CREATE STREAMING TABLE persistence)
 // =============================================================================
 
+// Partition offset for one Kafka partition at a completed checkpoint.
+message KafkaPartitionOffset {
+  int32 partition = 1;
+  int64 offset = 2;
+}
+
+// Kafka source subtask checkpoint: one file / one TaskContext (pipeline + subtask).
+message KafkaSourceSubtaskCheckpoint {
+  uint32 pipeline_id = 1;
+  uint32 subtask_index = 2;
+  // Epoch of the barrier when this snapshot was taken (aligns with latest_checkpoint_epoch on commit).
+  uint64 checkpoint_epoch = 3;
+  repeated KafkaPartitionOffset partitions = 4;
+}
+
+// Generic source checkpoint payload envelope (enum-like via oneof).
+message SourceCheckpointPayload {
+  oneof checkpoint {
+    KafkaSourceSubtaskCheckpoint kafka = 1;
+  }
+}
+
 // Persisted record for one streaming table (CREATE STREAMING TABLE).
 // On restart, the engine re-submits each record to JobManager to resume the pipeline.
 message StreamingTableDefinition {
@@ -52,6 +74,17 @@ message StreamingTableDefinition {
   // Stored as opaque bytes to avoid coupling storage schema with runtime API protos.
   bytes  fs_program_bytes = 3;
   string comment = 4;
+
+  uint64 checkpoint_interval_ms = 5;
+
+  // Last globally-committed checkpoint epoch.
+  // Updated by JobManager after all operators ACK. Used for crash recovery.
+  uint64 latest_checkpoint_epoch = 6;
+
+  // Kafka source per-subtask offsets at the same committed epoch as `latest_checkpoint_epoch`.
+  // Populated by the runtime coordinator from source checkpoint ACKs. Optional `.bin` files under
+  // the job state dir may exist only for local recovery materialization from this field.
+  repeated KafkaSourceSubtaskCheckpoint kafka_source_checkpoints = 7;
 }
 
 // =============================================================================

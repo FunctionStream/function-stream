@@ -19,6 +19,7 @@ mod execution_context;
 mod plan;
 mod runtime_context;
 mod statement;
+mod streaming_table_options;
 mod tool;
 
 pub use coordinator::Coordinator;

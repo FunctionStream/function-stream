@@ -191,7 +191,7 @@ impl StreamingOperatorBlueprint for StreamingJoinNode {
             self.determine_operator_type(),
             operator_config.encode_to_vec(),
             runtime_operator_kind::STREAMING_JOIN.to_string(),
-            1,
+            planner.default_parallelism(),
         );
 
         let left_edge =

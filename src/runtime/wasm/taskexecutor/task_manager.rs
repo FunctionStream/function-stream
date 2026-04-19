@@ -13,8 +13,8 @@
 use crate::config::GlobalConfig;
 use crate::runtime::common::ComponentState;
 use crate::runtime::processor::wasm::thread_pool::{GlobalTaskThreadPool, TaskThreadPool};
-use crate::runtime::task::{TaskBuilder, TaskLifecycle};
-use crate::runtime::taskexecutor::init_context::InitContext;
+use crate::runtime::wasm::task::{TaskBuilder, TaskLifecycle};
+use crate::runtime::wasm::taskexecutor::init_context::InitContext;
 use crate::storage::state_backend::StateStorageServer;
 use crate::storage::task::{
     FunctionInfo, StoredTaskInfo, TaskModuleBytes, TaskStorage, TaskStorageFactory,

@@ -17,7 +17,7 @@ use std::time::SystemTime;
 
 use arrow_array::RecordBatch;
 
-use crate::runtime::streaming::memory::MemoryTicket;
+use crate::runtime::memory::MemoryTicket;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
 pub enum Watermark {

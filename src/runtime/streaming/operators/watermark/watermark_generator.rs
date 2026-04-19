@@ -23,11 +23,11 @@ use datafusion_proto::protobuf::PhysicalExprNode;
 use prost::Message;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_millis};
 use async_trait::async_trait;
@@ -107,10 +107,6 @@ impl Operator for WatermarkGeneratorOperator {
         "ExpressionWatermarkGenerator"
     }
 
-    fn tick_interval(&self) -> Option<Duration> {
-        Some(Duration::from_secs(1))
-    }
-
     async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
         self.last_event_wall = SystemTime::now();
         Ok(())
@@ -121,13 +117,16 @@ impl Operator for WatermarkGeneratorOperator {
         _input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         self.last_event_wall = SystemTime::now();
 
-        let mut outputs = vec![StreamOutput::Forward(batch.clone())];
+        collector
+            .collect(StreamOutput::Forward(batch.clone()), ctx)
+            .await?;
 
         let Some(max_batch_ts) = self.extract_max_timestamp(&batch) else {
-            return Ok(outputs);
+            return Ok(());
         };
 
         let new_watermark = self.evaluate_watermark(&batch)?;
@@ -145,42 +144,27 @@ impl Operator for WatermarkGeneratorOperator {
                 to_millis(self.state.max_watermark)
             );
 
-            outputs.push(StreamOutput::Watermark(Watermark::EventTime(
-                self.state.max_watermark,
-            )));
+            collector
+                .collect(
+                    StreamOutput::Watermark(Watermark::EventTime(self.state.max_watermark)),
+                    ctx,
+                )
+                .await?;
 
             self.state.last_watermark_emitted_at = max_batch_ts;
             self.is_idle = false;
         }
 
-        Ok(outputs)
+        Ok(())
     }
 
     async fn process_watermark(
         &mut self,
         _watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        Ok(vec![])
-    }
-
-    async fn process_tick(
-        &mut self,
-        _tick_index: u64,
-        ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        if let Some(idle_timeout) = self.idle_time {
-            let elapsed = self.last_event_wall.elapsed().unwrap_or(Duration::ZERO);
-            if !self.is_idle && elapsed > idle_timeout {
-                info!(
-                    "task [{}] entering Idle after {:?}",
-                    ctx.subtask_index, idle_timeout
-                );
-                self.is_idle = true;
-                return Ok(vec![StreamOutput::Watermark(Watermark::Idle)]);
-            }
-        }
-        Ok(vec![])
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
+        Ok(())
     }
 
     async fn snapshot_state(

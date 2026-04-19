@@ -19,9 +19,9 @@ pub mod execution;
 pub mod factory;
 pub mod format;
 pub mod job;
-pub mod memory;
 pub mod network;
 pub mod operators;
 pub mod protocol;
+pub mod state;
 
 pub use protocol::StreamOutput;

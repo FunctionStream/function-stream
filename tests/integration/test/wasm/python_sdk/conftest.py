@@ -54,10 +54,25 @@ def kafka_topics(kafka: KafkaDockerManager) -> str:
     return kafka.config.bootstrap_servers
 
 
-def _sanitize_node_id(nodeid: str) -> str:
-    """Converts a pytest nodeid into a safe directory name."""
-    clean_name = re.sub(r"[^\w\-]+", "-", nodeid)
-    return clean_name.strip("-")
+def _sanitize_segment(segment: str) -> str:
+    clean = re.sub(r"[^\w\-]+", "_", segment).strip("_")
+    return clean or "unknown"
+
+
+def _nodeid_to_workspace_path(nodeid: str) -> str:
+    """
+    Convert pytest nodeid into a readable nested path under target/.
+
+    Example:
+        test/wasm/python_sdk/test_data_flow.py::TestDataFlow::test_single_word_counting
+    ->
+        test/wasm/python_sdk/test_data_flow/TestDataFlow/test_single_word_counting
+    """
+    parts = nodeid.split("::")
+    file_part = Path(parts[0]).with_suffix("")
+    file_segments = [_sanitize_segment(seg) for seg in file_part.parts]
+    extra_segments = [_sanitize_segment(seg) for seg in parts[1:]]
+    return str(Path(*file_segments, *extra_segments))
 
 
 @pytest.fixture
@@ -66,7 +81,7 @@ def fs_server(request: pytest.FixtureRequest) -> Generator[FunctionStreamInstanc
     Function-scoped FunctionStream instance.
     Uses Context Manager to ensure SIGKILL and workspace cleanup.
     """
-    test_name = _sanitize_node_id(request.node.nodeid)
+    test_name = _nodeid_to_workspace_path(request.node.nodeid)
     with FunctionStreamInstance(test_name=test_name) as instance:
         yield instance
 

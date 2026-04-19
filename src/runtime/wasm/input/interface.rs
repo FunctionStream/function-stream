@@ -10,8 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::runtime::buffer_and_event::BufferOrEvent;
-use crate::runtime::taskexecutor::InitContext;
+use crate::runtime::wasm::buffer_and_event::BufferOrEvent;
+use crate::runtime::wasm::taskexecutor::InitContext;
 
 pub use crate::runtime::common::ComponentState as InputState;
 

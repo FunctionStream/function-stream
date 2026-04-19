@@ -19,8 +19,8 @@ use crate::runtime::output::{Output, OutputProvider};
 use crate::runtime::processor::wasm::wasm_processor::WasmProcessorImpl;
 use crate::runtime::processor::wasm::wasm_processor_trait::WasmProcessor;
 use crate::runtime::processor::wasm::wasm_task::WasmTask;
-use crate::runtime::task::yaml_keys::{TYPE, type_values};
-use crate::runtime::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
+use crate::runtime::wasm::task::yaml_keys::{TYPE, type_values};
+use crate::runtime::wasm::task::{InputConfig, OutputConfig, ProcessorConfig, WasmTaskConfig};
 use serde_yaml::Value;
 use std::sync::Arc;
 

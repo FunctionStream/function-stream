@@ -608,7 +608,7 @@ impl WasmTaskConfig {
         task_name: String,
         value: &Value,
     ) -> Result<Self, Box<dyn std::error::Error + Send>> {
-        use crate::runtime::task::yaml_keys::{INPUT_GROUPS, INPUTS, NAME, OUTPUTS};
+        use crate::runtime::wasm::task::yaml_keys::{INPUT_GROUPS, INPUTS, NAME, OUTPUTS};
 
         // 1. Get name from config (if exists), otherwise use the passed task_name
         let config_name = value

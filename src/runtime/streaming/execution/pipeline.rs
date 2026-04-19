@@ -110,6 +110,7 @@ impl Pipeline {
                                         }
                                     }
                                     AlignmentStatus::Complete => {
+                                        let epoch = barrier.epoch as u64;
                                         self.chain_head
                                             .process_event(
                                                 idx,
@@ -123,6 +124,7 @@ impl Pipeline {
                                                 active_streams.insert(i, stream);
                                             }
                                         }
+                                        self.ctx.send_checkpoint_ack(epoch, vec![]).await;
                                     }
                                 }
                             }

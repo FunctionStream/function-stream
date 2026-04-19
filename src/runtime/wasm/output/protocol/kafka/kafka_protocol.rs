@@ -11,8 +11,8 @@
 // limitations under the License.
 
 use super::producer_config::KafkaProducerConfig;
-use crate::runtime::buffer_and_event::BufferOrEvent;
 use crate::runtime::output::output_protocol::OutputProtocol;
+use crate::runtime::wasm::buffer_and_event::BufferOrEvent;
 use rdkafka::producer::{BaseRecord, DefaultProducerContext, Producer, ThreadedProducer};
 use std::sync::Mutex;
 use std::time::Duration;

@@ -13,6 +13,9 @@
 
 //! WebAssembly runtime integration.
 
+pub mod buffer_and_event;
 pub mod input;
 pub mod output;
 pub mod processor;
+pub mod task;
+pub mod taskexecutor;

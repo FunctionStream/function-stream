@@ -13,12 +13,49 @@
 
 APP_NAME    := function-stream
 VERSION     := $(shell grep '^version' Cargo.toml | head -1 | awk -F '"' '{print $$2}')
-ARCH        := $(shell uname -m)
-OS          := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 DATE        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# 1. Auto-detect system environment & normalize architecture
+RAW_ARCH := $(shell uname -m)
+# Fix macOS M-series returning arm64 while Rust expects aarch64
+ifeq ($(RAW_ARCH), arm64)
+    ARCH := aarch64
+else ifeq ($(RAW_ARCH), amd64)
+    ARCH := x86_64
+else
+    ARCH := $(RAW_ARCH)
+endif
+
+OS          := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+OS_NAME     := $(shell uname -s)
+
+# 2. Configure RUSTFLAGS and target triple per platform
 DIST_ROOT   := dist
-TARGET_DIR  := target/release
+ifeq ($(OS_NAME), Linux)
+    TRIPLE := $(ARCH)-unknown-linux-gnu
+    STATIC_FLAGS :=
+else ifeq ($(OS_NAME), Darwin)
+    # macOS: strip symbols but keep dynamic linking (Apple system restriction)
+    TRIPLE := $(ARCH)-apple-darwin
+    STATIC_FLAGS :=
+else ifneq (,$(findstring MINGW,$(OS_NAME))$(findstring MSYS,$(OS_NAME)))
+    # Windows (Git Bash / MSYS2): static-link MSVC runtime
+    TRIPLE := $(ARCH)-pc-windows-msvc
+    STATIC_FLAGS := -C target-feature=+crt-static
+else
+    # Fallback
+    TRIPLE := $(ARCH)-unknown-linux-gnu
+    STATIC_FLAGS :=
+endif
+
+# 3. Aggressive optimization flags
+# opt-level=z  : size-oriented, minimize binary footprint
+# strip=symbols: remove debug symbol table at link time
+# Note: panic=abort is intentionally omitted to preserve stack unwinding
+#       for better fault tolerance in the streaming runtime
+OPTIMIZE_FLAGS := -C opt-level=z -C strip=symbols $(STATIC_FLAGS)
+
+TARGET_DIR  := target/$(TRIPLE)/release
 PYTHON_ROOT := python
 WASM_SOURCE := $(PYTHON_ROOT)/functionstream-runtime/target/functionstream-python-runtime.wasm
 
@@ -67,18 +104,42 @@ help:
 	@echo ""
 	@echo "  Version: $(VERSION) | Arch: $(ARCH) | OS: $(OS)"
 
-build: .check-env .build-wasm
-	$(call log,BUILD,Rust Full Features)
-	@cargo build --release --features python --quiet
+# 4. Auto-install missing Rust target toolchain
+.ensure-target:
+	@rustup target list --installed | grep -q "$(TRIPLE)" || \
+	(printf "$(C_Y)[!] Auto-installing target toolchain for $(OS_NAME): $(TRIPLE)$(C_0)\n" && \
+	 rustup target add $(TRIPLE))
+
+# 5. Build targets (depend on .ensure-target for automatic toolchain setup)
+build: .check-env .ensure-target .build-wasm
+	$(call log,BUILD,Rust Full [$(OS_NAME) / $(TRIPLE)])
+	@RUSTFLAGS="$(OPTIMIZE_FLAGS)" \
+	cargo build --release \
+		--target $(TRIPLE) \
+		--features python \
+		--quiet
 	$(call log,BUILD,CLI)
-	@cargo build --release -p function-stream-cli --quiet
+	@RUSTFLAGS="$(OPTIMIZE_FLAGS)" \
+	cargo build --release \
+		--target $(TRIPLE) \
+		-p function-stream-cli \
+		--quiet
 	$(call success,Target: $(TARGET_DIR)/$(APP_NAME) $(TARGET_DIR)/cli)
 
-build-lite: .check-env
-	$(call log,BUILD,Rust Lite No Python)
-	@cargo build --release --no-default-features --features incremental-cache --quiet
+build-lite: .check-env .ensure-target
+	$(call log,BUILD,Rust Lite [$(OS_NAME) / $(TRIPLE)])
+	@RUSTFLAGS="$(OPTIMIZE_FLAGS)" \
+	cargo build --release \
+		--target $(TRIPLE) \
+		--no-default-features \
+		--features incremental-cache \
+		--quiet
 	$(call log,BUILD,CLI for dist)
-	@cargo build --release -p function-stream-cli --quiet
+	@RUSTFLAGS="$(OPTIMIZE_FLAGS)" \
+	cargo build --release \
+		--target $(TRIPLE) \
+		-p function-stream-cli \
+		--quiet
 	$(call success,Target: $(TARGET_DIR)/$(APP_NAME) $(TARGET_DIR)/cli)
 
 .build-wasm:

@@ -27,17 +27,18 @@ use datafusion_proto::{
 };
 use futures::StreamExt;
 use prost::Message;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::Registry;
+use crate::runtime::streaming::state::OperatorStateStore;
 use crate::sql::common::time_utils::print_time;
 use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
 use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
@@ -94,9 +95,28 @@ pub struct TumblingWindowOperator {
     final_batches_passer: Arc<RwLock<Vec<RecordBatch>>>,
 
     active_bins: BTreeMap<SystemTime, ActiveBin>,
+
+    // LSM-Tree state engine and pending window timestamp index
+    state_store: Option<Arc<OperatorStateStore>>,
+    pending_bins: BTreeSet<u64>,
 }
 
 impl TumblingWindowOperator {
+    // State key: 8-byte big-endian bin_start_nanos
+    fn build_state_key(ts_nanos: u64) -> Vec<u8> {
+        ts_nanos.to_be_bytes().to_vec()
+    }
+
+    fn extract_timestamp(key: &[u8]) -> Option<u64> {
+        if key.len() == 8 {
+            let mut ts_bytes = [0u8; 8];
+            ts_bytes.copy_from_slice(key);
+            Some(u64::from_be_bytes(ts_bytes))
+        } else {
+            None
+        }
+    }
+
     fn bin_start(&self, timestamp: SystemTime) -> SystemTime {
         if self.width == Duration::ZERO {
             return timestamp;
@@ -141,16 +161,79 @@ impl Operator for TumblingWindowOperator {
         "TumblingWindow"
     }
 
-    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
+    // Recovery: replay raw data from LSM-Tree into DataFusion sessions
+    async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
+        let pipeline_block = ctx
+            .pipeline_state_memory_block
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing pipeline state memory block"))?;
+        let store = OperatorStateStore::new(
+            ctx.pipeline_id,
+            ctx.state_dir.clone(),
+            ctx.io_manager.clone(),
+            Arc::clone(pipeline_block),
+            ctx.operator_state_memory_bytes,
+        )
+        .map_err(|e| anyhow!("Failed to init state store: {e}"))?;
+
+        let safe_epoch = ctx.latest_safe_epoch();
+        let active_keys = store
+            .restore_metadata(safe_epoch)
+            .await
+            .map_err(|e| anyhow!("State recovery failed: {e}"))?;
+
+        if !active_keys.is_empty() {
+            info!(
+                pipeline_id = ctx.pipeline_id,
+                key_count = active_keys.len(),
+                "Tumbling Window Operator recovering active windows from LSM-Tree..."
+            );
+
+            for key in active_keys {
+                if let Some(ts_nanos) = Self::extract_timestamp(&key) {
+                    let bin_start = from_nanos(ts_nanos as u128);
+
+                    let batches = store.get_batches(&key).await.map_err(|e| anyhow!("{e}"))?;
+                    if batches.is_empty() {
+                        continue;
+                    }
+
+                    let slot = self.active_bins.entry(bin_start).or_default();
+                    Self::ensure_bin_running(
+                        slot,
+                        self.partial_aggregation_plan.clone(),
+                        &self.receiver_hook,
+                    )?;
+
+                    let sender = slot.sender.as_ref().unwrap();
+                    for batch in batches {
+                        sender
+                            .send(batch)
+                            .map_err(|e| anyhow!("recovery channel send: {e}"))?;
+                    }
+
+                    self.pending_bins.insert(ts_nanos);
+                }
+            }
+
+            info!(
+                pipeline_id = ctx.pipeline_id,
+                "Tumbling Window Operator successfully replayed events and rebuilt in-memory state."
+            );
+        }
+
+        self.state_store = Some(store);
         Ok(())
     }
 
+    // Write-ahead: persist raw data before in-memory computation
     async fn process_data(
         &mut self,
         _input_idx: usize,
         batch: RecordBatch,
         ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        _collector: &mut dyn Collector,
+    ) -> Result<()> {
         let bin_array = self
             .binning_function
             .evaluate(&batch)?
@@ -171,6 +254,11 @@ impl Operator for TumblingWindowOperator {
             .ok_or_else(|| anyhow!("binning function must produce TimestampNanosecond"))?;
         let partition_ranges = partition(std::slice::from_ref(&sorted_bins))?.ranges();
 
+        let store = self
+            .state_store
+            .as_ref()
+            .expect("State store not initialized");
+
         for range in partition_ranges {
             let bin_start = from_nanos(typed_bin.value(range.start) as u128);
 
@@ -186,8 +274,16 @@ impl Operator for TumblingWindowOperator {
             }
 
             let bin_batch = sorted.slice(range.start, range.end - range.start);
-            let slot = self.active_bins.entry(bin_start).or_default();
+            let bin_start_nanos = to_nanos(bin_start) as u64;
 
+            let state_key = Self::build_state_key(bin_start_nanos);
+            store
+                .put(state_key, bin_batch.clone())
+                .await
+                .map_err(|e| anyhow!("{e}"))?;
+            self.pending_bins.insert(bin_start_nanos);
+
+            let slot = self.active_bins.entry(bin_start).or_default();
             Self::ensure_bin_running(
                 slot,
                 self.partial_aggregation_plan.clone(),
@@ -203,19 +299,23 @@ impl Operator for TumblingWindowOperator {
                 .map_err(|e| anyhow!("partial channel send: {e}"))?;
         }
 
-        Ok(vec![])
+        Ok(())
     }
 
+    // Watermark-driven window closure with LSM-Tree GC
     async fn process_watermark(
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let Watermark::EventTime(current_time) = watermark else {
-            return Ok(vec![]);
+            return Ok(());
         };
-
-        let mut final_outputs = Vec::new();
+        let store = self
+            .state_store
+            .as_ref()
+            .expect("State store not initialized");
 
         let mut expired_bins = Vec::new();
         for &k in self.active_bins.keys() {
@@ -227,10 +327,8 @@ impl Operator for TumblingWindowOperator {
         }
 
         for bin_start in expired_bins {
-            let mut bin = self
-                .active_bins
-                .remove(&bin_start)
-                .ok_or_else(|| anyhow!("missing tumbling bin"))?;
+            let mut bin = self.active_bins.remove(&bin_start).unwrap();
+            let bin_start_nanos = to_nanos(bin_start) as u64;
 
             bin.close_and_drain().await?;
             let partial_batches = mem::take(&mut bin.finished_batches);
@@ -255,7 +353,9 @@ impl Operator for TumblingWindowOperator {
                 )?;
 
                 if self.final_projection.is_none() {
-                    final_outputs.push(StreamOutput::Forward(with_timestamp));
+                    collector
+                        .collect(StreamOutput::Forward(with_timestamp), _ctx)
+                        .await?;
                 } else {
                     aggregate_results.push(with_timestamp);
                 }
@@ -268,19 +368,42 @@ impl Operator for TumblingWindowOperator {
                     final_projection.execute(0, SessionContext::new().task_ctx())?;
 
                 while let Some(batch) = proj_exec.next().await {
-                    final_outputs.push(StreamOutput::Forward(batch?));
+                    collector
+                        .collect(StreamOutput::Forward(batch?), _ctx)
+                        .await?;
                 }
             }
+
+            // Tombstone the raw data — window is fully closed
+            let state_key = Self::build_state_key(bin_start_nanos);
+            store
+                .remove_batches(state_key)
+                .map_err(|e| anyhow!("{e}"))?;
+            self.pending_bins.remove(&bin_start_nanos);
         }
 
-        Ok(final_outputs)
+        Ok(())
     }
 
     async fn snapshot_state(
         &mut self,
-        _barrier: CheckpointBarrier,
+        barrier: CheckpointBarrier,
         _ctx: &mut TaskContext,
     ) -> Result<()> {
+        self.state_store
+            .as_ref()
+            .expect("State store not initialized")
+            .prepare_checkpoint_epoch(barrier.epoch as u64)
+            .map_err(|e| anyhow!("Snapshot failed: {e}"))?;
+        Ok(())
+    }
+
+    async fn commit_checkpoint(&mut self, epoch: u32, _ctx: &mut TaskContext) -> Result<()> {
+        self.state_store
+            .as_ref()
+            .expect("State store not initialized")
+            .commit_checkpoint_epoch(epoch as u64)
+            .map_err(|e| anyhow!("Commit checkpoint failed: {e}"))?;
         Ok(())
     }
 
@@ -367,6 +490,8 @@ impl TumblingAggregateWindowConstructor {
             receiver_hook,
             final_batches_passer,
             active_bins: BTreeMap::new(),
+            state_store: None,
+            pending_bins: BTreeSet::new(),
         })
     }
 }

@@ -128,4 +128,15 @@ impl OperatorChain {
     pub fn is_sink(&self) -> bool {
         self.operators[0].operator_name == OperatorName::ConnectorSink
     }
+
+    /// Operators safe to run at a higher upstream `TaskContext::parallelism` when fused after a
+    /// stateful node (e.g. window aggregate @ 8 → projection @ 1).
+    pub fn is_parallelism_upstream_expandable(&self) -> bool {
+        self.operators.iter().all(|op| {
+            matches!(
+                op.operator_name,
+                OperatorName::Projection | OperatorName::Value | OperatorName::ExpressionWatermark
+            )
+        })
+    }
 }

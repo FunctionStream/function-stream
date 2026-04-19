@@ -10,21 +10,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Kafka source checkpointing: `enable.auto.commit=false`, offsets captured at the checkpoint barrier
+//! and reported to the job coordinator for catalog persistence; restart rewinds from that snapshot.
+
 use anyhow::{Context as _, Result, anyhow};
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
 use bincode::{Decode, Encode};
 use governor::{DefaultDirectRateLimiter, Quota, RateLimiter as GovernorRateLimiter};
+use protocol::storage::{KafkaPartitionOffset, KafkaSourceSubtaskCheckpoint};
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message as KMessage, Offset, TopicPartitionList};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::source::{SourceEvent, SourceOffset, SourceOperator};
+use crate::runtime::streaming::api::source::{
+    SourceCheckpointReport, SourceEvent, SourceOffset, SourceOperator,
+};
 use crate::runtime::streaming::format::{BadDataPolicy, DataDeserializer, Format};
 use crate::sql::common::fs_schema::FieldValueType;
 use crate::sql::common::{CheckpointBarrier, MetadataField};
@@ -33,8 +40,74 @@ use crate::sql::common::{CheckpointBarrier, MetadataField};
 
 #[derive(Copy, Clone, Debug, Encode, Decode, PartialEq, PartialOrd)]
 pub struct KafkaState {
-    partition: i32,
-    offset: i64,
+    pub partition: i32,
+    pub offset: i64,
+}
+
+/// Last committed partition offsets for this source subtask, tied to a checkpoint epoch.
+/// Materialized into a `.bin` under the job state dir from catalog before restart; see
+/// [`TaskContext::latest_safe_epoch`] and `StreamingTableDefinition` in `storage.proto`.
+#[derive(Debug, Encode, Decode)]
+pub(crate) struct KafkaSourceSavedOffsets {
+    /// Same numbering as [`CheckpointBarrier::epoch`] / catalog `latest_checkpoint_epoch` (as u64).
+    pub(crate) epoch: u64,
+    pub(crate) partitions: Vec<KafkaState>,
+}
+
+pub(crate) fn encode_kafka_offset_snapshot(saved: &KafkaSourceSavedOffsets) -> Result<Vec<u8>> {
+    bincode::encode_to_vec(saved, bincode::config::standard())
+        .map_err(|e| anyhow!("bincode encode Kafka offset snapshot: {e}"))
+}
+
+pub(crate) fn decode_kafka_offset_snapshot(bytes: &[u8]) -> Result<KafkaSourceSavedOffsets> {
+    let (saved, _) = bincode::decode_from_slice(bytes, bincode::config::standard())
+        .map_err(|e| anyhow!("bincode decode Kafka offset snapshot: {e}"))?;
+    Ok(saved)
+}
+
+pub(crate) fn kafka_snapshot_path(
+    job_dir: &std::path::Path,
+    pipeline_id: u32,
+    subtask_index: u32,
+) -> PathBuf {
+    job_dir.join(format!(
+        "kafka_source_offsets_pipe{}_sub{}.bin",
+        pipeline_id, subtask_index
+    ))
+}
+
+fn kafka_offsets_snapshot_path(ctx: &TaskContext) -> PathBuf {
+    kafka_snapshot_path(&ctx.state_dir, ctx.pipeline_id, ctx.subtask_index)
+}
+
+fn load_saved_offsets_if_recovering(ctx: &TaskContext) -> Option<KafkaSourceSavedOffsets> {
+    let safe = ctx.latest_safe_epoch();
+    if safe == 0 {
+        return None;
+    }
+    let path = kafka_offsets_snapshot_path(ctx);
+    let bytes = std::fs::read(&path).ok()?;
+    let saved = match decode_kafka_offset_snapshot(&bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(
+                path = %path.display(),
+                error = %e,
+                "Failed to decode Kafka offset snapshot"
+            );
+            return None;
+        }
+    };
+    if saved.epoch > safe {
+        warn!(
+            path = %path.display(),
+            saved_epoch = saved.epoch,
+            safe_epoch = safe,
+            "Ignoring Kafka offset snapshot newer than catalog safe epoch"
+        );
+        return None;
+    }
+    Some(saved)
 }
 
 pub trait BatchDeserializer: Send + 'static {
@@ -182,7 +255,11 @@ impl KafkaSourceOperator {
         }
     }
 
-    async fn init_and_assign_consumer(&mut self, ctx: &mut TaskContext) -> Result<()> {
+    async fn init_and_assign_consumer(
+        &mut self,
+        ctx: &mut TaskContext,
+        saved_offsets: Option<KafkaSourceSavedOffsets>,
+    ) -> Result<()> {
         info!("Creating kafka consumer for {}", self.bootstrap_servers);
         let mut client_config = ClientConfig::new();
 
@@ -205,8 +282,24 @@ impl KafkaSourceOperator {
             .set("group.id", &group_id)
             .create()?;
 
-        let has_state = false;
-        let state_map: HashMap<i32, KafkaState> = HashMap::new();
+        let (has_state, state_map) = if let Some(saved) = saved_offsets {
+            info!(
+                job_id = %ctx.job_id,
+                pipeline_id = ctx.pipeline_id,
+                subtask = ctx.subtask_index,
+                epoch = saved.epoch,
+                safe_epoch = ctx.latest_safe_epoch(),
+                partitions = saved.partitions.len(),
+                "Restoring Kafka source offsets from materialized checkpoint snapshot"
+            );
+            let mut m = HashMap::with_capacity(saved.partitions.len());
+            for s in saved.partitions {
+                m.insert(s.partition, s);
+            }
+            (true, m)
+        } else {
+            (false, HashMap::new())
+        };
 
         let metadata = consumer
             .fetch_metadata(Some(&self.topic), Duration::from_secs(30))
@@ -224,9 +317,10 @@ impl KafkaSourceOperator {
 
         for p in partitions {
             if p.id().rem_euclid(pmax) == ctx.subtask_index as i32 {
+                // `current_offsets` / snapshot store last consumed offset; resume at next offset.
                 let offset = state_map
                     .get(&p.id())
-                    .map(|s| Offset::Offset(s.offset))
+                    .map(|s| Offset::Offset(s.offset.saturating_add(1)))
                     .unwrap_or_else(|| {
                         if has_state {
                             Offset::Beginning
@@ -264,7 +358,8 @@ impl SourceOperator for KafkaSourceOperator {
     }
 
     async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
-        self.init_and_assign_consumer(ctx).await?;
+        let saved = load_saved_offsets_if_recovering(ctx);
+        self.init_and_assign_consumer(ctx, saved).await?;
         self.rate_limiter = Some(GovernorRateLimiter::direct(Quota::per_second(
             self.messages_per_second,
         )));
@@ -363,10 +458,13 @@ impl SourceOperator for KafkaSourceOperator {
 
     async fn snapshot_state(
         &mut self,
-        _barrier: CheckpointBarrier,
+        barrier: CheckpointBarrier,
         ctx: &mut TaskContext,
-    ) -> Result<()> {
-        debug!("Source [{}] executing checkpoint", ctx.subtask_index);
+    ) -> Result<SourceCheckpointReport> {
+        debug!(
+            "Source [{}] executing checkpoint epoch {}",
+            ctx.subtask_index, barrier.epoch
+        );
 
         let mut topic_partitions = TopicPartitionList::new();
         for (&partition, &offset) in &self.current_offsets {
@@ -381,7 +479,27 @@ impl SourceOperator for KafkaSourceOperator {
             warn!("Failed to commit async offset to Kafka Broker: {:?}", e);
         }
 
-        Ok(())
+        let epoch = u64::from(barrier.epoch);
+        if self.current_offsets.is_empty() {
+            return Ok(SourceCheckpointReport::default());
+        }
+
+        let kafka_subtask = {
+            let mut parts: Vec<(i32, i64)> =
+                self.current_offsets.iter().map(|(&p, &o)| (p, o)).collect();
+            parts.sort_by_key(|x| x.0);
+            KafkaSourceSubtaskCheckpoint {
+                pipeline_id: ctx.pipeline_id,
+                subtask_index: ctx.subtask_index,
+                checkpoint_epoch: epoch,
+                partitions: parts
+                    .into_iter()
+                    .map(|(partition, offset)| KafkaPartitionOffset { partition, offset })
+                    .collect(),
+            }
+        };
+
+        Ok(SourceCheckpointReport::from_kafka_checkpoint(kafka_subtask))
     }
 
     async fn on_close(&mut self, _ctx: &mut TaskContext) -> Result<()> {

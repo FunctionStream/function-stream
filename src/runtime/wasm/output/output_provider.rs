@@ -11,7 +11,7 @@
 // limitations under the License.
 
 use crate::runtime::output::Output;
-use crate::runtime::task::OutputConfig;
+use crate::runtime::wasm::task::OutputConfig;
 
 pub struct OutputProvider;
 

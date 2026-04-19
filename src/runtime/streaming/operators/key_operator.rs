@@ -17,7 +17,7 @@
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::operators::StatelessPhysicalExecutor;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 use ahash::RandomState;
@@ -67,7 +67,8 @@ impl Operator for KeyExecutionOperator {
         _input_idx: usize,
         batch: RecordBatch,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         let mut outputs = Vec::new();
 
         let mut stream = self.executor.process_batch(batch).await?;
@@ -122,15 +123,22 @@ impl Operator for KeyExecutionOperator {
                 start_idx = end_idx;
             }
         }
-        Ok(outputs)
+        for out in outputs {
+            collector.collect(out, _ctx).await?;
+        }
+        Ok(())
     }
 
     async fn process_watermark(
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        Ok(vec![StreamOutput::Watermark(watermark)])
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
+        collector
+            .collect(StreamOutput::Watermark(watermark), _ctx)
+            .await?;
+        Ok(())
     }
 
     async fn snapshot_state(

@@ -24,7 +24,7 @@ use protocol::function_stream_graph::ProjectionOperator as ProjectionOperatorPro
 
 use crate::runtime::streaming::StreamOutput;
 use crate::runtime::streaming::api::context::TaskContext;
-use crate::runtime::streaming::api::operator::Operator;
+use crate::runtime::streaming::api::operator::{Collector, Operator};
 use crate::runtime::streaming::factory::global::Registry;
 use crate::sql::common::{CheckpointBarrier, FsSchema, FsSchemaRef, Watermark};
 use crate::sql::logical_node::logical::OperatorName;
@@ -98,9 +98,10 @@ impl Operator for ProjectionOperator {
         _input_idx: usize,
         batch: RecordBatch,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
         if batch.num_rows() == 0 {
-            return Ok(vec![]);
+            return Ok(());
         }
 
         let projected_columns = self
@@ -114,15 +115,22 @@ impl Operator for ProjectionOperator {
 
         let out_batch = RecordBatch::try_new(self.output_schema.schema.clone(), projected_columns)?;
 
-        Ok(vec![StreamOutput::Forward(out_batch)])
+        collector
+            .collect(StreamOutput::Forward(out_batch), _ctx)
+            .await?;
+        Ok(())
     }
 
     async fn process_watermark(
         &mut self,
         watermark: Watermark,
         _ctx: &mut TaskContext,
-    ) -> Result<Vec<StreamOutput>> {
-        Ok(vec![StreamOutput::Watermark(watermark)])
+        collector: &mut dyn Collector,
+    ) -> Result<()> {
+        collector
+            .collect(StreamOutput::Watermark(watermark), _ctx)
+            .await?;
+        Ok(())
     }
 
     async fn snapshot_state(

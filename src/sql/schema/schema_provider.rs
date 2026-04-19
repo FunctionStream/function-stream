@@ -29,7 +29,7 @@ use crate::sql::common::constants::{planning_placeholder_udf, window_fn};
 use crate::sql::logical_node::logical::{DylibUdfConfig, LogicalProgram};
 use crate::sql::schema::table::Table as CatalogTable;
 use crate::sql::schema::utils::window_arrow_struct;
-use crate::sql::types::{PlanningOptions, PlanningPlaceholderUdf};
+use crate::sql::types::{PlanningOptions, PlanningPlaceholderUdf, SqlConfig};
 
 pub type ObjectName = UniCase<String>;
 
@@ -129,6 +129,7 @@ pub struct StreamPlanningContext {
     pub config_options: datafusion::config::ConfigOptions,
     pub planning_options: PlanningOptions,
     pub analyzer: Analyzer,
+    pub sql_config: SqlConfig,
 }
 
 /// Back-compat name for [`StreamPlanningContext`].
@@ -139,14 +140,26 @@ impl StreamPlanningContext {
         StreamPlanningContextBuilder::default()
     }
 
+    #[inline]
+    pub fn default_parallelism(&self) -> usize {
+        self.sql_config.default_parallelism
+    }
+
+    #[inline]
+    pub fn key_by_parallelism(&self) -> usize {
+        self.sql_config.key_by_parallelism
+    }
+
     /// Same registration order as the historical `StreamSchemaProvider::new` (placeholders, then DataFusion defaults).
     pub fn new() -> Self {
-        Self::builder()
+        let mut ctx = Self::builder()
             .with_streaming_extensions()
             .expect("streaming extensions")
             .with_default_functions()
             .expect("default functions")
-            .build()
+            .build();
+        ctx.sql_config = crate::sql::planning_runtime::sql_planning_snapshot();
+        ctx
     }
 
     pub fn register_stream_table(&mut self, table: StreamTable) {
