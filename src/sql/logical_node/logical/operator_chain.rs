@@ -135,9 +135,7 @@ impl OperatorChain {
         self.operators.iter().all(|op| {
             matches!(
                 op.operator_name,
-                OperatorName::Projection
-                    | OperatorName::Value
-                    | OperatorName::ExpressionWatermark
+                OperatorName::Projection | OperatorName::Value | OperatorName::ExpressionWatermark
             )
         })
     }

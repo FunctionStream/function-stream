@@ -98,9 +98,7 @@ impl Optimizer for ChainingOptimizer {
             source_node.description =
                 format!("{} -> {}", source_node.description, target_node.description);
 
-            source_node.parallelism = source_node
-                .parallelism
-                .max(target_node.parallelism);
+            source_node.parallelism = source_node.parallelism.max(target_node.parallelism);
 
             source_node
                 .operator_chain
@@ -176,7 +174,10 @@ mod tests {
         let changed = ChainingOptimizer {}.optimize_once(&mut g);
         assert!(changed);
         assert_eq!(g.node_count(), 2);
-        let fused = g.node_weights().find(|n| n.description.contains("->")).unwrap();
+        let fused = g
+            .node_weights()
+            .find(|n| n.description.contains("->"))
+            .unwrap();
         assert_eq!(fused.parallelism, 8);
         assert_eq!(fused.operator_chain.len(), 2);
     }
