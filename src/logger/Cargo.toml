@@ -1,0 +1,15 @@
+[package]
+name = "function-stream-logger"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_logger"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1.0"
+function-stream-config = { path = "../config" }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

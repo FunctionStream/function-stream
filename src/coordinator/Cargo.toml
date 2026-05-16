@@ -1,0 +1,8 @@
+[package]
+name = "function-stream-coordinator"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_coordinator"
+path = "src/lib.rs"

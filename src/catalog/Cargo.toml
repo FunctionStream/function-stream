@@ -1,0 +1,11 @@
+[package]
+name = "function-stream-catalog"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_catalog"
+path = "src/lib.rs"
+
+[dependencies]
+protocol = { path = "../../protocol" }

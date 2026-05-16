@@ -1,0 +1,8 @@
+[package]
+name = "function-stream-common"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_common"
+path = "src/lib.rs"

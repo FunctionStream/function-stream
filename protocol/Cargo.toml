@@ -1,7 +1,7 @@
 [package]
 name = "protocol"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 description = "Protocol Buffers protocol definitions for function stream"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/your-username/rust-function-stream"

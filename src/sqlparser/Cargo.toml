@@ -1,0 +1,8 @@
+[package]
+name = "function-stream-sqlparser"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_sqlparser"
+path = "src/lib.rs"

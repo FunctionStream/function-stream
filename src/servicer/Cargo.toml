@@ -1,0 +1,8 @@
+[package]
+name = "function-stream-servicer"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_servicer"
+path = "src/lib.rs"
