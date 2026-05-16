@@ -1,0 +1,8 @@
+[package]
+name = "function-stream-streaming-runtime"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_streaming_runtime"
+path = "src/lib.rs"

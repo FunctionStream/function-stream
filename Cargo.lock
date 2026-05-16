@@ -3800,6 +3800,10 @@ dependencies = [
  "datafusion-expr 48.0.1",
  "datafusion-physical-expr 48.0.1",
  "datafusion-proto",
+ "function-stream-config",
+ "function-stream-logger",
+ "function-stream-runtime-common",
+ "function-stream-streaming-planner",
  "futures",
  "governor",
  "itertools 0.14.0",
@@ -3839,8 +3843,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "function-stream-catalog"
+version = "0.6.0"
+dependencies = [
+ "protocol",
+]
+
+[[package]]
+name = "function-stream-catalog-storage"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "function-stream-catalog",
+ "parking_lot",
+ "rocksdb",
+]
+
+[[package]]
 name = "function-stream-cli"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "arrow-array 52.2.0",
  "arrow-ipc 52.2.0",
@@ -3852,6 +3873,104 @@ dependencies = [
  "tokio",
  "tonic",
 ]
+
+[[package]]
+name = "function-stream-common"
+version = "0.6.0"
+
+[[package]]
+name = "function-stream-config"
+version = "0.6.0"
+dependencies = [
+ "serde",
+ "serde_yaml",
+ "uuid",
+]
+
+[[package]]
+name = "function-stream-coordinator"
+version = "0.6.0"
+
+[[package]]
+name = "function-stream-logger"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "function-stream-config",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "function-stream-runtime-common"
+version = "0.6.0"
+dependencies = [
+ "arrow-array 55.2.0",
+ "bincode",
+ "parking_lot",
+ "serde",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "function-stream-servicer"
+version = "0.6.0"
+
+[[package]]
+name = "function-stream-sqlparser"
+version = "0.6.0"
+
+[[package]]
+name = "function-stream-streaming-planner"
+version = "0.6.0"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "apache-avro",
+ "arrow 55.2.0",
+ "arrow-array 55.2.0",
+ "arrow-json 55.2.0",
+ "arrow-schema 55.2.0",
+ "async-trait",
+ "bincode",
+ "bytes",
+ "chrono",
+ "datafusion 48.0.1",
+ "datafusion-common 48.0.1",
+ "datafusion-execution 48.0.1",
+ "datafusion-expr 48.0.1",
+ "datafusion-physical-expr 48.0.1",
+ "datafusion-proto",
+ "function-stream-config",
+ "function-stream-runtime-common",
+ "futures",
+ "itertools 0.14.0",
+ "petgraph 0.7.1",
+ "prost 0.13.5",
+ "protocol",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "serde_json_path",
+ "sqlparser 0.55.0",
+ "strum 0.26.3",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "unicase",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "function-stream-streaming-runtime"
+version = "0.6.0"
+
+[[package]]
+name = "function-stream-wasm-runtime"
+version = "0.6.0"
 
 [[package]]
 name = "funty"
@@ -6431,7 +6550,7 @@ dependencies = [
 
 [[package]]
 name = "protocol"
-version = "0.1.0"
+version = "0.6.0"
 dependencies = [
  "env_logger",
  "log",

@@ -38,3 +38,7 @@ python/**/target/
 tests/integration/target/
 tests/integration/.venv/
 tests/integration/install
+
+# Python bytecode (do not commit)
+**/__pycache__/
+*.py[cod]

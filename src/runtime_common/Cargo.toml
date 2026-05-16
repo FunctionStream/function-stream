@@ -1,0 +1,16 @@
+[package]
+name = "function-stream-runtime-common"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_runtime_common"
+path = "src/lib.rs"
+
+[dependencies]
+arrow-array = "55"
+bincode = { version = "2", features = ["serde"] }
+parking_lot = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.0", features = ["sync"] }
+tracing = "0.1"

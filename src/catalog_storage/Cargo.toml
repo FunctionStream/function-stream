@@ -1,0 +1,14 @@
+[package]
+name = "function-stream-catalog-storage"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_catalog_storage"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1.0"
+function-stream-catalog = { path = "../catalog" }
+parking_lot = "0.12"
+rocksdb = { version = "0.21", features = ["multi-threaded-cf", "lz4"] }

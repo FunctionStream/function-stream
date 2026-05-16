@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 APP_NAME    := function-stream
+# Version from root `[workspace.package]` (single source of truth).
 VERSION     := $(shell grep '^version' Cargo.toml | head -1 | awk -F '"' '{print $$2}')
 DATE        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -106,6 +107,7 @@ build: .check-env .ensure-target .build-wasm
 	@RUSTFLAGS="$(OPTIMIZE_FLAGS)" \
 	cargo build --release \
 		--target $(TRIPLE) \
+		-p $(APP_NAME) \
 		--features python \
 		--quiet
 	$(call log,BUILD,CLI)
@@ -118,14 +120,15 @@ build: .check-env .ensure-target .build-wasm
 
 build-lite: .check-env .ensure-target
 	$(call log,BUILD,Rust Lite [$(OS_NAME) / $(TRIPLE)])
-	@RUSTFLAGS="$(INDUSTRIAL_RUSTFLAGS)" \
+	@RUSTFLAGS="$(OPTIMIZE_FLAGS)" \
 	cargo build --release \
 	   --target $(TRIPLE) \
+	   -p $(APP_NAME) \
 	   --no-default-features \
 	   --features incremental-cache \
 	   --quiet
 	$(call log,BUILD,CLI for dist)
-	@RUSTFLAGS="$(INDUSTRIAL_RUSTFLAGS)" \
+	@RUSTFLAGS="$(OPTIMIZE_FLAGS)" \
 	cargo build --release \
 	   --target $(TRIPLE) \
 	   -p function-stream-cli \
