@@ -18,16 +18,12 @@ mod coordinator;
 pub use function_stream_logger as logging;
 
 pub use function_stream_runtime_common::{common, memory};
+pub use function_stream_streaming_runtime as streaming;
+pub use function_stream_streaming_runtime::util;
 
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-
-#[path = "../../streaming_runtime/src/streaming/mod.rs"]
-mod streaming;
-
-#[path = "../../streaming_runtime/src/util/mod.rs"]
-mod util;
 
 #[path = "../../wasm_runtime/src/wasm/mod.rs"]
 mod wasm;

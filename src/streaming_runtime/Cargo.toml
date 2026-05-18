@@ -6,3 +6,8 @@ edition.workspace = true
 [lib]
 name = "function_stream_streaming_runtime"
 path = "src/lib.rs"
+
+[dependencies]
+function-stream-streaming-runtime-core = { path = "../streaming_runtime_core" }
+function-stream-streaming-runtime-job-manager = { path = "../streaming_runtime_job_manager" }
+function-stream-streaming-runtime-operators = { path = "../streaming_runtime_operators" }

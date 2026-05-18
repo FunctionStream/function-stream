@@ -10,12 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Facade crate for the split streaming runtime libraries.
+pub mod edge_manager;
+pub mod job_manager;
+pub mod models;
 
-pub use function_stream_streaming_runtime_core::{
-    StreamOutput, api, error, execution, network, protocol, state,
+pub use crate::stream_catalog::{CheckpointCatalog, install_global_checkpoint_catalog};
+pub use job_manager::{
+    JobManager, PipelineDetail, StateConfig, StreamingJobDetail, StreamingJobSummary,
 };
-pub use function_stream_streaming_runtime_job_manager::{job, stream_catalog};
-pub use function_stream_streaming_runtime_operators::{factory, format, operators, util};
-
-pub const CRATE_NAME: &str = "function-stream-streaming-runtime";

@@ -30,6 +30,7 @@ protocol = { path = "../../protocol" }
 function-stream-config = { path = "../config" }
 function-stream-logger = { path = "../logger" }
 function-stream-runtime-common = { path = "../runtime_common" }
+function-stream-streaming-runtime = { path = "../streaming_runtime" }
 function-stream-streaming-planner = { path = "../streaming_planner" }
 prost = "0.13"
 rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi", "curl"] }

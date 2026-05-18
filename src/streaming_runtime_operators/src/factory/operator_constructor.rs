@@ -10,12 +10,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Facade crate for the split streaming runtime libraries.
+use anyhow::Result;
+use std::sync::Arc;
 
-pub use function_stream_streaming_runtime_core::{
-    StreamOutput, api, error, execution, network, protocol, state,
-};
-pub use function_stream_streaming_runtime_job_manager::{job, stream_catalog};
-pub use function_stream_streaming_runtime_operators::{factory, format, operators, util};
+use crate::core::api::operator::ConstructedOperator;
+use crate::factory::global::Registry;
 
-pub const CRATE_NAME: &str = "function-stream-streaming-runtime";
+/// Builds a [`ConstructedOperator`] from serialized configuration and a [`Registry`].
+pub trait OperatorConstructor: Send + Sync {
+    fn with_config(&self, config: &[u8], registry: Arc<Registry>) -> Result<ConstructedOperator>;
+}

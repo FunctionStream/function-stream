@@ -10,12 +10,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Facade crate for the split streaming runtime libraries.
+//! JobManager crate for streaming runtime orchestration.
 
+pub use function_stream_config as config;
+pub use function_stream_runtime_common::{common, memory};
+pub use function_stream_streaming_planner as sql;
+pub use function_stream_streaming_runtime_core as core;
 pub use function_stream_streaming_runtime_core::{
     StreamOutput, api, error, execution, network, protocol, state,
 };
-pub use function_stream_streaming_runtime_job_manager::{job, stream_catalog};
 pub use function_stream_streaming_runtime_operators::{factory, format, operators, util};
 
-pub const CRATE_NAME: &str = "function-stream-streaming-runtime";
+pub mod job;
+pub mod stream_catalog;

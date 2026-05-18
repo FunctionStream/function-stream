@@ -3804,6 +3804,7 @@ dependencies = [
  "function-stream-logger",
  "function-stream-runtime-common",
  "function-stream-streaming-planner",
+ "function-stream-streaming-runtime",
  "futures",
  "governor",
  "itertools 0.14.0",
@@ -3967,6 +3968,94 @@ dependencies = [
 [[package]]
 name = "function-stream-streaming-runtime"
 version = "0.6.0"
+dependencies = [
+ "function-stream-streaming-runtime-core",
+ "function-stream-streaming-runtime-job-manager",
+ "function-stream-streaming-runtime-operators",
+]
+
+[[package]]
+name = "function-stream-streaming-runtime-core"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "arrow 55.2.0",
+ "arrow-array 55.2.0",
+ "arrow-schema 55.2.0",
+ "async-trait",
+ "crossbeam-channel",
+ "function-stream-runtime-common",
+ "function-stream-streaming-planner",
+ "parking_lot",
+ "parquet",
+ "protocol",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "function-stream-streaming-runtime-job-manager"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "function-stream-config",
+ "function-stream-runtime-common",
+ "function-stream-streaming-planner",
+ "function-stream-streaming-runtime-core",
+ "function-stream-streaming-runtime-operators",
+ "protocol",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "function-stream-streaming-runtime-operators"
+version = "0.6.0"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "apache-avro",
+ "arrow 55.2.0",
+ "arrow-array 55.2.0",
+ "arrow-array 57.3.0",
+ "arrow-ipc 55.2.0",
+ "arrow-ipc 57.3.0",
+ "arrow-json 55.2.0",
+ "arrow-schema 55.2.0",
+ "async-trait",
+ "base64",
+ "bincode",
+ "bytes",
+ "datafusion 48.0.1",
+ "datafusion-common 48.0.1",
+ "datafusion-execution 48.0.1",
+ "datafusion-expr 48.0.1",
+ "datafusion-physical-expr 48.0.1",
+ "datafusion-proto",
+ "function-stream-config",
+ "function-stream-runtime-common",
+ "function-stream-streaming-planner",
+ "function-stream-streaming-runtime-core",
+ "futures",
+ "governor",
+ "itertools 0.14.0",
+ "lance",
+ "object_store",
+ "parquet",
+ "prost 0.13.5",
+ "protocol",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "function-stream-wasm-runtime"

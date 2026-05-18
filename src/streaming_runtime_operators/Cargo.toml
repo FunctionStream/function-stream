@@ -1,0 +1,47 @@
+[package]
+name = "function-stream-streaming-runtime-operators"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_streaming_runtime_operators"
+path = "src/lib.rs"
+
+[dependencies]
+ahash = "0.8"
+anyhow = "1.0"
+apache-avro = "0.21"
+arrow = { version = "55", default-features = false }
+arrow-array = "55"
+arrow-array-lance = { package = "arrow-array", version = "57.3.0" }
+arrow-ipc = "55"
+arrow-ipc-lance = { package = "arrow-ipc", version = "57.3.0" }
+arrow-json = { version = "55.2.0" }
+arrow-schema = { version = "55", features = ["serde"] }
+async-trait = "0.1"
+base64 = "0.22"
+bincode = { version = "2", features = ["serde"] }
+bytes = "1"
+datafusion = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
+datafusion-common = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
+datafusion-execution = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
+datafusion-expr = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
+datafusion-physical-expr = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
+datafusion-proto = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
+function-stream-config = { path = "../config" }
+function-stream-runtime-common = { path = "../runtime_common" }
+function-stream-streaming-planner = { path = "../streaming_planner" }
+function-stream-streaming-runtime-core = { path = "../streaming_runtime_core" }
+futures = "0.3"
+governor = "0.8.0"
+itertools = "0.14"
+lance = { version = "4.0.0", default-features = false, features = ["aws"] }
+object_store = { version = "0.12.5", features = ["aws"] }
+parquet = "55"
+prost = "0.13"
+protocol = { path = "../../protocol" }
+rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi", "curl"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "sync", "time", "net", "signal", "fs", "io-util"] }
+tracing = "0.1"

@@ -170,8 +170,25 @@ fn initialize_memory_service(config: &GlobalConfig) -> Result<()> {
 fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
     use crate::streaming::factory::OperatorFactory;
     use crate::streaming::factory::Registry;
-    use crate::streaming::job::{JobManager, StateConfig};
+    use crate::streaming::job::{
+        CheckpointCatalog, JobManager, StateConfig, install_global_checkpoint_catalog,
+    };
     use std::sync::Arc;
+
+    struct StreamCatalogCheckpointStore;
+
+    impl CheckpointCatalog for StreamCatalogCheckpointStore {
+        fn commit_job_checkpoint(
+            &self,
+            job_id: &str,
+            epoch: u64,
+            source_infos: Vec<protocol::storage::SourceCheckpointInfo>,
+        ) -> Result<()> {
+            let catalog = crate::stream_catalog::CatalogManager::global()
+                .context("Checkpoint commit requires StreamCatalog")?;
+            Ok(catalog.commit_job_checkpoint(job_id, epoch, source_infos)?)
+        }
+    }
 
     let per_operator_memory_bytes = config
         .streaming
@@ -181,6 +198,8 @@ fn initialize_job_manager(config: &GlobalConfig) -> Result<()> {
 
     let registry = Arc::new(Registry::new());
     let factory = Arc::new(OperatorFactory::new(registry));
+    install_global_checkpoint_catalog(Arc::new(StreamCatalogCheckpointStore))
+        .context("JobManager checkpoint catalog bridge install failed")?;
 
     let state_base_dir = std::env::temp_dir().join("function-stream").join("state");
     let state_config = StateConfig {

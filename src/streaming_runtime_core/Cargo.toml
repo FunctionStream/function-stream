@@ -1,0 +1,30 @@
+[package]
+name = "function-stream-streaming-runtime-core"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "function_stream_streaming_runtime_core"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+arrow = { version = "55", default-features = false }
+arrow-array = "55"
+arrow-schema = { version = "55", features = ["serde"] }
+crossbeam-channel = "0.5"
+function-stream-runtime-common = { path = "../runtime_common" }
+function-stream-streaming-planner = { path = "../streaming_planner" }
+parking_lot = "0.12"
+parquet = "55"
+protocol = { path = "../../protocol" }
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "sync", "time", "net", "signal"] }
+tokio-stream = "0.1.18"
+tracing = "0.1"
+uuid = { version = "1.0", features = ["v7"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

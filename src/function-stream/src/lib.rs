@@ -24,12 +24,8 @@ pub mod coordinator;
 pub use function_stream_logger as logging;
 
 pub use function_stream_runtime_common::{common, memory};
-
-#[path = "../../streaming_runtime/src/streaming/mod.rs"]
-pub mod streaming;
-
-#[path = "../../streaming_runtime/src/util/mod.rs"]
-pub mod util;
+pub use function_stream_streaming_runtime as streaming;
+pub use function_stream_streaming_runtime::util;
 
 #[path = "../../wasm_runtime/src/wasm/mod.rs"]
 pub mod wasm;
