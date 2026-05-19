@@ -330,8 +330,20 @@ impl Operator for DeltaSinkOperator {
         ctx: &mut TaskContext,
         _collector: &mut dyn Collector,
     ) -> anyhow::Result<()> {
-        self.pending_bytes += batch.get_array_memory_size();
+        let batch_rows = batch.num_rows();
+        let batch_bytes = batch.get_array_memory_size();
+        self.pending_bytes += batch_bytes;
         self.pending.push(batch);
+
+        debug!(
+            table = %self.table_name,
+            subtask_idx = ctx.subtask_index,
+            batch_rows,
+            batch_bytes,
+            pending_batches = self.pending.len(),
+            pending_bytes = self.pending_bytes,
+            "delta sink received data"
+        );
 
         if self.pending_bytes > self.early_flush_threshold_bytes {
             debug!(

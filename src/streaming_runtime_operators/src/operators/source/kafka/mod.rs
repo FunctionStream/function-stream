@@ -341,6 +341,14 @@ impl SourceOperator for KafkaSourceOperator {
 
                 if let Some(payload) = msg.payload() {
                     let topic = msg.topic();
+                    debug!(
+                        topic,
+                        partition,
+                        offset,
+                        payload_bytes = payload.len(),
+                        timestamp_ms = timestamp,
+                        "kafka source consumed message"
+                    );
 
                     let connector_metadata = if !self.metadata_fields.is_empty() {
                         let mut meta = HashMap::new();
@@ -384,6 +392,13 @@ impl SourceOperator for KafkaSourceOperator {
                     && let Some(batch) = self.deserializer.flush_buffer()?
                 {
                     self.last_flush_time = Instant::now();
+                    debug!(
+                        num_rows = batch.num_rows(),
+                        num_columns = batch.num_columns(),
+                        flush_by_size = should_flush_by_size,
+                        flush_by_time = should_flush_by_time,
+                        "kafka source emitting record batch"
+                    );
                     return Ok(SourceEvent::Data(batch));
                 }
 
@@ -398,6 +413,11 @@ impl SourceOperator for KafkaSourceOperator {
                     && let Some(batch) = self.deserializer.flush_buffer()?
                 {
                     self.last_flush_time = Instant::now();
+                    debug!(
+                        num_rows = batch.num_rows(),
+                        num_columns = batch.num_columns(),
+                        "kafka source emitting record batch (poll timeout flush)"
+                    );
                     return Ok(SourceEvent::Data(batch));
                 }
                 Ok(SourceEvent::Idle)
