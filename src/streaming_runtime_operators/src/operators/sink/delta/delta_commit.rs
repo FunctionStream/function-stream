@@ -23,7 +23,7 @@ use deltalake::kernel::transaction::CommitBuilder;
 use deltalake::kernel::{Action, Add, StructField, StructType};
 use deltalake::protocol::{DeltaOperation, SaveMode};
 use deltalake::{DeltaTable, open_table_with_storage_options};
-use tracing::info;
+use tracing::{info, instrument};
 use url::Url;
 
 use super::DeltaSinkError;
@@ -93,6 +93,12 @@ impl DeltaTableCommitter {
 
         match open_result {
             Ok(table) => {
+                let version = table.version();
+                info!(
+                    table_uri = %self.table_uri,
+                    ?version,
+                    "opened existing delta table"
+                );
                 self.table = Some(table);
                 return Ok(());
             }
@@ -127,16 +133,39 @@ impl DeltaTableCommitter {
             .await
             .map_err(|e| DeltaSinkError::CommitterFailed(e.to_string()))?;
 
+        info!(
+            table_uri = %self.table_uri,
+            column_count = columns.len(),
+            version = table.version(),
+            "created new delta table"
+        );
         self.table = Some(table);
         Ok(())
     }
 
+    #[instrument(skip(self), fields(table_uri = %self.table_uri, epoch))]
     pub async fn commit_checkpoint(&mut self, epoch: u64) -> Result<(), DeltaSinkError> {
         if self.uncommitted.is_empty() {
             return Ok(());
         }
 
         let files = std::mem::take(&mut self.uncommitted);
+        let file_count = files.len();
+        let total_bytes: u64 = files.iter().map(|f| f.size_bytes).sum();
+        let total_records: u64 = files.iter().map(|f| f.record_count).sum();
+        let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+
+        let prev_version = self.table.as_ref().and_then(|t| t.version());
+
+        info!(
+            file_count,
+            total_bytes,
+            total_records,
+            ?prev_version,
+            paths = ?paths,
+            "committing delta checkpoint"
+        );
+
         self.ensure_table().await?;
 
         let table = self
@@ -190,8 +219,12 @@ impl DeltaTableCommitter {
         info!(
             epoch,
             version,
-            file_count = files.len(),
-            "successfully committed delta checkpoint (2PC completed)"
+            file_count,
+            total_bytes,
+            total_records,
+            ?prev_version,
+            paths = ?paths,
+            "delta checkpoint committed"
         );
         Ok(())
     }

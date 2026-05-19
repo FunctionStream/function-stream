@@ -274,6 +274,12 @@ impl DeltaSinkOperator {
 
         if let Some(committer) = self.committer.as_mut() {
             if committer.has_uncommitted() {
+                info!(
+                    table = %self.table_name,
+                    epoch,
+                    subtask_idx,
+                    "delta sink triggering checkpoint commit"
+                );
                 committer.commit_checkpoint(epoch).await?;
             }
         }
