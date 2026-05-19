@@ -25,11 +25,11 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tracing::debug;
 
-use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_millis};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
 use crate::factory::Registry;
+use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_millis};
 use async_trait::async_trait;
 use protocol::function_stream_graph::ExpressionWatermarkConfig;
 

@@ -30,22 +30,22 @@ use crate::config::{
     DEFAULT_CHECKPOINT_INTERVAL_MS, DEFAULT_OPERATOR_STATE_STORE_MEMORY_BYTES,
     DEFAULT_PIPELINE_PARALLELISM,
 };
-use crate::memory::global_memory_pool;
-use crate::sql::logical_node::logical::OperatorName;
-use crate::stream_catalog::CatalogManager;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{ConstructedOperator, Operator};
 use crate::core::api::source::SourceOperator;
 use crate::core::execution::{ChainBuilder, Pipeline, SourceDriver};
+use crate::core::network::endpoint::{BoxedEventStream, PhysicalSender};
+use crate::core::protocol::control::{ControlCommand, JobMasterEvent, StopMode};
+use crate::core::protocol::event::CheckpointBarrier;
+use crate::core::state::{IoManager, IoPool, NoopMetricsCollector};
 use crate::factory::OperatorFactory;
 use crate::job::edge_manager::EdgeManager;
 use crate::job::models::{
     PhysicalExecutionGraph, PhysicalPipeline, PipelineStatus, StreamingJobRollupStatus,
 };
-use crate::core::network::endpoint::{BoxedEventStream, PhysicalSender};
-use crate::core::protocol::control::{ControlCommand, JobMasterEvent, StopMode};
-use crate::core::protocol::event::CheckpointBarrier;
-use crate::core::state::{IoManager, IoPool, NoopMetricsCollector};
+use crate::memory::global_memory_pool;
+use crate::sql::logical_node::logical::OperatorName;
+use crate::stream_catalog::CatalogManager;
 
 #[derive(Debug, Clone)]
 pub struct StreamingJobSummary {

@@ -24,7 +24,6 @@ use protocol::function_stream_graph::{
 };
 use tracing::info;
 
-use crate::sql::common::FsSchema;
 use crate::core::api::operator::ConstructedOperator;
 use crate::core::api::source::SourceOffset;
 use crate::factory::global::Registry;
@@ -35,6 +34,7 @@ use crate::format::{
 };
 use crate::operators::sink::kafka::{ConsistencyMode, KafkaSinkOperator};
 use crate::operators::source::kafka::{BufferedDeserializer, KafkaSourceOperator};
+use crate::sql::common::FsSchema;
 
 const DEFAULT_SOURCE_BATCH_SIZE: usize = 1024;
 

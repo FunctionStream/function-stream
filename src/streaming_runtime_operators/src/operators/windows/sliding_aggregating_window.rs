@@ -33,13 +33,13 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::info;
 
-use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
-use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
-use crate::factory::Registry;
 use crate::core::state::OperatorStateStore;
+use crate::factory::Registry;
+use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark, from_nanos, to_nanos};
+use crate::sql::physical::{StreamingDecodingContext, StreamingExtensionCodec};
 use async_trait::async_trait;
 use protocol::function_stream_graph::SlidingWindowAggregateOperator;
 // ============================================================================

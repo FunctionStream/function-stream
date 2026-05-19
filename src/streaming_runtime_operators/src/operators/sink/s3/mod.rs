@@ -26,12 +26,12 @@ use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
 use tracing::{info, warn};
 
-use crate::sql::common::constants::factory_operator_name;
-use crate::sql::common::with_option_keys as opt;
-use crate::sql::common::{CheckpointBarrier, Watermark};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
+use crate::sql::common::constants::factory_operator_name;
+use crate::sql::common::with_option_keys as opt;
+use crate::sql::common::{CheckpointBarrier, Watermark};
 
 #[derive(Debug, Clone, Copy)]
 pub enum S3Format {

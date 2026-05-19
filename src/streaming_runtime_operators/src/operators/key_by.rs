@@ -19,10 +19,10 @@ use datafusion_common::hash_utils::create_hashes;
 use datafusion_physical_expr::expressions::Column;
 use std::sync::Arc;
 
-use crate::sql::common::{CheckpointBarrier, Watermark};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
+use crate::sql::common::{CheckpointBarrier, Watermark};
 
 use protocol::function_stream_graph::KeyPlanOperator;
 

@@ -41,16 +41,16 @@ use std::{collections::HashMap, mem, sync::Arc};
 use tracing::{debug, info, warn};
 // =========================================================================
 // =========================================================================
+use crate::core::StreamOutput;
+use crate::core::api::context::TaskContext;
+use crate::core::api::operator::{Collector, Operator};
+use crate::core::state::OperatorStateStore;
+use crate::factory::Registry;
+use crate::operators::{Key, UpdatingCache};
 use crate::sql::common::{
     CheckpointBarrier, FsSchema, TIMESTAMP_FIELD, UPDATING_META_FIELD, Watermark, to_nanos,
 };
 use crate::sql::physical::updating_meta_fields;
-use crate::core::StreamOutput;
-use crate::core::api::context::TaskContext;
-use crate::core::api::operator::{Collector, Operator};
-use crate::factory::Registry;
-use crate::operators::{Key, UpdatingCache};
-use crate::core::state::OperatorStateStore;
 use crate::util::decode_aggregate;
 
 #[derive(Debug, Copy, Clone)]

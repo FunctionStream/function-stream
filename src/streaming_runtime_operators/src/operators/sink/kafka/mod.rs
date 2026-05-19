@@ -36,12 +36,12 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
-use crate::sql::common::constants::factory_operator_name;
-use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
 use crate::format::DataSerializer;
+use crate::sql::common::constants::factory_operator_name;
+use crate::sql::common::{CheckpointBarrier, FsSchema, Watermark};
 // ============================================================================
 // ============================================================================
 

@@ -20,13 +20,13 @@ use parquet::basic::Compression;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, info, warn};
 
-use crate::memory::{MemoryBlock, try_global_memory_pool};
-use crate::sql::common::constants::factory_operator_name;
-use crate::sql::common::{CheckpointBarrier, Watermark};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
 use crate::format::encoder::FormatEncoder;
+use crate::memory::{MemoryBlock, try_global_memory_pool};
+use crate::sql::common::constants::factory_operator_name;
+use crate::sql::common::{CheckpointBarrier, Watermark};
 
 const DEFAULT_MAX_BUFFER_BYTES: usize = 64 * 1024 * 1024;
 

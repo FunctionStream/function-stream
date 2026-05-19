@@ -15,11 +15,11 @@ use arrow_array::RecordBatch;
 use async_trait::async_trait;
 use futures::StreamExt;
 
-use crate::sql::common::{CheckpointBarrier, Watermark};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
 use crate::operators::StatelessPhysicalExecutor;
+use crate::sql::common::{CheckpointBarrier, Watermark};
 
 pub struct ValueExecutionOperator {
     name: String,

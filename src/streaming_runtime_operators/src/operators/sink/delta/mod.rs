@@ -10,33 +10,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod delta_commit;
+
 use std::collections::HashMap;
-use std::fs::create_dir_all;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
 use arrow_array::RecordBatch;
+use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
 use bytes::Bytes;
+use delta_commit::{
+    DeltaTableCommitter, UncommittedDataFile, build_delta_storage_options, resolve_delta_table_uri,
+};
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectStorePath;
 use object_store::{ObjectStore, PutPayload};
 use parquet::basic::Compression;
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, instrument, warn};
+use url::Url;
 
-use crate::memory::{MemoryBlock, try_global_memory_pool};
-use crate::sql::common::constants::factory_operator_name;
-use crate::sql::common::with_option_keys as opt;
-use crate::sql::common::{CheckpointBarrier, Watermark};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
 use crate::format::encoder::FormatEncoder;
+use crate::memory::{MemoryBlock, try_global_memory_pool};
+use crate::sql::common::constants::factory_operator_name;
+use crate::sql::common::with_option_keys as opt;
+use crate::sql::common::{CheckpointBarrier, Watermark};
 
-/// Flush early when buffered batches exceed this size.
 const DEFAULT_MAX_BUFFER_BYTES: usize = 64 * 1024 * 1024;
+
+/// Strongly typed error domain for the Delta sink.
+#[derive(thiserror::Error, Debug)]
+pub enum DeltaSinkError {
+    #[error("local filesystem I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("object store error: {0}")]
+    ObjectStore(#[from] object_store::Error),
+
+    #[error("serialization task panicked: {0}")]
+    SerializationPanic(String),
+
+    #[error("delta committer failed: {0}")]
+    CommitterFailed(String),
+
+    #[error("configuration error: {0}")]
+    Config(String),
+}
 
 enum DeltaDestination {
     Local(PathBuf),
@@ -44,6 +67,15 @@ enum DeltaDestination {
         prefix: String,
         client: Arc<dyn ObjectStore>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeltaFormat {
+    Csv,
+    Parquet,
+    JsonL,
+    Avro,
+    Orc,
 }
 
 pub struct DeltaSinkOperator {
@@ -56,18 +88,16 @@ pub struct DeltaSinkOperator {
     early_flush_threshold_bytes: usize,
     file_counter: u64,
     format: DeltaFormat,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum DeltaFormat {
-    Csv,
-    Parquet,
-    JsonL,
-    Avro,
-    Orc,
+    committer: Option<DeltaTableCommitter>,
+    table_uri: Option<Url>,
+    storage_options: HashMap<String, String>,
+    s3_bucket: Option<String>,
+    sink_path: String,
+    catalog_schema: Option<Arc<ArrowSchema>>,
 }
 
 impl DeltaSinkOperator {
+    /// Synchronous, side-effect-free constructor. Async setup runs in [`Operator::on_start`].
     pub fn try_new(
         table_name: String,
         path: String,
@@ -75,15 +105,20 @@ impl DeltaSinkOperator {
         parquet_compression: Compression,
         sink_memory_bytes: u64,
         options: HashMap<String, String>,
-    ) -> Result<Self> {
-        let destination = if let Some(bucket) = options.get(opt::S3_BUCKET) {
+        catalog_schema: Option<Arc<ArrowSchema>>,
+    ) -> Result<Self, DeltaSinkError> {
+        let s3_bucket = options.get(opt::S3_BUCKET).cloned();
+        let storage_options = build_delta_storage_options(&options);
+
+        let destination = if let Some(bucket) = &s3_bucket {
             let region = options
                 .get(opt::S3_REGION)
-                .cloned()
-                .unwrap_or_else(|| "us-east-1".to_string());
+                .map(|s| s.as_str())
+                .unwrap_or("us-east-1");
             let mut builder = AmazonS3Builder::new()
                 .with_bucket_name(bucket.clone())
                 .with_region(region);
+
             if let Some(endpoint) = options.get(opt::S3_ENDPOINT) {
                 builder = builder.with_endpoint(endpoint);
                 if endpoint.to_ascii_lowercase().starts_with("http://") {
@@ -99,86 +134,106 @@ impl DeltaSinkOperator {
             if let Some(v) = options.get(opt::S3_SESSION_TOKEN) {
                 builder = builder.with_token(v);
             }
-            let client = builder
-                .build()
-                .context("failed to build s3 client for delta sink")?;
+
+            let client = builder.build().map_err(DeltaSinkError::ObjectStore)?;
+
             DeltaDestination::S3 {
                 prefix: path.trim_matches('/').to_string(),
                 client: Arc::new(client),
             }
         } else {
-            let root = PathBuf::from(path.clone());
-            create_dir_all(&root)
-                .with_context(|| format!("failed to create delta sink dir {}", root.display()))?;
-            DeltaDestination::Local(root)
+            DeltaDestination::Local(PathBuf::from(path.clone()))
         };
 
         let mut sink_memory_block = None;
         let reserve_bytes = usize::try_from(sink_memory_bytes).unwrap_or(DEFAULT_MAX_BUFFER_BYTES);
         let mut early_flush_threshold_bytes = reserve_bytes;
-        if let Ok(pool) = try_global_memory_pool()
-            && let Ok(block) = pool.try_request_block(reserve_bytes as u64)
-        {
-            early_flush_threshold_bytes = ((block.capacity() as usize) * 8) / 10;
-            sink_memory_block = Some(block);
+
+        if let Ok(pool) = try_global_memory_pool() {
+            if let Ok(block) = pool.try_request_block(reserve_bytes as u64) {
+                early_flush_threshold_bytes = ((block.capacity() as usize) * 8) / 10;
+                sink_memory_block = Some(block);
+            }
         }
 
         Ok(Self {
             table_name,
             destination,
             parquet_compression,
-            pending: Vec::new(),
+            pending: Vec::with_capacity(32),
             pending_bytes: 0,
             sink_memory_block,
             early_flush_threshold_bytes,
             file_counter: 0,
             format,
+            committer: None,
+            table_uri: None,
+            storage_options,
+            s3_bucket,
+            sink_path: path,
+            catalog_schema,
         })
     }
 
-    async fn flush_epoch(&mut self, epoch: u64, subtask_idx: usize) -> Result<()> {
+    /// Flush physical data files only; transaction commit is deferred to checkpoint.
+    #[instrument(skip(self), fields(table = %self.table_name))]
+    async fn flush_data_file(
+        &mut self,
+        epoch: u64,
+        subtask_idx: usize,
+    ) -> Result<(), DeltaSinkError> {
         if self.pending.is_empty() {
             return Ok(());
         }
 
+        let fallback_schema = self
+            .catalog_schema
+            .is_none()
+            .then(|| self.pending[0].schema());
         let batches = std::mem::take(&mut self.pending);
+        self.pending_bytes = 0;
+
+        let record_count: u64 = batches.iter().map(|b| b.num_rows() as u64).sum();
         let format = self.format;
         let compression = self.parquet_compression;
-        let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
-            match format {
-                DeltaFormat::Csv => FormatEncoder::encode_csv(&batches),
-                DeltaFormat::Parquet => FormatEncoder::encode_parquet(&batches, compression),
-                DeltaFormat::JsonL => FormatEncoder::encode_jsonl(&batches),
-                DeltaFormat::Avro => FormatEncoder::encode_avro(&batches),
-                DeltaFormat::Orc => FormatEncoder::encode_orc(&batches),
-            }
+
+        let bytes = tokio::task::spawn_blocking(move || match format {
+            DeltaFormat::Csv => FormatEncoder::encode_csv(&batches),
+            DeltaFormat::Parquet => FormatEncoder::encode_parquet(&batches, compression),
+            DeltaFormat::JsonL => FormatEncoder::encode_jsonl(&batches),
+            DeltaFormat::Avro => FormatEncoder::encode_avro(&batches),
+            DeltaFormat::Orc => FormatEncoder::encode_orc(&batches),
         })
         .await
-        .context("tokio blocking task panicked during serialization")??;
+        .map_err(|e| DeltaSinkError::SerializationPanic(e.to_string()))?
+        .map_err(|e| DeltaSinkError::SerializationPanic(e.to_string()))?;
+
+        if bytes.is_empty() {
+            return Ok(());
+        }
 
         self.file_counter += 1;
+        let ext = match self.format {
+            DeltaFormat::Csv => "csv",
+            DeltaFormat::Parquet => "parquet",
+            DeltaFormat::JsonL => "jsonl",
+            DeltaFormat::Avro => "avro",
+            DeltaFormat::Orc => "orc",
+        };
+
         let file_name = format!(
-            "delta-part-{:05}-epoch-{:010}-{:06}.{}",
-            subtask_idx,
-            epoch,
-            self.file_counter,
-            match self.format {
-                DeltaFormat::Csv => "csv",
-                DeltaFormat::Parquet => "parquet",
-                DeltaFormat::JsonL => "jsonl",
-                DeltaFormat::Avro => "avro",
-                DeltaFormat::Orc => "orc",
-            }
+            "part-{subtask_idx:05}-epoch-{epoch:010}-{counter:06}.{ext}",
+            counter = self.file_counter
         );
+        let file_size = bytes.len() as u64;
+        let mut relative_path = file_name.clone();
+
         match &self.destination {
             DeltaDestination::Local(root) => {
-                let out = root.join(file_name);
-                let mut f = tokio::fs::File::create(&out).await.with_context(|| {
-                    format!("failed creating delta sink file {}", out.display())
-                })?;
-                f.write_all(&bytes)
-                    .await
-                    .with_context(|| format!("failed writing delta sink file {}", out.display()))?;
+                let out = root.join(&file_name);
+                let mut f = tokio::fs::File::create(&out).await?;
+                f.write_all(&bytes).await?;
+                f.flush().await?;
             }
             DeltaDestination::S3 { prefix, client } => {
                 let key = if prefix.is_empty() {
@@ -186,16 +241,42 @@ impl DeltaSinkOperator {
                 } else {
                     format!("{prefix}/{file_name}")
                 };
+                relative_path = key.clone();
                 client
                     .put(
                         &ObjectStorePath::from(key),
                         PutPayload::from(Bytes::from(bytes)),
                     )
-                    .await
-                    .context("failed writing object to s3")?;
+                    .await?;
             }
         }
-        self.pending_bytes = 0;
+
+        if let Some(committer) = self.committer.as_mut() {
+            if let Some(schema) = fallback_schema {
+                committer.update_schema(schema)?;
+            }
+            committer.register_uncommitted(UncommittedDataFile {
+                path: relative_path,
+                size_bytes: file_size,
+                record_count,
+            });
+        }
+
+        Ok(())
+    }
+
+    async fn flush_and_commit_checkpoint(
+        &mut self,
+        epoch: u64,
+        subtask_idx: usize,
+    ) -> Result<(), DeltaSinkError> {
+        self.flush_data_file(epoch, subtask_idx).await?;
+
+        if let Some(committer) = self.committer.as_mut() {
+            if committer.has_uncommitted() {
+                committer.commit_checkpoint(epoch).await?;
+            }
+        }
         Ok(())
     }
 }
@@ -206,18 +287,32 @@ impl Operator for DeltaSinkOperator {
         factory_operator_name::CONNECTOR_SINK
     }
 
-    async fn on_start(&mut self, _ctx: &mut TaskContext) -> Result<()> {
-        let reserved_block_bytes = self
-            .sink_memory_block
-            .as_ref()
-            .map(|b| b.capacity())
-            .unwrap_or(0);
+    async fn on_start(&mut self, _ctx: &mut TaskContext) -> anyhow::Result<()> {
+        if let DeltaDestination::Local(root) = &self.destination {
+            tokio::fs::create_dir_all(root).await?;
+        }
+
+        let table_uri = resolve_delta_table_uri(&self.sink_path, self.s3_bucket.as_deref())?;
+        self.table_uri = Some(table_uri.clone());
+
+        if self.format == DeltaFormat::Parquet {
+            self.committer = Some(DeltaTableCommitter::try_new(
+                table_uri,
+                self.storage_options.clone(),
+                self.catalog_schema.clone(),
+            )?);
+        } else {
+            warn!(
+                format = ?self.format,
+                "format is not Parquet; writing raw files WITHOUT Delta transaction logs"
+            );
+        }
+
         info!(
             table = %self.table_name,
-            format = ?self.format,
-            reserved_block_bytes,
-            early_flush_threshold_bytes = self.early_flush_threshold_bytes,
-            "Starting delta sink operator"
+            threshold = self.early_flush_threshold_bytes,
+            is_true_delta = self.committer.is_some(),
+            "delta sink operator started successfully"
         );
         Ok(())
     }
@@ -228,18 +323,16 @@ impl Operator for DeltaSinkOperator {
         batch: RecordBatch,
         ctx: &mut TaskContext,
         _collector: &mut dyn Collector,
-    ) -> Result<()> {
-        let batch_size = batch.get_array_memory_size();
+    ) -> anyhow::Result<()> {
+        self.pending_bytes += batch.get_array_memory_size();
         self.pending.push(batch);
-        self.pending_bytes += batch_size;
 
         if self.pending_bytes > self.early_flush_threshold_bytes {
             debug!(
-                table = %self.table_name,
                 bytes = self.pending_bytes,
-                "memory watermark reached, triggering early flush"
+                "memory watermark reached, executing early flush (commit deferred to checkpoint)"
             );
-            self.flush_epoch(0, ctx.subtask_index as usize).await?;
+            self.flush_data_file(0, ctx.subtask_index as usize).await?;
         }
         Ok(())
     }
@@ -249,23 +342,29 @@ impl Operator for DeltaSinkOperator {
         _watermark: Watermark,
         _ctx: &mut TaskContext,
         _collector: &mut dyn Collector,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
+    #[instrument(skip(self, ctx), fields(epoch = barrier.epoch))]
     async fn snapshot_state(
         &mut self,
         barrier: CheckpointBarrier,
         ctx: &mut TaskContext,
-    ) -> Result<()> {
-        self.flush_epoch(barrier.epoch, ctx.subtask_index as usize)
+    ) -> anyhow::Result<()> {
+        self.flush_and_commit_checkpoint(barrier.epoch, ctx.subtask_index as usize)
             .await
+            .map_err(anyhow::Error::from)
     }
 
-    async fn on_close(&mut self, ctx: &mut TaskContext) -> Result<Vec<StreamOutput>> {
-        if !self.pending.is_empty() {
-            warn!(table = %self.table_name, "flushing remaining delta sink batches on close");
-            self.flush_epoch(u64::MAX, ctx.subtask_index as usize)
+    async fn on_close(&mut self, ctx: &mut TaskContext) -> anyhow::Result<Vec<StreamOutput>> {
+        if !self.pending.is_empty() || self.committer.as_ref().is_some_and(|c| c.has_uncommitted())
+        {
+            warn!(
+                table = %self.table_name,
+                "operator closing, forcing final flush and commit"
+            );
+            self.flush_and_commit_checkpoint(u64::MAX, ctx.subtask_index as usize)
                 .await?;
         }
         Ok(vec![])

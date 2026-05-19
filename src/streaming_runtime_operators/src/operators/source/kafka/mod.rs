@@ -31,13 +31,11 @@ use std::num::NonZeroU32;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
+use crate::core::api::context::TaskContext;
+use crate::core::api::source::{SourceCheckpointReport, SourceEvent, SourceOffset, SourceOperator};
+use crate::format::{BadDataPolicy, DataDeserializer, Format};
 use crate::sql::common::fs_schema::FieldValueType;
 use crate::sql::common::{CheckpointBarrier, MetadataField};
-use crate::core::api::context::TaskContext;
-use crate::core::api::source::{
-    SourceCheckpointReport, SourceEvent, SourceOffset, SourceOperator,
-};
-use crate::format::{BadDataPolicy, DataDeserializer, Format};
 
 pub trait BatchDeserializer: Send + 'static {
     fn deserialize_slice(

@@ -16,10 +16,10 @@ use anyhow::{Context, Result, bail};
 use prost::Message;
 use protocol::function_stream_graph::ConnectorOp;
 
-use crate::sql::common::constants::connector_type;
 use crate::core::api::operator::ConstructedOperator;
 use crate::factory::global::Registry;
 use crate::factory::operator_constructor::OperatorConstructor;
+use crate::sql::common::constants::connector_type;
 
 use super::{
     DeltaSinkDispatcher, FilesystemSinkDispatcher, IcebergSinkDispatcher, LanceDbSinkDispatcher,

@@ -15,11 +15,11 @@
 //! [`datafusion_common::hash_utils::create_hashes`] on those columns — same mechanism as
 //! [`crate::operators::key_by::KeyByOperator`].
 
-use crate::sql::common::{CheckpointBarrier, Watermark};
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
 use crate::operators::StatelessPhysicalExecutor;
+use crate::sql::common::{CheckpointBarrier, Watermark};
 use ahash::RandomState;
 use anyhow::{Result, anyhow};
 use arrow::compute::{sort_to_indices, take};

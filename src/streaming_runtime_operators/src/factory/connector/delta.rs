@@ -18,8 +18,6 @@ use prost::Message;
 use protocol::function_stream_graph::ConnectorOp;
 use protocol::function_stream_graph::connector_op::Config;
 
-use crate::sql::common::constants::connection_format_value;
-use crate::sql::common::with_option_keys as opt;
 use crate::core::api::operator::ConstructedOperator;
 use crate::factory::connector::sink_props_codec::{
     apply_common_sink_fields, normalized_props, parse_sink_memory_bytes,
@@ -28,6 +26,9 @@ use crate::factory::global::Registry;
 use crate::factory::operator_constructor::OperatorConstructor;
 use crate::operators::sink::delta::{DeltaFormat, DeltaSinkOperator};
 use crate::operators::sink::filesystem::compression_from_str;
+use crate::sql::common::FsSchema;
+use crate::sql::common::constants::connection_format_value;
+use crate::sql::common::with_option_keys as opt;
 
 pub struct DeltaSinkDispatcher;
 
@@ -39,6 +40,14 @@ impl OperatorConstructor for DeltaSinkDispatcher {
             _ => bail!("delta sink expects DeltaSinkConfig"),
         };
         let props = normalized_props(props);
+
+        let catalog_schema = op
+            .fs_schema
+            .as_ref()
+            .map(|fs| FsSchema::try_from(fs.clone()))
+            .transpose()
+            .map_err(|e| anyhow::anyhow!("invalid fs_schema for delta sink: {e}"))?
+            .map(|fs| fs.schema);
 
         let format = props
             .get(opt::FORMAT)
@@ -69,6 +78,7 @@ impl OperatorConstructor for DeltaSinkDispatcher {
                 compression,
                 sink_memory_bytes,
                 props,
+                catalog_schema,
             )?,
         )))
     }
