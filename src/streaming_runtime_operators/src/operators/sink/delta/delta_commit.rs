@@ -19,6 +19,7 @@ use arrow_ipc::writer::StreamWriter;
 use arrow_schema::Schema as ArrowSchema;
 use deltalake::errors::DeltaTableError;
 use deltalake::kernel::engine::arrow_conversion::TryIntoKernel as _;
+use deltalake::kernel::schema::cast::normalize_for_delta;
 use deltalake::kernel::transaction::CommitBuilder;
 use deltalake::kernel::{Action, Add, StructField, StructType};
 use deltalake::protocol::{DeltaOperation, SaveMode};
@@ -250,7 +251,10 @@ fn arrow_schema_to_delta_columns(schema: &ArrowSchema) -> Result<Vec<StructField
     let reader = deltalake::arrow::ipc::reader::StreamReader::try_new(cursor, None)
         .map_err(|e| DeltaSinkError::CommitterFailed(format!("ipc schema decode failed: {e}")))?;
     let delta_schema = reader.schema();
-    let struct_type: StructType = delta_schema
+    // Delta kernel rejects Timestamp(ms); normalize to Delta-compatible types (e.g. us).
+    let normalized = normalize_for_delta(&delta_schema);
+    let struct_type: StructType = normalized
+        .as_ref()
         .try_into_kernel()
         .map_err(|e| DeltaSinkError::CommitterFailed(e.to_string()))?;
     Ok(struct_type.fields().cloned().collect())
