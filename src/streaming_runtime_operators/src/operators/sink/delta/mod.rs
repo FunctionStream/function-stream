@@ -11,14 +11,15 @@
 // limitations under the License.
 
 //! Delta Lake sink with Arroyo-style separation:
-//! - [`physical_sink`]: encode + PUT part files (no `_delta_log` I/O)
-//! - [`delta_commit`]: checkpoint-time transaction commit
+//! - [`delta_writer`]: [`DeltaSink`] / [`DeltaLocalSink`] write `part-*` data files
+//! - [`delta_commit`]: checkpoint-time `_delta_log` transaction commit
+//! - [`DeltaSinkOperator`]: stream operator coordinator
 
 mod delta_commit;
-mod physical_sink;
+mod delta_writer;
 
 pub use delta_commit::strip_streaming_system_columns_arc;
-pub use physical_sink::FinishedFile;
+pub use delta_writer::FinishedFile;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -43,7 +44,7 @@ use crate::sql::common::constants::factory_operator_name;
 use crate::sql::common::with_option_keys as opt;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
-use physical_sink::{LocalPhysicalSink, SingleThreadPhysicalSink, preflight_s3_bucket};
+use delta_writer::{DeltaLocalSink, DeltaSink, preflight_s3_bucket};
 
 const DEFAULT_MAX_BUFFER_BYTES: usize = 64 * 1024 * 1024;
 
@@ -72,10 +73,9 @@ pub enum DeltaSinkError {
     Config(String),
 }
 
-/// Physical storage backend: part-file writer only.
-enum PhysicalBackend {
-    Local(LocalPhysicalSink),
-    S3(SingleThreadPhysicalSink),
+enum DeltaSinkBackend {
+    Local(DeltaLocalSink),
+    ObjectStore(DeltaSink),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,11 +87,11 @@ pub enum DeltaFormat {
     Orc,
 }
 
-/// Coordinator operator: buffers batches, delegates physical writes to [`PhysicalBackend`],
+/// Stream operator: buffers batches, delegates data-file writes to [`DeltaSinkBackend`],
 /// and commits `_delta_log` at checkpoint via [`DeltaTableCommitter`].
 pub struct DeltaSinkOperator {
     table_name: String,
-    physical: PhysicalBackend,
+    sink: DeltaSinkBackend,
     parquet_compression: Compression,
     pending: Vec<RecordBatch>,
     pending_bytes: usize,
@@ -123,13 +123,13 @@ impl DeltaSinkOperator {
         let s3_bucket = options.get(opt::S3_BUCKET).cloned();
         let (storage_options, commit_strategy) = build_delta_storage_options(&options)?;
 
-        let (physical, local_root) = if let Some(bucket) = &s3_bucket {
-            let sink = SingleThreadPhysicalSink::try_new(bucket.clone(), path.clone(), &options)?;
-            (PhysicalBackend::S3(sink), None)
+        let (sink, local_root) = if let Some(bucket) = &s3_bucket {
+            let s3 = DeltaSink::try_new(bucket.clone(), path.clone(), &options)?;
+            (DeltaSinkBackend::ObjectStore(s3), None)
         } else {
             let root = PathBuf::from(path.clone());
             (
-                PhysicalBackend::Local(LocalPhysicalSink::new(root.clone())),
+                DeltaSinkBackend::Local(DeltaLocalSink::new(root.clone())),
                 Some(root),
             )
         };
@@ -147,7 +147,7 @@ impl DeltaSinkOperator {
 
         Ok(Self {
             table_name,
-            physical,
+            sink,
             parquet_compression,
             pending: Vec::with_capacity(64),
             pending_bytes: 0,
@@ -188,12 +188,12 @@ impl DeltaSinkOperator {
         let format = self.format;
         let schema = self.parquet_write_schema.clone();
 
-        let finished = match &mut self.physical {
-            PhysicalBackend::S3(sink) => {
+        let finished = match &mut self.sink {
+            DeltaSinkBackend::ObjectStore(sink) => {
                 sink.write_batches(&batches, format, compression, schema, epoch, subtask_idx)
                     .await?
             }
-            PhysicalBackend::Local(sink) => {
+            DeltaSinkBackend::Local(sink) => {
                 sink.write_batches(&batches, format, compression, schema, epoch, subtask_idx)
                     .await?
             }
@@ -248,7 +248,7 @@ impl Operator for DeltaSinkOperator {
             tokio::fs::create_dir_all(root).await?;
         }
 
-        if let PhysicalBackend::S3(sink) = &self.physical {
+        if let DeltaSinkBackend::ObjectStore(sink) = &self.sink {
             preflight_s3_bucket(
                 sink.client().as_ref(),
                 sink.prefix_path(),

@@ -10,14 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Arroyo-style physical file sink: encode + PUT to object storage without touching
-//! `_delta_log`. The coordinator ([`super::DeltaSinkOperator`] + [`super::delta_commit::DeltaTableCommitter`])
-//! commits metadata at checkpoint boundaries.
+//! Delta data-file writer: encode batches and PUT `part-*` objects (S3/MinIO or local).
+//! Does not write `_delta_log`; [`super::delta_commit::DeltaTableCommitter`] handles that
+//! at checkpoint.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use arrow_array::RecordBatch;
 use arrow_schema::Schema as ArrowSchema;
@@ -27,7 +27,7 @@ use object_store::path::Path as ObjectStorePath;
 use object_store::{BackoffConfig, ObjectStore, PutPayload, RetryConfig};
 use parquet::basic::Compression;
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 use crate::format::encoder::FormatEncoder;
 use crate::sql::common::with_option_keys as opt;
@@ -35,8 +35,7 @@ use crate::sql::common::with_option_keys as opt;
 use super::delta_commit::cast_batches_for_delta_write;
 use super::{DeltaFormat, DeltaSinkError};
 
-/// Descriptor returned after a successful physical write (Arroyo `FinishedFile` contract).
-/// Stateless and safe to hand to the transaction committer at checkpoint time.
+/// Descriptor for a completed data-file write (two-phase commit: register at checkpoint).
 #[derive(Debug, Clone)]
 pub struct FinishedFile {
     pub filename: String,
@@ -54,19 +53,15 @@ impl FinishedFile {
     }
 }
 
-/// Single-writer physical sink targeting S3-compatible stores (AWS S3, MinIO, R2, Ceph).
-///
-/// Uses plain `ObjectStore::put` for unique `part-*.parquet` keys — no `_delta_log` I/O and
-/// no rename-based locking on this path. Delta transaction logs are written only by
-/// [`super::delta_commit::DeltaTableCommitter`] at checkpoint.
-pub struct SingleThreadPhysicalSink {
+/// S3-compatible data-file writer (AWS S3, MinIO, R2). No `_delta_log` I/O on this path.
+pub struct DeltaSink {
     bucket_name: String,
     prefix_path: String,
     object_client: Arc<dyn ObjectStore>,
     file_counter: u64,
 }
 
-impl SingleThreadPhysicalSink {
+impl DeltaSink {
     pub fn try_new(
         bucket: String,
         prefix: String,
@@ -93,7 +88,7 @@ impl SingleThreadPhysicalSink {
         &self.prefix_path
     }
 
-    /// Encode batches off the async runtime, then atomically PUT one object.
+    #[instrument(skip(self, batches, parquet_write_schema), fields(epoch, subtask = subtask_idx))]
     pub async fn write_batches(
         &mut self,
         batches: &[RecordBatch],
@@ -108,32 +103,11 @@ impl SingleThreadPhysicalSink {
         }
 
         let record_count: u64 = batches.iter().map(|b| b.num_rows() as u64).sum();
-        let owned_batches = batches.to_vec();
 
-        let encoded = tokio::task::spawn_blocking(move || {
-            encode_batches(
-                owned_batches,
-                format,
-                compression,
-                parquet_write_schema.as_deref(),
-            )
-        })
-        .await
-        .map_err(|e| DeltaSinkError::SerializationPanic(e.to_string()))?
-        .map_err(DeltaSinkError::SerializationPanic)?;
+        let encoded =
+            encode_in_background(batches.to_vec(), format, compression, parquet_write_schema)
+                .await?;
 
-        self.put_encoded(encoded, record_count, format, epoch, subtask_idx)
-            .await
-    }
-
-    async fn put_encoded(
-        &mut self,
-        encoded: Vec<u8>,
-        record_count: u64,
-        format: DeltaFormat,
-        epoch: u64,
-        subtask_idx: usize,
-    ) -> Result<Option<FinishedFile>, DeltaSinkError> {
         if encoded.is_empty() {
             return Ok(None);
         }
@@ -153,19 +127,27 @@ impl SingleThreadPhysicalSink {
         let size = encoded.len();
         debug!(
             target_key = %object_key,
-            size,
+            size_bytes = size,
             record_count,
-            "uploading data file to S3-compatible storage"
+            "uploading delta data file to object storage"
         );
 
+        let start_io = Instant::now();
         self.object_client
             .put(
                 &ObjectStorePath::from(object_key.clone()),
                 PutPayload::from(Bytes::from(encoded)),
             )
             .await?;
+        let io_duration = start_io.elapsed();
 
-        info!(file = %object_key, size, record_count, "data file persisted to object storage");
+        info!(
+            file = %object_key,
+            size_bytes = size,
+            records = record_count,
+            io_latency_ms = io_duration.as_millis(),
+            "delta data file persisted to object storage"
+        );
 
         Ok(Some(FinishedFile {
             filename: object_key,
@@ -175,13 +157,13 @@ impl SingleThreadPhysicalSink {
     }
 }
 
-/// Local filesystem physical sink (same contract as [`SingleThreadPhysicalSink`]).
-pub struct LocalPhysicalSink {
+/// Local filesystem data-file writer with tmp + fsync + atomic rename.
+pub struct DeltaLocalSink {
     root: PathBuf,
     file_counter: u64,
 }
 
-impl LocalPhysicalSink {
+impl DeltaLocalSink {
     pub fn new(root: PathBuf) -> Self {
         Self {
             root,
@@ -189,6 +171,7 @@ impl LocalPhysicalSink {
         }
     }
 
+    #[instrument(skip(self, batches, parquet_write_schema), fields(epoch, subtask = subtask_idx))]
     pub async fn write_batches(
         &mut self,
         batches: &[RecordBatch],
@@ -203,19 +186,10 @@ impl LocalPhysicalSink {
         }
 
         let record_count: u64 = batches.iter().map(|b| b.num_rows() as u64).sum();
-        let owned_batches = batches.to_vec();
 
-        let encoded = tokio::task::spawn_blocking(move || {
-            encode_batches(
-                owned_batches,
-                format,
-                compression,
-                parquet_write_schema.as_deref(),
-            )
-        })
-        .await
-        .map_err(|e| DeltaSinkError::SerializationPanic(e.to_string()))?
-        .map_err(DeltaSinkError::SerializationPanic)?;
+        let encoded =
+            encode_in_background(batches.to_vec(), format, compression, parquet_write_schema)
+                .await?;
 
         if encoded.is_empty() {
             return Ok(None);
@@ -227,14 +201,30 @@ impl LocalPhysicalSink {
             "part-{subtask_idx:05}-epoch-{epoch:010}-{counter:06}.{ext}",
             counter = self.file_counter
         );
-        let out = self.root.join(&file_name);
+        let final_out = self.root.join(&file_name);
+        let tmp_out = self.root.join(format!("{file_name}.tmp"));
         let size = encoded.len();
 
-        let mut f = tokio::fs::File::create(&out).await?;
-        f.write_all(&encoded).await?;
-        f.flush().await?;
+        let start_io = Instant::now();
+        {
+            let mut f = tokio::fs::File::create(&tmp_out).await?;
+            f.write_all(&encoded).await?;
+            f.sync_all().await?;
+        }
 
-        info!(file = %file_name, size, record_count, "data file persisted to local storage");
+        if let Err(e) = tokio::fs::rename(&tmp_out, &final_out).await {
+            let _ = tokio::fs::remove_file(&tmp_out).await;
+            return Err(DeltaSinkError::Io(e));
+        }
+        let io_duration = start_io.elapsed();
+
+        info!(
+            file = %file_name,
+            size_bytes = size,
+            records = record_count,
+            io_latency_ms = io_duration.as_millis(),
+            "delta data file atomically persisted locally"
+        );
 
         Ok(Some(FinishedFile {
             filename: file_name,
@@ -244,7 +234,47 @@ impl LocalPhysicalSink {
     }
 }
 
-/// Build an S3-compatible [`ObjectStore`] client with production defaults for MinIO / private cloud.
+/// Offload CPU-heavy encoding to the blocking thread pool.
+async fn encode_in_background(
+    owned_batches: Vec<RecordBatch>,
+    format: DeltaFormat,
+    compression: Compression,
+    parquet_write_schema: Option<Arc<ArrowSchema>>,
+) -> Result<Vec<u8>, DeltaSinkError> {
+    let start_cpu = Instant::now();
+    let encoded = tokio::task::spawn_blocking(move || {
+        let batches = if format == DeltaFormat::Parquet {
+            if let Some(schema) = parquet_write_schema {
+                cast_batches_for_delta_write(&owned_batches, schema.as_ref())
+                    .map_err(|e| e.to_string())?
+            } else {
+                owned_batches
+            }
+        } else {
+            owned_batches
+        };
+
+        match format {
+            DeltaFormat::Csv => FormatEncoder::encode_csv(&batches).map_err(|e| e.to_string()),
+            DeltaFormat::Parquet => {
+                FormatEncoder::encode_parquet(&batches, compression).map_err(|e| e.to_string())
+            }
+            DeltaFormat::JsonL => FormatEncoder::encode_jsonl(&batches).map_err(|e| e.to_string()),
+            DeltaFormat::Avro => FormatEncoder::encode_avro(&batches).map_err(|e| e.to_string()),
+            DeltaFormat::Orc => FormatEncoder::encode_orc(&batches).map_err(|e| e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| DeltaSinkError::SerializationPanic(format!("worker thread panicked: {e}")))?
+    .map_err(DeltaSinkError::SerializationPanic)?;
+
+    debug!(
+        cpu_latency_ms = start_cpu.elapsed().as_millis(),
+        "record batch serialization completed"
+    );
+    Ok(encoded)
+}
+
 pub fn build_s3_object_store(
     bucket: &str,
     options: &HashMap<String, String>,
@@ -256,12 +286,12 @@ pub fn build_s3_object_store(
 
     let retry_config = RetryConfig {
         backoff: BackoffConfig {
-            init_backoff: Duration::from_millis(100),
-            max_backoff: Duration::from_secs(3),
+            init_backoff: Duration::from_millis(200),
+            max_backoff: Duration::from_secs(5),
             base: 2.0,
         },
-        max_retries: 4,
-        retry_timeout: Duration::from_secs(15),
+        max_retries: 5,
+        retry_timeout: Duration::from_secs(30),
     };
 
     let mut builder = AmazonS3Builder::new()
@@ -291,7 +321,6 @@ pub fn build_s3_object_store(
     ))
 }
 
-/// Preflight bucket connectivity before the pipeline accepts traffic.
 pub async fn preflight_s3_bucket(
     client: &dyn ObjectStore,
     prefix: &str,
@@ -312,9 +341,8 @@ pub async fn preflight_s3_bucket(
             let lower = msg.to_ascii_lowercase();
             if lower.contains("nosuchbucket") || lower.contains("the specified bucket") {
                 return Err(DeltaSinkError::Config(format!(
-                    "S3 bucket '{}' does not exist (prefix '{}'): {msg}",
-                    bucket.unwrap_or("<unknown>"),
-                    prefix
+                    "S3 bucket '{}' does not exist",
+                    bucket.unwrap_or("<unknown>")
                 )));
             }
             if lower.contains("invalidaccesskeyid")
@@ -323,7 +351,7 @@ pub async fn preflight_s3_bucket(
                 || lower.contains("accessdenied")
             {
                 return Err(DeltaSinkError::Config(format!(
-                    "S3 credential check failed for bucket '{}': {msg}",
+                    "S3 authentication failed for bucket '{}': {msg}",
                     bucket.unwrap_or("<unknown>")
                 )));
             }
@@ -336,35 +364,8 @@ pub async fn preflight_s3_bucket(
     }
 }
 
-fn encode_batches(
-    batches: Vec<RecordBatch>,
-    format: DeltaFormat,
-    compression: Compression,
-    parquet_write_schema: Option<&ArrowSchema>,
-) -> Result<Vec<u8>, String> {
-    let batches = if format == DeltaFormat::Parquet {
-        if let Some(schema) = parquet_write_schema {
-            cast_batches_for_delta_write(&batches, schema).map_err(|e| e.to_string())?
-        } else {
-            batches
-        }
-    } else {
-        batches
-    };
-
-    match format {
-        DeltaFormat::Csv => FormatEncoder::encode_csv(&batches).map_err(|e| e.to_string()),
-        DeltaFormat::Parquet => {
-            FormatEncoder::encode_parquet(&batches, compression).map_err(|e| e.to_string())
-        }
-        DeltaFormat::JsonL => FormatEncoder::encode_jsonl(&batches).map_err(|e| e.to_string()),
-        DeltaFormat::Avro => FormatEncoder::encode_avro(&batches).map_err(|e| e.to_string()),
-        DeltaFormat::Orc => FormatEncoder::encode_orc(&batches).map_err(|e| e.to_string()),
-    }
-}
-
 impl DeltaFormat {
-    fn file_extension(self) -> &'static str {
+    pub(crate) fn file_extension(self) -> &'static str {
         match self {
             DeltaFormat::Csv => "csv",
             DeltaFormat::Parquet => "parquet",
