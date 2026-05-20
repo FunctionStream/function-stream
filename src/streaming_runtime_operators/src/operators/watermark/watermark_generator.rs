@@ -17,7 +17,7 @@ use arrow_array::types::{
     TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
     TimestampSecondType,
 };
-use arrow_array::{RecordBatch, TimestampNanosecondArray};
+use arrow_array::{Array, RecordBatch};
 use arrow_schema::{DataType, TimeUnit};
 use bincode::{Decode, Encode};
 use datafusion::physical_expr::PhysicalExpr;
@@ -81,33 +81,7 @@ impl WatermarkGeneratorOperator {
     }
 
     fn extract_max_timestamp(&self, batch: &RecordBatch) -> Option<SystemTime> {
-        let ts_column = batch.column(self.timestamp_index);
-        match ts_column.data_type() {
-            DataType::Timestamp(TimeUnit::Nanosecond, _) => {
-                let arr = ts_column.as_primitive::<TimestampNanosecondType>();
-                aggregate::max(arr).map(|v| from_nanos(v as u128))
-            }
-            DataType::Timestamp(TimeUnit::Microsecond, _) => {
-                let arr = ts_column.as_primitive::<TimestampMicrosecondType>();
-                aggregate::max(arr).map(|v| from_nanos((v as u128) * 1_000))
-            }
-            DataType::Timestamp(TimeUnit::Millisecond, _) => {
-                let arr = ts_column.as_primitive::<TimestampMillisecondType>();
-                aggregate::max(arr).map(|v| from_nanos((v as u128) * 1_000_000))
-            }
-            DataType::Timestamp(TimeUnit::Second, _) => {
-                let arr = ts_column.as_primitive::<TimestampSecondType>();
-                aggregate::max(arr).map(|v| from_nanos((v as u128) * 1_000_000_000))
-            }
-            other => {
-                debug!(
-                    ?other,
-                    index = self.timestamp_index,
-                    "skip max timestamp: column is not a timestamp array"
-                );
-                None
-            }
-        }
+        max_timestamp_from_array(batch.column(self.timestamp_index).as_ref()).map(from_nanos)
     }
 
     fn evaluate_watermark(&self, batch: &RecordBatch) -> Result<SystemTime> {
@@ -116,15 +90,40 @@ impl WatermarkGeneratorOperator {
             .evaluate(batch)?
             .into_array(batch.num_rows())?;
 
-        let typed_array = watermark_array
-            .as_any()
-            .downcast_ref::<TimestampNanosecondArray>()
-            .ok_or_else(|| anyhow!("watermark expression must return TimestampNanosecondArray"))?;
+        let max_nanos = max_timestamp_from_array(watermark_array.as_ref()).ok_or_else(|| {
+            anyhow!(
+                "watermark expression must return a timestamp array, got {:?}",
+                watermark_array.data_type()
+            )
+        })?;
 
-        let max_watermark_nanos = aggregate::max(typed_array)
-            .ok_or_else(|| anyhow!("failed to extract max watermark from batch"))?;
+        Ok(from_nanos(max_nanos))
+    }
+}
 
-        Ok(from_nanos(max_watermark_nanos as u128))
+/// Returns event time as nanoseconds since epoch (internal watermark representation).
+fn max_timestamp_from_array(array: &dyn Array) -> Option<u128> {
+    match array.data_type() {
+        DataType::Timestamp(TimeUnit::Nanosecond, _) => {
+            let arr = array.as_primitive::<TimestampNanosecondType>();
+            aggregate::max(arr).map(|v| v as u128)
+        }
+        DataType::Timestamp(TimeUnit::Microsecond, _) => {
+            let arr = array.as_primitive::<TimestampMicrosecondType>();
+            aggregate::max(arr).map(|v| (v as u128) * 1_000)
+        }
+        DataType::Timestamp(TimeUnit::Millisecond, _) => {
+            let arr = array.as_primitive::<TimestampMillisecondType>();
+            aggregate::max(arr).map(|v| (v as u128) * 1_000_000)
+        }
+        DataType::Timestamp(TimeUnit::Second, _) => {
+            let arr = array.as_primitive::<TimestampSecondType>();
+            aggregate::max(arr).map(|v| (v as u128) * 1_000_000_000)
+        }
+        other => {
+            debug!(?other, "skip max timestamp: not a timestamp array");
+            None
+        }
     }
 }
 
