@@ -10,45 +10,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Delta Lake sink with Arroyo-style separation:
+//! - [`physical_sink`]: encode + PUT part files (no `_delta_log` I/O)
+//! - [`delta_commit`]: checkpoint-time transaction commit
+
 mod delta_commit;
+mod physical_sink;
 
 pub use delta_commit::strip_streaming_system_columns_arc;
+pub use physical_sink::FinishedFile;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Once;
-use std::time::Duration;
 
 use arrow_array::RecordBatch;
 use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
-use bytes::Bytes;
 use delta_commit::{
-    DeltaCommitStrategy, DeltaTableCommitter, UncommittedDataFile, build_delta_storage_options,
-    cast_batches_for_delta_write, resolve_delta_table_uri,
+    DeltaCommitStrategy, DeltaTableCommitter, build_delta_storage_options, resolve_delta_table_uri,
 };
-use object_store::aws::AmazonS3Builder;
-use object_store::path::Path as ObjectStorePath;
-use object_store::{BackoffConfig, ObjectStore, PutPayload, RetryConfig};
 use parquet::basic::Compression;
-use tokio::io::AsyncWriteExt;
 use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 
 use crate::core::StreamOutput;
 use crate::core::api::context::TaskContext;
 use crate::core::api::operator::{Collector, Operator};
-use crate::format::encoder::FormatEncoder;
 use crate::memory::{MemoryBlock, try_global_memory_pool};
 use crate::sql::common::constants::factory_operator_name;
 use crate::sql::common::with_option_keys as opt;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
+use physical_sink::{LocalPhysicalSink, SingleThreadPhysicalSink, preflight_s3_bucket};
+
 const DEFAULT_MAX_BUFFER_BYTES: usize = 64 * 1024 * 1024;
 
-/// Registers deltalake protocol handlers (e.g. `s3://`) exactly once per process.
-/// Without this, `deltalake::open_table` returns `Cannot infer storage location from: s3://...`.
 fn ensure_delta_handlers_registered() {
     static REGISTER: Once = Once::new();
     REGISTER.call_once(|| {
@@ -56,7 +54,6 @@ fn ensure_delta_handlers_registered() {
     });
 }
 
-/// Strongly typed error domain for the Delta sink.
 #[derive(thiserror::Error, Debug)]
 pub enum DeltaSinkError {
     #[error("local filesystem I/O error: {0}")]
@@ -75,12 +72,10 @@ pub enum DeltaSinkError {
     Config(String),
 }
 
-enum DeltaDestination {
-    Local(PathBuf),
-    S3 {
-        prefix: String,
-        client: Arc<dyn ObjectStore>,
-    },
+/// Physical storage backend: part-file writer only.
+enum PhysicalBackend {
+    Local(LocalPhysicalSink),
+    S3(SingleThreadPhysicalSink),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,15 +87,16 @@ pub enum DeltaFormat {
     Orc,
 }
 
+/// Coordinator operator: buffers batches, delegates physical writes to [`PhysicalBackend`],
+/// and commits `_delta_log` at checkpoint via [`DeltaTableCommitter`].
 pub struct DeltaSinkOperator {
     table_name: String,
-    destination: DeltaDestination,
+    physical: PhysicalBackend,
     parquet_compression: Compression,
     pending: Vec<RecordBatch>,
     pending_bytes: usize,
     sink_memory_block: Option<Arc<MemoryBlock>>,
     early_flush_threshold_bytes: usize,
-    file_counter: u64,
     format: DeltaFormat,
     committer: Option<DeltaTableCommitter>,
     table_uri: Option<Url>,
@@ -109,12 +105,12 @@ pub struct DeltaSinkOperator {
     s3_bucket: Option<String>,
     sink_path: String,
     catalog_schema: Option<Arc<ArrowSchema>>,
-    /// Normalized schema for Parquet files (microsecond timestamps, etc.).
     parquet_write_schema: Option<Arc<ArrowSchema>>,
+    /// Retained for local path creation in [`Operator::on_start`].
+    local_root: Option<PathBuf>,
 }
 
 impl DeltaSinkOperator {
-    /// Synchronous, side-effect-free constructor. Async setup runs in [`Operator::on_start`].
     pub fn try_new(
         table_name: String,
         path: String,
@@ -127,58 +123,15 @@ impl DeltaSinkOperator {
         let s3_bucket = options.get(opt::S3_BUCKET).cloned();
         let (storage_options, commit_strategy) = build_delta_storage_options(&options)?;
 
-        let destination = if let Some(bucket) = &s3_bucket {
-            let region = options
-                .get(opt::S3_REGION)
-                .map(|s| s.as_str())
-                .unwrap_or("us-east-1");
-
-            // Production-grade retry with exponential backoff for transient network
-            // blips on S3 / MinIO / R2. Caps retries to keep checkpoint progress
-            // bounded; pipeline-level retries handle longer outages.
-            let retry_config = RetryConfig {
-                backoff: BackoffConfig {
-                    init_backoff: Duration::from_millis(100),
-                    max_backoff: Duration::from_secs(5),
-                    base: 2.0,
-                },
-                max_retries: 5,
-                retry_timeout: Duration::from_secs(30),
-            };
-
-            let mut builder = AmazonS3Builder::new()
-                .with_bucket_name(bucket.clone())
-                .with_region(region)
-                .with_retry(retry_config);
-
-            if let Some(endpoint) = options.get(opt::S3_ENDPOINT) {
-                builder = builder.with_endpoint(endpoint);
-                if endpoint.to_ascii_lowercase().starts_with("http://") {
-                    builder = builder.with_allow_http(true);
-                }
-                // Custom endpoint typically means MinIO / Ceph / R2 / private S3
-                // gateways that route via path style; virtual-hosted style would
-                // require per-bucket DNS that these backends usually lack.
-                builder = builder.with_virtual_hosted_style_request(false);
-            }
-            if let Some(v) = options.get(opt::S3_ACCESS_KEY_ID) {
-                builder = builder.with_access_key_id(v);
-            }
-            if let Some(v) = options.get(opt::S3_SECRET_ACCESS_KEY) {
-                builder = builder.with_secret_access_key(v);
-            }
-            if let Some(v) = options.get(opt::S3_SESSION_TOKEN) {
-                builder = builder.with_token(v);
-            }
-
-            let client = builder.build().map_err(DeltaSinkError::ObjectStore)?;
-
-            DeltaDestination::S3 {
-                prefix: path.trim_matches('/').to_string(),
-                client: Arc::new(client),
-            }
+        let (physical, local_root) = if let Some(bucket) = &s3_bucket {
+            let sink = SingleThreadPhysicalSink::try_new(bucket.clone(), path.clone(), &options)?;
+            (PhysicalBackend::S3(sink), None)
         } else {
-            DeltaDestination::Local(PathBuf::from(path.clone()))
+            let root = PathBuf::from(path.clone());
+            (
+                PhysicalBackend::Local(LocalPhysicalSink::new(root.clone())),
+                Some(root),
+            )
         };
 
         let mut sink_memory_block = None;
@@ -194,13 +147,12 @@ impl DeltaSinkOperator {
 
         Ok(Self {
             table_name,
-            destination,
+            physical,
             parquet_compression,
-            pending: Vec::with_capacity(32),
+            pending: Vec::with_capacity(64),
             pending_bytes: 0,
             sink_memory_block,
             early_flush_threshold_bytes,
-            file_counter: 0,
             format,
             committer: None,
             table_uri: None,
@@ -210,10 +162,10 @@ impl DeltaSinkOperator {
             sink_path: path,
             catalog_schema: catalog_schema.and_then(strip_streaming_system_columns_arc),
             parquet_write_schema: None,
+            local_root,
         })
     }
 
-    /// Flush physical data files only; transaction commit is deferred to checkpoint.
     #[instrument(skip(self), fields(table = %self.table_name))]
     async fn flush_data_file(
         &mut self,
@@ -228,88 +180,34 @@ impl DeltaSinkOperator {
             strip_streaming_system_columns_arc(self.pending[0].schema())
                 .expect("batch has no user columns after removing streaming system columns")
         });
+
         let batches = std::mem::take(&mut self.pending);
         self.pending_bytes = 0;
 
-        let record_count: u64 = batches.iter().map(|b| b.num_rows() as u64).sum();
-        let format = self.format;
         let compression = self.parquet_compression;
-        let parquet_write_schema = self.parquet_write_schema.clone();
+        let format = self.format;
+        let schema = self.parquet_write_schema.clone();
 
-        let bytes = tokio::task::spawn_blocking(move || {
-            let batches = if format == DeltaFormat::Parquet {
-                if let Some(ref schema) = parquet_write_schema {
-                    cast_batches_for_delta_write(&batches, schema)?
-                } else {
-                    batches
-                }
-            } else {
-                batches
-            };
-            match format {
-                DeltaFormat::Csv => FormatEncoder::encode_csv(&batches),
-                DeltaFormat::Parquet => FormatEncoder::encode_parquet(&batches, compression),
-                DeltaFormat::JsonL => FormatEncoder::encode_jsonl(&batches),
-                DeltaFormat::Avro => FormatEncoder::encode_avro(&batches),
-                DeltaFormat::Orc => FormatEncoder::encode_orc(&batches),
+        let finished = match &mut self.physical {
+            PhysicalBackend::S3(sink) => {
+                sink.write_batches(&batches, format, compression, schema, epoch, subtask_idx)
+                    .await?
             }
-        })
-        .await
-        .map_err(|e| DeltaSinkError::SerializationPanic(e.to_string()))?
-        .map_err(|e| DeltaSinkError::SerializationPanic(e.to_string()))?;
-
-        if bytes.is_empty() {
-            return Ok(());
-        }
-
-        self.file_counter += 1;
-        let ext = match self.format {
-            DeltaFormat::Csv => "csv",
-            DeltaFormat::Parquet => "parquet",
-            DeltaFormat::JsonL => "jsonl",
-            DeltaFormat::Avro => "avro",
-            DeltaFormat::Orc => "orc",
+            PhysicalBackend::Local(sink) => {
+                sink.write_batches(&batches, format, compression, schema, epoch, subtask_idx)
+                    .await?
+            }
         };
 
-        let file_name = format!(
-            "part-{subtask_idx:05}-epoch-{epoch:010}-{counter:06}.{ext}",
-            counter = self.file_counter
-        );
-        let file_size = bytes.len() as u64;
-        let mut relative_path = file_name.clone();
-
-        match &self.destination {
-            DeltaDestination::Local(root) => {
-                let out = root.join(&file_name);
-                let mut f = tokio::fs::File::create(&out).await?;
-                f.write_all(&bytes).await?;
-                f.flush().await?;
-            }
-            DeltaDestination::S3 { prefix, client } => {
-                let key = if prefix.is_empty() {
-                    file_name
-                } else {
-                    format!("{prefix}/{file_name}")
-                };
-                relative_path = key.clone();
-                client
-                    .put(
-                        &ObjectStorePath::from(key),
-                        PutPayload::from(Bytes::from(bytes)),
-                    )
-                    .await?;
-            }
-        }
+        let Some(finished) = finished else {
+            return Ok(());
+        };
 
         if let Some(committer) = self.committer.as_mut() {
             if let Some(schema) = fallback_schema {
                 committer.update_schema(schema)?;
             }
-            committer.register_uncommitted(UncommittedDataFile {
-                path: relative_path,
-                size_bytes: file_size,
-                record_count,
-            });
+            committer.register_uncommitted(finished.into_uncommitted());
         }
 
         Ok(())
@@ -346,12 +244,17 @@ impl Operator for DeltaSinkOperator {
     async fn on_start(&mut self, _ctx: &mut TaskContext) -> anyhow::Result<()> {
         ensure_delta_handlers_registered();
 
-        if let DeltaDestination::Local(root) = &self.destination {
+        if let Some(root) = &self.local_root {
             tokio::fs::create_dir_all(root).await?;
         }
 
-        if let DeltaDestination::S3 { client, prefix } = &self.destination {
-            preflight_s3_bucket(client.as_ref(), prefix, self.s3_bucket.as_deref()).await?;
+        if let PhysicalBackend::S3(sink) = &self.physical {
+            preflight_s3_bucket(
+                sink.client().as_ref(),
+                sink.prefix_path(),
+                self.s3_bucket.as_deref(),
+            )
+            .await?;
         }
 
         let table_uri = resolve_delta_table_uri(&self.sink_path, self.s3_bucket.as_deref())?;
@@ -374,10 +277,10 @@ impl Operator for DeltaSinkOperator {
 
         info!(
             table = %self.table_name,
-            threshold = self.early_flush_threshold_bytes,
+            threshold_bytes = self.early_flush_threshold_bytes,
             is_true_delta = self.committer.is_some(),
             commit_strategy = %self.commit_strategy.label(),
-            "delta sink operator started successfully"
+            "delta sink operator started (physical write + checkpoint commit)"
         );
         Ok(())
     }
@@ -407,7 +310,7 @@ impl Operator for DeltaSinkOperator {
         if self.pending_bytes > self.early_flush_threshold_bytes {
             debug!(
                 bytes = self.pending_bytes,
-                "memory watermark reached, executing early flush (commit deferred to checkpoint)"
+                "memory high-watermark breached, early flush (commit deferred to checkpoint)"
             );
             self.flush_data_file(0, ctx.subtask_index as usize).await?;
         }
@@ -454,52 +357,5 @@ impl Operator for DeltaSinkOperator {
             }
         }
         Ok(vec![])
-    }
-}
-
-/// Verify the S3 bucket is reachable and produce a clear error before
-/// the deltalake layer fails with a less obvious message.
-async fn preflight_s3_bucket(
-    client: &dyn ObjectStore,
-    prefix: &str,
-    bucket: Option<&str>,
-) -> Result<(), DeltaSinkError> {
-    let probe_path = if prefix.is_empty() {
-        ObjectStorePath::from("")
-    } else {
-        ObjectStorePath::from(prefix.to_string())
-    };
-
-    let mut stream = client.list(Some(&probe_path));
-    match futures::StreamExt::next(&mut stream).await {
-        None => Ok(()),
-        Some(Ok(_)) => Ok(()),
-        Some(Err(object_store::Error::NotFound { .. })) => Ok(()),
-        Some(Err(e)) => {
-            let msg = e.to_string();
-            let lower = msg.to_ascii_lowercase();
-            if lower.contains("nosuchbucket") || lower.contains("the specified bucket") {
-                return Err(DeltaSinkError::Config(format!(
-                    "S3 bucket '{}' does not exist (prefix '{}'): {msg}",
-                    bucket.unwrap_or("<unknown>"),
-                    prefix
-                )));
-            }
-            if lower.contains("invalidaccesskeyid")
-                || lower.contains("signaturedoesnotmatch")
-                || lower.contains("access denied")
-                || lower.contains("accessdenied")
-            {
-                return Err(DeltaSinkError::Config(format!(
-                    "S3 credential check failed for bucket '{}': {msg}",
-                    bucket.unwrap_or("<unknown>")
-                )));
-            }
-            Err(DeltaSinkError::Config(format!(
-                "failed to access S3 bucket '{}' (prefix '{}'): {msg}",
-                bucket.unwrap_or("<unknown>"),
-                prefix
-            )))
-        }
     }
 }
