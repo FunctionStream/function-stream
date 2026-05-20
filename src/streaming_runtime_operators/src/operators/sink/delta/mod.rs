@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Once;
+use std::time::Duration;
 
 use arrow_array::RecordBatch;
 use arrow_schema::Schema as ArrowSchema;
@@ -29,10 +30,10 @@ use delta_commit::{
 };
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectStorePath;
-use object_store::{ObjectStore, PutPayload};
+use object_store::{BackoffConfig, ObjectStore, PutPayload, RetryConfig};
 use parquet::basic::Compression;
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 
 use crate::core::StreamOutput;
@@ -131,15 +132,34 @@ impl DeltaSinkOperator {
                 .get(opt::S3_REGION)
                 .map(|s| s.as_str())
                 .unwrap_or("us-east-1");
+
+            // Production-grade retry with exponential backoff for transient network
+            // blips on S3 / MinIO / R2. Caps retries to keep checkpoint progress
+            // bounded; pipeline-level retries handle longer outages.
+            let retry_config = RetryConfig {
+                backoff: BackoffConfig {
+                    init_backoff: Duration::from_millis(100),
+                    max_backoff: Duration::from_secs(5),
+                    base: 2.0,
+                },
+                max_retries: 5,
+                retry_timeout: Duration::from_secs(30),
+            };
+
             let mut builder = AmazonS3Builder::new()
                 .with_bucket_name(bucket.clone())
-                .with_region(region);
+                .with_region(region)
+                .with_retry(retry_config);
 
             if let Some(endpoint) = options.get(opt::S3_ENDPOINT) {
                 builder = builder.with_endpoint(endpoint);
                 if endpoint.to_ascii_lowercase().starts_with("http://") {
                     builder = builder.with_allow_http(true);
                 }
+                // Custom endpoint typically means MinIO / Ceph / R2 / private S3
+                // gateways that route via path style; virtual-hosted style would
+                // require per-bucket DNS that these backends usually lack.
+                builder = builder.with_virtual_hosted_style_request(false);
             }
             if let Some(v) = options.get(opt::S3_ACCESS_KEY_ID) {
                 builder = builder.with_access_key_id(v);
@@ -421,8 +441,17 @@ impl Operator for DeltaSinkOperator {
                 table = %self.table_name,
                 "operator closing, forcing final flush and commit"
             );
-            self.flush_and_commit_checkpoint(u64::MAX, ctx.subtask_index as usize)
-                .await?;
+            if let Err(e) = self
+                .flush_and_commit_checkpoint(u64::MAX, ctx.subtask_index as usize)
+                .await
+            {
+                error!(
+                    table = %self.table_name,
+                    error = %e,
+                    "fatal: final flush/commit on close failed; data may be lost"
+                );
+                return Err(e.into());
+            }
         }
         Ok(vec![])
     }
@@ -454,6 +483,16 @@ async fn preflight_s3_bucket(
                     "S3 bucket '{}' does not exist (prefix '{}'): {msg}",
                     bucket.unwrap_or("<unknown>"),
                     prefix
+                )));
+            }
+            if lower.contains("invalidaccesskeyid")
+                || lower.contains("signaturedoesnotmatch")
+                || lower.contains("access denied")
+                || lower.contains("accessdenied")
+            {
+                return Err(DeltaSinkError::Config(format!(
+                    "S3 credential check failed for bucket '{}': {msg}",
+                    bucket.unwrap_or("<unknown>")
                 )));
             }
             Err(DeltaSinkError::Config(format!(

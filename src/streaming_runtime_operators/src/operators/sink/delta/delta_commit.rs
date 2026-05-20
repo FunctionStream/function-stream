@@ -523,6 +523,13 @@ pub fn build_delta_storage_options(
         if !v.starts_with("https://") {
             storage.insert("AWS_ALLOW_HTTP".to_string(), "true".to_string());
         }
+        // Custom endpoint implies MinIO / Ceph / R2 / private S3 gateway — these
+        // backends route via path style; virtual-hosted style requires per-bucket
+        // DNS that they typically do not provide.
+        storage.insert(
+            "AWS_VIRTUAL_HOSTED_STYLE_REQUEST".to_string(),
+            "false".to_string(),
+        );
     }
     if let Some(v) = options.get(opt::S3_SESSION_TOKEN) {
         storage.insert("AWS_SESSION_TOKEN".to_string(), v.clone());
