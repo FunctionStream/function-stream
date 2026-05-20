@@ -28,7 +28,7 @@ datafusion-execution = { git = "https://github.com/FunctionStream/datafusion", b
 datafusion-expr = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
 datafusion-physical-expr = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
 datafusion-proto = { git = "https://github.com/FunctionStream/datafusion", branch = "48.0.1/fs" }
-deltalake = { version = "0.32.3", default-features = false, features = ["rustls"] }
+deltalake = { version = "0.32.3", default-features = false, features = ["rustls", "s3"] }
 function-stream-config = { path = "../config" }
 function-stream-runtime-common = { path = "../runtime_common" }
 function-stream-streaming-planner = { path = "../streaming_planner" }

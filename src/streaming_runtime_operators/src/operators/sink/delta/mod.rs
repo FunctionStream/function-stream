@@ -17,6 +17,7 @@ pub use delta_commit::strip_streaming_system_columns_arc;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Once;
 
 use arrow_array::RecordBatch;
 use arrow_schema::Schema as ArrowSchema;
@@ -44,6 +45,15 @@ use crate::sql::common::with_option_keys as opt;
 use crate::sql::common::{CheckpointBarrier, Watermark};
 
 const DEFAULT_MAX_BUFFER_BYTES: usize = 64 * 1024 * 1024;
+
+/// Registers deltalake protocol handlers (e.g. `s3://`) exactly once per process.
+/// Without this, `deltalake::open_table` returns `Cannot infer storage location from: s3://...`.
+fn ensure_delta_handlers_registered() {
+    static REGISTER: Once = Once::new();
+    REGISTER.call_once(|| {
+        deltalake::aws::register_handlers(None);
+    });
+}
 
 /// Strongly typed error domain for the Delta sink.
 #[derive(thiserror::Error, Debug)]
@@ -312,8 +322,14 @@ impl Operator for DeltaSinkOperator {
     }
 
     async fn on_start(&mut self, _ctx: &mut TaskContext) -> anyhow::Result<()> {
+        ensure_delta_handlers_registered();
+
         if let DeltaDestination::Local(root) = &self.destination {
             tokio::fs::create_dir_all(root).await?;
+        }
+
+        if let DeltaDestination::S3 { client, prefix } = &self.destination {
+            preflight_s3_bucket(client.as_ref(), prefix, self.s3_bucket.as_deref()).await?;
         }
 
         let table_uri = resolve_delta_table_uri(&self.sink_path, self.s3_bucket.as_deref())?;
@@ -406,5 +422,42 @@ impl Operator for DeltaSinkOperator {
                 .await?;
         }
         Ok(vec![])
+    }
+}
+
+/// Verify the S3 bucket is reachable and produce a clear error before
+/// the deltalake layer fails with a less obvious message.
+async fn preflight_s3_bucket(
+    client: &dyn ObjectStore,
+    prefix: &str,
+    bucket: Option<&str>,
+) -> Result<(), DeltaSinkError> {
+    let probe_path = if prefix.is_empty() {
+        ObjectStorePath::from("")
+    } else {
+        ObjectStorePath::from(prefix.to_string())
+    };
+
+    let mut stream = client.list(Some(&probe_path));
+    match futures::StreamExt::next(&mut stream).await {
+        None => Ok(()),
+        Some(Ok(_)) => Ok(()),
+        Some(Err(object_store::Error::NotFound { .. })) => Ok(()),
+        Some(Err(e)) => {
+            let msg = e.to_string();
+            let lower = msg.to_ascii_lowercase();
+            if lower.contains("nosuchbucket") || lower.contains("the specified bucket") {
+                return Err(DeltaSinkError::Config(format!(
+                    "S3 bucket '{}' does not exist (prefix '{}'): {msg}",
+                    bucket.unwrap_or("<unknown>"),
+                    prefix
+                )));
+            }
+            Err(DeltaSinkError::Config(format!(
+                "failed to access S3 bucket '{}' (prefix '{}'): {msg}",
+                bucket.unwrap_or("<unknown>"),
+                prefix
+            )))
+        }
     }
 }
