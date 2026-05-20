@@ -443,6 +443,22 @@ pub fn build_delta_storage_options(options: &HashMap<String, String>) -> HashMap
     if let Some(v) = options.get(opt::S3_SESSION_TOKEN) {
         storage.insert("AWS_SESSION_TOKEN".to_string(), v.clone());
     }
+
+    // deltalake-aws 0.15+ requires either a DynamoDB lock client or this flag for S3 commits.
+    // Function-Stream Delta sinks are single-writer per table, so unsafe rename is safe.
+    // Users may opt into ETag-based conditional puts (e.g. MinIO) via `s3.conditional.put=etag`.
+    let conditional_put = options
+        .get("s3.conditional.put")
+        .map(String::as_str)
+        .unwrap_or("");
+    if !conditional_put.is_empty() {
+        storage.insert("conditional_put".to_string(), conditional_put.to_string());
+    } else {
+        storage
+            .entry("AWS_S3_ALLOW_UNSAFE_RENAME".to_string())
+            .or_insert_with(|| "true".to_string());
+    }
+
     storage
 }
 
