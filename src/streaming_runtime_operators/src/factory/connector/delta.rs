@@ -24,7 +24,9 @@ use crate::factory::connector::sink_props_codec::{
 };
 use crate::factory::global::Registry;
 use crate::factory::operator_constructor::OperatorConstructor;
-use crate::operators::sink::delta::{DeltaFormat, DeltaSinkOperator};
+use crate::operators::sink::delta::{
+    DeltaFormat, DeltaSinkOperator, strip_streaming_system_columns_arc,
+};
 use crate::operators::sink::filesystem::compression_from_str;
 use crate::sql::common::FsSchema;
 use crate::sql::common::constants::connection_format_value;
@@ -47,7 +49,7 @@ impl OperatorConstructor for DeltaSinkDispatcher {
             .map(|fs| FsSchema::try_from(fs.clone()))
             .transpose()
             .map_err(|e| anyhow::anyhow!("invalid fs_schema for delta sink: {e}"))?
-            .map(|fs| fs.schema);
+            .and_then(|fs| strip_streaming_system_columns_arc(fs.schema));
 
         let format = props
             .get(opt::FORMAT)

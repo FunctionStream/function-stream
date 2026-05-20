@@ -13,8 +13,12 @@
 use anyhow::{Result, anyhow};
 use arrow::compute::kernels::aggregate;
 use arrow_array::cast::AsArray;
-use arrow_array::types::TimestampNanosecondType;
+use arrow_array::types::{
+    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
+    TimestampSecondType,
+};
 use arrow_array::{RecordBatch, TimestampNanosecondArray};
+use arrow_schema::{DataType, TimeUnit};
 use bincode::{Decode, Encode};
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion_proto::physical_plan::DefaultPhysicalExtensionCodec;
@@ -78,9 +82,32 @@ impl WatermarkGeneratorOperator {
 
     fn extract_max_timestamp(&self, batch: &RecordBatch) -> Option<SystemTime> {
         let ts_column = batch.column(self.timestamp_index);
-        let arr = ts_column.as_primitive::<TimestampNanosecondType>();
-        let max_ts = aggregate::max(arr)?;
-        Some(from_nanos(max_ts as u128))
+        match ts_column.data_type() {
+            DataType::Timestamp(TimeUnit::Nanosecond, _) => {
+                let arr = ts_column.as_primitive::<TimestampNanosecondType>();
+                aggregate::max(arr).map(|v| from_nanos(v as u128))
+            }
+            DataType::Timestamp(TimeUnit::Microsecond, _) => {
+                let arr = ts_column.as_primitive::<TimestampMicrosecondType>();
+                aggregate::max(arr).map(|v| from_nanos((v as u128) * 1_000))
+            }
+            DataType::Timestamp(TimeUnit::Millisecond, _) => {
+                let arr = ts_column.as_primitive::<TimestampMillisecondType>();
+                aggregate::max(arr).map(|v| from_nanos((v as u128) * 1_000_000))
+            }
+            DataType::Timestamp(TimeUnit::Second, _) => {
+                let arr = ts_column.as_primitive::<TimestampSecondType>();
+                aggregate::max(arr).map(|v| from_nanos((v as u128) * 1_000_000_000))
+            }
+            other => {
+                debug!(
+                    ?other,
+                    index = self.timestamp_index,
+                    "skip max timestamp: column is not a timestamp array"
+                );
+                None
+            }
+        }
     }
 
     fn evaluate_watermark(&self, batch: &RecordBatch) -> Result<SystemTime> {

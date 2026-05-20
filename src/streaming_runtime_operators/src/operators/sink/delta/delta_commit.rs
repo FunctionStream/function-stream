@@ -14,9 +14,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use arrow::compute::cast;
 use arrow_array::RecordBatch;
 use arrow_ipc::writer::StreamWriter;
-use arrow_schema::Schema as ArrowSchema;
+use arrow_schema::{DataType, Field, FieldRef, Schema as ArrowSchema, TimeUnit};
 use deltalake::errors::DeltaTableError;
 use deltalake::kernel::engine::arrow_conversion::TryIntoKernel as _;
 use deltalake::kernel::schema::cast::normalize_for_delta;
@@ -27,7 +28,41 @@ use deltalake::{DeltaTable, open_table_with_storage_options};
 use tracing::{info, instrument};
 use url::Url;
 
+use crate::sql::common::{TIMESTAMP_FIELD, UPDATING_META_FIELD};
+
 use super::DeltaSinkError;
+
+/// Streaming-internal columns that must not be persisted to external sinks.
+pub fn is_streaming_system_column(name: &str) -> bool {
+    name == TIMESTAMP_FIELD || name == UPDATING_META_FIELD
+}
+
+/// Remove `_timestamp` / `_updating_meta` from a schema (e.g. connector `fs_schema` may inject them).
+pub fn strip_streaming_system_columns(schema: &ArrowSchema) -> ArrowSchema {
+    let fields: Vec<FieldRef> = schema
+        .fields()
+        .iter()
+        .filter(|f| !is_streaming_system_column(f.name()))
+        .cloned()
+        .collect();
+    ArrowSchema::new(fields)
+}
+
+pub fn strip_streaming_system_columns_arc(schema: Arc<ArrowSchema>) -> Option<Arc<ArrowSchema>> {
+    let stripped = strip_streaming_system_columns(schema.as_ref());
+    if stripped.fields().is_empty() {
+        return None;
+    }
+    let had_system = schema
+        .fields()
+        .iter()
+        .any(|f| is_streaming_system_column(f.name()));
+    if had_system {
+        Some(Arc::new(stripped))
+    } else {
+        Some(schema)
+    }
+}
 
 pub struct UncommittedDataFile {
     pub path: String,
@@ -42,6 +77,8 @@ pub struct DeltaTableCommitter {
     table: Option<DeltaTable>,
     /// Precomputed from catalog `fs_schema` at startup, or lazily from the first batch.
     delta_columns: Option<Vec<StructField>>,
+    /// Arrow 55 schema for Parquet writes (timestamps normalized to microsecond).
+    write_schema: Option<Arc<ArrowSchema>>,
 }
 
 impl DeltaTableCommitter {
@@ -50,7 +87,11 @@ impl DeltaTableCommitter {
         storage_options: HashMap<String, String>,
         catalog_schema: Option<Arc<ArrowSchema>>,
     ) -> Result<Self, DeltaSinkError> {
-        let delta_columns = catalog_schema
+        let user_schema = catalog_schema.and_then(strip_streaming_system_columns_arc);
+        let write_schema = user_schema
+            .as_ref()
+            .map(|s| Arc::new(normalize_arrow_schema_for_delta(s)));
+        let delta_columns = user_schema
             .as_deref()
             .map(arrow_schema_to_delta_columns)
             .transpose()?;
@@ -61,13 +102,30 @@ impl DeltaTableCommitter {
             uncommitted: Vec::new(),
             table: None,
             delta_columns,
+            write_schema,
         })
     }
 
-    /// Fallback when catalog schema is absent: derive columns from the first flushed batch.
+    pub fn write_schema(&self) -> Option<Arc<ArrowSchema>> {
+        self.write_schema.clone()
+    }
+
+    /// Fallback when catalog schema is absent: derive user columns from the first flushed batch.
     pub fn update_schema(&mut self, schema: Arc<ArrowSchema>) -> Result<(), DeltaSinkError> {
+        let user_schema = strip_streaming_system_columns_arc(schema).ok_or_else(|| {
+            DeltaSinkError::CommitterFailed(
+                "cannot derive delta table schema: no user columns after removing streaming \
+                 system columns (_timestamp, _updating_meta)"
+                    .into(),
+            )
+        })?;
         if self.delta_columns.is_none() {
-            self.delta_columns = Some(arrow_schema_to_delta_columns(&schema)?);
+            self.delta_columns = Some(arrow_schema_to_delta_columns(user_schema.as_ref())?);
+        }
+        if self.write_schema.is_none() {
+            self.write_schema = Some(Arc::new(normalize_arrow_schema_for_delta(
+                user_schema.as_ref(),
+            )));
         }
         Ok(())
     }
@@ -229,6 +287,105 @@ impl DeltaTableCommitter {
         );
         Ok(())
     }
+}
+
+/// Normalize Arrow 55 schema for Delta Parquet writes (align with deltalake `normalize_for_delta`).
+pub fn normalize_arrow_schema_for_delta(schema: &ArrowSchema) -> ArrowSchema {
+    let fields: Vec<FieldRef> = schema
+        .fields()
+        .iter()
+        .map(|f| Arc::new(normalize_field_for_delta(f.as_ref())))
+        .collect();
+    ArrowSchema::new(fields)
+}
+
+fn normalize_field_for_delta(field: &Field) -> Field {
+    let data_type = normalize_datatype_for_delta(field.data_type());
+    if data_type == *field.data_type() {
+        field.clone()
+    } else {
+        field.clone().with_data_type(data_type)
+    }
+}
+
+fn normalize_datatype_for_delta(dt: &DataType) -> DataType {
+    match dt {
+        DataType::Date64 => DataType::Date32,
+        DataType::Timestamp(TimeUnit::Second, tz)
+        | DataType::Timestamp(TimeUnit::Millisecond, tz)
+        | DataType::Timestamp(TimeUnit::Nanosecond, tz) => {
+            DataType::Timestamp(TimeUnit::Microsecond, tz.clone())
+        }
+        DataType::Struct(fields) => {
+            let normalized: Vec<FieldRef> = fields
+                .iter()
+                .map(|f| Arc::new(normalize_field_for_delta(f.as_ref())))
+                .collect();
+            DataType::Struct(normalized.into())
+        }
+        DataType::List(inner) => {
+            DataType::List(Arc::new(normalize_field_for_delta(inner.as_ref())))
+        }
+        DataType::LargeList(inner) => {
+            DataType::LargeList(Arc::new(normalize_field_for_delta(inner.as_ref())))
+        }
+        DataType::FixedSizeList(inner, len) => {
+            DataType::FixedSizeList(Arc::new(normalize_field_for_delta(inner.as_ref())), *len)
+        }
+        DataType::Map(entries, sorted) => DataType::Map(
+            Arc::new(normalize_field_for_delta(entries.as_ref())),
+            *sorted,
+        ),
+        _ => dt.clone(),
+    }
+}
+
+/// Cast record batches so on-disk Parquet matches the Delta table schema.
+pub fn cast_batches_for_delta_write(
+    batches: &[RecordBatch],
+    target_schema: &ArrowSchema,
+) -> Result<Vec<RecordBatch>, DeltaSinkError> {
+    let target = Arc::new(target_schema.clone());
+    batches
+        .iter()
+        .map(|batch| cast_batch_for_delta_write(batch, &target))
+        .collect()
+}
+
+fn cast_batch_for_delta_write(
+    batch: &RecordBatch,
+    target_schema: &Arc<ArrowSchema>,
+) -> Result<RecordBatch, DeltaSinkError> {
+    if batch.schema().as_ref() == target_schema.as_ref() {
+        return Ok(batch.clone());
+    }
+
+    let mut columns = Vec::with_capacity(target_schema.fields().len());
+    for field in target_schema.fields() {
+        let col = batch.column_by_name(field.name()).ok_or_else(|| {
+            DeltaSinkError::CommitterFailed(format!(
+                "batch missing column '{}' required by delta write schema",
+                field.name()
+            ))
+        })?;
+        let casted = if col.data_type() == field.data_type() {
+            col.clone()
+        } else {
+            cast(col, field.data_type()).map_err(|e| {
+                DeltaSinkError::CommitterFailed(format!(
+                    "failed to cast column '{}' from {:?} to {:?}: {e}",
+                    field.name(),
+                    col.data_type(),
+                    field.data_type()
+                ))
+            })?
+        };
+        columns.push(casted);
+    }
+
+    RecordBatch::try_new(target_schema.clone(), columns).map_err(|e| {
+        DeltaSinkError::CommitterFailed(format!("failed to build delta write batch: {e}"))
+    })
 }
 
 /// Bridge arrow 55 (runtime) schema to deltalake kernel schema via IPC.

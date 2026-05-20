@@ -12,6 +12,8 @@
 
 mod delta_commit;
 
+pub use delta_commit::strip_streaming_system_columns_arc;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,7 +23,8 @@ use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
 use bytes::Bytes;
 use delta_commit::{
-    DeltaTableCommitter, UncommittedDataFile, build_delta_storage_options, resolve_delta_table_uri,
+    DeltaTableCommitter, UncommittedDataFile, build_delta_storage_options,
+    cast_batches_for_delta_write, resolve_delta_table_uri,
 };
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectStorePath;
@@ -94,6 +97,8 @@ pub struct DeltaSinkOperator {
     s3_bucket: Option<String>,
     sink_path: String,
     catalog_schema: Option<Arc<ArrowSchema>>,
+    /// Normalized schema for Parquet files (microsecond timestamps, etc.).
+    parquet_write_schema: Option<Arc<ArrowSchema>>,
 }
 
 impl DeltaSinkOperator {
@@ -171,7 +176,8 @@ impl DeltaSinkOperator {
             storage_options,
             s3_bucket,
             sink_path: path,
-            catalog_schema,
+            catalog_schema: catalog_schema.and_then(strip_streaming_system_columns_arc),
+            parquet_write_schema: None,
         })
     }
 
@@ -186,23 +192,35 @@ impl DeltaSinkOperator {
             return Ok(());
         }
 
-        let fallback_schema = self
-            .catalog_schema
-            .is_none()
-            .then(|| self.pending[0].schema());
+        let fallback_schema = self.catalog_schema.is_none().then(|| {
+            strip_streaming_system_columns_arc(self.pending[0].schema())
+                .expect("batch has no user columns after removing streaming system columns")
+        });
         let batches = std::mem::take(&mut self.pending);
         self.pending_bytes = 0;
 
         let record_count: u64 = batches.iter().map(|b| b.num_rows() as u64).sum();
         let format = self.format;
         let compression = self.parquet_compression;
+        let parquet_write_schema = self.parquet_write_schema.clone();
 
-        let bytes = tokio::task::spawn_blocking(move || match format {
-            DeltaFormat::Csv => FormatEncoder::encode_csv(&batches),
-            DeltaFormat::Parquet => FormatEncoder::encode_parquet(&batches, compression),
-            DeltaFormat::JsonL => FormatEncoder::encode_jsonl(&batches),
-            DeltaFormat::Avro => FormatEncoder::encode_avro(&batches),
-            DeltaFormat::Orc => FormatEncoder::encode_orc(&batches),
+        let bytes = tokio::task::spawn_blocking(move || {
+            let batches = if format == DeltaFormat::Parquet {
+                if let Some(ref schema) = parquet_write_schema {
+                    cast_batches_for_delta_write(&batches, schema)?
+                } else {
+                    batches
+                }
+            } else {
+                batches
+            };
+            match format {
+                DeltaFormat::Csv => FormatEncoder::encode_csv(&batches),
+                DeltaFormat::Parquet => FormatEncoder::encode_parquet(&batches, compression),
+                DeltaFormat::JsonL => FormatEncoder::encode_jsonl(&batches),
+                DeltaFormat::Avro => FormatEncoder::encode_avro(&batches),
+                DeltaFormat::Orc => FormatEncoder::encode_orc(&batches),
+            }
         })
         .await
         .map_err(|e| DeltaSinkError::SerializationPanic(e.to_string()))?
@@ -302,11 +320,13 @@ impl Operator for DeltaSinkOperator {
         self.table_uri = Some(table_uri.clone());
 
         if self.format == DeltaFormat::Parquet {
-            self.committer = Some(DeltaTableCommitter::try_new(
+            let committer = DeltaTableCommitter::try_new(
                 table_uri,
                 self.storage_options.clone(),
                 self.catalog_schema.clone(),
-            )?);
+            )?;
+            self.parquet_write_schema = committer.write_schema();
+            self.committer = Some(committer);
         } else {
             warn!(
                 format = ?self.format,
