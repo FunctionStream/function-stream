@@ -82,6 +82,24 @@ pub const S3_ACCESS_KEY_ID: &str = "s3.access_key_id";
 pub const S3_SECRET_ACCESS_KEY: &str = "s3.secret_access_key";
 pub const S3_SESSION_TOKEN: &str = "s3.session_token";
 
+// ── Delta Lake commit coordination (S3-compatible backends) ───────────────
+//
+// `delta.commit.strategy` selects how concurrent-writer safety is enforced
+// when committing to `_delta_log` on S3-compatible object stores:
+//
+//   - `single-writer` (default): rely on Function-Stream's pipeline scheduler
+//     that guarantees a single writer per Delta table. Commits use direct
+//     PUT and are atomic per object. Suitable for AWS S3, MinIO, R2, GCS-S3.
+//   - `dynamodb`: use deltalake-aws DynamoDB lock client for multi-writer
+//     safety. Requires `delta.dynamodb.table` and AWS credentials/region.
+//
+pub const DELTA_COMMIT_STRATEGY: &str = "delta.commit.strategy";
+pub const DELTA_DYNAMODB_TABLE: &str = "delta.dynamodb.table";
+pub const DELTA_DYNAMODB_REGION: &str = "delta.dynamodb.region";
+pub const DELTA_DYNAMODB_ENDPOINT: &str = "delta.dynamodb.endpoint";
+pub const DELTA_DYNAMODB_ACCESS_KEY_ID: &str = "delta.dynamodb.access_key_id";
+pub const DELTA_DYNAMODB_SECRET_ACCESS_KEY: &str = "delta.dynamodb.secret_access_key";
+
 // ── Protobuf ────────────────────────────────────────────────────────────────
 
 pub const PROTOBUF_INTO_UNSTRUCTURED_JSON: &str = "protobuf.into_unstructured_json";

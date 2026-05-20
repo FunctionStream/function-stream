@@ -32,6 +32,83 @@ use crate::sql::common::{TIMESTAMP_FIELD, UPDATING_META_FIELD};
 
 use super::DeltaSinkError;
 
+/// Coordination strategy for Delta `_delta_log` commits on S3-compatible stores.
+///
+/// `deltalake-aws` 0.15 only ships two safe primitives for S3 commits:
+///   - a DynamoDB-backed lock client, or
+///   - a single-writer flag (`AWS_S3_ALLOW_UNSAFE_RENAME=true`) that
+///     guarantees correctness only when there is exactly one writer per table.
+///
+/// Function-Stream's planner+scheduler guarantees a single writer per Delta
+/// table, so `SingleWriter` is the safe default for all S3-compatible backends
+/// including MinIO, R2 and GCS-S3. For multi-process deployments writing to the
+/// same table, switch to `DynamoDb`.
+#[derive(Debug, Clone)]
+pub enum DeltaCommitStrategy {
+    /// Single-writer per table (default). Function-Stream's scheduler enforces
+    /// this invariant, so direct PUTs to `_delta_log/*.json` are race-free.
+    SingleWriter,
+
+    /// DynamoDB-backed multi-writer concurrency control via deltalake-aws.
+    DynamoDb(DynamoDbLockConfig),
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DynamoDbLockConfig {
+    pub table_name: Option<String>,
+    pub region: Option<String>,
+    pub endpoint: Option<String>,
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+}
+
+impl DeltaCommitStrategy {
+    /// Resolve the commit strategy from sink options.
+    ///
+    /// `delta.commit.strategy`:
+    ///   - `single-writer` / `single_writer` / `none` / unset → SingleWriter
+    ///   - `dynamodb` / `dynamo` → DynamoDb
+    pub fn from_options(options: &HashMap<String, String>) -> Result<Self, DeltaSinkError> {
+        use crate::sql::common::with_option_keys as opt;
+
+        let raw = options
+            .get(opt::DELTA_COMMIT_STRATEGY)
+            .map(|v| v.trim().to_ascii_lowercase())
+            .unwrap_or_default();
+
+        match raw.as_str() {
+            "" | "single-writer" | "single_writer" | "singlewriter" | "none" => {
+                Ok(Self::SingleWriter)
+            }
+            "dynamodb" | "dynamo" => {
+                let cfg = DynamoDbLockConfig {
+                    table_name: options.get(opt::DELTA_DYNAMODB_TABLE).cloned(),
+                    region: options.get(opt::DELTA_DYNAMODB_REGION).cloned(),
+                    endpoint: options.get(opt::DELTA_DYNAMODB_ENDPOINT).cloned(),
+                    access_key_id: options.get(opt::DELTA_DYNAMODB_ACCESS_KEY_ID).cloned(),
+                    secret_access_key: options.get(opt::DELTA_DYNAMODB_SECRET_ACCESS_KEY).cloned(),
+                };
+                if cfg.table_name.is_none() {
+                    return Err(DeltaSinkError::Config(
+                        "delta.commit.strategy=dynamodb requires delta.dynamodb.table".into(),
+                    ));
+                }
+                Ok(Self::DynamoDb(cfg))
+            }
+            other => Err(DeltaSinkError::Config(format!(
+                "unknown delta.commit.strategy '{other}'; expected single-writer or dynamodb"
+            ))),
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::SingleWriter => "single-writer",
+            Self::DynamoDb(_) => "dynamodb",
+        }
+    }
+}
+
 /// Streaming-internal columns that must not be persisted to external sinks.
 pub fn is_streaming_system_column(name: &str) -> bool {
     name == TIMESTAMP_FIELD || name == UPDATING_META_FIELD
@@ -421,10 +498,17 @@ fn simple_stats_json(record_count: u64) -> Option<String> {
     Some(format!(r#"{{"numRecords":{record_count}}}"#))
 }
 
-pub fn build_delta_storage_options(options: &HashMap<String, String>) -> HashMap<String, String> {
+/// Build the storage options handed to deltalake.
+///
+/// Returns both the assembled HashMap and the resolved commit strategy so the
+/// caller can log/expose it.
+pub fn build_delta_storage_options(
+    options: &HashMap<String, String>,
+) -> Result<(HashMap<String, String>, DeltaCommitStrategy), DeltaSinkError> {
     use crate::sql::common::with_option_keys as opt;
 
     let mut storage = HashMap::new();
+
     if let Some(v) = options.get(opt::S3_ACCESS_KEY_ID) {
         storage.insert("AWS_ACCESS_KEY_ID".to_string(), v.clone());
     }
@@ -444,22 +528,39 @@ pub fn build_delta_storage_options(options: &HashMap<String, String>) -> HashMap
         storage.insert("AWS_SESSION_TOKEN".to_string(), v.clone());
     }
 
-    // deltalake-aws 0.15+ requires either a DynamoDB lock client or this flag for S3 commits.
-    // Function-Stream Delta sinks are single-writer per table, so unsafe rename is safe.
-    // Users may opt into ETag-based conditional puts (e.g. MinIO) via `s3.conditional.put=etag`.
-    let conditional_put = options
-        .get("s3.conditional.put")
-        .map(String::as_str)
-        .unwrap_or("");
-    if !conditional_put.is_empty() {
-        storage.insert("conditional_put".to_string(), conditional_put.to_string());
-    } else {
-        storage
-            .entry("AWS_S3_ALLOW_UNSAFE_RENAME".to_string())
-            .or_insert_with(|| "true".to_string());
+    let strategy = DeltaCommitStrategy::from_options(options)?;
+    match &strategy {
+        DeltaCommitStrategy::SingleWriter => {
+            // Function-Stream guarantees a single writer per Delta table via its
+            // pipeline scheduler. deltalake-aws still gates S3 commits unless one
+            // of the two supported flags is set, so we set the single-writer flag
+            // here; the architectural invariant makes this safe.
+            storage.insert("AWS_S3_ALLOW_UNSAFE_RENAME".to_string(), "true".to_string());
+        }
+        DeltaCommitStrategy::DynamoDb(cfg) => {
+            storage.insert(
+                "AWS_S3_LOCKING_PROVIDER".to_string(),
+                "dynamodb".to_string(),
+            );
+            if let Some(table) = &cfg.table_name {
+                storage.insert("DELTA_DYNAMO_TABLE_NAME".to_string(), table.clone());
+            }
+            if let Some(region) = &cfg.region {
+                storage.insert("AWS_REGION_DYNAMODB".to_string(), region.clone());
+            }
+            if let Some(endpoint) = &cfg.endpoint {
+                storage.insert("AWS_ENDPOINT_URL_DYNAMODB".to_string(), endpoint.clone());
+            }
+            if let Some(v) = &cfg.access_key_id {
+                storage.insert("AWS_ACCESS_KEY_ID_DYNAMODB".to_string(), v.clone());
+            }
+            if let Some(v) = &cfg.secret_access_key {
+                storage.insert("AWS_SECRET_ACCESS_KEY_DYNAMODB".to_string(), v.clone());
+            }
+        }
     }
 
-    storage
+    Ok((storage, strategy))
 }
 
 pub fn resolve_delta_table_uri(path: &str, bucket: Option<&str>) -> Result<Url, DeltaSinkError> {

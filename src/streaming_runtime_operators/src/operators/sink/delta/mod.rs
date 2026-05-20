@@ -24,7 +24,7 @@ use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
 use bytes::Bytes;
 use delta_commit::{
-    DeltaTableCommitter, UncommittedDataFile, build_delta_storage_options,
+    DeltaCommitStrategy, DeltaTableCommitter, UncommittedDataFile, build_delta_storage_options,
     cast_batches_for_delta_write, resolve_delta_table_uri,
 };
 use object_store::aws::AmazonS3Builder;
@@ -104,6 +104,7 @@ pub struct DeltaSinkOperator {
     committer: Option<DeltaTableCommitter>,
     table_uri: Option<Url>,
     storage_options: HashMap<String, String>,
+    commit_strategy: DeltaCommitStrategy,
     s3_bucket: Option<String>,
     sink_path: String,
     catalog_schema: Option<Arc<ArrowSchema>>,
@@ -123,7 +124,7 @@ impl DeltaSinkOperator {
         catalog_schema: Option<Arc<ArrowSchema>>,
     ) -> Result<Self, DeltaSinkError> {
         let s3_bucket = options.get(opt::S3_BUCKET).cloned();
-        let storage_options = build_delta_storage_options(&options);
+        let (storage_options, commit_strategy) = build_delta_storage_options(&options)?;
 
         let destination = if let Some(bucket) = &s3_bucket {
             let region = options
@@ -184,6 +185,7 @@ impl DeltaSinkOperator {
             committer: None,
             table_uri: None,
             storage_options,
+            commit_strategy,
             s3_bucket,
             sink_path: path,
             catalog_schema: catalog_schema.and_then(strip_streaming_system_columns_arc),
@@ -354,6 +356,7 @@ impl Operator for DeltaSinkOperator {
             table = %self.table_name,
             threshold = self.early_flush_threshold_bytes,
             is_true_delta = self.committer.is_some(),
+            commit_strategy = %self.commit_strategy.label(),
             "delta sink operator started successfully"
         );
         Ok(())
