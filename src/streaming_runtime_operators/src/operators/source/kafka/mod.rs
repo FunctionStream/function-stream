@@ -19,7 +19,6 @@ use anyhow::{Context as _, Result, anyhow};
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
-use governor::{DefaultDirectRateLimiter, Quota, RateLimiter as GovernorRateLimiter};
 use protocol::storage::{
     KafkaPartitionOffset, KafkaSourceSubtaskCheckpoint, SourceCheckpointInfo,
     source_checkpoint_info,
@@ -27,9 +26,10 @@ use protocol::storage::{
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message as KMessage, Offset, TopicPartitionList};
 use std::collections::HashMap;
-use std::num::NonZeroU32;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
+
+use crate::operators::source::batch_buffer::{MAX_BATCH_LINGER_TIME, SOURCE_POLL_TIMEOUT};
 
 use crate::core::api::context::TaskContext;
 use crate::core::api::source::{SourceCheckpointReport, SourceEvent, SourceOffset, SourceOperator};
@@ -131,9 +131,6 @@ impl SourceOffsetExt for SourceOffset {
 // ============================================================================
 // ============================================================================
 
-const KAFKA_POLL_TIMEOUT: Duration = Duration::from_millis(100);
-const MAX_BATCH_LINGER_TIME: Duration = Duration::from_millis(500);
-
 pub struct KafkaSourceOperator {
     pub topic: String,
     pub bootstrap_servers: String,
@@ -142,11 +139,9 @@ pub struct KafkaSourceOperator {
     pub offset_mode: SourceOffset,
 
     pub client_configs: HashMap<String, String>,
-    pub messages_per_second: NonZeroU32,
     pub metadata_fields: Vec<MetadataField>,
 
     consumer: Option<StreamConsumer>,
-    rate_limiter: Option<DefaultDirectRateLimiter>,
     deserializer: Box<dyn BatchDeserializer>,
 
     current_offsets: HashMap<i32, i64>,
@@ -166,7 +161,6 @@ impl KafkaSourceOperator {
         group_id_prefix: Option<String>,
         offset_mode: SourceOffset,
         client_configs: HashMap<String, String>,
-        messages_per_second: NonZeroU32,
         metadata_fields: Vec<MetadataField>,
         deserializer: Box<dyn BatchDeserializer>,
     ) -> Self {
@@ -177,10 +171,8 @@ impl KafkaSourceOperator {
             group_id_prefix,
             offset_mode,
             client_configs,
-            messages_per_second,
             metadata_fields,
             consumer: None,
-            rate_limiter: None,
             deserializer,
             current_offsets: HashMap::new(),
             is_empty_assignment: false,
@@ -238,6 +230,19 @@ impl KafkaSourceOperator {
             client_config.set(key, value);
         }
 
+        // High-throughput fetch defaults (override via client_configs in WITH clause).
+        for (k, v) in [
+            ("fetch.min.bytes", "65536"),
+            ("fetch.max.bytes", "52428800"),
+            ("max.partition.fetch.bytes", "1048576"),
+            ("queued.min.messages", "500000"),
+            ("queued.max.messages.kbytes", "65536"),
+        ] {
+            if !self.client_configs.contains_key(k) {
+                client_config.set(k, v);
+            }
+        }
+
         let consumer: StreamConsumer = client_config
             .set("bootstrap.servers", &self.bootstrap_servers)
             .set("enable.partition.eof", "false")
@@ -292,6 +297,20 @@ impl KafkaSourceOperator {
         self.consumer = Some(consumer);
         Ok(())
     }
+
+    fn try_emit_buffered_batch(&mut self, _reason: &str) -> Result<Option<SourceEvent>> {
+        let should_flush_by_size = self.deserializer.should_flush();
+        let should_flush_by_time = self.last_flush_time.elapsed() > MAX_BATCH_LINGER_TIME;
+
+        if !self.deserializer.is_empty()
+            && (should_flush_by_size || should_flush_by_time)
+            && let Some(batch) = self.deserializer.flush_buffer()?
+        {
+            self.last_flush_time = Instant::now();
+            return Ok(Some(SourceEvent::Data(batch)));
+        }
+        Ok(None)
+    }
 }
 
 // ============================================================================
@@ -309,9 +328,6 @@ impl SourceOperator for KafkaSourceOperator {
 
     async fn on_start(&mut self, ctx: &mut TaskContext) -> Result<()> {
         self.init_and_assign_consumer(ctx).await?;
-        self.rate_limiter = Some(GovernorRateLimiter::direct(Quota::per_second(
-            self.messages_per_second,
-        )));
         Ok(())
     }
 
@@ -320,107 +336,80 @@ impl SourceOperator for KafkaSourceOperator {
             return Ok(SourceEvent::Idle);
         }
 
-        let consumer = self
-            .consumer
-            .as_ref()
-            .ok_or_else(|| anyhow!("Kafka consumer not initialized"))?;
-        let rate_limiter = self
-            .rate_limiter
-            .as_ref()
-            .ok_or_else(|| anyhow!("rate limiter not initialized"))?;
-
-        match tokio::time::timeout(KAFKA_POLL_TIMEOUT, consumer.recv()).await {
-            Ok(Ok(msg)) => {
-                let partition = msg.partition();
-                let offset = msg.offset();
-                let timestamp = msg.timestamp().to_millis().ok_or_else(|| {
-                    anyhow!("Failed to read timestamp from Kafka record: message has no timestamp")
-                })?;
-
-                self.current_offsets.insert(partition, offset);
-
-                if let Some(payload) = msg.payload() {
-                    let topic = msg.topic();
-                    debug!(
-                        topic,
-                        partition,
-                        offset,
-                        payload_bytes = payload.len(),
-                        timestamp_ms = timestamp,
-                        "kafka source consumed message"
-                    );
-
-                    let connector_metadata = if !self.metadata_fields.is_empty() {
-                        let mut meta = HashMap::new();
-                        for f in &self.metadata_fields {
-                            meta.insert(
-                                f.field_name.as_str(),
-                                match f.key.as_str() {
-                                    "key" => FieldValueType::Bytes(msg.key()),
-                                    "offset_id" => FieldValueType::Int64(Some(msg.offset())),
-                                    "partition" => FieldValueType::Int32(Some(msg.partition())),
-                                    "topic" => FieldValueType::String(Some(topic)),
-                                    "timestamp" => FieldValueType::Int64(Some(timestamp)),
-                                    _ => continue,
-                                },
-                            );
-                        }
-                        Some(meta)
-                    } else {
-                        None
-                    };
-
-                    self.deserializer.deserialize_slice(
-                        payload,
-                        timestamp.max(0) as u64,
-                        connector_metadata,
-                    )?;
-                } else {
-                    debug!(
-                        "Received tombstone message at partition {} offset {}",
-                        partition, offset
-                    );
-                }
-
-                rate_limiter.until_ready().await;
-
-                let should_flush_by_size = self.deserializer.should_flush();
-                let should_flush_by_time = self.last_flush_time.elapsed() > MAX_BATCH_LINGER_TIME;
-
-                if !self.deserializer.is_empty()
-                    && (should_flush_by_size || should_flush_by_time)
-                    && let Some(batch) = self.deserializer.flush_buffer()?
-                {
-                    self.last_flush_time = Instant::now();
-                    debug!(
-                        num_rows = batch.num_rows(),
-                        num_columns = batch.num_columns(),
-                        flush_by_size = should_flush_by_size,
-                        flush_by_time = should_flush_by_time,
-                        "kafka source emitting record batch"
-                    );
-                    return Ok(SourceEvent::Data(batch));
-                }
-
-                Ok(SourceEvent::Idle)
+        // Keep polling while the in-memory buffer is filling; returning Idle here would make
+        // SourceDriver sleep `source_idle_timeout` (50ms) between every single message.
+        loop {
+            if let Some(event) = self.try_emit_buffered_batch("linger")? {
+                return Ok(event);
             }
-            Ok(Err(e)) => {
-                error!("Kafka recv error: {}", e);
-                Err(anyhow!("Kafka error: {}", e))
-            }
-            Err(_) => {
-                if !self.deserializer.is_empty()
-                    && let Some(batch) = self.deserializer.flush_buffer()?
-                {
-                    self.last_flush_time = Instant::now();
-                    debug!(
-                        num_rows = batch.num_rows(),
-                        num_columns = batch.num_columns(),
-                        "kafka source emitting record batch (poll timeout flush)"
-                    );
-                    return Ok(SourceEvent::Data(batch));
+
+            let recv_result = {
+                let consumer = self
+                    .consumer
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Kafka consumer not initialized"))?;
+                tokio::time::timeout(SOURCE_POLL_TIMEOUT, consumer.recv()).await
+            };
+
+            match recv_result {
+                Ok(Ok(msg)) => {
+                    let partition = msg.partition();
+                    let offset = msg.offset();
+                    let timestamp = msg.timestamp().to_millis().ok_or_else(|| {
+                        anyhow!(
+                            "Failed to read timestamp from Kafka record: message has no timestamp"
+                        )
+                    })?;
+
+                    self.current_offsets.insert(partition, offset);
+
+                    if let Some(payload) = msg.payload() {
+                        let topic = msg.topic();
+
+                        let connector_metadata = if !self.metadata_fields.is_empty() {
+                            let mut meta = HashMap::new();
+                            for f in &self.metadata_fields {
+                                meta.insert(
+                                    f.field_name.as_str(),
+                                    match f.key.as_str() {
+                                        "key" => FieldValueType::Bytes(msg.key()),
+                                        "offset_id" => FieldValueType::Int64(Some(msg.offset())),
+                                        "partition" => FieldValueType::Int32(Some(msg.partition())),
+                                        "topic" => FieldValueType::String(Some(topic)),
+                                        "timestamp" => FieldValueType::Int64(Some(timestamp)),
+                                        _ => continue,
+                                    },
+                                );
+                            }
+                            Some(meta)
+                        } else {
+                            None
+                        };
+
+                        self.deserializer.deserialize_slice(
+                            payload,
+                            timestamp.max(0) as u64,
+                            connector_metadata,
+                        )?;
+                    }
+
+                    if let Some(event) = self.try_emit_buffered_batch("batch full")? {
+                        return Ok(event);
+                    }
+                    // Buffer not ready: poll again immediately (do not return Idle).
                 }
-                Ok(SourceEvent::Idle)
+                Ok(Err(e)) => {
+                    error!("Kafka recv error: {}", e);
+                    return Err(anyhow!("Kafka error: {}", e));
+                }
+                Err(_) => {
+                    if let Some(event) =
+                        self.try_emit_buffered_batch("poll timeout")?
+                    {
+                        return Ok(event);
+                    }
+                    return Ok(SourceEvent::Idle);
+                }
             }
         }
     }

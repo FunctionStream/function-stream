@@ -257,6 +257,10 @@ pub mod connector_type {
     pub const NATS: &str = "nats";
     pub const REDIS: &str = "redis";
     pub const MQTT: &str = "mqtt";
+    pub const HTTP: &str = "http";
+    pub const ROS: &str = "ros";
+    pub const ROS2: &str = "ros2";
+    pub const ROBOT_BAG: &str = "robot-bag";
     pub const WEBSOCKET: &str = "websocket";
     pub const SSE: &str = "sse";
     pub const NEXMARK: &str = "nexmark";
@@ -273,6 +277,11 @@ pub mod connection_table_role {
 
 pub const SUPPORTED_CONNECTOR_ADAPTERS: &[&str] = &[
     connector_type::KAFKA,
+    connector_type::MQTT,
+    connector_type::HTTP,
+    connector_type::ROS,
+    connector_type::ROS2,
+    connector_type::ROBOT_BAG,
     connector_type::FILESYSTEM,
     connector_type::S3,
     connector_type::DELTA,

@@ -13,7 +13,6 @@
 use anyhow::{Context, Result, bail};
 use prost::Message;
 use std::collections::HashMap;
-use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use protocol::function_stream_graph::connector_op::Config;
@@ -33,10 +32,9 @@ use crate::format::{
     Format as RuntimeFormat, JsonFormat as RuntimeJsonFormat, TimestampFormat as RtTimestampFormat,
 };
 use crate::operators::sink::kafka::{ConsistencyMode, KafkaSinkOperator};
+use crate::operators::source::batch_buffer::DEFAULT_SOURCE_BATCH_SIZE;
 use crate::operators::source::kafka::{BufferedDeserializer, KafkaSourceOperator};
 use crate::sql::common::FsSchema;
-
-const DEFAULT_SOURCE_BATCH_SIZE: usize = 1024;
 
 // ─────────────── Proto → Runtime type conversions ───────────────
 
@@ -169,9 +167,6 @@ impl KafkaConnectorDispatcher {
             DEFAULT_SOURCE_BATCH_SIZE,
         ));
 
-        let rate = NonZeroU32::new(cfg.rate_limit_msgs_per_sec.max(1))
-            .unwrap_or_else(|| NonZeroU32::new(1_000_000).expect("nonzero"));
-
         let source_op = KafkaSourceOperator::new(
             cfg.topic.clone(),
             cfg.bootstrap_servers.clone(),
@@ -179,7 +174,6 @@ impl KafkaConnectorDispatcher {
             cfg.group_id_prefix.clone(),
             proto_offset_to_runtime(cfg.offset_mode),
             final_configs,
-            rate,
             vec![],
             deserializer,
         );

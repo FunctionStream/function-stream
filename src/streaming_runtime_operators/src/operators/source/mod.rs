@@ -10,4 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod batch_buffer;
+pub mod http;
 pub mod kafka;
+pub mod mqtt;
+pub mod robot_bag;
+pub mod ros;

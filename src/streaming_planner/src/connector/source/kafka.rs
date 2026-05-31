@@ -29,6 +29,37 @@ use crate::connector::provider::SourceProvider;
 
 pub struct KafkaSourceConnector;
 
+pub fn default_kafka_consumer_group_id(table_name: &str) -> String {
+    let sanitized: String = table_name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    format!("fs-{sanitized}-consumer")
+}
+
+pub fn ensure_default_consumer_group(
+    table_name: &str,
+    options: &mut ConnectorOptions,
+) -> Result<()> {
+    let has_group = options.peek_opt_str(opt::KAFKA_GROUP_ID)?.is_some()
+        || options.peek_opt_str(opt::KAFKA_GROUP_ID_LEGACY)?.is_some();
+    let has_prefix = options.peek_opt_str(opt::KAFKA_GROUP_ID_PREFIX)?.is_some();
+    if has_group || has_prefix {
+        return Ok(());
+    }
+    options.insert_str(
+        opt::KAFKA_GROUP_ID,
+        default_kafka_consumer_group_id(table_name),
+    )?;
+    Ok(())
+}
+
 impl KafkaSourceConnector {
     fn sql_format_to_proto(fmt: &SqlFormat) -> Result<FormatConfig> {
         match fmt {
@@ -108,11 +139,6 @@ impl SourceProvider for KafkaSourceConnector {
         })?;
         let proto_format = Self::sql_format_to_proto(sql_format)?;
 
-        let rate_limit = options
-            .pull_opt_u64(opt::KAFKA_RATE_LIMIT_MESSAGES_PER_SECOND)?
-            .map(|v| v.clamp(1, u32::MAX as u64) as u32)
-            .unwrap_or(0);
-
         let value_subject = options.pull_opt_str(opt::KAFKA_VALUE_SUBJECT)?;
 
         let offset_mode = match options
@@ -178,8 +204,68 @@ impl SourceProvider for KafkaSourceConnector {
             client_configs,
             format: Some(proto_format),
             bad_data_policy: Self::bad_data_to_proto(&bad_data),
-            rate_limit_msgs_per_sec: rate_limit,
+            rate_limit_msgs_per_sec: 0,
             value_subject,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datafusion::sql::sqlparser::ast::{Expr, Ident, SqlOption, Value as SqlValue};
+
+    fn options_from_map(pairs: &[(&str, &str)]) -> ConnectorOptions {
+        let opts: Vec<SqlOption> = pairs
+            .iter()
+            .map(|(k, v)| SqlOption::KeyValue {
+                key: Ident::new(*k),
+                value: Expr::Value(
+                    SqlValue::SingleQuotedString((*v).to_string()).with_empty_span(),
+                ),
+            })
+            .collect();
+        ConnectorOptions::new(&opts, &None).expect("options")
+    }
+
+    #[test]
+    fn assigns_default_group_id_when_missing() {
+        let mut options = options_from_map(&[
+            ("connector", "kafka"),
+            ("topic", "events"),
+            ("bootstrap.servers", "localhost:9092"),
+        ]);
+        ensure_default_consumer_group("my_events", &mut options).expect("ensure");
+        assert_eq!(
+            options.peek_opt_str(opt::KAFKA_GROUP_ID).expect("peek"),
+            Some("fs-my_events-consumer".to_string())
+        );
+    }
+
+    #[test]
+    fn keeps_user_group_id() {
+        let mut options = options_from_map(&[
+            ("connector", "kafka"),
+            ("topic", "events"),
+            ("bootstrap.servers", "localhost:9092"),
+            ("group.id", "custom-group"),
+        ]);
+        ensure_default_consumer_group("my_events", &mut options).expect("ensure");
+        assert_eq!(
+            options.peek_opt_str(opt::KAFKA_GROUP_ID).expect("peek"),
+            Some("custom-group".to_string())
+        );
+    }
+
+    #[test]
+    fn skips_when_group_id_prefix_set() {
+        let mut options = options_from_map(&[
+            ("connector", "kafka"),
+            ("topic", "events"),
+            ("bootstrap.servers", "localhost:9092"),
+            ("group.id.prefix", "prefix"),
+        ]);
+        ensure_default_consumer_group("my_events", &mut options).expect("ensure");
+        assert!(options.peek_opt_str(opt::KAFKA_GROUP_ID).expect("peek").is_none());
     }
 }

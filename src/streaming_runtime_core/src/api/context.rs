@@ -33,7 +33,7 @@ pub struct TaskContextConfig {
 impl Default for TaskContextConfig {
     fn default() -> Self {
         Self {
-            source_idle_timeout: Duration::from_millis(50),
+            source_idle_timeout: Duration::from_millis(5),
         }
     }
 }

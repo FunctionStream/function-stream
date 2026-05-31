@@ -31,6 +31,7 @@ use crate::common::constants::{connection_table_role, connector_type, sql_field}
 use crate::common::with_option_keys as opt;
 use crate::common::{BadData, ConnectorOptions, Format, Framing, JsonCompression, JsonFormat};
 use crate::connector::registry::REGISTRY;
+use crate::connector::source::kafka::ensure_default_consumer_group;
 use crate::schema::ColumnDescriptor;
 use crate::schema::catalog::{ExternalTable, LookupTable, SourceTable};
 use crate::schema::data_encoding_format::DataEncodingFormat;
@@ -84,6 +85,9 @@ impl<'a> DdlCompiler<'a> {
         validate_adapter_availability(&adapter_type)?;
 
         let pk_constraints = AstUtils::parse_primary_keys(&stmt.constraints)?;
+        if adapter_type == connector_type::KAFKA {
+            ensure_default_consumer_group(&target_name, &mut options)?;
+        }
         let catalog_with_options = options.snapshot_for_catalog();
 
         let format = Format::from_opts(&mut options)?;
@@ -167,6 +171,9 @@ impl<'a> DdlCompiler<'a> {
         validate_adapter_availability(&adapter_type)?;
 
         let pk_constraints = AstUtils::parse_primary_keys(&stmt.constraints)?;
+        if adapter_type == connector_type::KAFKA {
+            ensure_default_consumer_group(&target_name, &mut options)?;
+        }
         let catalog_with_options = options.snapshot_for_catalog();
 
         let connection_format = Format::from_opts(&mut options)?;

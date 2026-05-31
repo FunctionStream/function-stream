@@ -12,12 +12,17 @@
 
 use protocol::function_stream_graph::{
     DeltaSinkConfig, FilesystemSinkConfig, IcebergSinkConfig, KafkaSinkConfig, KafkaSourceConfig,
-    LanceDbSinkConfig, S3SinkConfig, connector_op,
+    HttpSourceConfig, LanceDbSinkConfig, MqttSourceConfig, RobotBagSourceConfig,
+    RosSourceConfig, S3SinkConfig, connector_op,
 };
 
 #[derive(Debug, Clone)]
 pub enum ConnectorConfig {
     KafkaSource(KafkaSourceConfig),
+    MqttSource(MqttSourceConfig),
+    HttpSource(HttpSourceConfig),
+    RosSource(RosSourceConfig),
+    RobotBagSource(RobotBagSourceConfig),
     KafkaSink(KafkaSinkConfig),
     FilesystemSink(FilesystemSinkConfig),
     DeltaSink(DeltaSinkConfig),
@@ -30,6 +35,12 @@ impl ConnectorConfig {
     pub fn to_proto_config(&self) -> connector_op::Config {
         match self {
             ConnectorConfig::KafkaSource(cfg) => connector_op::Config::KafkaSource(cfg.clone()),
+            ConnectorConfig::MqttSource(cfg) => connector_op::Config::MqttSource(cfg.clone()),
+            ConnectorConfig::HttpSource(cfg) => connector_op::Config::HttpSource(cfg.clone()),
+            ConnectorConfig::RosSource(cfg) => connector_op::Config::RosSource(cfg.clone()),
+            ConnectorConfig::RobotBagSource(cfg) => {
+                connector_op::Config::RobotBagSource(cfg.clone())
+            }
             ConnectorConfig::KafkaSink(cfg) => connector_op::Config::KafkaSink(cfg.clone()),
             ConnectorConfig::FilesystemSink(cfg) => {
                 connector_op::Config::FilesystemSink(cfg.clone())
@@ -47,6 +58,18 @@ impl PartialEq for ConnectorConfig {
         use prost::Message;
         match (self, other) {
             (ConnectorConfig::KafkaSource(a), ConnectorConfig::KafkaSource(b)) => {
+                a.encode_to_vec() == b.encode_to_vec()
+            }
+            (ConnectorConfig::MqttSource(a), ConnectorConfig::MqttSource(b)) => {
+                a.encode_to_vec() == b.encode_to_vec()
+            }
+            (ConnectorConfig::HttpSource(a), ConnectorConfig::HttpSource(b)) => {
+                a.encode_to_vec() == b.encode_to_vec()
+            }
+            (ConnectorConfig::RosSource(a), ConnectorConfig::RosSource(b)) => {
+                a.encode_to_vec() == b.encode_to_vec()
+            }
+            (ConnectorConfig::RobotBagSource(a), ConnectorConfig::RobotBagSource(b)) => {
                 a.encode_to_vec() == b.encode_to_vec()
             }
             (ConnectorConfig::KafkaSink(a), ConnectorConfig::KafkaSink(b)) => {
@@ -80,6 +103,10 @@ impl std::hash::Hash for ConnectorConfig {
         std::mem::discriminant(self).hash(state);
         match self {
             ConnectorConfig::KafkaSource(cfg) => cfg.encode_to_vec().hash(state),
+            ConnectorConfig::MqttSource(cfg) => cfg.encode_to_vec().hash(state),
+            ConnectorConfig::HttpSource(cfg) => cfg.encode_to_vec().hash(state),
+            ConnectorConfig::RosSource(cfg) => cfg.encode_to_vec().hash(state),
+            ConnectorConfig::RobotBagSource(cfg) => cfg.encode_to_vec().hash(state),
             ConnectorConfig::KafkaSink(cfg) => cfg.encode_to_vec().hash(state),
             ConnectorConfig::FilesystemSink(cfg) => cfg.encode_to_vec().hash(state),
             ConnectorConfig::DeltaSink(cfg) => cfg.encode_to_vec().hash(state),

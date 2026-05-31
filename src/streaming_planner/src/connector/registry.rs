@@ -22,7 +22,12 @@ use super::sink::iceberg::IcebergSinkConnector;
 use super::sink::kafka::KafkaSinkConnector;
 use super::sink::lancedb::LanceDbSinkConnector;
 use super::sink::s3::S3SinkConnector;
+use super::source::http::HttpSourceConnector;
 use super::source::kafka::KafkaSourceConnector;
+use super::source::mqtt::MqttSourceConnector;
+use super::source::robot_bag::RobotBagSourceConnector;
+use super::source::ros::RosSourceConnector;
+use super::source::ros2::Ros2SourceConnector;
 
 pub struct ConnectorRegistry {
     sources: HashMap<String, Arc<dyn SourceProvider>>,
@@ -37,6 +42,11 @@ impl ConnectorRegistry {
         };
 
         registry.register_source(Arc::new(KafkaSourceConnector));
+        registry.register_source(Arc::new(MqttSourceConnector));
+        registry.register_source(Arc::new(HttpSourceConnector));
+        registry.register_source(Arc::new(RosSourceConnector));
+        registry.register_source(Arc::new(Ros2SourceConnector));
+        registry.register_source(Arc::new(RobotBagSourceConnector));
 
         registry.register_sink(Arc::new(KafkaSinkConnector));
         registry.register_sink(Arc::new(S3SinkConnector));

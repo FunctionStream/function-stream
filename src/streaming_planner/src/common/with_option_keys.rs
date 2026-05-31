@@ -50,6 +50,64 @@ pub const KAFKA_KEY_FIELD_LEGACY: &str = "key.field";
 pub const KAFKA_SINK_TIMESTAMP_FIELD: &str = "sink.timestamp.field";
 pub const KAFKA_TIMESTAMP_FIELD_LEGACY: &str = "timestamp.field";
 
+// ── MQTT ──────────────────────────────────────────────────────────────────
+
+pub const MQTT_HOST: &str = "mqtt.host";
+pub const MQTT_HOST_LEGACY: &str = "host";
+pub const MQTT_PORT: &str = "mqtt.port";
+pub const MQTT_PORT_LEGACY: &str = "port";
+pub const MQTT_TOPIC: &str = "topic";
+pub const MQTT_CLIENT_ID: &str = "mqtt.client.id";
+pub const MQTT_CLIENT_ID_LEGACY: &str = "client.id";
+pub const MQTT_USERNAME: &str = "mqtt.username";
+pub const MQTT_USERNAME_LEGACY: &str = "username";
+pub const MQTT_PASSWORD: &str = "mqtt.password";
+pub const MQTT_PASSWORD_LEGACY: &str = "password";
+pub const MQTT_QOS: &str = "mqtt.qos";
+pub const MQTT_QOS_LEGACY: &str = "qos";
+pub const MQTT_CLEAN_SESSION: &str = "mqtt.clean.session";
+pub const MQTT_CLEAN_SESSION_LEGACY: &str = "clean.session";
+pub const MQTT_KEEP_ALIVE_SECS: &str = "mqtt.keep.alive.secs";
+pub const MQTT_KEEP_ALIVE_SECS_LEGACY: &str = "keep.alive.secs";
+pub const MQTT_RATE_LIMIT_MESSAGES_PER_SECOND: &str = "rate_limit.messages_per_second";
+
+// ── HTTP (Flink rest-lookup / robot REST aligned) ─────────────────────────
+
+pub const HTTP_MODE: &str = "mode";
+pub const HTTP_URL: &str = "url";
+pub const HTTP_METHOD: &str = "http.method";
+pub const HTTP_LOOKUP_METHOD: &str = "lookup-method";
+pub const HTTP_SCAN_INTERVAL: &str = "scan.interval";
+pub const HTTP_SCAN_INTERVAL_MS: &str = "scan.interval.ms";
+pub const HTTP_POLL_INTERVAL_MS: &str = "http.poll.interval.ms";
+pub const HTTP_REQUEST_BODY: &str = "http.request.body";
+pub const HTTP_REQUEST_BODY_LEGACY: &str = "body";
+pub const HTTP_LISTEN_HOST: &str = "http.listen.host";
+pub const HTTP_LISTEN_PORT: &str = "http.listen.port";
+pub const HTTP_WEBHOOK_PATH: &str = "http.webhook.path";
+pub const HTTP_REQUEST_TIMEOUT_MS: &str = "http.request.timeout.ms";
+pub const HTTP_RESPONSE_SPLIT: &str = "http.response.split";
+pub const HTTP_HEADER_PREFIX: &str = "header.";
+
+// ── ROS / rosbridge ───────────────────────────────────────────────────────
+
+pub const ROS_URL: &str = "url";
+pub const ROS_URL_LEGACY: &str = "ros.url";
+pub const ROS_TOPIC: &str = "topic";
+pub const ROS_TOPIC_LEGACY: &str = "ros.topic";
+pub const ROS_MESSAGE_FIELD: &str = "ros.message.field";
+pub const ROS_MESSAGE_FIELD_LEGACY: &str = "message.field";
+pub const ROS_VERSION: &str = "ros.version";
+
+// ── Robot bag / file formats ──────────────────────────────────────────────
+
+pub const ROBOT_BAG_PATH: &str = "path";
+pub const ROBOT_BAG_FORMAT: &str = "bag.format";
+pub const ROBOT_BAG_TOPIC: &str = "topic";
+pub const ROBOT_BAG_REPLAY_INTERVAL_MS: &str = "replay.interval.ms";
+pub const ROBOT_BAG_LOOP: &str = "loop";
+pub const ROBOT_BAG_PCD_EMIT_MODE: &str = "pcd.emit.mode";
+
 // ── JSON format ───────────────────────────────────────────────────────────
 
 pub const JSON_CONFLUENT_SCHEMA_REGISTRY: &str = "json.confluent_schema_registry";

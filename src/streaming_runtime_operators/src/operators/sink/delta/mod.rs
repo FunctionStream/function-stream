@@ -29,11 +29,12 @@ use std::sync::Once;
 use arrow_array::RecordBatch;
 use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
+use arrow::compute::concat_batches;
 use delta_commit::{
     DeltaCommitStrategy, DeltaTableCommitter, build_delta_storage_options, resolve_delta_table_uri,
 };
 use parquet::basic::Compression;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 use url::Url;
 
 use crate::core::StreamOutput;
@@ -46,7 +47,22 @@ use crate::sql::common::{CheckpointBarrier, Watermark};
 
 use delta_writer::{DeltaLocalSink, DeltaSink, preflight_s3_bucket};
 
-const DEFAULT_MAX_BUFFER_BYTES: usize = 64 * 1024 * 1024;
+const DEFAULT_MAX_BUFFER_BYTES: usize = 256 * 1024 * 1024;
+
+fn pending_row_count(batches: &[RecordBatch]) -> usize {
+    batches.iter().map(|b| b.num_rows()).sum()
+}
+
+/// Merge many small stream batches into one Parquet row group where possible.
+fn merge_pending_for_write(batches: Vec<RecordBatch>) -> Result<Vec<RecordBatch>, DeltaSinkError> {
+    if batches.len() <= 1 {
+        return Ok(batches);
+    }
+    let schema = batches[0].schema();
+    let merged = concat_batches(&schema, &batches)
+        .map_err(|e| DeltaSinkError::Config(format!("failed to merge pending batches: {e}")))?;
+    Ok(vec![merged])
+}
 
 fn ensure_delta_handlers_registered() {
     static REGISTER: Once = Once::new();
@@ -172,7 +188,9 @@ impl DeltaSinkOperator {
         epoch: u64,
         subtask_idx: usize,
     ) -> Result<(), DeltaSinkError> {
-        if self.pending.is_empty() {
+        if self.pending.is_empty() || pending_row_count(&self.pending) == 0 {
+            self.pending.clear();
+            self.pending_bytes = 0;
             return Ok(());
         }
 
@@ -181,7 +199,7 @@ impl DeltaSinkOperator {
                 .expect("batch has no user columns after removing streaming system columns")
         });
 
-        let batches = std::mem::take(&mut self.pending);
+        let batches = merge_pending_for_write(std::mem::take(&mut self.pending))?;
         self.pending_bytes = 0;
 
         let compression = self.parquet_compression;
@@ -292,26 +310,14 @@ impl Operator for DeltaSinkOperator {
         ctx: &mut TaskContext,
         _collector: &mut dyn Collector,
     ) -> anyhow::Result<()> {
-        let batch_rows = batch.num_rows();
-        let batch_bytes = batch.get_array_memory_size();
-        self.pending_bytes += batch_bytes;
+        if batch.num_rows() == 0 {
+            return Ok(());
+        }
+
+        self.pending_bytes += batch.get_array_memory_size();
         self.pending.push(batch);
 
-        debug!(
-            table = %self.table_name,
-            subtask_idx = ctx.subtask_index,
-            batch_rows,
-            batch_bytes,
-            pending_batches = self.pending.len(),
-            pending_bytes = self.pending_bytes,
-            "delta sink received data"
-        );
-
         if self.pending_bytes > self.early_flush_threshold_bytes {
-            debug!(
-                bytes = self.pending_bytes,
-                "memory high-watermark breached, early flush (commit deferred to checkpoint)"
-            );
             self.flush_data_file(0, ctx.subtask_index as usize).await?;
         }
         Ok(())

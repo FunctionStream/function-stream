@@ -42,6 +42,15 @@ parquet = "55"
 prost = "0.13"
 protocol = { path = "../../protocol" }
 rdkafka = { version = "0.38", features = ["cmake-build", "ssl", "gssapi", "curl"] }
+rumqttc = "0.24"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+axum = "0.7"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+mcap = "0.19"
+rosbag = "0.6.3"
+lzf = "1.0.0"
+byteorder = "1.5"
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2"

@@ -57,10 +57,22 @@ impl FormatEncoder {
         if batches.is_empty() {
             return Ok(Vec::new());
         }
+        Self::encode_parquet_with_schema(batches, batches[0].schema(), compression)
+    }
 
-        let schema = batches[0].schema();
+    /// Encode with an explicit schema and larger row groups for throughput.
+    pub fn encode_parquet_with_schema(
+        batches: &[RecordBatch],
+        schema: std::sync::Arc<arrow_schema::Schema>,
+        compression: Compression,
+    ) -> Result<Vec<u8>> {
+        if batches.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let props = WriterProperties::builder()
             .set_compression(compression)
+            .set_max_row_group_size(128 * 1024 * 1024)
             .build();
         let mut cursor = Cursor::new(Vec::new());
         let mut writer = ArrowWriter::try_new(&mut cursor, schema, Some(props))

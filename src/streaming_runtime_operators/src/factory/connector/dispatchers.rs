@@ -23,7 +23,9 @@ use crate::sql::common::constants::connector_type;
 
 use super::{
     DeltaSinkDispatcher, FilesystemSinkDispatcher, IcebergSinkDispatcher, LanceDbSinkDispatcher,
-    S3SinkDispatcher, kafka::KafkaConnectorDispatcher,
+    S3SinkDispatcher, http::HttpSourceDispatcher, kafka::KafkaConnectorDispatcher,
+    mqtt::MqttSourceDispatcher, robot_bag::RobotBagSourceDispatcher,
+    ros::RosSourceDispatcher,
 };
 
 pub struct ConnectorSourceDispatcher;
@@ -34,6 +36,11 @@ impl OperatorConstructor for ConnectorSourceDispatcher {
             .context("failed decoding connector op for source dispatch")?;
         match op.connector.to_ascii_lowercase().as_str() {
             connector_type::KAFKA => KafkaConnectorDispatcher.with_config(config, registry),
+            connector_type::MQTT => MqttSourceDispatcher.with_config(config, registry),
+            connector_type::HTTP => HttpSourceDispatcher.with_config(config, registry),
+            connector_type::ROS => RosSourceDispatcher.with_config(config, registry),
+            connector_type::ROS2 => RosSourceDispatcher.with_config(config, registry),
+            connector_type::ROBOT_BAG => RobotBagSourceDispatcher.with_config(config, registry),
             _ => bail!("unsupported source connector '{}'", op.connector),
         }
     }

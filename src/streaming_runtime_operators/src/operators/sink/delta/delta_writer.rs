@@ -103,6 +103,9 @@ impl DeltaSink {
         }
 
         let record_count: u64 = batches.iter().map(|b| b.num_rows() as u64).sum();
+        if record_count == 0 {
+            return Ok(None);
+        }
 
         let encoded =
             encode_in_background(batches.to_vec(), format, compression, parquet_write_schema)
@@ -186,6 +189,9 @@ impl DeltaLocalSink {
         }
 
         let record_count: u64 = batches.iter().map(|b| b.num_rows() as u64).sum();
+        if record_count == 0 {
+            return Ok(None);
+        }
 
         let encoded =
             encode_in_background(batches.to_vec(), format, compression, parquet_write_schema)
@@ -244,7 +250,7 @@ async fn encode_in_background(
     let start_cpu = Instant::now();
     let encoded = tokio::task::spawn_blocking(move || {
         let batches = if format == DeltaFormat::Parquet {
-            if let Some(schema) = parquet_write_schema {
+            if let Some(ref schema) = parquet_write_schema {
                 cast_batches_for_delta_write(&owned_batches, schema.as_ref())
                     .map_err(|e| e.to_string())?
             } else {
@@ -257,7 +263,16 @@ async fn encode_in_background(
         match format {
             DeltaFormat::Csv => FormatEncoder::encode_csv(&batches).map_err(|e| e.to_string()),
             DeltaFormat::Parquet => {
-                FormatEncoder::encode_parquet(&batches, compression).map_err(|e| e.to_string())
+                if let Some(ref schema) = parquet_write_schema {
+                    FormatEncoder::encode_parquet_with_schema(
+                        &batches,
+                        Arc::clone(schema),
+                        compression,
+                    )
+                    .map_err(|e| e.to_string())
+                } else {
+                    FormatEncoder::encode_parquet(&batches, compression).map_err(|e| e.to_string())
+                }
             }
             DeltaFormat::JsonL => FormatEncoder::encode_jsonl(&batches).map_err(|e| e.to_string()),
             DeltaFormat::Avro => FormatEncoder::encode_avro(&batches).map_err(|e| e.to_string()),
@@ -286,12 +301,12 @@ pub fn build_s3_object_store(
 
     let retry_config = RetryConfig {
         backoff: BackoffConfig {
-            init_backoff: Duration::from_millis(200),
-            max_backoff: Duration::from_secs(5),
+            init_backoff: Duration::from_millis(100),
+            max_backoff: Duration::from_secs(3),
             base: 2.0,
         },
-        max_retries: 5,
-        retry_timeout: Duration::from_secs(30),
+        max_retries: 3,
+        retry_timeout: Duration::from_secs(120),
     };
 
     let mut builder = AmazonS3Builder::new()
