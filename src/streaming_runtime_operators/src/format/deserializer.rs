@@ -11,6 +11,7 @@
 // limitations under the License.
 
 use anyhow::{Context, Result, anyhow};
+use arrow::compute::concat_batches;
 use arrow_array::builder::{BinaryBuilder, StringBuilder, TimestampNanosecondBuilder};
 use arrow_array::{ArrayRef, RecordBatch};
 use arrow_json::reader::ReaderBuilder;
@@ -108,18 +109,8 @@ impl DataDeserializer {
             buffer.push(b'\n');
         }
 
-        let mut decoder = ReaderBuilder::new(self.decoder_schema.clone())
-            .with_strict_mode(false)
-            .build_decoder()
-            .context("Failed to build Arrow JSON decoder")?;
-
-        decoder
-            .decode(&buffer)
-            .context("Arrow batch decoding failed")?;
-
-        let decoded_batch = decoder
-            .flush()?
-            .ok_or_else(|| anyhow!("Decoder returned empty batch after successful validation"))?;
+        let decoded_batch =
+            decode_ndjson_buffer(&self.decoder_schema, &buffer, valid_indices.len())?;
 
         // Step 3: Re-inject Event-Time Column
         self.rebuild_with_timestamp(decoded_batch, kafka_timestamps_ms, &valid_indices)
@@ -217,6 +208,53 @@ impl DataDeserializer {
     }
 }
 
+/// Decodes NDJSON bytes into a single [`RecordBatch`], looping decode/flush until the
+/// buffer is fully consumed. Arrow's JSON decoder defaults to `batch_size = 1024`, so a
+/// single decode+flush is insufficient when the input has more rows than that.
+fn decode_ndjson_buffer(
+    decoder_schema: &SchemaRef,
+    buffer: &[u8],
+    expected_rows: usize,
+) -> Result<RecordBatch> {
+    let mut decoder = ReaderBuilder::new(decoder_schema.clone())
+        .with_strict_mode(false)
+        .with_batch_size(expected_rows.max(1))
+        .build_decoder()
+        .context("Failed to build Arrow JSON decoder")?;
+
+    let mut offset = 0;
+    let mut batches = Vec::new();
+    while offset < buffer.len() {
+        let decoded = decoder
+            .decode(&buffer[offset..])
+            .context("Arrow batch decoding failed")?;
+        if decoded == 0 {
+            return Err(anyhow!(
+                "Arrow JSON decoder stalled at offset {}/{}",
+                offset,
+                buffer.len()
+            ));
+        }
+        offset += decoded;
+
+        while let Some(batch) = decoder.flush()? {
+            batches.push(batch);
+        }
+    }
+
+    if batches.is_empty() {
+        return Err(anyhow!(
+            "Decoder returned empty batch after successful validation"
+        ));
+    }
+
+    if batches.len() == 1 {
+        Ok(batches.into_iter().next().unwrap())
+    } else {
+        concat_batches(decoder_schema, &batches).context("Failed to concat decoded JSON batches")
+    }
+}
+
 /// Helper: Strips the specialized timestamp field to allow the raw decoder
 /// to focus only on payload data.
 fn schema_without_timestamp(schema: &Schema) -> SchemaRef {
@@ -227,4 +265,89 @@ fn schema_without_timestamp(schema: &Schema) -> SchemaRef {
         .cloned()
         .collect::<Vec<_>>();
     Arc::new(Schema::new_with_metadata(fields, schema.metadata().clone()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::format::config::{BadDataPolicy, DecimalEncoding, Format, JsonFormat, TimestampFormat};
+    use arrow_schema::{DataType, Field, TimeUnit};
+
+    fn test_deserializer() -> DataDeserializer {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new(
+                TIMESTAMP_FIELD,
+                DataType::Timestamp(TimeUnit::Nanosecond, None),
+                false,
+            ),
+            Field::new("id", DataType::Int64, false),
+            Field::new("value", DataType::Utf8, false),
+        ]));
+        DataDeserializer::new(
+            Format::Json(JsonFormat {
+                timestamp_format: TimestampFormat::UnixMillis,
+                decimal_encoding: DecimalEncoding::String,
+                include_schema: false,
+            }),
+            schema,
+            BadDataPolicy::Fail,
+        )
+    }
+
+    #[test]
+    fn decode_json_batch_exceeds_arrow_default_batch_size() {
+        let deserializer = test_deserializer();
+        let row_count = 2500;
+        let messages: Vec<Vec<u8>> = (0..row_count)
+            .map(|i| format!(r#"{{"id":{i},"value":"row-{i}"}}"#).into_bytes())
+            .collect();
+        let msg_refs: Vec<&[u8]> = messages.iter().map(|m| m.as_slice()).collect();
+        let kafka_ts: Vec<u64> = (0..row_count).map(|i| 1_700_000_000_000 + i as u64).collect();
+
+        let batch = deserializer
+            .deserialize_batch_with_kafka_timestamps(&msg_refs, &kafka_ts)
+            .expect("batch larger than 1024 rows should decode");
+
+        assert_eq!(batch.num_rows(), row_count);
+    }
+
+    #[test]
+    fn decode_json_batch_at_kafka_source_batch_size() {
+        let deserializer = test_deserializer();
+        let row_count = 4096;
+        let messages: Vec<Vec<u8>> = (0..row_count)
+            .map(|i| format!(r#"{{"id":{i},"value":"row-{i}"}}"#).into_bytes())
+            .collect();
+        let msg_refs: Vec<&[u8]> = messages.iter().map(|m| m.as_slice()).collect();
+        let kafka_ts: Vec<u64> = (0..row_count).map(|i| i as u64).collect();
+
+        let batch = deserializer
+            .deserialize_batch_with_kafka_timestamps(&msg_refs, &kafka_ts)
+            .expect("4096-row batch should decode without alignment error");
+
+        assert_eq!(batch.num_rows(), row_count);
+    }
+
+    #[test]
+    fn decode_ndjson_buffer_loops_past_default_batch_size() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
+        let row_count = 3647;
+        let mut buffer = Vec::new();
+        for i in 0..row_count {
+            buffer.extend_from_slice(format!(r#"{{"id":{i}}}"#).as_bytes());
+            buffer.push(b'\n');
+        }
+
+        // Pre-fix behavior: one decode + one flush only yields 1024 rows.
+        let mut decoder = ReaderBuilder::new(schema.clone())
+            .with_strict_mode(false)
+            .build_decoder()
+            .unwrap();
+        decoder.decode(&buffer).unwrap();
+        let single_flush = decoder.flush().unwrap().unwrap();
+        assert_eq!(single_flush.num_rows(), 1024);
+
+        let batch = decode_ndjson_buffer(&schema, &buffer, row_count).expect("3647 rows");
+        assert_eq!(batch.num_rows(), row_count);
+    }
 }
